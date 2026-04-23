@@ -7,6 +7,7 @@ import {
   Bell,
   Briefcase,
   Car,
+  Bus,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -302,6 +303,11 @@ const AdminLayout = () => {
               { label: 'Set Price', path: '/admin/pricing/set-price' },
               { label: 'Goods Types', path: '/admin/pricing/goods-types' },
             ],
+          },
+          {
+            icon: Bus,
+            label: 'Bus Service',
+            path: '/admin/bus-service',
           },
           {
             icon: MapPin,

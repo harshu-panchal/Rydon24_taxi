@@ -4,6 +4,7 @@ import {
   approveOwner,
   approveOwnerSignupFromDriver,
   createAirport,
+  createBusService,
   createAppModule,
   createGoodsType,
   createDriver,
@@ -25,6 +26,7 @@ import {
   approveUserDeletionRequest,
   approveDriverDeletionRequest,
   deleteAppModule,
+  deleteBusService,
   deleteDriver,
   deleteDriverNeededDocument,
   deleteGoodsType,
@@ -50,6 +52,7 @@ import {
   getAdminStatus,
   getAdminEarnings,
   getAirports,
+  getBusServices,
   getAppModules,
   getCancelChart,
   getCountries,
@@ -134,6 +137,7 @@ import {
   adjustOwnerWallet,
   updateAppModule,
   updateAirport,
+  updateBusService,
   updateDriver,
   updateDriverNeededDocument,
   updateDriverPassword,
@@ -243,6 +247,10 @@ adminRouter.get('/admin/airports', getAirports);
 adminRouter.post('/admin/airports', createAirport);
 adminRouter.patch('/admin/airports/:id', updateAirport);
 adminRouter.delete('/admin/airports/:id', deleteAirport);
+adminRouter.get('/admin/bus-services', getBusServices);
+adminRouter.post('/admin/bus-services', createBusService);
+adminRouter.patch('/admin/bus-services/:id', updateBusService);
+adminRouter.delete('/admin/bus-services/:id', deleteBusService);
 adminRouter.get('/admin/goods-types', getGoodsTypes);
 adminRouter.post('/admin/goods-types', createGoodsType);
 adminRouter.patch('/admin/goods-types/:id', updateGoodsType);

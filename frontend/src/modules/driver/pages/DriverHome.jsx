@@ -281,6 +281,7 @@ const DriverHome = () => {
     const [walletSummary, setWalletSummary] = useState({ balance: 0, cashLimit: 500, isBlocked: false });
     const driverCoordsRef = useRef(readStoredDriverCoords());
     const acceptingRideIdRef = useRef('');
+    const currentRequestRef = useRef(null);
     const driverPosition = useMemo(() => toLatLng(driverCoords || DEFAULT_MAP_COORDS), [driverCoords]);
     const mapVehicleIcon = useMemo(
         () => getMapIconForVehicle(vehicleIconUrl || vehicleIconType),
@@ -314,6 +315,10 @@ const DriverHome = () => {
             setShowLowBalanceModal(true);
         }
     }, [isBalanceCritical, isOnline, isHydratingDriver]);
+
+    useEffect(() => {
+        currentRequestRef.current = currentRequest;
+    }, [currentRequest]);
 
 
     const fetchActiveJob = useCallback(async (type = 'ride') => {
@@ -623,7 +628,8 @@ const DriverHome = () => {
                 if (acceptingRideIdRef.current && acceptingRideIdRef.current === rideId) {
                     return;
                 }
-                if (!currentRequest?.rideId || currentRequest.rideId === rideId) {
+                const activeRequest = currentRequestRef.current;
+                if (!activeRequest?.rideId || activeRequest.rideId === rideId) {
                     setShowRequest(false);
                     setCurrentRequest(null);
                     stopRideRequestAlertSound();
@@ -654,7 +660,8 @@ const DriverHome = () => {
                     return;
                 }
 
-                const nextType = currentRequest?.type || 'ride';
+                const activeRequest = currentRequestRef.current;
+                const nextType = activeRequest?.type || 'ride';
                 let currentJob = null;
 
                 try {
@@ -672,20 +679,20 @@ const DriverHome = () => {
                     state: {
                         type: nextType,
                         rideId: currentJob?.rideId || payload.rideId,
-                        otp: currentJob?.otp || payload?.otp || currentRequest?.raw?.otp || '',
+                        otp: currentJob?.otp || payload?.otp || activeRequest?.raw?.otp || '',
                         request: {
-                            ...currentRequest,
+                            ...activeRequest,
                             rideId: currentJob?.rideId || payload.rideId,
-                            otp: currentJob?.otp || payload?.otp || currentRequest?.raw?.otp || '',
+                            otp: currentJob?.otp || payload?.otp || activeRequest?.raw?.otp || '',
                             raw: currentJob || {
-                                ...(currentRequest?.raw || {}),
-                                otp: payload?.otp || currentRequest?.raw?.otp || '',
+                                ...(activeRequest?.raw || {}),
+                                otp: payload?.otp || activeRequest?.raw?.otp || '',
                                 status: payload.status,
                                 liveStatus: payload.liveStatus,
                                 acceptedAt: payload.acceptedAt,
                             },
                         },
-                        currentDriverCoords: driverCoordsRef.current || driverCoords || null,
+                        currentDriverCoords: driverCoordsRef.current || null,
                     },
                 });
             };
@@ -737,7 +744,7 @@ const DriverHome = () => {
             socketService.disconnect();
         }
         return undefined;
-    }, [currentRequest, driverCoords, fetchActiveJob, isOnline, navigate]);
+    }, [fetchActiveJob, isOnline, navigate]);
     
     useEffect(() => {
         let interval;

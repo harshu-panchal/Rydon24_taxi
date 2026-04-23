@@ -172,6 +172,7 @@ const SearchingDriver = () => {
     () => (location.pathname.startsWith('/taxi/user') ? '/taxi/user' : ''),
     [location.pathname],
   );
+  const userHomeRoute = routePrefix || '/taxi/user';
   const selectedVehicleTypeId = useMemo(
     () => routeState.vehicleTypeId || routeState.vehicle?.vehicleTypeId,
     [routeState],
@@ -218,7 +219,7 @@ const SearchingDriver = () => {
 
   useEffect(() => {
     if (!searchNonce) {
-      navigate(routePrefix || '/', { replace: true });
+      navigate(userHomeRoute, { replace: true });
       return;
     }
 
@@ -251,7 +252,7 @@ const SearchingDriver = () => {
         return;
       }
 
-      navigate(routePrefix || '/', { replace: true });
+      navigate(userHomeRoute, { replace: true });
       return;
     }
 
@@ -283,7 +284,7 @@ const SearchingDriver = () => {
 
     if (!searchNonce || !selectedVehicleTypeId) {
       setSearchStatus('Vehicle type missing. Please select a vehicle again.');
-      navigate(routePrefix || '/', { replace: true });
+      navigate(userHomeRoute, { replace: true });
       return undefined;
     }
 
@@ -523,7 +524,7 @@ const SearchingDriver = () => {
         if (!disposed) {
           setSearchStatus(error?.message || 'Could not create ride request. Redirecting...');
           setTimeout(() => {
-             if (!disposed) navigate(routePrefix || '/', { replace: true });
+             if (!disposed) navigate(userHomeRoute, { replace: true });
           }, 3000);
         }
       }
@@ -534,7 +535,7 @@ const SearchingDriver = () => {
         cleanupSearchRef.current?.();
       }, 0);
     };
-  }, [navigate, routePrefix, routeState, searchNonce, selectedVehicleTypeId]);
+  }, [navigate, routePrefix, routeState, searchNonce, selectedVehicleTypeId, userHomeRoute]);
 
   const handleCancel = async () => {
     clearTimeout(timerRef.current);
@@ -549,7 +550,7 @@ const SearchingDriver = () => {
       // Navigation still proceeds even if the cancel request races with another state update.
     }
 
-    navigate(routePrefix || '/');
+    navigate(userHomeRoute, { replace: true });
   };
   const isSearching = stage === STAGES.SEARCHING;
   const isAccepted  = stage === STAGES.ACCEPTED || stage === STAGES.COMPLETING;
