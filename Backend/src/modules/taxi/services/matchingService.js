@@ -1,0 +1,197 @@
+import { ApiError } from '../../../utils/ApiError.js';
+import { normalizePoint } from '../../../utils/geo.js';
+import { DISPATCH_TOP_DRIVERS } from '../constants/index.js';
+import { Vehicle } from '../admin/models/Vehicle.js';
+import { Driver } from '../driver/models/Driver.js';
+import { Zone } from '../driver/models/Zone.js';
+
+const EARTH_RADIUS_METERS = 6371000;
+
+const normalizeVehicleKey = (value = '') => String(value || '').trim().toLowerCase();
+
+const normalizeVehicleKeys = (vehicles = []) => {
+  const keys = vehicles.flatMap((vehicle) => [
+    vehicle?.name,
+    vehicle?.vehicle_type,
+    vehicle?.icon_types,
+    String(vehicle?.name || '').replace(/\s+/g, '_'),
+    String(vehicle?.icon_types || '').replace(/\s+/g, '_'),
+  ]);
+
+  return [...new Set(keys.map(normalizeVehicleKey).filter(Boolean))];
+};
+
+const normalizeVehicleTypeIds = (vehicleTypeIds = [], vehicleTypeId = null) => {
+  const values = Array.isArray(vehicleTypeIds) ? vehicleTypeIds : [vehicleTypeIds];
+
+  if (vehicleTypeId) {
+    values.push(vehicleTypeId);
+  }
+
+  return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
+};
+
+const buildDriverMatchFilters = ({ zoneId, vehicleTypeId, vehicleTypeIds, vehicleTypeKeys }) => {
+  const normalizedVehicleTypeIds = normalizeVehicleTypeIds(vehicleTypeIds, vehicleTypeId);
+  const normalizedVehicleTypeKeys = Array.isArray(vehicleTypeKeys)
+    ? [...new Set(vehicleTypeKeys.map(normalizeVehicleKey).filter(Boolean))]
+    : [];
+  const vehicleTypeClauses = [
+    ...(normalizedVehicleTypeIds.length ? [{ vehicleTypeId: { $in: normalizedVehicleTypeIds } }] : []),
+    ...(normalizedVehicleTypeKeys.length
+      ? [
+          { vehicleType: { $in: normalizedVehicleTypeKeys } },
+          { vehicleIconType: { $in: normalizedVehicleTypeKeys } },
+        ]
+      : []),
+  ];
+  const vehicleTypeFilter =
+    vehicleTypeClauses.length > 1
+      ? { $or: vehicleTypeClauses }
+      : vehicleTypeClauses[0] || {};
+
+  return {
+    isOnline: true,
+    isOnRide: false,
+    'wallet.isBlocked': { $ne: true },
+    ...(zoneId ? { zoneId } : {}),
+    ...vehicleTypeFilter,
+  };
+};
+
+export const findZoneByPickup = async (pickupCoords) => {
+  const coordinates = normalizePoint(pickupCoords, 'pickupCoords');
+
+  // Zones are authoritative for dispatch, so every pickup must belong to one polygon.
+  return Zone.findOne({
+    geometry: {
+      $geoIntersects: {
+        $geometry: {
+          type: 'Point',
+          coordinates,
+        },
+      },
+    },
+  });
+};
+
+const toLocalMeters = (origin, target) => {
+  const [originLng, originLat] = origin;
+  const [targetLng, targetLat] = target;
+  const originLatRadians = (originLat * Math.PI) / 180;
+  const metersPerDegreeLat = (Math.PI * EARTH_RADIUS_METERS) / 180;
+  const metersPerDegreeLng = metersPerDegreeLat * Math.cos(originLatRadians);
+
+  return {
+    x: (targetLng - originLng) * metersPerDegreeLng,
+    y: (targetLat - originLat) * metersPerDegreeLat,
+  };
+};
+
+const getDistanceToSegmentMeters = (origin, segmentStart, segmentEnd) => {
+  const start = toLocalMeters(origin, segmentStart);
+  const end = toLocalMeters(origin, segmentEnd);
+  const segmentX = end.x - start.x;
+  const segmentY = end.y - start.y;
+  const segmentLengthSquared = (segmentX * segmentX) + (segmentY * segmentY);
+
+  if (segmentLengthSquared <= 0) {
+    return Math.hypot(start.x, start.y);
+  }
+
+  const projection = Math.max(
+    0,
+    Math.min(1, -((start.x * segmentX) + (start.y * segmentY)) / segmentLengthSquared),
+  );
+  const closestX = start.x + (projection * segmentX);
+  const closestY = start.y + (projection * segmentY);
+
+  return Math.hypot(closestX, closestY);
+};
+
+const getZoneBoundaryCapMeters = (zone, pickupCoords) => {
+  const ring = Array.isArray(zone?.geometry?.coordinates?.[0]) ? zone.geometry.coordinates[0] : [];
+
+  if (ring.length < 3) {
+    return null;
+  }
+
+  let shortestDistance = Number.POSITIVE_INFINITY;
+
+  for (let index = 0; index < ring.length - 1; index += 1) {
+    const segmentStart = normalizePoint(ring[index], `zone.geometry.coordinates[0][${index}]`);
+    const segmentEnd = normalizePoint(ring[index + 1], `zone.geometry.coordinates[0][${index + 1}]`);
+    const distanceMeters = getDistanceToSegmentMeters(pickupCoords, segmentStart, segmentEnd);
+
+    if (Number.isFinite(distanceMeters) && distanceMeters < shortestDistance) {
+      shortestDistance = distanceMeters;
+    }
+  }
+
+  return Number.isFinite(shortestDistance) ? Math.max(0, Math.round(shortestDistance)) : null;
+};
+
+export const matchDrivers = async (pickupCoords, options = {}) => {
+  const coordinates = normalizePoint(pickupCoords, 'pickupCoords');
+  const {
+    maxDistance = 3000,
+    limit = DISPATCH_TOP_DRIVERS,
+    vehicleTypeId,
+    vehicleTypeIds,
+  } = options;
+  const normalizedVehicleTypeIds = normalizeVehicleTypeIds(vehicleTypeIds, vehicleTypeId);
+  const allowedVehicles = normalizedVehicleTypeIds.length
+    ? await Vehicle.find({ _id: { $in: normalizedVehicleTypeIds } }).select('name vehicle_type icon_types').lean()
+    : [];
+  const vehicleTypeKeys = normalizeVehicleKeys(allowedVehicles);
+
+  const zone = await findZoneByPickup(coordinates);
+  const zoneBoundaryCapMeters = zone ? getZoneBoundaryCapMeters(zone, coordinates) : null;
+  const effectiveMaxDistance = Number.isFinite(zoneBoundaryCapMeters) && zoneBoundaryCapMeters >= 0
+    ? Math.min(Math.max(1, Math.round(maxDistance)), Math.max(1, zoneBoundaryCapMeters))
+    : Math.max(1, Math.round(maxDistance));
+
+  // MongoDB handles both distance filtering and nearest-first sorting via $near.
+  const locationFilter = {
+    location: {
+      $near: {
+        $geometry: {
+          type: 'Point',
+          coordinates,
+        },
+        $maxDistance: effectiveMaxDistance,
+      },
+    },
+  };
+
+  let drivers = await Driver.find({
+    ...buildDriverMatchFilters({
+      zoneId: zone?._id || null,
+      vehicleTypeIds: normalizedVehicleTypeIds,
+      vehicleTypeKeys,
+    }),
+    ...locationFilter,
+  })
+    .limit(limit)
+    .select('name phone socketId vehicleTypeId vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel rating location zoneId isOnline isOnRide');
+
+  if (drivers.length === 0 && zone?._id) {
+    drivers = await Driver.find({
+      ...buildDriverMatchFilters({
+        zoneId: null,
+        vehicleTypeIds: normalizedVehicleTypeIds,
+        vehicleTypeKeys,
+      }),
+      ...locationFilter,
+    })
+      .limit(limit)
+      .select('name phone socketId vehicleTypeId vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel rating location zoneId isOnline isOnRide');
+  }
+
+  return {
+    zone,
+    drivers,
+    searchRadiusMeters: effectiveMaxDistance,
+    zoneBoundaryCapMeters,
+  };
+};

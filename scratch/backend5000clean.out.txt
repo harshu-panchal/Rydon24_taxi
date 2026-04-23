@@ -1,0 +1,211 @@
+MongoDB connected to ac-xl50eqo-shard-00-00.6ifoxfu.mongodb.net/appzeto_taxi
+Taxi backend listening on port 5000
+[0mGET /health [32m200[0m 2.667 ms - 52[0m
+[listDrivers] start {
+  page: '1',
+  limit: '10',
+  status: undefined,
+  search: undefined,
+  approve: 'true'
+}
+[listDrivers] count done 10
+[0mGET /api/v1/admin/drivers?page=1&limit=10&approve=true [0m-[0m - ms - -[0m
+[0mGET /api/v1/admin/general-settings/general [36m304[0m 41.536 ms - -[0m
+[0mGET /api/v1/admin/general-settings/customize [36m304[0m 47.222 ms - -[0m
+[listDrivers] start {
+  page: '1',
+  limit: '10',
+  status: undefined,
+  search: '',
+  approve: 'true'
+}
+[listDrivers] count done 10
+[listDrivers] start {
+  page: '1',
+  limit: '10',
+  status: undefined,
+  search: '',
+  approve: 'true'
+}
+[listDrivers] count done 10
+[listDrivers] start {
+  page: '1',
+  limit: '10',
+  status: undefined,
+  search: '',
+  approve: 'true'
+}
+[listDrivers] count done 10
+[0mGET /api/v1/admin/drivers?page=1&limit=10&approve=true&search= [0m-[0m - ms - -[0m
+[0mGET /api/v1/admin/drivers?page=1&limit=10&approve=true&search= [0m-[0m - ms - -[0m
+[0mGET /api/v1/admin/drivers?page=1&limit=10&approve=true&search= [0m-[0m - ms - -[0m
+[listDrivers] drivers done 10
+[listDrivers] hydrated refs done { owners: 2, serviceLocations: 2 }
+[listDrivers] response ready 10
+[listDrivers] drivers done 10
+[listDrivers] hydrated refs done { owners: 2, serviceLocations: 2 }
+[listDrivers] response ready 10
+[listDrivers] drivers done 10
+[listDrivers] hydrated refs done { owners: 2, serviceLocations: 2 }
+[listDrivers] response ready 10
+[listDrivers] drivers done 10
+[listDrivers] hydrated refs done { owners: 2, serviceLocations: 2 }
+[listDrivers] response ready 10
+[0mGET /api/v1/admin/general-settings/general [32m200[0m 34.594 ms - 278[0m
+[0mGET /api/v1/admin/general-settings/customize [32m200[0m 41.547 ms - 1449[0m
+[listDrivers] start {
+  page: '1',
+  limit: '10',
+  status: undefined,
+  search: '',
+  approve: 'true'
+}
+[listDrivers] count done 10
+[listDrivers] start {
+  page: '1',
+  limit: '10',
+  status: undefined,
+  search: '',
+  approve: 'false'
+}
+[listDrivers] count done 4
+[listDrivers] drivers done 4
+[listDrivers] hydrated refs done { owners: 0, serviceLocations: 0 }
+[listDrivers] response ready 4
+[0mGET /api/v1/admin/drivers?page=1&limit=10&approve=false&search= [36m304[0m 94.092 ms - -[0m
+[listDrivers] start {
+  page: '1',
+  limit: '10',
+  status: undefined,
+  search: '',
+  approve: 'false'
+}
+[listDrivers] count done 4
+[listDrivers] drivers done 4
+[listDrivers] hydrated refs done { owners: 0, serviceLocations: 0 }
+[listDrivers] response ready 4
+[0mGET /api/v1/admin/drivers?page=1&limit=10&approve=false&search= [36m304[0m 96.913 ms - -[0m
+[listDrivers] start {
+  page: '1',
+  limit: '10',
+  status: undefined,
+  search: '',
+  approve: 'false'
+}
+[listDrivers] count done 4
+[listDrivers] drivers done 4
+[listDrivers] hydrated refs done { owners: 0, serviceLocations: 0 }
+[listDrivers] response ready 4
+[0mGET /api/v1/admin/drivers?page=1&limit=10&approve=false&search= [36m304[0m 75.721 ms - -[0m
+[listDrivers] start {
+  page: '1',
+  limit: '10',
+  status: undefined,
+  search: '',
+  approve: 'true'
+}
+[listDrivers] count done 10
+[listDrivers] start {
+  page: '1',
+  limit: '10',
+  status: undefined,
+  search: '',
+  approve: 'true'
+}
+[listDrivers] count done 10
+[0mGET /api/v1/admin/drivers?page=1&limit=10&approve=true&search= [0m-[0m - ms - -[0m
+[0mGET /api/v1/admin/drivers?page=1&limit=10&approve=true&search= [0m-[0m - ms - -[0m
+[0mGET /api/v1/admin/drivers?page=1&limit=10&approve=true&search= [0m-[0m - ms - -[0m
+[listDrivers] start {
+  page: '1',
+  limit: '10',
+  status: undefined,
+  search: undefined,
+  approve: 'false'
+}
+[listDrivers] drivers done 10
+[listDrivers] count done 4
+[listDrivers] start {
+  page: '1',
+  limit: '10',
+  status: undefined,
+  search: undefined,
+  approve: 'true'
+}
+[listDrivers] hydrated refs done { owners: 2, serviceLocations: 2 }
+[listDrivers] response ready 10
+[listDrivers] count done 10
+[listDrivers] drivers done 4
+[listDrivers] hydrated refs done { owners: 0, serviceLocations: 0 }
+[listDrivers] response ready 4
+[0mGET /api/v1/admin/drivers?page=1&limit=10&approve=false [32m200[0m 80.360 ms - 2788[0m
+[0mGET /api/v1/admin/drivers?page=1&limit=10&approve=true [0m-[0m - ms - -[0m
+[listDrivers] drivers done 10
+[listDrivers] hydrated refs done { owners: 2, serviceLocations: 2 }
+[listDrivers] response ready 10
+[listDrivers] drivers done 10
+[listDrivers] hydrated refs done { owners: 2, serviceLocations: 2 }
+[listDrivers] response ready 10
+[listDrivers] drivers done 10
+[listDrivers] hydrated refs done { owners: 2, serviceLocations: 2 }
+[listDrivers] response ready 10
+[listDrivers] start {
+  page: '1',
+  limit: '10',
+  status: undefined,
+  search: '',
+  approve: 'true'
+}
+[listDrivers] count done 10
+[0mGET /api/v1/admin/driver-subscriptions/plans/list [36m304[0m 86.819 ms - -[0m
+[listDrivers] start {
+  page: '1',
+  limit: '10',
+  status: undefined,
+  search: '',
+  approve: 'true'
+}
+[listDrivers] count done 10
+[listDrivers] start {
+  page: '1',
+  limit: '10',
+  status: undefined,
+  search: '',
+  approve: 'true'
+}
+[listDrivers] count done 10
+[0mGET /api/v1/admin/wallet/drivers/withdrawals?page=1&limit=10 [36m304[0m 92.808 ms - -[0m
+[0mGET /api/v1/admin/wallet/drivers/withdrawals?page=1&limit=10 [36m304[0m 91.662 ms - -[0m
+[0mGET /api/v1/admin/wallet/drivers/withdrawals?page=1&limit=10 [36m304[0m 84.369 ms - -[0m
+[0mGET /api/v1/admin/wallet/drivers/negative-balance?page=1&limit=10 [32m200[0m 71.835 ms - 141[0m
+[0mGET /api/v1/admin/wallet/drivers/negative-balance?page=1&limit=10 [36m304[0m 76.241 ms - -[0m
+[0mGET /api/v1/admin/wallet/drivers/negative-balance?page=1&limit=10 [36m304[0m 59.790 ms - -[0m
+[0mGET /api/v1/admin/drivers/delete-requests [36m304[0m 71.072 ms - -[0m
+[0mGET /api/v1/admin/payment-methods [32m200[0m 75.360 ms - 1116[0m
+[0mGET /api/v1/admin/drivers?page=1&limit=10&approve=true&search= [0m-[0m - ms - -[0m
+[0mGET /api/v1/admin/drivers?page=1&limit=10&approve=true&search= [0m-[0m - ms - -[0m
+[0mGET /api/v1/admin/drivers?page=1&limit=10&approve=true&search= [0m-[0m - ms - -[0m
+[0mGET /api/v1/admin/general-settings/customize [36m304[0m 51.265 ms - -[0m
+[0mGET /api/v1/admin/general-settings/general [36m304[0m 54.062 ms - -[0m
+[0mGET /api/v1/admin/countries?active=1 [32m200[0m 67.561 ms - 377[0m
+[0mGET /api/v1/admin/general-settings/transport-ride [36m304[0m 33.182 ms - -[0m
+[0mGET /api/v1/admin/general-settings/bid-ride [36m304[0m 28.085 ms - -[0m
+[0mGET /api/v1/admin/driver-subscriptions/settings [0m-[0m - ms - -[0m
+[listDrivers] drivers done 10
+[listDrivers] hydrated refs done { owners: 2, serviceLocations: 2 }
+[listDrivers] response ready 10
+[0mGET /api/v1/admin/driver-ratings [36m304[0m 50593.371 ms - -[0m
+[listDrivers] drivers done 10
+[listDrivers] drivers done 10
+[listDrivers] hydrated refs done { owners: 2, serviceLocations: 2 }
+[listDrivers] response ready 10
+[listDrivers] hydrated refs done { owners: 2, serviceLocations: 2 }
+[listDrivers] response ready 10
+[listDrivers] start {
+  page: '1',
+  limit: '10',
+  status: undefined,
+  search: '',
+  approve: 'true'
+}
+[listDrivers] count done 10

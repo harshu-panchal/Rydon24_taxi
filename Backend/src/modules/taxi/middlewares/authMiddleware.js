@@ -1,0 +1,110 @@
+import { Admin } from '../admin/models/Admin.js';
+import { Owner } from '../admin/models/Owner.js';
+import { ApiError } from '../../../utils/ApiError.js';
+import { Driver } from '../driver/models/Driver.js';
+import { User } from '../user/models/User.js';
+import { verifyAccessToken } from '../services/tokenService.js';
+
+const roleModelMap = {
+  admin: Admin,
+  driver: Driver,
+  owner: Owner,
+  user: User,
+};
+
+const attachResolvedAuth = (req, payload) => {
+  req.auth = {
+    sub: payload.sub,
+    role: payload.role,
+  };
+};
+
+const resolveOpenUserIdentity = async (req) => {
+  const explicitUserId =
+    req.headers['x-user-id'] ||
+    req.body?.userId ||
+    req.query?.userId ||
+    req.params?.userId ||
+    null;
+
+  const query = explicitUserId ? { _id: explicitUserId } : {};
+  const user = await User.findOne(query).sort({ createdAt: 1 });
+
+  if (!user) {
+    throw new ApiError(404, 'No user account is available for open user access');
+  }
+
+  attachResolvedAuth(req, {
+    sub: String(user._id),
+    role: 'user',
+  });
+};
+
+export const authenticate = (allowedRoles = []) => async (req, _res, next) => {
+  try {
+    const authorization = req.headers.authorization || '';
+    const [, token] = authorization.split(' ');
+
+    if (!token) {
+      throw new ApiError(401, 'Authorization token is required');
+    }
+
+    const payload = verifyAccessToken(token);
+
+    if (allowedRoles.length > 0 && !allowedRoles.includes(payload.role)) {
+      throw new ApiError(403, 'Insufficient permissions for this resource');
+    }
+
+    const Model = roleModelMap[payload.role];
+
+    if (!Model) {
+      throw new ApiError(401, 'Unsupported auth role');
+    }
+
+    const entity = await Model.findById(payload.sub);
+
+    if (!entity) {
+      throw new ApiError(401, 'Authenticated account no longer exists');
+    }
+
+    if (
+      payload.role === 'user' &&
+      (entity.deletedAt || entity.isActive === false || entity.active === false)
+    ) {
+      throw new ApiError(401, 'User account is not active');
+    }
+
+    if (
+      payload.role === 'driver' &&
+      (entity.approve === false || String(entity.status || '').toLowerCase() === 'pending')
+    ) {
+      throw new ApiError(403, 'Driver account is pending approval');
+    }
+
+    attachResolvedAuth(req, payload);
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const authenticateOrResolveUser = (allowedRoles = ['user']) => async (req, res, next) => {
+  const authorization = req.headers.authorization || '';
+  const [, token] = authorization.split(' ');
+
+  if (token) {
+    return authenticate(allowedRoles)(req, res, next);
+  }
+
+  try {
+    if (!allowedRoles.includes('user')) {
+      throw new ApiError(401, 'Authorization token is required');
+    }
+
+    await resolveOpenUserIdentity(req);
+    next();
+  } catch (error) {
+    next(error);
+  }
+};

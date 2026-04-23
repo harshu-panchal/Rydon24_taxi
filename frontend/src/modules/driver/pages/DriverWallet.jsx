@@ -1,0 +1,544 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+    AlertCircle,
+    ArrowDownLeft,
+    ArrowLeft,
+    ArrowUpRight,
+    CheckCircle2,
+    Clock3,
+    IndianRupee,
+    RefreshCw,
+    Wallet,
+    X,
+} from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import DriverBottomNav from '../../shared/components/DriverBottomNav';
+import api from '../../../shared/api/axiosInstance';
+import { socketService } from '../../../shared/api/socket';
+
+const emptyWallet = {
+    balance: 0,
+    cashLimit: 0,
+    minimumBalanceForOrders: 0,
+    availableForOrders: 0,
+    isBlocked: false,
+};
+
+const money = (value) => {
+    const amount = Number(value || 0);
+    const sign = amount < 0 ? '-' : '';
+    return `${sign}Rs ${Math.abs(amount).toFixed(2)}`;
+};
+
+const toNumber = (value, fallback = 0) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const isEnabled = (value, fallback = true) => {
+    if (value === undefined || value === null || value === '') return fallback;
+    return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
+};
+
+const transactionLabel = (type = '') => {
+    const labels = {
+        ride_earning: 'Online ride earning',
+        commission_deduction: 'Cash ride commission',
+        top_up: 'Wallet top-up',
+        adjustment: 'Wallet adjustment',
+    };
+
+    return labels[type] || String(type || 'Wallet transaction').replace(/_/g, ' ');
+};
+
+const transactionHint = (tx = {}) => {
+    const payment = tx.metadata?.paymentMethod;
+    const commission = tx.metadata?.commissionAmount;
+    const fare = tx.metadata?.fare;
+
+    if (tx.type === 'commission_deduction') {
+        return `COD ride${fare ? ` of ${money(fare)}` : ''}${commission ? `, admin commission ${money(commission)}` : ''}`;
+    }
+
+    if (tx.type === 'ride_earning') {
+        return `${payment === 'online' ? 'Online' : 'Ride'} payout after admin commission`;
+    }
+
+    return tx.description || 'Updated by wallet activity';
+};
+
+const formatDate = (value) => {
+    const date = value ? new Date(value) : null;
+    if (!date || Number.isNaN(date.getTime())) return 'Just now';
+
+    return date.toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+    });
+};
+
+const normalizeWalletResponse = (payload) => {
+    const data = payload?.data || payload || {};
+    return {
+        wallet: data.wallet || emptyWallet,
+        transactions: Array.isArray(data.transactions) ? data.transactions : [],
+        settings: data.settings || {},
+    };
+};
+
+const StatPill = ({ label, value, tone = 'dark' }) => {
+    const toneClass = tone === 'good' ? 'text-emerald-700 bg-emerald-50' : tone === 'warn' ? 'text-amber-700 bg-amber-50' : 'text-slate-700 bg-slate-100';
+
+    return (
+        <div className={`rounded-2xl px-4 py-3 ${toneClass}`}>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] opacity-70">{label}</p>
+            <p className="mt-1 text-base font-black">{value}</p>
+        </div>
+    );
+};
+
+const DriverWallet = () => {
+    const navigate = useNavigate();
+    const [wallet, setWallet] = useState(emptyWallet);
+    const [transactions, setTransactions] = useState([]);
+    const [settings, setSettings] = useState({});
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState('');
+    const [showTopUp, setShowTopUp] = useState(false);
+    const [topUpAmount, setTopUpAmount] = useState('500');
+    const [processingTopUp, setProcessingTopUp] = useState(false);
+    const [topUpSuccess, setTopUpSuccess] = useState(false);
+
+    const loadWallet = useCallback(async ({ quiet = false } = {}) => {
+        if (!quiet) setRefreshing(true);
+        setError('');
+
+        try {
+            const response = await api.get('/drivers/wallet');
+            const next = normalizeWalletResponse(response);
+            setWallet(next.wallet);
+            setTransactions(next.transactions);
+            setSettings(next.settings);
+        } catch (requestError) {
+            setError(requestError?.response?.data?.message || requestError?.message || 'Could not load wallet.');
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        loadWallet({ quiet: true });
+
+        const socket = socketService.connect({ role: 'driver' });
+        const onWalletUpdated = (payload) => {
+            if (payload?.wallet) setWallet(payload.wallet);
+            if (payload?.transaction) {
+                setTransactions((previous) => [
+                    payload.transaction,
+                    ...previous.filter((item) => item._id !== payload.transaction._id),
+                ].slice(0, 50));
+            }
+        };
+
+        if (socket) socketService.on('driver:wallet:updated', onWalletUpdated);
+
+        return () => {
+            socketService.off('driver:wallet:updated', onWalletUpdated);
+        };
+    }, [loadWallet]);
+
+    const rules = useMemo(() => {
+        const minimumBalance = toNumber(
+            wallet.minimumBalanceForOrders,
+            toNumber(settings.driver_wallet_minimum_amount_to_get_an_order, 0),
+        );
+        const availableForOrders = toNumber(wallet.availableForOrders, toNumber(wallet.balance) - minimumBalance);
+        const minimumTopUp = toNumber(wallet.minimumTopUpAmount, toNumber(settings.minimum_amount_added_to_wallet, 0));
+        const minimumTransfer = toNumber(wallet.minimumTransferAmount, toNumber(settings.minimum_wallet_amount_for_transfer, 0));
+        const walletEnabled = wallet.isWalletEnabled ?? isEnabled(settings.show_wallet_feature_for_driver, true);
+        const transferEnabled = wallet.isTransferEnabled ?? isEnabled(settings.enable_wallet_transfer_driver, true);
+        const canReceiveOrders = walletEnabled && !wallet.isBlocked && availableForOrders >= 0;
+
+        return {
+            minimumBalance,
+            availableForOrders,
+            minimumTopUp,
+            minimumTransfer,
+            walletEnabled,
+            transferEnabled,
+            canReceiveOrders,
+        };
+    }, [settings, wallet]);
+
+    const quickAmounts = useMemo(() => {
+        const base = Math.max(rules.minimumTopUp, 100);
+        return [base, base * 2, base * 5].map((amount) => String(Math.round(amount)));
+    }, [rules.minimumTopUp]);
+
+    const recentTransactions = useMemo(() => transactions.slice(0, 20), [transactions]);
+
+    const loadRazorpayScript = useCallback(() =>
+        new Promise((resolve) => {
+            if (window.Razorpay) {
+                resolve(true);
+                return;
+            }
+
+            const script = document.createElement('script');
+            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            script.async = true;
+            script.onload = () => resolve(true);
+            script.onerror = () => resolve(false);
+            document.body.appendChild(script);
+        }), []);
+
+    const handleTopUp = async () => {
+        const amount = Number(topUpAmount);
+
+        if (!rules.walletEnabled) {
+            setError('Wallet is disabled by admin.');
+            return;
+        }
+
+        if (!Number.isFinite(amount) || amount <= 0) {
+            setError('Enter a valid top-up amount.');
+            return;
+        }
+
+        if (rules.minimumTopUp > 0 && amount < rules.minimumTopUp) {
+            setError(`Minimum top-up amount is Rs ${rules.minimumTopUp}.`);
+            return;
+        }
+
+        setProcessingTopUp(true);
+        setError('');
+
+        try {
+            const scriptLoaded = await loadRazorpayScript();
+            if (!scriptLoaded) {
+                throw new Error('Razorpay SDK failed to load. Please check your internet connection.');
+            }
+
+            // 1. Create order on backend
+            const orderResponse = await api.post('/drivers/wallet/top-up/razorpay/order', {
+                amount,
+            });
+            const orderData = orderResponse?.data || orderResponse;
+
+            if (!orderData?.orderId || !orderData?.keyId) {
+                throw new Error('Could not initiate payment. Please try again.');
+            }
+
+            // 2. Open Razorpay checkout
+            const options = {
+                key: orderData.keyId,
+                amount: orderData.amount,
+                currency: orderData.currency || 'INR',
+                name: 'Appzeto Taxi',
+                description: 'Wallet Top-up',
+                order_id: orderData.orderId,
+                handler: async (response) => {
+                    try {
+                        setProcessingTopUp(true);
+                        // 3. Verify payment on backend
+                        const verifyResponse = await api.post('/drivers/wallet/top-up/razorpay/verify', {
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_signature: response.razorpay_signature,
+                        });
+
+                        const result = verifyResponse?.data || verifyResponse;
+                        if (result?.wallet) {
+                            setWallet(result.wallet);
+                        }
+                        if (result?.transaction) {
+                            setTransactions((previous) => [
+                                result.transaction,
+                                ...previous.filter((item) => item._id !== result.transaction._id),
+                            ].slice(0, 50));
+                        }
+                        
+                        setTopUpSuccess(true);
+                        setTimeout(() => {
+                            setTopUpSuccess(false);
+                            setShowTopUp(false);
+                            setTopUpAmount('500');
+                        }, 2000);
+                    } catch (verifyError) {
+                        setError(verifyError?.response?.data?.message || 'Payment verification failed.');
+                    } finally {
+                        setProcessingTopUp(false);
+                    }
+                },
+                modal: {
+                    ondismiss: () => {
+                        setProcessingTopUp(false);
+                    },
+                },
+                theme: {
+                    color: '#0F172A',
+                },
+            };
+
+            const rzp = new window.Razorpay(options);
+            rzp.on('payment.failed', (response) => {
+                setError(response.error?.description || 'Payment failed.');
+                setProcessingTopUp(false);
+            });
+            rzp.open();
+        } catch (requestError) {
+            setError(requestError?.response?.data?.message || requestError?.message || 'Top-up request failed.');
+            setProcessingTopUp(false);
+        }
+    };
+
+
+    const statusCopy = rules.walletEnabled
+        ? rules.canReceiveOrders
+            ? 'Ready for orders'
+            : 'Top up to receive orders'
+        : 'Wallet disabled';
+
+    return (
+        <div className="min-h-screen bg-[#f5f1e8] px-4 pb-28 pt-4 text-slate-950">
+            <div className="mx-auto max-w-md">
+                <header className="mb-4 flex items-center justify-between">
+                    <button
+                        type="button"
+                        onClick={() => navigate(-1)}
+                        className="grid h-11 w-11 place-items-center rounded-full bg-white text-slate-900 shadow-sm"
+                        aria-label="Go back"
+                    >
+                        <ArrowLeft size={20} />
+                    </button>
+                    <div className="text-center">
+                        <h1 className="text-lg font-black tracking-tight">Driver wallet</h1>
+                        <p className="text-xs font-bold text-slate-500">Cash commission and online earnings</p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => loadWallet()}
+                        disabled={refreshing}
+                        className="grid h-11 w-11 place-items-center rounded-full bg-white text-slate-900 shadow-sm disabled:opacity-60"
+                        aria-label="Refresh wallet"
+                    >
+                        <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
+                    </button>
+                </header>
+
+                {loading ? (
+                    <div className="grid min-h-[60vh] place-items-center">
+                        <div className="text-center">
+                            <RefreshCw className="mx-auto animate-spin text-emerald-700" size={28} />
+                            <p className="mt-3 text-sm font-black text-slate-500">Loading wallet...</p>
+                        </div>
+                    </div>
+                ) : (
+                    <main className="space-y-4">
+                        <section className="rounded-[2rem] bg-[#101521] p-5 text-white shadow-xl">
+                            <div className="flex items-start justify-between gap-4">
+                                <div>
+                                    <p className="text-xs font-black uppercase tracking-[0.18em] text-white/45">Current balance</p>
+                                    <h2 className="mt-2 text-4xl font-black tracking-tight">{money(wallet.balance)}</h2>
+                                    <span className={`mt-3 inline-flex rounded-full px-3 py-1 text-xs font-black ${rules.canReceiveOrders ? 'bg-emerald-400/15 text-emerald-200' : 'bg-amber-400/15 text-amber-200'}`}>
+                                        {statusCopy}
+                                    </span>
+                                </div>
+                                <div className="grid h-14 w-14 place-items-center rounded-2xl bg-white/10">
+                                    <Wallet size={26} />
+                                </div>
+                            </div>
+
+                            <div className="mt-5 grid grid-cols-2 gap-3">
+                                <div className="rounded-2xl bg-white/10 p-3">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Minimum needed</p>
+                                    <p className="mt-1 text-lg font-black">{money(rules.minimumBalance)}</p>
+                                </div>
+                                <div className="rounded-2xl bg-white/10 p-3">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Available cash limit</p>
+                                    <p className={`mt-1 text-lg font-black ${rules.availableForOrders >= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                        {money(rules.availableForOrders)}
+                                    </p>
+                                </div>
+                            </div>
+                        </section>
+
+                        {error && (
+                            <div className="flex items-start gap-3 rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm font-bold text-rose-700">
+                                <AlertCircle className="mt-0.5 shrink-0" size={18} />
+                                <p>{error}</p>
+                            </div>
+                        )}
+
+                        <section className="grid grid-cols-2 gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowTopUp(true)}
+                                disabled={!rules.walletEnabled}
+                                className="flex h-13 items-center justify-center gap-2 rounded-2xl bg-[#009b72] text-sm font-black uppercase tracking-[0.08em] text-white shadow-sm disabled:bg-slate-200 disabled:text-slate-400"
+                            >
+                                Top up <ArrowUpRight size={17} />
+                            </button>
+                            <button
+                                type="button"
+                                disabled
+                                className="flex h-13 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white text-sm font-black uppercase tracking-[0.08em] text-slate-400"
+                            >
+                                Transfer soon
+                            </button>
+                        </section>
+
+                        <section className="rounded-[1.7rem] bg-white p-4 shadow-sm">
+                            <div className="mb-3 flex items-center gap-2">
+                                <IndianRupee size={18} className="text-emerald-700" />
+                                <h3 className="text-sm font-black text-slate-950">How it reflects</h3>
+                            </div>
+                            <div className="grid gap-2">
+                                <div className="rounded-2xl bg-slate-50 p-3">
+                                    <p className="text-sm font-black text-slate-900">Cash / COD ride</p>
+                                    <p className="mt-1 text-xs font-bold leading-relaxed text-slate-500">Driver collects the full cash fare. Wallet deducts only admin commission.</p>
+                                </div>
+                                <div className="rounded-2xl bg-slate-50 p-3">
+                                    <p className="text-sm font-black text-slate-900">Online ride</p>
+                                    <p className="mt-1 text-xs font-bold leading-relaxed text-slate-500">Platform receives the fare. Wallet credits driver earning after commission.</p>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section className="grid grid-cols-2 gap-3">
+                            <StatPill label="Top-up minimum" value={money(rules.minimumTopUp)} tone="dark" />
+                            <StatPill
+                                label="Transfer minimum"
+                                value={money(rules.minimumTransfer)}
+                                tone={rules.transferEnabled ? 'good' : 'warn'}
+                            />
+                        </section>
+
+                        <section className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-sm font-black text-slate-950">Recent transactions</h3>
+                                <p className="text-xs font-bold text-slate-500">{recentTransactions.length} shown</p>
+                            </div>
+
+                            {recentTransactions.length === 0 ? (
+                                <div className="rounded-[1.7rem] bg-white p-8 text-center shadow-sm">
+                                    <Clock3 className="mx-auto text-slate-300" size={30} />
+                                    <p className="mt-3 text-sm font-black text-slate-700">No transactions yet</p>
+                                    <p className="mt-1 text-xs font-bold text-slate-400">Ride earnings and cash commissions will appear here.</p>
+                                </div>
+                            ) : (
+                                recentTransactions.map((tx, index) => {
+                                    const isDebit = Number(tx.amount || 0) < 0;
+                                    return (
+                                        <motion.div
+                                            key={tx._id || tx.id || index}
+                                            initial={{ opacity: 0, y: 8 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: Math.min(index * 0.02, 0.18) }}
+                                            className="flex items-center justify-between gap-3 rounded-[1.4rem] bg-white p-4 shadow-sm"
+                                        >
+                                            <div className="flex min-w-0 items-center gap-3">
+                                                <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${isDebit ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-700'}`}>
+                                                    {isDebit ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="truncate text-sm font-black text-slate-950">{transactionLabel(tx.type)}</p>
+                                                    <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{transactionHint(tx)}</p>
+                                                    <p className="mt-1 text-[11px] font-bold text-slate-400">{formatDate(tx.createdAt)}</p>
+                                                </div>
+                                            </div>
+                                            <div className="shrink-0 text-right">
+                                                <p className={`text-sm font-black ${isDebit ? 'text-rose-600' : 'text-emerald-700'}`}>{money(tx.amount)}</p>
+                                                <p className="mt-1 text-[10px] font-black uppercase text-slate-400">Bal {money(tx.balanceAfter)}</p>
+                                            </div>
+                                        </motion.div>
+                                    );
+                                })
+                            )}
+                        </section>
+                    </main>
+                )}
+            </div>
+
+            <AnimatePresence>
+                {showTopUp && (
+                    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/55 px-3 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ y: '100%' }}
+                            animate={{ y: 0 }}
+                            exit={{ y: '100%' }}
+                            className="w-full max-w-md rounded-t-[2rem] bg-white p-5 pb-8 shadow-2xl"
+                        >
+                            <div className="mb-5 flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-950">Top up wallet</h3>
+                                    <p className="text-sm font-bold text-slate-500">Minimum amount: {money(rules.minimumTopUp)}</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowTopUp(false)}
+                                    className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-600"
+                                    aria-label="Close top-up"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            {topUpSuccess ? (
+                                <div className="grid place-items-center py-10 text-center">
+                                    <div className="grid h-20 w-20 place-items-center rounded-full bg-emerald-50 text-emerald-700">
+                                        <CheckCircle2 size={38} strokeWidth={3} />
+                                    </div>
+                                    <p className="mt-4 text-lg font-black">Wallet updated</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="rounded-3xl bg-slate-50 p-5 text-center">
+                                        <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Amount</p>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            value={topUpAmount}
+                                            onChange={(event) => setTopUpAmount(event.target.value)}
+                                            className="mt-2 w-full bg-transparent text-center text-4xl font-black text-slate-950 outline-none"
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {quickAmounts.map((amount) => (
+                                            <button
+                                                key={amount}
+                                                type="button"
+                                                onClick={() => setTopUpAmount(amount)}
+                                                className="rounded-2xl border border-slate-100 bg-white py-3 text-sm font-black text-slate-700 shadow-sm"
+                                            >
+                                                {money(amount)}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleTopUp}
+                                        disabled={processingTopUp || !rules.walletEnabled}
+                                        className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#101521] text-sm font-black uppercase tracking-widest text-white disabled:bg-slate-200 disabled:text-slate-400"
+                                    >
+                                        {processingTopUp ? <RefreshCw className="animate-spin" size={18} /> : 'Add money'}
+                                    </button>
+                                </div>
+                            )}
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            <DriverBottomNav />
+        </div>
+    );
+};
+
+export default DriverWallet;

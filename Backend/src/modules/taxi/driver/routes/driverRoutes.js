@@ -1,0 +1,198 @@
+import { Router } from "express";
+import { asyncHandler } from "../../../../utils/asyncHandler.js";
+import { authenticate } from "../../middlewares/authMiddleware.js";
+import {
+  addDriverEmergencyContact,
+  completeOnboarding,
+  createDriverPaymentQr,
+  createOwnerFleetDriver,
+  deleteCurrentDriverAccount,
+  deleteDriverEmergencyContact,
+  goOffline,
+  goOnline,
+  getCurrentDriver,
+  getDriverPaymentQrStatus,
+  getDriverApprovalStatus,
+  getDriverDocumentTemplates,
+  getDriverEmergencyContacts,
+  getDriverNotifications,
+  saveDriverFcmToken,
+  getOwnerFleetDrivers,
+  getMyWallet,
+  getOnboardingSession,
+  getServiceLocations,
+  loginDriver,
+  startDriverLoginOtpRequest,
+  saveOnboardingDocuments,
+  saveOnboardingPersonal,
+  saveOnboardingReferral,
+  saveOnboardingVehicle,
+  registerDriver,
+  requestDriverAccountDeletion,
+  startOnboarding,
+  topUpMyWallet,
+  createDriverWalletTopupOrder,
+  verifyDriverWalletTopup,
+
+  updateCurrentDriver,
+  updateDriverVehicle,
+  verifyOnboardingOtp,
+  verifyDriverLoginOtpRequest,
+  addOwnerVehicle,
+  getOwnerFleetVehicles,
+  deleteOwnerFleetVehicle,
+  updateCurrentDriverDocument,
+} from "../controllers/driverController.js";
+
+export const driverRouter = Router();
+
+driverRouter.post("/register", asyncHandler(registerDriver));
+driverRouter.post("/login", asyncHandler(loginDriver));
+driverRouter.post("/auth/send-otp", asyncHandler(startDriverLoginOtpRequest));
+driverRouter.post(
+  "/auth/verify-otp",
+  asyncHandler(verifyDriverLoginOtpRequest),
+);
+driverRouter.get(
+  "/me",
+  authenticate(["driver"]),
+  asyncHandler(getCurrentDriver),
+);
+driverRouter.patch(
+  "/me",
+  authenticate(["driver"]),
+  asyncHandler(updateCurrentDriver),
+);
+driverRouter.delete(
+  "/me",
+  authenticate(["driver"]),
+  asyncHandler(deleteCurrentDriverAccount),
+);
+driverRouter.post(
+  "/me/delete-request",
+  authenticate(["driver"]),
+  asyncHandler(requestDriverAccountDeletion),
+);
+driverRouter.get(
+  "/emergency-contacts",
+  authenticate(["driver"]),
+  asyncHandler(getDriverEmergencyContacts),
+);
+driverRouter.post(
+  "/emergency-contacts",
+  authenticate(["driver"]),
+  asyncHandler(addDriverEmergencyContact),
+);
+driverRouter.delete(
+  "/emergency-contacts/:contactId",
+  authenticate(["driver"]),
+  asyncHandler(deleteDriverEmergencyContact),
+);
+driverRouter.patch(
+  "/documents/:documentKey",
+  authenticate(["driver"]),
+  asyncHandler(updateCurrentDriverDocument),
+);
+driverRouter.get(
+  "/notifications",
+  authenticate(["driver"]),
+  asyncHandler(getDriverNotifications),
+);
+driverRouter.post(
+  "/fcm-token",
+  authenticate(["driver"]),
+  asyncHandler(saveDriverFcmToken),
+);
+driverRouter.get(
+  "/wallet",
+  authenticate(["driver"]),
+  asyncHandler(getMyWallet),
+);
+driverRouter.post(
+  "/wallet/top-up",
+  authenticate(["driver"]),
+  asyncHandler(topUpMyWallet),
+);
+driverRouter.post(
+  "/wallet/top-up/razorpay/order",
+  authenticate(["driver"]),
+  asyncHandler(createDriverWalletTopupOrder),
+);
+driverRouter.post(
+  "/wallet/top-up/razorpay/verify",
+  authenticate(["driver"]),
+  asyncHandler(verifyDriverWalletTopup),
+);
+
+driverRouter.post(
+  "/payments/qr",
+  authenticate(["driver"]),
+  asyncHandler(createDriverPaymentQr),
+);
+driverRouter.get(
+  "/payments/qr/status",
+  authenticate(["driver"]),
+  asyncHandler(getDriverPaymentQrStatus),
+);
+driverRouter.patch(
+  "/vehicle",
+  authenticate(["driver"]),
+  asyncHandler(updateDriverVehicle),
+);
+driverRouter.get("/approval-status", asyncHandler(getDriverApprovalStatus));
+driverRouter.get(
+  "/fleet/drivers",
+  authenticate(["driver"]),
+  asyncHandler(getOwnerFleetDrivers),
+);
+driverRouter.post(
+  "/fleet/drivers",
+  authenticate(["driver"]),
+  asyncHandler(createOwnerFleetDriver),
+);
+driverRouter.get(
+  "/fleet/vehicles",
+  authenticate(["driver"]),
+  asyncHandler(getOwnerFleetVehicles),
+);
+driverRouter.post(
+  "/fleet/vehicles",
+  authenticate(["driver"]),
+  asyncHandler(addOwnerVehicle),
+);
+driverRouter.delete(
+  "/fleet/vehicles/:vehicleId",
+  authenticate(["driver"]),
+  asyncHandler(deleteOwnerFleetVehicle),
+);
+driverRouter.get("/service-locations", asyncHandler(getServiceLocations));
+driverRouter.get(
+  "/document-templates",
+  asyncHandler(getDriverDocumentTemplates),
+);
+driverRouter.post("/onboarding/send-otp", asyncHandler(startOnboarding));
+driverRouter.post("/onboarding/verify-otp", asyncHandler(verifyOnboardingOtp));
+driverRouter.patch(
+  "/onboarding/personal",
+  asyncHandler(saveOnboardingPersonal),
+);
+driverRouter.patch(
+  "/onboarding/referral",
+  asyncHandler(saveOnboardingReferral),
+);
+driverRouter.patch("/onboarding/vehicle", asyncHandler(saveOnboardingVehicle));
+driverRouter.patch(
+  "/onboarding/documents",
+  asyncHandler(saveOnboardingDocuments),
+);
+driverRouter.post("/onboarding/complete", asyncHandler(completeOnboarding));
+driverRouter.get(
+  "/onboarding/session/:registrationId",
+  asyncHandler(getOnboardingSession),
+);
+driverRouter.patch("/online", authenticate(["driver"]), asyncHandler(goOnline));
+driverRouter.patch(
+  "/offline",
+  authenticate(["driver"]),
+  asyncHandler(goOffline),
+);

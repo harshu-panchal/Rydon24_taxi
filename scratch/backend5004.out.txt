@@ -1,0 +1,11 @@
+MongoDB connected to ac-xl50eqo-shard-00-01.6ifoxfu.mongodb.net/appzeto_taxi
+Taxi backend listening on port 5004
+[listDrivers] start {
+  page: '1',
+  limit: '10',
+  status: undefined,
+  search: undefined,
+  approve: 'true'
+}
+[listDrivers] count done 10
+[0mGET /api/v1/admin/drivers?page=1&limit=10&approve=true [0m-[0m - ms - -[0m

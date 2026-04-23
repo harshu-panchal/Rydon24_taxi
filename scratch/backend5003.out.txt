@@ -1,0 +1,4 @@
+MongoDB connected to ac-xl50eqo-shard-00-00.6ifoxfu.mongodb.net/appzeto_taxi
+Taxi backend listening on port 5003
+[0mGET /api/v1/admin/drivers?page=1&limit=10&approve=true [0m-[0m - ms - -[0m
+[0mGET /health [32m200[0m 1.850 ms - 52[0m
