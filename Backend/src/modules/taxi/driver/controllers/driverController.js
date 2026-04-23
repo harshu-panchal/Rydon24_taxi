@@ -17,6 +17,7 @@ import {
   signAccessToken,
 } from "../services/authService.js";
 import { emitToDriver } from "../../services/dispatchService.js";
+import { notifyLateAvailableDriver } from "../../services/dispatchService.js";
 import { findZoneByPickup } from "../services/locationService.js";
 import { listDriverServiceLocations } from "../services/serviceLocationService.js";
 import {
@@ -520,6 +521,10 @@ export const goOnline = async (req, res) => {
       ...driver.toObject(),
       vehicleIconUrl,
     },
+  });
+
+  notifyLateAvailableDriver(driver._id).catch((error) => {
+    console.error("Failed to notify late-available driver on goOnline", error);
   });
 };
 

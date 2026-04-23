@@ -120,6 +120,74 @@ const closeDriverRequestWindow = (rideId, driverIds = []) => {
   }
 };
 
+const emitRideRequestToDrivers = async ({
+  ride,
+  targetDrivers = [],
+  zone = null,
+  effectiveRadius = 0,
+  dispatchVehicleTypeIds = [],
+  dispatchConfig,
+  attemptIndex = 0,
+}) => {
+  if (!ride || !targetDrivers.length) {
+    return;
+  }
+
+  const requestExpiresAt = new Date(Date.now() + dispatchConfig.retryDelayMs).toISOString();
+
+  for (const driver of targetDrivers) {
+    emitToDriver(driver._id, 'rideRequest', {
+      rideId: String(ride._id),
+      type: ride.serviceType || 'ride',
+      serviceType: ride.serviceType || 'ride',
+      userId: String(ride.userId),
+      user: {
+        id: ride.userId?._id ? String(ride.userId._id) : String(ride.userId || ''),
+        name: ride.userId?.name || 'Customer',
+        phone: ride.userId?.phone || '',
+        countryCode: ride.userId?.countryCode || '',
+      },
+      pickupLocation: ride.pickupLocation,
+      pickupAddress: ride.pickupAddress || '',
+      dropLocation: ride.dropLocation,
+      dropAddress: ride.dropAddress || '',
+      estimatedDistanceMeters: ride.estimatedDistanceMeters || 0,
+      estimatedDurationMinutes: ride.estimatedDurationMinutes || 0,
+      vehicleTypeId: ride.vehicleTypeId ? String(ride.vehicleTypeId) : null,
+      vehicleTypeIds: dispatchVehicleTypeIds,
+      vehicleIconType: ride.vehicleIconType,
+      vehicleIconUrl: ride.vehicleIconUrl || '',
+      fare: ride.fare,
+      paymentMethod: ride.paymentMethod,
+      parcel: ride.parcel || null,
+      intercity: ride.intercity || null,
+      radius: effectiveRadius,
+      attempt: attemptIndex + 1,
+      maxAttempts: dispatchConfig.maxAttempts,
+      acceptRejectDurationSeconds: dispatchConfig.retryWindowSeconds,
+      expiresInSeconds: dispatchConfig.retryWindowSeconds,
+      requestExpiresAt,
+      zoneId: zone?._id ? String(zone._id) : null,
+    });
+  }
+
+  sendPushNotificationToEntities({
+    driverIds: targetDrivers.map((driver) => String(driver._id)),
+    title: ride.serviceType === 'parcel' ? 'New delivery request' : 'New ride request',
+    body: ride.pickupAddress
+      ? `Pickup: ${ride.pickupAddress}`
+      : 'A new booking is waiting for your response.',
+    data: {
+      type: 'ride_request',
+      rideId: String(ride._id),
+      serviceType: ride.serviceType || 'ride',
+      userId: String(ride.userId?._id || ride.userId || ''),
+    },
+  }).catch((error) => {
+    console.error('Failed to send driver ride-request push notification', error);
+  });
+};
+
 export const markDriverRejectedFromDispatch = (rideId, driverId) => {
   if (!rideId || !driverId) {
     return;
@@ -341,8 +409,6 @@ const dispatchAttempt = async (rideId, attemptIndex = 0) => {
     );
     const dispatchVehicleTypeIds = getDispatchVehicleTypeIds(ride);
     const dispatchState = getDispatchState(rideId);
-    const requestExpiresAt = new Date(Date.now() + dispatchConfig.retryDelayMs).toISOString();
-
     if (dispatchConfig.dispatchType === 'one_by_one' && attemptIndex > 0 && dispatchState.driverIds.length) {
       closeDriverRequestWindow(rideId, dispatchState.driverIds);
     }
@@ -377,59 +443,15 @@ const dispatchAttempt = async (rideId, attemptIndex = 0) => {
       timer: null,
     });
 
-    for (const driver of targetDrivers) {
-      emitToDriver(driver._id, 'rideRequest', {
-        rideId: String(ride._id),
-        type: ride.serviceType || 'ride',
-        serviceType: ride.serviceType || 'ride',
-        userId: String(ride.userId),
-        user: {
-          id: ride.userId?._id ? String(ride.userId._id) : String(ride.userId || ''),
-          name: ride.userId?.name || 'Customer',
-          phone: ride.userId?.phone || '',
-          countryCode: ride.userId?.countryCode || '',
-        },
-        pickupLocation: ride.pickupLocation,
-        pickupAddress: ride.pickupAddress || '',
-        dropLocation: ride.dropLocation,
-        dropAddress: ride.dropAddress || '',
-        estimatedDistanceMeters: ride.estimatedDistanceMeters || 0,
-        estimatedDurationMinutes: ride.estimatedDurationMinutes || 0,
-        vehicleTypeId: ride.vehicleTypeId ? String(ride.vehicleTypeId) : null,
-        vehicleTypeIds: dispatchVehicleTypeIds,
-        vehicleIconType: ride.vehicleIconType,
-        vehicleIconUrl: ride.vehicleIconUrl || '',
-        fare: ride.fare,
-        paymentMethod: ride.paymentMethod,
-        parcel: ride.parcel || null,
-        intercity: ride.intercity || null,
-        radius: effectiveRadius,
-        attempt: attemptIndex + 1,
-        maxAttempts: dispatchConfig.maxAttempts,
-        acceptRejectDurationSeconds: dispatchConfig.retryWindowSeconds,
-        expiresInSeconds: dispatchConfig.retryWindowSeconds,
-        requestExpiresAt,
-        zoneId: zone?._id ? String(zone._id) : null,
-      });
-    }
-
-    if (targetDrivers.length) {
-      sendPushNotificationToEntities({
-        driverIds: targetDrivers.map((driver) => String(driver._id)),
-        title: ride.serviceType === 'parcel' ? 'New delivery request' : 'New ride request',
-        body: ride.pickupAddress
-          ? `Pickup: ${ride.pickupAddress}`
-          : 'A new booking is waiting for your response.',
-        data: {
-          type: 'ride_request',
-          rideId: String(ride._id),
-          serviceType: ride.serviceType || 'ride',
-          userId: String(ride.userId?._id || ride.userId || ''),
-        },
-      }).catch((error) => {
-        console.error('Failed to send driver ride-request push notification', error);
-      });
-    }
+    await emitRideRequestToDrivers({
+      ride,
+      targetDrivers,
+      zone,
+      effectiveRadius,
+      dispatchVehicleTypeIds,
+      dispatchConfig,
+      attemptIndex,
+    });
 
     emitToRoom(getUserRoom(ride.userId), 'rideSearchUpdate', {
       rideId: String(ride._id),
@@ -471,6 +493,83 @@ const dispatchAttempt = async (rideId, attemptIndex = 0) => {
 export const startDispatchFlow = async (ride) => {
   stopDispatchFlow(ride._id);
   await dispatchAttempt(ride._id, 0);
+};
+
+export const notifyLateAvailableDriver = async (driverId) => {
+  if (!driverId || activeDispatches.size === 0) {
+    return;
+  }
+
+  const driver = await Driver.findById(driverId)
+    .select('_id isOnline isOnRide wallet location zoneId vehicleTypeId vehicleType vehicleIconType');
+
+  if (!driver?.isOnline || driver?.isOnRide || driver?.wallet?.isBlocked || !driver?.location?.coordinates?.length) {
+    return;
+  }
+
+  const activeRideIds = Array.from(activeDispatches.keys());
+
+  for (const rideId of activeRideIds) {
+    const ride = await Ride.findById(rideId).populate('userId', 'name phone countryCode');
+
+    if (!ride || ride.status !== RIDE_STATUS.SEARCHING) {
+      continue;
+    }
+
+    const dispatchState = getDispatchState(rideId);
+    const driverKey = String(driver._id);
+
+    if (
+      dispatchState.notifiedDriverIds.includes(driverKey) ||
+      dispatchState.rejectedDriverIds.includes(driverKey)
+    ) {
+      continue;
+    }
+
+    const dispatchConfig = await resolveTransportDispatchConfig();
+    const attemptIndex = Number.isInteger(dispatchState.radiusIndex) ? dispatchState.radiusIndex : 0;
+    const radius = getAttemptRadiusMeters(
+      dispatchConfig.baseDistanceMeters || dispatchConfig.maxDistanceMeters,
+      attemptIndex,
+    );
+    const dispatchVehicleTypeIds = getDispatchVehicleTypeIds(ride);
+    const { zone, drivers, searchRadiusMeters } = await matchDrivers(ride.pickupLocation.coordinates, {
+      maxDistance: radius,
+      vehicleTypeId: ride.vehicleTypeId,
+      vehicleTypeIds: dispatchVehicleTypeIds,
+    });
+
+    const matchedDriver = drivers.find((item) => String(item._id) === driverKey);
+    if (!matchedDriver) {
+      continue;
+    }
+
+    const effectiveRadius = Number.isFinite(searchRadiusMeters) && searchRadiusMeters > 0
+      ? searchRadiusMeters
+      : radius;
+
+    const nextNotifiedDriverIds = [...dispatchState.notifiedDriverIds, driverKey];
+    const nextDriverIds = dispatchConfig.dispatchType === 'broadcast'
+      ? [...new Set([...dispatchState.driverIds, driverKey])]
+      : dispatchState.driverIds.length
+        ? dispatchState.driverIds
+        : [driverKey];
+
+    saveDispatchState(rideId, {
+      driverIds: nextDriverIds,
+      notifiedDriverIds: nextNotifiedDriverIds,
+    });
+
+    await emitRideRequestToDrivers({
+      ride,
+      targetDrivers: [matchedDriver],
+      zone,
+      effectiveRadius,
+      dispatchVehicleTypeIds,
+      dispatchConfig,
+      attemptIndex,
+    });
+  }
 };
 
 export const notifyRideAccepted = async (ride) => {

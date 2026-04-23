@@ -284,6 +284,8 @@ const DriverHome = () => {
     const driverCoordsRef = useRef(readStoredDriverCoords());
     const acceptingRideIdRef = useRef('');
     const currentRequestRef = useRef(null);
+    const recoveryTimeoutsRef = useRef([]);
+    const recoveryInFlightRef = useRef(false);
     const driverPosition = useMemo(() => toLatLng(driverCoords || DEFAULT_MAP_COORDS), [driverCoords]);
     const mapVehicleIcon = useMemo(
         () => getMapIconForVehicle(vehicleIconUrl || vehicleIconType),
@@ -321,6 +323,13 @@ const DriverHome = () => {
     useEffect(() => {
         currentRequestRef.current = currentRequest;
     }, [currentRequest]);
+
+    const clearRecoveryBurst = useCallback(() => {
+        recoveryTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
+        recoveryTimeoutsRef.current = [];
+    }, []);
+
+    useEffect(() => clearRecoveryBurst, [clearRecoveryBurst]);
 
 
     const fetchActiveJob = useCallback(async (type = 'ride') => {
@@ -625,53 +634,81 @@ const DriverHome = () => {
             return;
         }
 
-        const socket = socketService.connect({ role: 'driver' });
-
-        if (!socket) {
+        if (recoveryInFlightRef.current) {
             return;
         }
 
-        let nextCoords = driverCoordsRef.current;
-
-        if (!nextCoords) {
-            try {
-                nextCoords = await updateDriverLocation({ quiet: true });
-            } catch {
-                nextCoords = driverCoordsRef.current;
-            }
-        }
-
-        if (nextCoords) {
-            socketService.emit('locationUpdate', { coordinates: nextCoords });
-        }
+        recoveryInFlightRef.current = true;
 
         try {
-            const [activeDelivery, activeRide] = await Promise.allSettled([
-                fetchActiveJob('parcel'),
-                fetchActiveJob('ride'),
-            ]);
-            const deliveryPayload = activeDelivery.status === 'fulfilled' ? activeDelivery.value : null;
-            const ridePayload = activeRide.status === 'fulfilled' ? activeRide.value : null;
-            const currentJob = deliveryPayload?.rideId
-                ? deliveryPayload
-                : ridePayload?.rideId
-                    ? ridePayload
-                    : null;
+            const socket = socketService.connect({ role: 'driver' });
 
-            if (currentJob?.rideId) {
-                openActiveJob(currentJob);
+            if (!socket) {
                 return;
             }
-        } catch {
-            // Realtime recovery should continue even if active-job hydration fails.
+
+            let nextCoords = driverCoordsRef.current;
+
+            if (!nextCoords) {
+                try {
+                    nextCoords = await updateDriverLocation({ quiet: true });
+                } catch {
+                    nextCoords = driverCoordsRef.current;
+                }
+            }
+
+            if (nextCoords) {
+                socketService.emit('locationUpdate', { coordinates: nextCoords });
+            }
+
+            try {
+                const [activeDelivery, activeRide] = await Promise.allSettled([
+                    fetchActiveJob('parcel'),
+                    fetchActiveJob('ride'),
+                ]);
+                const deliveryPayload = activeDelivery.status === 'fulfilled' ? activeDelivery.value : null;
+                const ridePayload = activeRide.status === 'fulfilled' ? activeRide.value : null;
+                const currentJob = deliveryPayload?.rideId
+                    ? deliveryPayload
+                    : ridePayload?.rideId
+                        ? ridePayload
+                        : null;
+
+                if (currentJob?.rideId) {
+                    openActiveJob(currentJob);
+                    return;
+                }
+            } catch {
+                // Realtime recovery should continue even if active-job hydration fails.
+            }
+
+            setStatusMessage(
+                reason === 'visibility'
+                    ? 'Realtime connection refreshed.'
+                    : 'Driver session synced.',
+            );
+        } finally {
+            recoveryInFlightRef.current = false;
+        }
+    }, [fetchActiveJob, isHydratingDriver, isOnline, isTogglingDuty, openActiveJob, updateDriverLocation]);
+
+    const scheduleRecoveryBurst = useCallback(({ reason = 'resume' } = {}) => {
+        if (!isOnline || isHydratingDriver || isTogglingDuty) {
+            return;
         }
 
-        setStatusMessage(
-            reason === 'visibility'
-                ? 'Realtime connection refreshed.'
-                : 'Driver session synced.',
-        );
-    }, [fetchActiveJob, isHydratingDriver, isOnline, isTogglingDuty, openActiveJob, updateDriverLocation]);
+        clearRecoveryBurst();
+
+        [0, 1500, 5000, 10000].forEach((delay, index) => {
+            const timeoutId = window.setTimeout(() => {
+                recoverRealtimeSession({
+                    reason: index === 0 ? reason : `${reason}-retry-${index}`,
+                }).catch(() => {});
+            }, delay);
+
+            recoveryTimeoutsRef.current.push(timeoutId);
+        });
+    }, [clearRecoveryBurst, isHydratingDriver, isOnline, isTogglingDuty, recoverRealtimeSession]);
 
     // Socket Integration
     useEffect(() => {
@@ -694,9 +731,19 @@ const DriverHome = () => {
                 console.info('[driver-home] emitted initial locationUpdate from effect', driverCoordsRef.current);
             }
 
-            const onSocketConnect = () => setSocketStatus('connected');
-            const onSocketDisconnect = () => setSocketStatus('offline');
+            const onSocketConnect = () => {
+                clearRecoveryBurst();
+                setSocketStatus('connected');
+            };
+            const onSocketDisconnect = () => {
+                setSocketStatus('offline');
+                scheduleRecoveryBurst({ reason: 'disconnect' });
+            };
             const onSocketReconnectAttempt = () => setSocketStatus('reconnecting');
+            const onSocketConnectError = () => {
+                setSocketStatus('reconnecting');
+                scheduleRecoveryBurst({ reason: 'connect-error' });
+            };
 
             const onRideRequest = (data) => {
                 console.info('[driver-home] rideRequest received', data);
@@ -808,6 +855,7 @@ const DriverHome = () => {
             console.info('[driver-home] socket listeners registered');
             socket.on('connect', onSocketConnect);
             socket.on('disconnect', onSocketDisconnect);
+            socket.on('connect_error', onSocketConnectError);
             socket.io.on('reconnect_attempt', onSocketReconnectAttempt);
 
             const locationInterval = setInterval(() => {
@@ -839,16 +887,18 @@ const DriverHome = () => {
                 socketService.off('driver:wallet:updated', onWalletUpdated);
                 socket.off('connect', onSocketConnect);
                 socket.off('disconnect', onSocketDisconnect);
+                socket.off('connect_error', onSocketConnectError);
                 socket.io.off('reconnect_attempt', onSocketReconnectAttempt);
                 clearInterval(locationInterval);
             };
         } else {
             console.info('[driver-home] driver offline, disconnecting socket');
+            clearRecoveryBurst();
             setSocketStatus('offline');
             socketService.disconnect();
         }
         return undefined;
-    }, [fetchActiveJob, isOnline, navigate]);
+    }, [clearRecoveryBurst, fetchActiveJob, isOnline, navigate, scheduleRecoveryBurst]);
 
     useEffect(() => {
         if (!isOnline) {
@@ -857,20 +907,20 @@ const DriverHome = () => {
 
         const handleVisibilityRecovery = () => {
             if (document.visibilityState === 'visible') {
-                recoverRealtimeSession({ reason: 'visibility' }).catch(() => {});
+                scheduleRecoveryBurst({ reason: 'visibility' });
             }
         };
 
         const handleWindowFocus = () => {
-            recoverRealtimeSession({ reason: 'focus' }).catch(() => {});
+            scheduleRecoveryBurst({ reason: 'focus' });
         };
 
         const handlePageShow = () => {
-            recoverRealtimeSession({ reason: 'pageshow' }).catch(() => {});
+            scheduleRecoveryBurst({ reason: 'pageshow' });
         };
 
         const handleNetworkOnline = () => {
-            recoverRealtimeSession({ reason: 'network' }).catch(() => {});
+            scheduleRecoveryBurst({ reason: 'network' });
         };
 
         document.addEventListener('visibilitychange', handleVisibilityRecovery);
@@ -884,7 +934,28 @@ const DriverHome = () => {
             window.removeEventListener('pageshow', handlePageShow);
             window.removeEventListener('online', handleNetworkOnline);
         };
-    }, [isOnline, recoverRealtimeSession]);
+    }, [isOnline, scheduleRecoveryBurst]);
+
+    useEffect(() => {
+        if (!isOnline) {
+            return undefined;
+        }
+
+        const healthCheckInterval = window.setInterval(() => {
+            if (document.visibilityState !== 'visible') {
+                return;
+            }
+
+            if (!socketService.isConnected()) {
+                setSocketStatus('reconnecting');
+                scheduleRecoveryBurst({ reason: 'health-check' });
+            }
+        }, 8000);
+
+        return () => {
+            clearInterval(healthCheckInterval);
+        };
+    }, [isOnline, scheduleRecoveryBurst]);
 
     useEffect(() => {
         if (!isOnline) {
@@ -892,12 +963,12 @@ const DriverHome = () => {
             return undefined;
         }
 
-        window.__driverReconnectRealtime = () => recoverRealtimeSession({ reason: 'flutter-resume' });
+        window.__driverReconnectRealtime = () => scheduleRecoveryBurst({ reason: 'flutter-resume' });
 
         return () => {
             delete window.__driverReconnectRealtime;
         };
-    }, [isOnline, recoverRealtimeSession]);
+    }, [isOnline, scheduleRecoveryBurst]);
     
     useEffect(() => {
         let interval;

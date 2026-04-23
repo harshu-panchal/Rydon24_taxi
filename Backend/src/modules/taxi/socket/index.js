@@ -16,6 +16,7 @@ import {
   addSocketSubscriptions,
   joinRideRoom,
   markDriverRejectedFromDispatch,
+  notifyLateAvailableDriver,
   notifyRideAccepted,
   setSocketServer,
   startDispatchFlow,
@@ -60,6 +61,9 @@ export const configureTaxiSocketServer = (httpServer) => {
 
     if (identity.role === 'driver') {
       await Driver.findByIdAndUpdate(identity.sub, { socketId: socket.id });
+      notifyLateAvailableDriver(identity.sub).catch((error) => {
+        console.error('Failed to notify late-available driver on socket connect', error);
+      });
     }
 
     socket.on('chat:join', ({ conversationKey }) => {
@@ -146,6 +150,9 @@ export const configureTaxiSocketServer = (httpServer) => {
           socketId: socket.id,
           location: toPoint(normalizedCoords, 'coordinates'),
           zoneId: zone?._id || null,
+        });
+        notifyLateAvailableDriver(identity.sub).catch((error) => {
+          console.error('Failed to notify late-available driver on location update', error);
         });
       }),
     );
