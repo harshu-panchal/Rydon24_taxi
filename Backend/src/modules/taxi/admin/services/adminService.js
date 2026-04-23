@@ -5573,6 +5573,8 @@ export const deleteOwner = async (id) => {
       footer_2: '$general.footer_2',
       default_lat: '$general.default_lat',
       default_lng: '$general.default_lng',
+      logo: '$general.logo',
+      favicon: '$general.favicon',
       brand_logo: '$general.brand_logo',
     },
   };
