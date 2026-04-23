@@ -17,6 +17,7 @@ function LandingPage() {
   const navigate = useNavigate();
   const { settings } = useSettings();
   const appName = settings.general?.app_name || 'Appzeto';
+  const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
 
   const handleRedirect = (e) => {
     e?.preventDefault();
@@ -28,7 +29,12 @@ function LandingPage() {
       {/* Primary Header */}
       <header className="landing-header">
         <div className="landing-header-left">
-          <a href="/" className="landing-logo">{appName}</a>
+          <a href="/" className="landing-logo">
+            {appLogo ? (
+              <img src={appLogo} alt={`${appName} logo`} className="landing-logo-icon" />
+            ) : null}
+            <span>{appName}</span>
+          </a>
           <a href="#" className="landing-nav-link" onClick={handleRedirect}>Ride</a>
           <a href="#" className="landing-nav-link" onClick={handleRedirect}>Drive</a>
           <a href="#" className="landing-nav-link" onClick={handleRedirect}>Business</a>
