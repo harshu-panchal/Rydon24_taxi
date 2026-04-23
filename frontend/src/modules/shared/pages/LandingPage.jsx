@@ -48,17 +48,6 @@ function LandingPage() {
         </div>
       </header>
 
-      {/* Sub Header / Tabs */}
-      <div className="landing-sub-header">
-        <h2>Ride</h2>
-        <nav className="landing-sub-nav">
-          <a href="#" className="landing-sub-nav-link" onClick={handleRedirect}>Request a ride</a>
-          <a href="#" className="landing-sub-nav-link" onClick={handleRedirect}>Reserve a ride</a>
-          <a href="#" className="landing-sub-nav-link" onClick={handleRedirect}>See prices</a>
-          <a href="#" className="landing-sub-nav-link" onClick={handleRedirect}>Explore ride options</a>
-        </nav>
-      </div>
-
       {/* Hero Section */}
       <section className="landing-hero-container">
         <div className="landing-hero-form">
