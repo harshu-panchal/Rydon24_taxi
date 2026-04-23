@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import AuthLayout from '../../components/AuthLayout';
 import { User, Mail, Camera, Smartphone, Lock } from 'lucide-react';
 import { userAuthService } from '../../services/authService';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const fieldShellClassName =
   'rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm transition-all flex items-center gap-3 focus-within:border-slate-900 focus-within:ring-4 focus-within:ring-slate-900/5';
@@ -15,6 +16,7 @@ const PENDING_SIGNUP_PHONE_KEY = 'pendingUserSignupPhone';
 
 const Signup = () => {
   const location = useLocation();
+  const { settings } = useSettings();
   const preservedPhone = typeof window !== 'undefined' ? sessionStorage.getItem(PENDING_SIGNUP_PHONE_KEY) || '' : '';
   const initialPhone = String(location.state?.phone || preservedPhone || '').replace(/\D/g, '').slice(-10);
   const fileInputRef = useRef(null);
@@ -31,19 +33,12 @@ const Signup = () => {
   const [photoError, setPhotoError] = useState('');
   const [error, setError] = useState('');
   const [otpSending, setOtpSending] = useState(false);
-  const [appName, setAppName] = useState('App');
   const navigate = useNavigate();
+  const appName = settings.general?.app_name || 'Appzeto';
   const isValidPhone = /^\d{10}$/.test(formData.phone);
   const isValidPassword = formData.password.length >= 5;
   const hasVerifiedSignupContext = Boolean(location.state?.otpVerified) || Boolean(preservedPhone);
   const [step, setStep] = useState(() => (hasVerifiedSignupContext ? 'profile' : 'phone'));
-
-  useEffect(() => {
-    const title = document.title;
-    if (title && title !== 'App') {
-      setAppName(title);
-    }
-  }, []);
 
   useEffect(() => {
     if (step === 'profile' && isValidPhone) {

@@ -1,24 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import AuthLayout from '../../components/AuthLayout';
 import { ChevronDown, Phone } from 'lucide-react';
 import { userAuthService } from '../../services/authService';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const Login = () => {
   const location = useLocation();
+  const { settings } = useSettings();
   const [phoneNumber, setPhoneNumber] = useState(() => String(location.state?.phone || '').replace(/\D/g, '').slice(-10));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(() => String(location.state?.error || ''));
-  const [appName, setAppName] = useState('App');
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const title = document.title;
-    if (title && title !== 'App') {
-      setAppName(title);
-    }
-  }, []);
+  const appName = settings.general?.app_name || 'Appzeto';
 
   const isValidPhone = phoneNumber.length === 10 && /^\d+$/.test(phoneNumber);
 

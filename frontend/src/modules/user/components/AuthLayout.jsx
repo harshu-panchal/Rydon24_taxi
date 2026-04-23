@@ -1,18 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
 import heroImg from '@/assets/landing/hero.png';
+import { useSettings } from '../../../shared/context/SettingsContext';
 
 const AuthLayout = ({ children, title, subtitle }) => {
-  const [appName, setAppName] = useState('App');
-
-  useEffect(() => {
-    const title = document.title;
-    if (title && title !== 'App') {
-      setAppName(title);
-    } else {
-      setAppName('Appzeto');
-    }
-  }, []);
+  const { settings } = useSettings();
+  const appName = settings.general?.app_name || 'Appzeto';
+  const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
 
   return (
     <div className="min-h-screen bg-[#F8F9FB] flex flex-col lg:flex-row font-sans selection:bg-black selection:text-white overflow-x-hidden w-full">
@@ -29,10 +23,18 @@ const AuthLayout = ({ children, title, subtitle }) => {
         </div>
 
         <div className="relative z-10 w-full flex flex-col justify-between p-16">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-              <div className="w-4 h-4 bg-black rounded-sm"></div>
-            </div>
+          <div className="flex items-center gap-3">
+            {appLogo ? (
+              <img
+                src={appLogo}
+                alt={`${appName} logo`}
+                className="h-11 w-11 rounded-xl object-cover bg-white/95 p-1 shadow-lg shadow-black/20"
+              />
+            ) : (
+              <div className="w-11 h-11 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-black/20">
+                <div className="w-5 h-5 bg-black rounded-md"></div>
+              </div>
+            )}
             <span className="text-2xl font-black tracking-tighter text-white">{appName}</span>
           </div>
           
@@ -75,9 +77,17 @@ const AuthLayout = ({ children, title, subtitle }) => {
       <div className="flex-1 flex items-center justify-center p-4 md:p-12 relative w-full bg-white lg:bg-[#F8F9FB]">
         {/* Mobile Header (Visible only on small screens) */}
         <div className="lg:hidden absolute top-8 left-0 right-0 flex flex-col items-center px-4 text-center">
-            <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center mb-2 shadow-lg shadow-black/10">
-              <div className="w-5 h-5 bg-white rounded-md"></div>
-            </div>
+            {appLogo ? (
+              <img
+                src={appLogo}
+                alt={`${appName} logo`}
+                className="h-14 w-14 rounded-2xl object-cover bg-white p-1.5 mb-3 shadow-lg shadow-black/10"
+              />
+            ) : (
+              <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center mb-2 shadow-lg shadow-black/10">
+                <div className="w-5 h-5 bg-white rounded-md"></div>
+              </div>
+            )}
             <span className="text-2xl font-black tracking-tighter text-black">{appName}</span>
         </div>
 

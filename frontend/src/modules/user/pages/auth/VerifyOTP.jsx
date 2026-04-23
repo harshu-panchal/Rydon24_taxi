@@ -165,8 +165,11 @@ const VerifyOTP = () => {
       title="Verify your number"
       subtitle={`Enter the 4-digit code sent to +91 ${maskedPhone || phone}`}
     >
-      <div className="absolute top-8 left-8 md:top-10 md:left-10 lg:hidden">
-        <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-full transition-all">
+      <div className="lg:hidden mb-2 -mt-4">
+        <button
+          onClick={() => navigate(-1)}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-900 shadow-sm transition-all hover:bg-gray-50"
+        >
           <ArrowLeft size={20} className="text-gray-900" />
         </button>
       </div>
