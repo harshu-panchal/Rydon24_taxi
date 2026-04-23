@@ -101,7 +101,11 @@ class SocketService {
     this.currentToken = token;
     this.socket = io(SOCKET_ORIGIN, {
       auth: { token },
-      transports: ['websocket'],
+      // Start with polling and upgrade when possible so reverse proxies that
+      // don't immediately pass WebSocket upgrades can still complete the
+      // Socket.IO handshake in production.
+      transports: ['polling', 'websocket'],
+      upgrade: true,
       withCredentials: true,
       reconnection: true,
     });
@@ -118,6 +122,8 @@ class SocketService {
       console.error('[socket] connect_error', {
         role: options.role || 'unknown',
         message: error?.message || 'unknown error',
+        description: error?.description || null,
+        context: error?.context || null,
       });
     });
 

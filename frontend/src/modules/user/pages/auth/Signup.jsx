@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import AuthLayout from '../../components/AuthLayout';
 import { User, Mail, Camera, Smartphone, Lock } from 'lucide-react';
@@ -218,6 +218,29 @@ const Signup = () => {
               <span>Continue</span>
             )}
           </motion.button>
+
+          <div className="space-y-3 text-center">
+            <p className="text-sm font-medium text-slate-500">
+              Already have an account?{' '}
+              <Link
+                to="/taxi/user/login"
+                state={{ phone: formData.phone }}
+                className="font-bold text-black underline underline-offset-4"
+              >
+                Login
+              </Link>
+            </p>
+            <p className="text-[12px] text-slate-400 font-medium leading-relaxed px-2">
+              By continuing, you agree to our
+              <Link to="/terms" className="ml-1 text-black underline hover:opacity-70 transition-colors">
+                Terms
+              </Link>
+              {' '}and
+              <Link to="/privacy" className="ml-1 text-black underline hover:opacity-70 transition-colors">
+                Privacy Policy
+              </Link>
+            </p>
+          </div>
         </form>
       ) : (
       <form onSubmit={handleSignup} className="space-y-8">
@@ -371,6 +394,29 @@ const Signup = () => {
             >
                 Change number
             </button>
+        </div>
+
+        <div className="space-y-3 text-center">
+          <p className="text-sm font-medium text-slate-500">
+            Already have an account?{' '}
+            <Link
+              to="/taxi/user/login"
+              state={{ phone: formData.phone }}
+              className="font-bold text-black underline underline-offset-4"
+            >
+              Login
+            </Link>
+          </p>
+          <p className="text-[12px] text-slate-400 font-medium leading-relaxed px-2">
+            By creating an account, you agree to our
+            <Link to="/terms" className="ml-1 text-black underline hover:opacity-70 transition-colors">
+              Terms
+            </Link>
+            {' '}and
+            <Link to="/privacy" className="ml-1 text-black underline hover:opacity-70 transition-colors">
+              Privacy Policy
+            </Link>
+          </p>
         </div>
       </form>
       )}

@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapPin, Navigation, Calendar, Package, Bike, Car, ArrowRight, Globe, HelpCircle } from 'lucide-react';
 import './LandingPage.css';
+import { useSettings } from '../../../shared/context/SettingsContext';
 
 // Using the generated images
 import heroImg from '@/assets/landing/hero.png';
@@ -13,18 +14,9 @@ import citiesImg from '@/assets/landing/cities.png';
 import airportImg from '/airport_illustration.png';
 
 function LandingPage() {
-  const [appName, setAppName] = useState('App');
   const navigate = useNavigate();
-
-  useEffect(() => {
-    // Dynamically get the app name from the favicon/title
-    const title = document.title;
-    if (title && title !== 'App') {
-      setAppName(title);
-    } else {
-      setAppName('Appzeto'); // Fallback
-    }
-  }, []);
+  const { settings } = useSettings();
+  const appName = settings.general?.app_name || 'Appzeto';
 
   const handleRedirect = (e) => {
     e?.preventDefault();
