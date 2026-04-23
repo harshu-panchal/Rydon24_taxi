@@ -11,6 +11,7 @@ import {
 import api from '../../../../shared/api/axiosInstance';
 import toast from 'react-hot-toast';
 import { useSettings } from '../../../../shared/context/SettingsContext';
+let liveFaviconObjectUrl = '';
 
 const SectionCard = ({ title, children, id }) => (
   <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-8" id={id}>
@@ -91,6 +92,73 @@ const fileToDataUrl = (file) =>
     reader.readAsDataURL(file);
   });
 
+const resizeImageDataUrl = (dataUrl, size = 64) =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const context = canvas.getContext('2d');
+
+      if (!context) {
+        reject(new Error('Unable to prepare image canvas'));
+        return;
+      }
+
+      context.clearRect(0, 0, size, size);
+      context.drawImage(image, 0, 0, size, size);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    image.onerror = () => reject(new Error('Unable to process image'));
+    image.src = dataUrl;
+  });
+
+const setLiveFavicon = (faviconUrl = '') => {
+  const rels = ['icon', 'shortcut icon', 'apple-touch-icon'];
+
+  if (liveFaviconObjectUrl) {
+    URL.revokeObjectURL(liveFaviconObjectUrl);
+    liveFaviconObjectUrl = '';
+  }
+
+  let resolvedHref = 'data:,';
+
+  if (faviconUrl) {
+    const [meta, content] = String(faviconUrl).split(',');
+    const mimeMatch = meta.match(/data:(.*?)(;base64)?$/i);
+    const mime = mimeMatch?.[1] || 'image/png';
+    const binary = window.atob(content || '');
+    const bytes = new Uint8Array(binary.length);
+
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+
+    liveFaviconObjectUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
+    resolvedHref = liveFaviconObjectUrl;
+  }
+
+  rels.forEach((rel) => {
+    let link = document.head.querySelector(`link[rel='${rel}']`);
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = rel;
+      document.head.appendChild(link);
+    }
+
+    if (faviconUrl) {
+      link.href = resolvedHref;
+      link.type = 'image/png';
+      link.sizes = '64x64';
+    } else {
+      link.href = 'data:,';
+      link.removeAttribute('type');
+      link.removeAttribute('sizes');
+    }
+  });
+};
+
 const GeneralSettings = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -156,8 +224,16 @@ const GeneralSettings = () => {
   };
 
   const handleFaviconUpload = async (file) => {
-    const dataUrl = await fileToDataUrl(file);
-    handleChange('general', 'favicon', dataUrl);
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const resizedFavicon = await resizeImageDataUrl(dataUrl, 64);
+      handleChange('general', 'favicon', resizedFavicon);
+      setLiveFavicon(resizedFavicon);
+      toast.success('Favicon prepared at 64x64');
+    } catch (err) {
+      console.error('Favicon resize failed:', err);
+      toast.error('Failed to prepare favicon');
+    }
   };
 
   if (loading) {
@@ -203,7 +279,16 @@ const GeneralSettings = () => {
         <SectionCard title="Image Section">
            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
               <ImageUploadBox title="Brand Logo" size="750px x 100px" preview={settings.general.logo || settings.customization.logo || settings.general.brand_logo} onUpload={(file) => handleLogoUpload(file)} onClear={() => handleChange('general', 'logo', '')} />
-              <ImageUploadBox title="Favicon" size="80px x 80px" preview={settings.general.favicon || settings.customization.favicon} onUpload={(file) => handleFaviconUpload(file)} onClear={() => handleChange('general', 'favicon', '')} />
+              <ImageUploadBox
+                title="Favicon"
+                size="80px x 80px"
+                preview={settings.general.favicon || settings.customization.favicon}
+                onUpload={(file) => handleFaviconUpload(file)}
+                onClear={() => {
+                  handleChange('general', 'favicon', '');
+                  setLiveFavicon('');
+                }}
+              />
            </div>
         </SectionCard>
 
