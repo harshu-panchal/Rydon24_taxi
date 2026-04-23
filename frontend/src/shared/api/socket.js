@@ -117,6 +117,9 @@ class SocketService {
       upgrade: true,
       withCredentials: true,
       reconnection: true,
+      reconnectionDelay: 750,
+      reconnectionDelayMax: 2500,
+      timeout: 10000,
     });
     this.attachRegisteredListeners();
 

@@ -269,6 +269,7 @@ const DriverHome = () => {
     const [map, setMap] = useState(null);
     const [driverCoords, setDriverCoords] = useState(() => readStoredDriverCoords());
     const [statusMessage, setStatusMessage] = useState('');
+    const [socketStatus, setSocketStatus] = useState('offline');
     const [acceptingRideId, setAcceptingRideId] = useState('');
     const [isHydratingDriver, setIsHydratingDriver] = useState(true);
     const [isTogglingDuty, setIsTogglingDuty] = useState(false);
@@ -332,6 +333,39 @@ const DriverHome = () => {
         });
         return unwrapApiPayload(response);
     }, []);
+
+    const openActiveJob = useCallback((job) => {
+        if (!job?.rideId) {
+            return false;
+        }
+
+        const currentType = normalizeJobType(job);
+
+        navigate('/taxi/driver/active-trip', {
+            replace: true,
+            state: {
+                type: currentType,
+                rideId: job.rideId,
+                otp: job.otp || '',
+                request: {
+                    type: currentType,
+                    title: getJobTitle(currentType),
+                    fare: `Rs ${job.fare || 0}`,
+                    payment: job.paymentMethod || 'Cash',
+                    pickup: job.pickupAddress || formatPoint(job.pickupLocation, 'Pickup Location'),
+                    drop: job.dropAddress || formatPoint(job.dropLocation, 'Drop Location'),
+                    distance: formatTripDistance(job),
+                    requestId: job.rideId,
+                    rideId: job.rideId,
+                    otp: job.otp || '',
+                    raw: job,
+                },
+                currentDriverCoords: driverCoordsRef.current || job.lastDriverLocation?.coordinates || null,
+            },
+        });
+
+        return true;
+    }, [navigate]);
 
     const onLoad = useCallback(function callback(map) {
         setMap(map);
@@ -446,28 +480,7 @@ const DriverHome = () => {
                 if (currentJob?.rideId) {
                     const currentType = normalizeJobType(currentJob);
 
-                    navigate('/taxi/driver/active-trip', {
-                        replace: true,
-                        state: {
-                            type: currentType,
-                            rideId: currentJob.rideId,
-                            otp: currentJob.otp || '',
-                            request: {
-                                type: currentType,
-                                title: getJobTitle(currentType),
-                                fare: `Rs ${currentJob.fare || 0}`,
-                                payment: currentJob.paymentMethod || 'Cash',
-                                pickup: currentJob.pickupAddress || formatPoint(currentJob.pickupLocation, 'Pickup Location'),
-                                drop: currentJob.dropAddress || formatPoint(currentJob.dropLocation, 'Drop Location'),
-                                distance: formatTripDistance(currentJob),
-                                requestId: currentJob.rideId,
-                                rideId: currentJob.rideId,
-                                otp: currentJob.otp || '',
-                                raw: currentJob,
-                            },
-                            currentDriverCoords: driverCoordsRef.current || currentJob.lastDriverLocation?.coordinates || null,
-                        },
-                    });
+                    openActiveJob(currentJob);
                     return;
                 }
             } catch {
@@ -484,7 +497,7 @@ const DriverHome = () => {
         return () => {
             active = false;
         };
-    }, [fetchActiveJob, hydrateDriverState, navigate]);
+    }, [fetchActiveJob, hydrateDriverState, navigate, openActiveJob]);
 
     useEffect(() => {
         if (map && driverCoords) {
@@ -632,12 +645,33 @@ const DriverHome = () => {
             socketService.emit('locationUpdate', { coordinates: nextCoords });
         }
 
+        try {
+            const [activeDelivery, activeRide] = await Promise.allSettled([
+                fetchActiveJob('parcel'),
+                fetchActiveJob('ride'),
+            ]);
+            const deliveryPayload = activeDelivery.status === 'fulfilled' ? activeDelivery.value : null;
+            const ridePayload = activeRide.status === 'fulfilled' ? activeRide.value : null;
+            const currentJob = deliveryPayload?.rideId
+                ? deliveryPayload
+                : ridePayload?.rideId
+                    ? ridePayload
+                    : null;
+
+            if (currentJob?.rideId) {
+                openActiveJob(currentJob);
+                return;
+            }
+        } catch {
+            // Realtime recovery should continue even if active-job hydration fails.
+        }
+
         setStatusMessage(
             reason === 'visibility'
                 ? 'Realtime connection refreshed.'
                 : 'Driver session synced.',
         );
-    }, [isHydratingDriver, isOnline, isTogglingDuty, updateDriverLocation]);
+    }, [fetchActiveJob, isHydratingDriver, isOnline, isTogglingDuty, openActiveJob, updateDriverLocation]);
 
     // Socket Integration
     useEffect(() => {
@@ -649,13 +683,20 @@ const DriverHome = () => {
                 console.warn('[driver-home] socket effect could not get a socket');
                 setStatusMessage('Driver session missing. Please login again.');
                 setIsOnline(false);
+                setSocketStatus('offline');
                 return undefined;
             }
+
+            setSocketStatus(socket.connected ? 'connected' : 'reconnecting');
 
             if (driverCoordsRef.current) {
                 socketService.emit('locationUpdate', { coordinates: driverCoordsRef.current });
                 console.info('[driver-home] emitted initial locationUpdate from effect', driverCoordsRef.current);
             }
+
+            const onSocketConnect = () => setSocketStatus('connected');
+            const onSocketDisconnect = () => setSocketStatus('offline');
+            const onSocketReconnectAttempt = () => setSocketStatus('reconnecting');
 
             const onRideRequest = (data) => {
                 console.info('[driver-home] rideRequest received', data);
@@ -765,6 +806,9 @@ const DriverHome = () => {
             socketService.on('rideAccepted', openAcceptedRide);
             socketService.on('driver:wallet:updated', onWalletUpdated);
             console.info('[driver-home] socket listeners registered');
+            socket.on('connect', onSocketConnect);
+            socket.on('disconnect', onSocketDisconnect);
+            socket.io.on('reconnect_attempt', onSocketReconnectAttempt);
 
             const locationInterval = setInterval(() => {
                 getCurrentCoords({ purpose: 'background' })
@@ -793,10 +837,14 @@ const DriverHome = () => {
                 socketService.off('errorMessage', onSocketError);
                 socketService.off('rideAccepted', openAcceptedRide);
                 socketService.off('driver:wallet:updated', onWalletUpdated);
+                socket.off('connect', onSocketConnect);
+                socket.off('disconnect', onSocketDisconnect);
+                socket.io.off('reconnect_attempt', onSocketReconnectAttempt);
                 clearInterval(locationInterval);
             };
         } else {
             console.info('[driver-home] driver offline, disconnecting socket');
+            setSocketStatus('offline');
             socketService.disconnect();
         }
         return undefined;
@@ -835,6 +883,19 @@ const DriverHome = () => {
             window.removeEventListener('focus', handleWindowFocus);
             window.removeEventListener('pageshow', handlePageShow);
             window.removeEventListener('online', handleNetworkOnline);
+        };
+    }, [isOnline, recoverRealtimeSession]);
+
+    useEffect(() => {
+        if (!isOnline) {
+            delete window.__driverReconnectRealtime;
+            return undefined;
+        }
+
+        window.__driverReconnectRealtime = () => recoverRealtimeSession({ reason: 'flutter-resume' });
+
+        return () => {
+            delete window.__driverReconnectRealtime;
         };
     }, [isOnline, recoverRealtimeSession]);
     
@@ -954,6 +1015,16 @@ const DriverHome = () => {
                     <span className="text-xl font-black tracking-tight">
                         {Number(walletSummary.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
+                </div>
+
+                <div className={`pointer-events-none rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] shadow-lg ${
+                    socketStatus === 'connected'
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : socketStatus === 'reconnecting'
+                            ? 'border-amber-200 bg-amber-50 text-amber-700'
+                            : 'border-slate-200 bg-white/95 text-slate-500'
+                }`}>
+                    {socketStatus}
                 </div>
 
                 {/* Search Button */}

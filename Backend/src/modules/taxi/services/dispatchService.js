@@ -10,6 +10,7 @@ import { Delivery } from '../user/models/Delivery.js';
 import { getRideRoom } from './rideService.js';
 import { SOCKET_EVENTS } from '../socket/events.js';
 import { resolveTransportDispatchConfig } from './transportSettingsService.js';
+import { sendPushNotificationToEntities } from './pushNotificationService.js';
 
 const activeDispatches = new Map();
 let ioInstance = null;
@@ -412,6 +413,24 @@ const dispatchAttempt = async (rideId, attemptIndex = 0) => {
       });
     }
 
+    if (targetDrivers.length) {
+      sendPushNotificationToEntities({
+        driverIds: targetDrivers.map((driver) => String(driver._id)),
+        title: ride.serviceType === 'parcel' ? 'New delivery request' : 'New ride request',
+        body: ride.pickupAddress
+          ? `Pickup: ${ride.pickupAddress}`
+          : 'A new booking is waiting for your response.',
+        data: {
+          type: 'ride_request',
+          rideId: String(ride._id),
+          serviceType: ride.serviceType || 'ride',
+          userId: String(ride.userId?._id || ride.userId || ''),
+        },
+      }).catch((error) => {
+        console.error('Failed to send driver ride-request push notification', error);
+      });
+    }
+
     emitToRoom(getUserRoom(ride.userId), 'rideSearchUpdate', {
       rideId: String(ride._id),
       status: ride.status,
@@ -540,4 +559,20 @@ export const notifyRideAccepted = async (ride) => {
       reason: 'accepted-by-another-driver',
     });
   }
+
+  sendPushNotificationToEntities({
+    userIds: [String(populatedRide.userId)],
+    title: 'Ride accepted',
+    body: populatedRide.driverId?.name
+      ? `${populatedRide.driverId.name} accepted your request.`
+      : 'A driver accepted your request.',
+    data: {
+      type: 'ride_accepted',
+      rideId: String(populatedRide._id),
+      serviceType: populatedRide.serviceType || 'ride',
+      driverId: String(populatedRide.driverId?._id || ''),
+    },
+  }).catch((error) => {
+    console.error('Failed to send user ride-accepted push notification', error);
+  });
 };
