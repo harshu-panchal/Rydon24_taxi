@@ -14,7 +14,7 @@ const seed = async () => {
     const result = await AdminBusinessSetting.findOneAndUpdate(
       { scope: 'default' },
       { $set: defaults },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
     );
 
     console.log('Business settings seeded successfully:', result.scope);

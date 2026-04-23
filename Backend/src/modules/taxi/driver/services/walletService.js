@@ -224,7 +224,7 @@ export const applyDriverWalletAdjustment = async ({
         'wallet.isBlocked': isBlockedAfter,
       },
     },
-    { new: true, session },
+    { returnDocument: 'after', session },
   );
 
   const [transaction] = await WalletTransaction.create(
@@ -301,7 +301,7 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
     const ride = await Ride.findOneAndUpdate(
       { _id: rideId, walletSettledAt: null, driverId: { $ne: null } },
       { $set: { walletSettledAt: new Date() } },
-      { new: true, session },
+      { returnDocument: 'after', session },
     );
 
     if (!ride) {

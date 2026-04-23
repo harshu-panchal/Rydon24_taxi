@@ -135,7 +135,7 @@ const closeRideAsUnmatched = async (rideId) => {
   const ride = await Ride.findOneAndUpdate(
     { _id: rideId, status: RIDE_STATUS.SEARCHING },
     { status: RIDE_STATUS.CANCELLED, liveStatus: RIDE_LIVE_STATUS.CANCELLED },
-    { new: true },
+    { returnDocument: 'after' },
   );
 
   if (!ride) {

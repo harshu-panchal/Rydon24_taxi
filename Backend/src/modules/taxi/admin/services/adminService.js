@@ -1848,7 +1848,7 @@ export const updateUser = async (id, payload) => {
   const user = await User.findOneAndUpdate(
     { _id: id, deletedAt: null },
     { $set: update },
-    { new: true, runValidators: true },
+    { returnDocument: 'after', runValidators: true },
   );
 
   if (!user) throw new ApiError(404, 'User not found');
@@ -1865,7 +1865,7 @@ export const deleteUser = async (id) => {
         active: false,
       },
     },
-    { new: true },
+    { returnDocument: 'after' },
   );
 
   if (!user) {
@@ -1909,7 +1909,7 @@ export const restoreDeletedUser = async (id) => {
         active: true,
       },
     },
-    { new: true, runValidators: true },
+    { returnDocument: 'after', runValidators: true },
   );
 
   if (!user) {
@@ -1978,7 +1978,7 @@ export const approveUserDeletionRequest = async (id, adminId) => {
         'deletionRequest.adminNote': '',
       },
     },
-    { new: true, runValidators: true },
+    { returnDocument: 'after', runValidators: true },
   );
 
   if (!user) throw new ApiError(404, 'Pending user deletion request not found');
@@ -2001,7 +2001,7 @@ export const rejectUserDeletionRequest = async (id, payload = {}, adminId) => {
         'deletionRequest.adminNote': adminNote,
       },
     },
-    { new: true, runValidators: true },
+    { returnDocument: 'after', runValidators: true },
   );
 
   if (!user) throw new ApiError(404, 'Pending user deletion request not found');
@@ -2685,7 +2685,7 @@ export const rejectDriverDeletionRequest = async (id, payload = {}, adminId) => 
         'deletionRequest.adminNote': adminNote,
       },
     },
-    { new: true, runValidators: true },
+    { returnDocument: 'after', runValidators: true },
   );
 
   if (!driver) throw new ApiError(404, 'Pending driver deletion request not found');
@@ -2696,7 +2696,7 @@ export const restoreDeletedDriver = async (id) => {
   const driver = await Driver.findOneAndUpdate(
     { _id: id, deletedAt: { $ne: null } },
     { $set: { deletedAt: null } },
-    { new: true },
+    { returnDocument: 'after' },
   );
 
   if (!driver) {
@@ -2801,7 +2801,7 @@ export const updateDriver = async (id, payload) => {
     update.phone = String(update.phone);
   }
 
-  const driver = await Driver.findByIdAndUpdate(id, update, { new: true });
+  const driver = await Driver.findByIdAndUpdate(id, update, { returnDocument: 'after' });
   if (!driver) throw new ApiError(404, 'Driver not found');
   return serializeDriver(driver);
 };
@@ -2816,7 +2816,7 @@ export const updateDriverPassword = async (id, password) => {
       password: await hashPassword(password),
       password_last_updated_at: new Date(),
     },
-    { new: true },
+    { returnDocument: 'after' },
   );
 
   if (!driver) throw new ApiError(404, 'Driver not found');
@@ -2928,7 +2928,7 @@ export const updateSubscriptionSettings = async (payload) => {
   const setting = await AdminBusinessSetting.findOneAndUpdate(
     { scope: 'default' },
     { $set: { 'subscription.mode': mode } },
-    { new: true, upsert: true },
+    { returnDocument: 'after', upsert: true },
   );
 
   return setting.subscription;
@@ -2953,7 +2953,7 @@ export const updateReferralSettings = async (type, payload) => {
   const setting = await AdminBusinessSetting.findOneAndUpdate(
     { scope: 'default' },
     { $set: { [updateKey]: updateData } },
-    { new: true, upsert: true },
+    { returnDocument: 'after', upsert: true },
   );
 
   return setting.referral[type];
@@ -5291,7 +5291,7 @@ export const deleteOwner = async (id) => {
         },
       },
       {
-        new: true,
+        returnDocument: 'after',
         upsert: true,
         setDefaultsOnInsert: true,
       },
@@ -5364,7 +5364,7 @@ export const deleteOwner = async (id) => {
   export const listLanguages = async () => AppLanguage.find().sort({ code: 1 }).lean();
 
   export const updateLanguageStatus = async (id, payload) => {
-    const language = await AppLanguage.findByIdAndUpdate(id, { active: Number(payload.active) }, { new: true });
+    const language = await AppLanguage.findByIdAndUpdate(id, { active: Number(payload.active) }, { returnDocument: 'after' });
     if (!language) throw new ApiError(404, 'Language not found');
     return language.toObject();
   };
@@ -5388,7 +5388,7 @@ export const deleteOwner = async (id) => {
   };
 
   export const updatePreferenceStatus = async (id, payload) => {
-    const preference = await UserPreference.findByIdAndUpdate(id, { active: Number(payload.active) }, { new: true });
+    const preference = await UserPreference.findByIdAndUpdate(id, { active: Number(payload.active) }, { returnDocument: 'after' });
     if (!preference) throw new ApiError(404, 'Preference not found');
     return preference.toObject();
   };
@@ -5421,13 +5421,13 @@ export const deleteOwner = async (id) => {
   export const listNotificationChannels = async () => NotificationChannel.find().sort({ createdAt: 1 }).lean();
 
   export const toggleChannelPush = async (id, status) => {
-    const channel = await NotificationChannel.findByIdAndUpdate(id, { push_notification: !!status }, { new: true });
+    const channel = await NotificationChannel.findByIdAndUpdate(id, { push_notification: !!status }, { returnDocument: 'after' });
     if (!channel) throw new ApiError(404, 'Channel not found');
     return channel.toObject();
   };
 
   export const toggleChannelMail = async (id, status) => {
-    const channel = await NotificationChannel.findByIdAndUpdate(id, { mail: !!status }, { new: true });
+    const channel = await NotificationChannel.findByIdAndUpdate(id, { mail: !!status }, { returnDocument: 'after' });
     if (!channel) throw new ApiError(404, 'Channel not found');
     return channel.toObject();
   };
@@ -5493,7 +5493,7 @@ export const deleteOwner = async (id) => {
     }
 
     const method = await PaymentMethod.findByIdAndUpdate(id, update, {
-      new: true,
+      returnDocument: 'after',
       runValidators: true,
     });
     if (!method) {
@@ -5968,7 +5968,7 @@ export const deleteOwner = async (id) => {
     if (payload.active !== undefined) update.active = normalizeBoolean(payload.active) ? 1 : 0;
     if (payload.company_key !== undefined) update.company_key = payload.company_key;
 
-    const item = await TaxiAppModule.findByIdAndUpdate(id, { $set: update }, { new: true });
+    const item = await TaxiAppModule.findByIdAndUpdate(id, { $set: update }, { returnDocument: 'after' });
     if (!item) throw new ApiError(404, 'App module not found in database registry');
     return item.toObject();
   };

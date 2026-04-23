@@ -505,7 +505,7 @@ export const goOnline = async (req, res) => {
       zoneId: zone?._id || null,
       location: toPoint(coordinates, "location"),
     },
-    { new: true },
+    { returnDocument: 'after' },
   );
 
   if (!driver) {
@@ -1369,7 +1369,7 @@ export const updateDriverVehicle = async (req, res) => {
   }
 
   const driver = await Driver.findByIdAndUpdate(req.auth.sub, update, {
-    new: true,
+    returnDocument: 'after',
   });
 
   if (!driver) {
@@ -1855,7 +1855,7 @@ export const goOffline = async (req, res) => {
       isOnline: false,
       socketId: null,
     },
-    { new: true },
+    { returnDocument: 'after' },
   );
 
   if (!driver) {

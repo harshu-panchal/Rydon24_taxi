@@ -397,7 +397,7 @@ export const adminUpdateSupportTitle = async (req, res) => {
     patch.active = Boolean(req.body.active);
   }
 
-  const updated = await SupportTicketTitle.findByIdAndUpdate(titleId, patch, { new: true });
+  const updated = await SupportTicketTitle.findByIdAndUpdate(titleId, patch, { returnDocument: 'after' });
   if (!updated) {
     throw new ApiError(404, 'Support title not found');
   }
@@ -528,7 +528,7 @@ export const adminUpdateSupportTicket = async (req, res) => {
     }
   }
 
-  const updated = await SupportTicket.findOneAndUpdate({ ticketCode }, patch, { new: true });
+  const updated = await SupportTicket.findOneAndUpdate({ ticketCode }, patch, { returnDocument: 'after' });
   if (!updated) {
     throw new ApiError(404, 'Support ticket not found');
   }

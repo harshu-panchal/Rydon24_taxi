@@ -272,6 +272,7 @@ const DriverHome = () => {
     const [acceptingRideId, setAcceptingRideId] = useState('');
     const [isHydratingDriver, setIsHydratingDriver] = useState(true);
     const [isTogglingDuty, setIsTogglingDuty] = useState(false);
+    const [showOfflineConfirm, setShowOfflineConfirm] = useState(false);
     const [vehicleIconType, setVehicleIconType] = useState(
         () => storedDriverInfo?.vehicleIconType || storedDriverInfo?.vehicleType || 'car',
     );
@@ -583,6 +584,19 @@ const DriverHome = () => {
         }
     }, []);
 
+    const handleDutyToggle = useCallback(() => {
+        if (isHydratingDriver || isTogglingDuty) {
+            return;
+        }
+
+        if (isOnline) {
+            setShowOfflineConfirm(true);
+            return;
+        }
+
+        goOnline();
+    }, [goOnline, isHydratingDriver, isOnline, isTogglingDuty]);
+
     // Socket Integration
     useEffect(() => {
         if (isOnline) {
@@ -798,6 +812,50 @@ const DriverHome = () => {
                 isBlocked={isBalanceCritical}
             />
 
+            <AnimatePresence>
+                {showOfflineConfirm && (
+                    <>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 z-[70] bg-slate-950/45 backdrop-blur-sm"
+                            onClick={() => setShowOfflineConfirm(false)}
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, y: 24, scale: 0.96 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 24, scale: 0.96 }}
+                            className="absolute inset-x-5 bottom-32 z-[71] rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
+                        >
+                            <h3 className="text-[18px] font-black tracking-tight text-slate-950">Go offline?</h3>
+                            <p className="mt-2 text-[13px] font-semibold leading-relaxed text-slate-500">
+                                New ride requests will stop until you go online again.
+                            </p>
+                            <div className="mt-5 grid grid-cols-2 gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowOfflineConfirm(false)}
+                                    className="h-12 rounded-[16px] border border-slate-200 bg-slate-50 text-[12px] font-black uppercase tracking-[0.14em] text-slate-500"
+                                >
+                                    Stay Online
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowOfflineConfirm(false);
+                                        goOffline();
+                                    }}
+                                    className="h-12 rounded-[16px] bg-rose-500 text-[12px] font-black uppercase tracking-[0.14em] text-white shadow-[0_14px_28px_rgba(244,63,94,0.28)]"
+                                >
+                                    Go Offline
+                                </button>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+
             {/* --- TOP FLOATING UI --- */}
             <div className="fixed top-0 left-0 right-0 p-5 pt-12 flex items-start justify-between z-40 pointer-events-none max-w-md mx-auto">
                 {/* Menu Button */}
@@ -917,7 +975,7 @@ const DriverHome = () => {
                         <motion.button 
                             whileTap={{ scale: 0.9 }}
                             disabled={isHydratingDriver || isTogglingDuty}
-                            onClick={isOnline ? goOffline : goOnline}
+                            onClick={handleDutyToggle}
                             className={`
                                 relative w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transition-all duration-500 z-10
                                 ${isOnline 

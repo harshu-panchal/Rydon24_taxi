@@ -224,7 +224,7 @@ const syncDeliveryWithRide = async (ride) => {
   };
 
   if (ride.deliveryId) {
-    return Delivery.findByIdAndUpdate(ride.deliveryId, payload, { new: true });
+    return Delivery.findByIdAndUpdate(ride.deliveryId, payload, { returnDocument: 'after' });
   }
 
   const delivery = await Delivery.create(payload);

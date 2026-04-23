@@ -255,7 +255,7 @@ export const applyPromoToRideInTransaction = async ({
     promoUpdateQuery.usage_count = { $lt: maxUsesTotal };
   }
 
-  const promoUpdated = await PromoCode.findOneAndUpdate(promoUpdateQuery, { $inc: { usage_count: 1 } }, { new: true, session });
+  const promoUpdated = await PromoCode.findOneAndUpdate(promoUpdateQuery, { $inc: { usage_count: 1 } }, { returnDocument: 'after', session });
   if (!promoUpdated) {
     throw new ApiError(409, 'Promo code usage limit reached');
   }
@@ -288,7 +288,7 @@ export const applyPromoToRideInTransaction = async ({
     const counterUpdated = await PromoUserCounter.findOneAndUpdate(
       counterQuery,
       { $inc: { uses_count: 1, cumulative_discount_amount: breakdown.discount_amount } },
-      { new: true, session },
+      { returnDocument: 'after', session },
     );
 
     if (!counterUpdated) {
