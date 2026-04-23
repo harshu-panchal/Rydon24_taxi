@@ -85,6 +85,15 @@ class SocketService {
     }
 
     if (this.socket && this.currentToken === token) {
+      if (!this.socket.connected) {
+        console.info('[socket] reconnecting existing socket', {
+          role: options.role || 'unknown',
+          socketId: this.socket.id || null,
+        });
+        this.socket.auth = { ...(this.socket.auth || {}), token };
+        this.socket.connect();
+      }
+
       console.info('[socket] reusing existing connection', {
         role: options.role || 'unknown',
         socketId: this.socket.id || null,

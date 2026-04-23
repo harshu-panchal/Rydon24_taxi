@@ -492,6 +492,16 @@ const DriverHome = () => {
         }
     }, [map, driverCoords]);
 
+    const recenterMap = useCallback(async () => {
+        try {
+            setStatusMessage('Recentering map...');
+            await updateDriverLocation({ quiet: true });
+            setStatusMessage('Map recentered to your location.');
+        } catch (error) {
+            setStatusMessage(error.message || 'Could not recenter map.');
+        }
+    }, [updateDriverLocation]);
+
     const goOnline = useCallback(async () => {
         if (isBalanceCritical) {
             setShowLowBalanceModal(true);
@@ -596,6 +606,38 @@ const DriverHome = () => {
 
         goOnline();
     }, [goOnline, isHydratingDriver, isOnline, isTogglingDuty]);
+
+    const recoverRealtimeSession = useCallback(async ({ reason = 'resume' } = {}) => {
+        if (!isOnline || isHydratingDriver || isTogglingDuty) {
+            return;
+        }
+
+        const socket = socketService.connect({ role: 'driver' });
+
+        if (!socket) {
+            return;
+        }
+
+        let nextCoords = driverCoordsRef.current;
+
+        if (!nextCoords) {
+            try {
+                nextCoords = await updateDriverLocation({ quiet: true });
+            } catch {
+                nextCoords = driverCoordsRef.current;
+            }
+        }
+
+        if (nextCoords) {
+            socketService.emit('locationUpdate', { coordinates: nextCoords });
+        }
+
+        setStatusMessage(
+            reason === 'visibility'
+                ? 'Realtime connection refreshed.'
+                : 'Driver session synced.',
+        );
+    }, [isHydratingDriver, isOnline, isTogglingDuty, updateDriverLocation]);
 
     // Socket Integration
     useEffect(() => {
@@ -759,6 +801,42 @@ const DriverHome = () => {
         }
         return undefined;
     }, [fetchActiveJob, isOnline, navigate]);
+
+    useEffect(() => {
+        if (!isOnline) {
+            return undefined;
+        }
+
+        const handleVisibilityRecovery = () => {
+            if (document.visibilityState === 'visible') {
+                recoverRealtimeSession({ reason: 'visibility' }).catch(() => {});
+            }
+        };
+
+        const handleWindowFocus = () => {
+            recoverRealtimeSession({ reason: 'focus' }).catch(() => {});
+        };
+
+        const handlePageShow = () => {
+            recoverRealtimeSession({ reason: 'pageshow' }).catch(() => {});
+        };
+
+        const handleNetworkOnline = () => {
+            recoverRealtimeSession({ reason: 'network' }).catch(() => {});
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityRecovery);
+        window.addEventListener('focus', handleWindowFocus);
+        window.addEventListener('pageshow', handlePageShow);
+        window.addEventListener('online', handleNetworkOnline);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityRecovery);
+            window.removeEventListener('focus', handleWindowFocus);
+            window.removeEventListener('pageshow', handlePageShow);
+            window.removeEventListener('online', handleNetworkOnline);
+        };
+    }, [isOnline, recoverRealtimeSession]);
     
     useEffect(() => {
         let interval;
@@ -915,6 +993,17 @@ const DriverHome = () => {
                         </div>
                     </div>
                 )}
+            </div>
+
+            <div className="absolute right-5 top-1/2 z-30 -translate-y-1/2">
+                <button
+                    type="button"
+                    onClick={recenterMap}
+                    className="pointer-events-auto flex h-12 w-12 items-center justify-center rounded-full border border-slate-100 bg-white/95 text-slate-900 shadow-[0_12px_30px_rgba(15,23,42,0.16)] transition-transform active:scale-90"
+                    aria-label="Recenter map"
+                >
+                    <Target size={20} strokeWidth={2.4} />
+                </button>
             </div>
 
             {/* --- BOTTOM FLOATING UI --- */}
