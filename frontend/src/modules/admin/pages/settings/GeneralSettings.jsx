@@ -236,6 +236,8 @@ const GeneralSettings = () => {
     }
   };
 
+  const configuredAppName = String(settings.general?.app_name || '').trim() || 'App';
+
   if (loading) {
      return (
        <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -265,7 +267,7 @@ const GeneralSettings = () => {
               <InputField label="Admin Theme Color" name="admin_theme_color" value={settings.customization.admin_theme_color} onChange={(n, v) => handleChange('customization', n, v)} placeholder="#405189" />
               <InputField label="Landing Website Theme Color" name="landing_theme_color" value={settings.customization.landing_theme_color} onChange={(n, v) => handleChange('customization', n, v)} placeholder="#0ab39c" />
               <InputField label="Side Text Bar Color (eg:#1c3faa)" name="sidebar_text_color" value={settings.customization.sidebar_text_color} onChange={(n, v) => handleChange('customization', n, v)} placeholder="#ffffff" />
-              <InputField label="App Name" name="app_name" value={settings.general.app_name} onChange={(n, v) => handleChange('general', n, v)} placeholder="ZyderTaxi" />
+              <InputField label="App Name" name="app_name" value={settings.general.app_name} onChange={(n, v) => handleChange('general', n, v)} placeholder={configuredAppName} />
               <InputField label="Currency Code" name="default_currency_code_for_mobile_app" value={settings.customization.default_currency_code_for_mobile_app} onChange={(n, v) => handleChange('customization', n, v)} placeholder="INR" />
               <InputField label="Currency Symbol" name="currency_symbol" value={settings.customization.currency_symbol} onChange={(n, v) => handleChange('customization', n, v)} placeholder="₹" />
               <InputField label="Contact Us Mobile 1" name="contact_phone_1" value={settings.general.contact_phone_1} onChange={(n, v) => handleChange('general', n, v)} placeholder="0000000000" />
@@ -294,7 +296,7 @@ const GeneralSettings = () => {
 
         {/* Extra Metadata */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12 pt-4">
-           <InputField label="Footer Content 1" name="footer_1" value={settings.general.footer_1} onChange={(n, v) => handleChange('general', n, v)} placeholder="2026 © Zyder." />
+           <InputField label="Footer Content 1" name="footer_1" value={settings.general.footer_1} onChange={(n, v) => handleChange('general', n, v)} placeholder={`2026 © ${configuredAppName}.`} />
            <InputField label="Footer Content 2" name="footer_2" value={settings.general.footer_2} onChange={(n, v) => handleChange('general', n, v)} placeholder="Design & Develop by Appzeto" />
         </div>
 

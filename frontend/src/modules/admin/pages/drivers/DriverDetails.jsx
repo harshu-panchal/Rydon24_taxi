@@ -13,8 +13,41 @@ import {
 } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { DELHI_CENTER, HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../utils/googleMaps';
+import BikeIcon from '@/assets/icons/bike.png';
+import CarIcon from '@/assets/icons/car.png';
+import AutoIcon from '@/assets/icons/auto.png';
+import TruckIcon from '@/assets/icons/truck.png';
+import EhcvIcon from '@/assets/icons/ehcv.png';
+import HcvIcon from '@/assets/icons/hcv.png';
+import LcvIcon from '@/assets/icons/LCV.png';
+import McvIcon from '@/assets/icons/mcv.png';
+import LuxuryIcon from '@/assets/icons/Luxury.png';
+import PremiumIcon from '@/assets/icons/Premium.png';
+import SuvIcon from '@/assets/icons/SUV.png';
 
 const mapContainerStyle = { width: '100%', height: '100%' };
+
+const getMapIconForVehicle = (iconType = '') => {
+  const raw = String(iconType || '').trim();
+  if (/^(https?:|data:image\/|blob:|\/uploads\/|\/images\/|\/[^/])/.test(raw)) {
+    return raw;
+  }
+
+  const value = raw.toLowerCase();
+
+  if (value.includes('bike')) return BikeIcon;
+  if (value.includes('auto')) return AutoIcon;
+  if (value.includes('ehc')) return EhcvIcon;
+  if (value.includes('hcv')) return HcvIcon;
+  if (value.includes('lcv')) return LcvIcon;
+  if (value.includes('mcv')) return McvIcon;
+  if (value.includes('truck')) return TruckIcon;
+  if (value.includes('lux')) return LuxuryIcon;
+  if (value.includes('premium')) return PremiumIcon;
+  if (value.includes('suv')) return SuvIcon;
+
+  return CarIcon;
+};
 
 const getDocumentImages = (doc = {}) => {
   if (Array.isArray(doc?.images) && doc.images.length) {
@@ -34,7 +67,6 @@ const DriverDetails = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { id } = useParams();
-  const { isLoaded, loadError } = useAppGoogleMapsLoader();
   const [activeTab, setActiveTab] = useState('Driver Profile');
   const [profile, setProfile] = useState(null);
   const [walletForm, setWalletForm] = useState({ amount: '', operation: 'credit', isSubmitting: false });
@@ -92,6 +124,23 @@ const DriverDetails = () => {
     if (!profile?.location?.lat || !profile?.location?.lng) return DELHI_CENTER;
     return { lat: profile.location.lat, lng: profile.location.lng };
   }, [profile]);
+  const shouldLoadMap = activeTab === 'Driver Profile';
+  const { isLoaded, loadError } = useAppGoogleMapsLoader(shouldLoadMap);
+  const vehicleMapIconUrl = useMemo(
+    () => getMapIconForVehicle(profile?.vehicleIconType || profile?.vehicle_image || profile?.vehicle?.type),
+    [profile],
+  );
+  const vehicleMarkerIcon = useMemo(() => {
+    if (!isLoaded || !globalThis.google?.maps || !vehicleMapIconUrl) {
+      return undefined;
+    }
+
+    return {
+      url: vehicleMapIconUrl,
+      scaledSize: new globalThis.google.maps.Size(42, 42),
+      anchor: new globalThis.google.maps.Point(21, 21),
+    };
+  }, [isLoaded, vehicleMapIconUrl]);
 
   const stats = profile?.stats || {};
   const earnings = profile?.earnings || {};
@@ -564,6 +613,10 @@ const DriverDetails = () => {
                   <div className="h-full flex items-center justify-center text-sm text-gray-500 bg-gray-50">
                     Map unavailable.
                   </div>
+                ) : !profile?.location ? (
+                  <div className="h-full flex items-center justify-center text-sm text-gray-500 bg-gray-50">
+                    Live driver location is not available yet.
+                  </div>
                 ) : HAS_VALID_GOOGLE_MAPS_KEY && isLoaded ? (
                   <GoogleMap
                     mapContainerStyle={mapContainerStyle}
@@ -571,13 +624,23 @@ const DriverDetails = () => {
                     zoom={13}
                     options={{ streetViewControl: false, mapTypeControl: true, fullscreenControl: true }}
                   >
-                    <MarkerF position={mapCenter} />
+                    <MarkerF position={mapCenter} icon={vehicleMarkerIcon} />
                   </GoogleMap>
                 ) : (
                   <div className="h-full flex items-center justify-center text-sm text-gray-500 bg-gray-50">
-                    Configure `VITE_GOOGLE_MAPS_API_KEY` to show map.
+                    {HAS_VALID_GOOGLE_MAPS_KEY ? 'Loading map on demand...' : 'Configure `VITE_GOOGLE_MAPS_API_KEY` to show map.'}
                   </div>
                 )}
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3 text-xs text-gray-500">
+                <span>
+                  {profile?.vehicle?.type || 'Vehicle'} marker
+                </span>
+                {profile?.location ? (
+                  <span>
+                    {Number(profile.location.lat).toFixed(4)}, {Number(profile.location.lng).toFixed(4)}
+                  </span>
+                ) : null}
               </div>
             </div>
 

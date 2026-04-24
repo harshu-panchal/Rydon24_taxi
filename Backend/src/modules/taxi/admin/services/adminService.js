@@ -842,6 +842,8 @@ const serializeDriver = (driver) => ({
   transport_type: driver.registerFor || driver.vehicleType || '',
   register_for: driver.registerFor || '',
   vehicle_type: driver.vehicleType || '',
+  vehicleIconType: driver.vehicleIconType || driver.vehicleType || '',
+  vehicleImage: driver.vehicleImage || '',
   vehicle_number: driver.vehicleNumber || '',
   vehicle_color: driver.vehicleColor || '',
   rating:
@@ -2845,7 +2847,10 @@ export const getDriverProfile = async (id) => {
     throw new ApiError(404, 'Driver not found');
   }
 
-  const rides = await Ride.find({ driverId: driver._id }).sort({ createdAt: -1 }).lean();
+  const [rides, walletTransactions] = await Promise.all([
+    Ride.find({ driverId: driver._id }).sort({ createdAt: -1 }).lean(),
+    WalletTransaction.find({ driverId: driver._id }).sort({ createdAt: -1 }).lean(),
+  ]);
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
@@ -2869,10 +2874,25 @@ export const getDriverProfile = async (id) => {
 
   const totalEarnings = sum(completedRides, 'fare');
   const todayEarnings = sum(todayCompleted, 'fare');
-  const driverEarnings = sum(completedRides, 'driverEarnings');
-  const adminCommission = sum(completedRides, 'commissionAmount');
+  const driverEarnings = completedRides.reduce((total, ride) => {
+    const fare = Number(ride?.fare || 0);
+    const commission = Number(ride?.commissionAmount || 0);
+    const earning = Number(ride?.driverEarnings ?? Math.max(fare - commission, 0));
+    return total + earning;
+  }, 0);
+  const adminCommission = completedRides.reduce((total, ride) => {
+    const fare = Number(ride?.fare || 0);
+    const explicitCommission = ride?.commissionAmount;
+    const fallbackCommission = Math.max(fare - Number(ride?.driverEarnings || 0), 0);
+    return total + Number(explicitCommission ?? fallbackCommission);
+  }, 0);
   const byCash = sum(completedRides.filter((r) => r.paymentMethod === 'cash'), 'fare');
   const byCard = sum(completedRides.filter((r) => r.paymentMethod === 'online'), 'fare');
+  const spendAmount = walletTransactions.reduce((total, item) => {
+    const amount = Number(item?.amount || 0);
+    return amount < 0 ? total + Math.abs(amount) : total;
+  }, 0);
+  const balanceAmount = Number(driver?.wallet?.balance || 0);
 
   const driverLocation = driver.location?.coordinates || [];
   const lastRideLocation = rides.find((ride) => Array.isArray(ride.lastDriverLocation?.coordinates));
@@ -2892,7 +2912,7 @@ export const getDriverProfile = async (id) => {
       number: driver.vehicleNumber || '',
     },
     image: driver.profile_image || driver.avatar || '',
-    vehicle_image: 'https://img.freepik.com/free-vector/yellow-passenger-transport-taxi-car_1017-4886.jpg',
+    vehicle_image: driver.vehicleImage || 'https://img.freepik.com/free-vector/yellow-passenger-transport-taxi-car_1017-4886.jpg',
     stats: {
       total_trips: rides.length,
       completed_trips: completedRides.length,
@@ -2909,6 +2929,8 @@ export const getDriverProfile = async (id) => {
       by_cash: Number(byCash.toFixed(2)),
       by_wallet: 0,
       by_card: Number(byCard.toFixed(2)),
+      spend_amount: Number(spendAmount.toFixed(2)),
+      balance_amount: Number(balanceAmount.toFixed(2)),
     },
     location: hasValidLocation ? { lat, lng } : null,
   };
