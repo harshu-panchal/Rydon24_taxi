@@ -27,14 +27,19 @@ const OTPVerification = () => {
         ...(location.state || {}),
     };
 
-    const phone = session.phone || '95898 14119';
+    const phone = String(session.phone || '').replace(/\D/g, '').slice(-10);
     const role = session.role || 'driver';
     const registrationId = session.registrationId || '';
     const debugOtp = session.debugOtp || '';
     const isLoginFlow = Boolean(session.loginMode);
 
     useEffect(() => {
-        if (debugOtp && /^\d{4}$/.test(String(debugOtp))) {
+        if (!phone) {
+            navigate(isLoginFlow ? '/taxi/driver/login' : '/taxi/driver/reg-phone', { replace: true });
+            return undefined;
+        }
+
+        if (isLoginFlow && debugOtp && /^\d{4}$/.test(String(debugOtp))) {
             setOtp(String(debugOtp).split(''));
         }
 
@@ -42,7 +47,7 @@ const OTPVerification = () => {
             setTimer(prev => (prev > 0 ? prev - 1 : 0));
         }, 1000);
         return () => clearInterval(interval);
-    }, [debugOtp]);
+    }, [debugOtp, isLoginFlow, navigate, phone]);
 
     const handleChange = (index, value) => {
         if (!/^\d*$/.test(value)) return;
@@ -122,10 +127,27 @@ const OTPVerification = () => {
         setError('');
         try {
             if (isLoginFlow) {
-                await sendDriverLoginOtp({ phone });
+                const response = await sendDriverLoginOtp({ phone });
+                saveDriverRegistrationSession({
+                    ...session,
+                    phone,
+                    loginMode: true,
+                    debugOtp: response?.data?.session?.debugOtp || '',
+                });
             } else {
-                await sendDriverOtp({ phone, role });
+                const response = await sendDriverOtp({ phone, role });
+                const sessionData = response?.data?.session || {};
+                saveDriverRegistrationSession({
+                    ...session,
+                    phone,
+                    role,
+                    registrationId: sessionData.registrationId || '',
+                    debugOtp: sessionData.debugOtp || '',
+                    loginMode: false,
+                });
             }
+            setOtp(['', '', '', '']);
+            inputs.current[0]?.focus();
             setTimer(30);
             setError('OTP Resent Successfully');
         } catch (err) {
@@ -178,7 +200,10 @@ const OTPVerification = () => {
                             <input
                                 key={index}
                                 ref={el => inputs.current[index] = el}
-                                type="text"
+                                type="tel"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                autoComplete={index === 0 ? 'one-time-code' : 'off'}
                                 maxLength={1}
                                 value={digit}
                                 onChange={e => handleChange(index, e.target.value)}

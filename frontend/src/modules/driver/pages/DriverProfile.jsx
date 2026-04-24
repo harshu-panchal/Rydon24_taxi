@@ -17,7 +17,6 @@ import {
     ChevronRight,
     Camera,
     CheckCircle2,
-    ArrowLeft,
     Wallet,
     Info,
     Gift,
@@ -29,7 +28,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import { useImageUpload } from '../../../shared/hooks/useImageUpload';
-import { clearDriverRegistrationSession, getCurrentDriver, updateDriverProfile } from '../services/registrationService';
+import { clearDriverAuthState, getCurrentDriver, updateDriverProfile } from '../services/registrationService';
 
 const DriverProfile = () => {
     const navigate = useNavigate();
@@ -69,11 +68,7 @@ const DriverProfile = () => {
     }, []);
 
     const handleLogout = () => {
-        clearDriverRegistrationSession();
-        localStorage.removeItem('token');
-        localStorage.removeItem('driverToken');
-        localStorage.removeItem('role');
-        localStorage.removeItem('chatRole');
+        clearDriverAuthState();
         setIsLogoutOpen(false);
         navigate('/taxi/driver/login', { replace: true });
     };
@@ -155,7 +150,7 @@ const DriverProfile = () => {
         {
             title: 'Preferences',
             items: [
-                { id: 'languages', label: 'App Language', icon: <Languages size={20} />, path: '/taxi/driver/lang-select' },
+                { id: 'languages', label: 'App Language', icon: <Languages size={20} />, path: '/taxi/driver/lang-select', state: { allowAuthenticated: true } },
                 { id: 'routeBooking', label: 'My Route Booking', icon: <Route size={20} />, type: 'toggle' },
             ]
         },
@@ -172,9 +167,7 @@ const DriverProfile = () => {
             {/* Header - Compact & Aligned */}
             <header className="px-5 pt-4 pb-4 border-b border-slate-50 sticky top-0 bg-white z-[60]">
                 <div className="flex items-center justify-between mb-4">
-                    <button onClick={() => navigate(-1)} className="p-1 -ml-2 text-slate-600 active:scale-95">
-                        <ArrowLeft size={22} strokeWidth={2.5} />
-                    </button>
+                    <div className="w-8" />
                     <button onClick={() => navigate('/taxi/driver/help-support')} className="flex items-center gap-1.5 text-[#88B04B] font-bold text-[13px] tracking-wide">
                         <Info size={18} />
                         Help & Support
@@ -270,7 +263,7 @@ const DriverProfile = () => {
                                 <motion.div 
                                     key={item.id}
                                     whileTap={item.type !== 'toggle' ? { backgroundColor: '#F8F9FA' } : {}}
-                                    onClick={() => item.path && navigate(item.path)}
+                                    onClick={() => item.path && navigate(item.path, item.state ? { state: item.state } : undefined)}
                                     className="flex items-center justify-between px-6 py-4 group cursor-pointer border-b border-slate-50/50"
                                 >
                                     <div className="flex items-center gap-5">

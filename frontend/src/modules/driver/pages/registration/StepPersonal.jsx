@@ -17,7 +17,7 @@ const StepPersonal = () => {
         ...getStoredDriverRegistrationSession(),
         ...(location.state || {}),
     };
-    const phone = session.phone || '95898 14119';
+    const phone = String(session.phone || '').replace(/\D/g, '').slice(-10);
     const registrationId = session.registrationId || '';
     const role = session.role || 'driver';
     const isOwner = role === 'owner';
@@ -147,7 +147,7 @@ const StepPersonal = () => {
                                     <User size={18} />
                                 </div>
                                 <div className="flex-1 space-y-1.5">
-                                    <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600">Full name</label>
+                                    <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600">Enter Name</label>
                                     <input
                                         value={formData.fullName}
                                         onChange={(e) => setFormData(p => ({ ...p, fullName: e.target.value.replace(/[^A-Za-z .'-]/g, '') }))}

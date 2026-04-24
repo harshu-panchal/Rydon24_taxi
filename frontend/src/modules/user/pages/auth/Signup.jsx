@@ -1,8 +1,8 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import AuthLayout from '../../components/AuthLayout';
-import { User, Mail, Camera, Smartphone, Lock } from 'lucide-react';
+import { User, Mail, Camera, Smartphone, Lock, ImagePlus, LifeBuoy } from 'lucide-react';
 import { userAuthService } from '../../services/authService';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 
@@ -19,7 +19,6 @@ const Signup = () => {
   const { settings } = useSettings();
   const preservedPhone = typeof window !== 'undefined' ? sessionStorage.getItem(PENDING_SIGNUP_PHONE_KEY) || '' : '';
   const initialPhone = String(location.state?.phone || preservedPhone || '').replace(/\D/g, '').slice(-10);
-  const fileInputRef = useRef(null);
   const [formData, setFormData] = useState({
     phone: initialPhone,
     name: '',
@@ -64,11 +63,6 @@ const Signup = () => {
       reader.readAsDataURL(file);
     });
 
-  const handlePickPhoto = () => {
-    setPhotoError('');
-    fileInputRef.current?.click();
-  };
-
   const handlePhotoChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -78,6 +72,9 @@ const Signup = () => {
 
     try {
       const dataUrl = await readFileAsDataUrl(file);
+      if (!String(dataUrl || '').startsWith('data:image/')) {
+        throw new Error('Please choose an image file');
+      }
       const uploadPayload = await userAuthService.uploadProfileImage(dataUrl);
       const secureUrl = uploadPayload?.data?.secureUrl || '';
 
@@ -117,7 +114,7 @@ const Signup = () => {
     }
   };
 
-  const handleSignup = async (e) => {
+  const handleSignup = async (e, overrides = {}) => {
     e.preventDefault();
     if (!formData.name || !isValidPhone) return;
 
@@ -131,7 +128,7 @@ const Signup = () => {
         email: formData.email,
         password: formData.password,
         gender: formData.gender,
-        profileImage: formData.profileImage,
+        profileImage: overrides.profileImage ?? formData.profileImage,
       });
       const payload = response?.data || {};
 
@@ -159,7 +156,22 @@ const Signup = () => {
 
   const handleGenderChange = (gender) => {
     setFormData({ ...formData, gender });
-  }
+  };
+
+  const handleSkipForNow = async () => {
+    if (loading || photoUploading) {
+      return;
+    }
+
+    setFormData((prev) => ({ ...prev, profileImage: '' }));
+    setPhotoError('');
+
+    const fakeEvent = {
+      preventDefault() {},
+    };
+
+    await handleSignup(fakeEvent, { profileImage: '' });
+  };
 
   return (
     <AuthLayout
@@ -249,25 +261,47 @@ const Signup = () => {
                       <User size={40} className="text-slate-400" />
                     )}
                 </div>
-                <button
-                  type="button"
-                  onClick={handlePickPhoto}
-                  disabled={photoUploading}
-                  className="absolute bottom-1 right-1 w-8 h-8 bg-black rounded-full border-2 border-white flex items-center justify-center text-white shadow-md cursor-pointer hover:bg-gray-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                >
+                <div className="absolute bottom-1 right-1 w-8 h-8 bg-black rounded-full border-2 border-white flex items-center justify-center text-white shadow-md">
                     <Camera size={14} />
-                </button>
+                </div>
             </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              capture="user"
-              className="hidden"
-              onChange={handlePhotoChange}
-            />
             <p className="mt-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">Profile Photo (Optional)</p>
             <p className="mt-2 text-xs font-medium text-slate-500">You can add one now or skip it and update later.</p>
+            <div className="mt-4 grid w-full max-w-[280px] grid-cols-2 gap-2">
+              <label className={`relative flex h-11 items-center justify-center gap-2 rounded-2xl border text-[11px] font-bold uppercase tracking-wider transition-all ${
+                photoUploading
+                  ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+                  : 'cursor-pointer border-slate-200 bg-white text-slate-700 active:scale-[0.99]'
+              }`}>
+                <ImagePlus size={14} />
+                Gallery
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={photoUploading}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                  aria-label="Upload profile photo from gallery"
+                  onChange={handlePhotoChange}
+                />
+              </label>
+              <label className={`relative flex h-11 items-center justify-center gap-2 rounded-2xl border text-[11px] font-bold uppercase tracking-wider transition-all ${
+                photoUploading
+                  ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+                  : 'cursor-pointer border-slate-900 bg-slate-950 text-white active:scale-[0.99]'
+              }`}>
+                <Camera size={14} />
+                Camera
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="user"
+                  disabled={photoUploading}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                  aria-label="Capture profile photo"
+                  onChange={handlePhotoChange}
+                />
+              </label>
+            </div>
             {photoUploading && <p className="text-[11px] font-bold text-slate-500 mt-2">Uploading...</p>}
             {photoError && <p className="text-[11px] font-bold text-red-500 mt-2">{photoError}</p>}
         </div>
@@ -282,12 +316,14 @@ const Signup = () => {
                 type="tel"
                 maxLength={10}
                 placeholder="Enter 10-digit number"
-                className={fieldInputClassName}
+                className={`${fieldInputClassName} text-slate-500`}
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, '') })}
+                readOnly
+                aria-readonly="true"
                 required
               />
             </div>
+            <p className="ml-1 text-xs font-medium text-slate-500">Verified number. You can&apos;t edit it here.</p>
           </div>
 
           <div className="space-y-2">
@@ -360,35 +396,40 @@ const Signup = () => {
           )}
         </div>
 
-        <motion.button 
-          whileTap={{ scale: 0.98 }}
-          type="submit"
-          disabled={!formData.name || !isValidPhone || !isValidPassword || loading || photoUploading}
-          className={`w-full py-4 rounded-xl text-lg font-bold shadow-xl transition-all flex items-center justify-center gap-3 mt-4 ${
-            formData.name && isValidPhone && isValidPassword && !loading && !photoUploading
-            ? 'bg-black text-white shadow-black/10' 
-            : 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
-          }`}
-        >
-          {loading ? (
-            <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-          ) : (
-            <span>Let's Go!</span>
-          )}
-        </motion.button>
+        <div className="space-y-3">
+          <motion.button 
+            whileTap={{ scale: 0.98 }}
+            type="submit"
+            disabled={!formData.name || !isValidPhone || !isValidPassword || loading || photoUploading}
+            className={`w-full py-4 rounded-xl text-lg font-bold shadow-xl transition-all flex items-center justify-center gap-3 mt-4 ${
+              formData.name && isValidPhone && isValidPassword && !loading && !photoUploading
+              ? 'bg-black text-white shadow-black/10' 
+              : 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
+            }`}
+          >
+            {loading ? (
+              <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+            ) : (
+              <span>Let's Go!</span>
+            )}
+          </motion.button>
 
-        <div className="text-center">
-            <button 
-                type="button"
-                onClick={() => {
-                  sessionStorage.removeItem(PENDING_SIGNUP_PHONE_KEY);
-                  setStep('phone');
-                  setError('');
-                }}
-                className="text-slate-500 font-bold hover:text-black transition-colors text-sm underline underline-offset-4 decoration-dashed"
-            >
-                Change number
-            </button>
+          <button
+            type="button"
+            onClick={handleSkipForNow}
+            className="w-full rounded-xl border border-slate-200 bg-white py-3.5 text-sm font-bold text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900"
+          >
+            Skip For Now
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/taxi/user/support')}
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 text-sm font-bold text-slate-700 transition-colors hover:border-slate-300 hover:text-slate-900 flex items-center justify-center gap-2"
+          >
+            <LifeBuoy size={16} />
+            Need Help
+          </button>
         </div>
 
         <div className="space-y-3 text-center">

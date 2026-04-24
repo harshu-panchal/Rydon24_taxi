@@ -49,7 +49,6 @@ const matchesDocumentRole = (accountType, role) => {
 const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000));
 
 const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
-const getVisibleOtp = (otp) => (process.env.NODE_ENV !== 'production' ? String(otp) : null);
 
 const getVehicleType = (vehicleTypeId, registerFor = '') => {
   const type = VEHICLE_TYPE_MAP[String(vehicleTypeId || registerFor || '').trim().toLowerCase()];
@@ -247,7 +246,7 @@ export const startDriverOnboarding = async ({ phone, role = 'driver' }) => {
     otp,
     purpose: 'driver onboarding OTP',
   });
-  const debugOtp = getVisibleOtp(otp);
+  const debugOtp = smsDispatch.mode === 'debug' && process.env.NODE_ENV !== 'production' ? otp : null;
 
   if (debugOtp) {
     console.log(`[onboardingService] OTP for ${normalizedPhone} = ${debugOtp} (${smsDispatch.mode})`);

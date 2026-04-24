@@ -35,10 +35,22 @@ const onboardingRoutes = new Set([
     '/taxi/driver/status',
 ]);
 
+const softEntryRoutes = new Set([
+    '/taxi/driver/welcome',
+    '/taxi/driver/login',
+    '/taxi/driver/reg-phone',
+]);
+
 const redirectToDriverLogin = (navigate) => {
     clearDriverAuthState();
     navigate('/taxi/driver/login', { replace: true });
 };
+
+const getAuthenticatedDriverHome = () => (
+    String(localStorage.getItem('role') || 'driver').toLowerCase() === 'owner'
+        ? '/taxi/driver/profile'
+        : '/taxi/driver/home'
+);
 
 const DriverLayout = () => {
     const location = useLocation();
@@ -49,14 +61,30 @@ const DriverLayout = () => {
 
     useEffect(() => {
         const currentPath = location.pathname;
+        const onboardingState = location.state || {};
+        const token = localStorage.getItem('driverToken') || localStorage.getItem('token');
+        const authenticatedHome = getAuthenticatedDriverHome();
+
+        if (token && softEntryRoutes.has(currentPath)) {
+            navigate(authenticatedHome, { replace: true });
+            return;
+        }
+
+        if (
+            token
+            && currentPath === '/taxi/driver/lang-select'
+            && !onboardingState.registrationFlow
+            && !onboardingState.allowAuthenticated
+        ) {
+            navigate(authenticatedHome, { replace: true });
+            return;
+        }
 
         if (onboardingRoutes.has(currentPath)) {
             setIsAllowed(true);
             setIsChecking(false);
             return;
         }
-
-        const token = localStorage.getItem('driverToken') || localStorage.getItem('token');
 
         if (!token) {
             setIsAllowed(false);

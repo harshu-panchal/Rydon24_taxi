@@ -7,6 +7,7 @@ import { getSavedLocation, saveLocation } from '../services/locationStore';
 const DEFAULT_CENTER = { lat: 17.385, lon: 78.4867 };
 const DEFAULT_ZOOM = 16;
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
+const AUTO_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
 const areCentersNearlyEqual = (first, second, threshold = 0.00001) => (
   Math.abs(Number(first?.lat ?? 0) - Number(second?.lat ?? 0)) < threshold &&
   Math.abs(Number(first?.lon ?? 0) - Number(second?.lon ?? 0)) < threshold
@@ -19,13 +20,17 @@ const LocationMapSection = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [map, setMap] = useState(null);
   const isDraggingRef = useRef(false);
+  const requestedLocationRef = useRef(false);
   const { isLoaded, loadError } = useAppGoogleMapsLoader();
 
   const persistCoords = (next) => {
     setCoords(next);
     setCenterCoords(next);
     setStatus('ready');
-    saveLocation(next);
+    saveLocation({
+      ...next,
+      updatedAt: Date.now(),
+    });
   };
 
   const persistAddress = (address) => {
@@ -36,6 +41,18 @@ const LocationMapSection = () => {
     const saved = getSavedLocation();
     if (typeof saved?.lat === 'number' && typeof saved?.lon === 'number') {
       persistCoords({ lat: saved.lat, lon: saved.lon });
+    }
+
+    const shouldRefreshCurrentLocation =
+      !saved
+      || typeof saved?.lat !== 'number'
+      || typeof saved?.lon !== 'number'
+      || !saved?.updatedAt
+      || (Date.now() - saved.updatedAt) > AUTO_REFRESH_INTERVAL_MS;
+
+    if (shouldRefreshCurrentLocation && !requestedLocationRef.current) {
+      requestedLocationRef.current = true;
+      requestLocation();
     }
   }, []);
 

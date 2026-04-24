@@ -7,6 +7,7 @@ import { userAuthService } from '../../services/authService';
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
 const PENDING_SIGNUP_PHONE_KEY = 'pendingUserSignupPhone';
+const PENDING_OTP_PHONE_KEY = 'pendingUserOtpPhone';
 const maskPhone = (phone) => {
   const digits = String(phone || '').replace(/\D/g, '').slice(-10);
   if (digits.length !== 10) {
@@ -18,7 +19,12 @@ const maskPhone = (phone) => {
 
 const VerifyOTP = () => {
   const location = useLocation();
-  const phone = String(location.state?.phone || sessionStorage.getItem(PENDING_SIGNUP_PHONE_KEY) || '').replace(/\D/g, '').slice(-10);
+  const phone = String(
+    location.state?.phone ||
+    sessionStorage.getItem(PENDING_OTP_PHONE_KEY) ||
+    sessionStorage.getItem(PENDING_SIGNUP_PHONE_KEY) ||
+    '',
+  ).replace(/\D/g, '').slice(-10);
   const [otp, setOtp] = useState(['', '', '', '']);
   const [timer, setTimer] = useState(30);
   const [loading, setLoading] = useState(false);
@@ -44,6 +50,7 @@ const VerifyOTP = () => {
       return;
     }
 
+    sessionStorage.setItem(PENDING_OTP_PHONE_KEY, phone);
     sessionStorage.setItem(PENDING_SIGNUP_PHONE_KEY, phone);
   }, [navigate, phone]);
 
@@ -110,6 +117,8 @@ const VerifyOTP = () => {
         localStorage.setItem('userToken', payload.token || '');
         localStorage.setItem('role', 'user');
         localStorage.setItem('userInfo', JSON.stringify(payload.user || {}));
+        sessionStorage.removeItem(PENDING_OTP_PHONE_KEY);
+        sessionStorage.removeItem(PENDING_SIGNUP_PHONE_KEY);
         setTimeout(() => navigate('/taxi/user', { replace: true }), 1200);
         return;
       }
@@ -122,10 +131,13 @@ const VerifyOTP = () => {
         localStorage.setItem('userToken', loginPayload.token || '');
         localStorage.setItem('role', 'user');
         localStorage.setItem('userInfo', JSON.stringify(loginPayload.user || {}));
+        sessionStorage.removeItem(PENDING_OTP_PHONE_KEY);
+        sessionStorage.removeItem(PENDING_SIGNUP_PHONE_KEY);
         setTimeout(() => navigate('/taxi/user', { replace: true }), 1200);
         return;
       }
 
+      sessionStorage.setItem(PENDING_OTP_PHONE_KEY, String(phone || ''));
       sessionStorage.setItem(PENDING_SIGNUP_PHONE_KEY, String(phone || ''));
       setTimeout(() => navigate('/taxi/user/signup', { state: { phone, otpVerified: true } }), 1200);
     } catch (err) {
@@ -183,6 +195,9 @@ const VerifyOTP = () => {
                 inputs.current[index] = el;
               }}
               type="tel"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete={index === 0 ? 'one-time-code' : 'off'}
               maxLength={1}
               value={digit}
               onChange={(e) => handleChange(index, e.target.value)}

@@ -5,6 +5,21 @@ import { ChevronRight, ShieldCheck, Wallet, Clock, Star, TrendingUp, Sparkles, U
 import DriverHero from '@/assets/driver_welcome_hero.png';
 import { useSettings } from '@/shared/context/SettingsContext';
 
+const partnerAvatars = [
+    {
+        name: 'Arjun',
+        image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
+    },
+    {
+        name: 'Priya',
+        image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80',
+    },
+    {
+        name: 'Rohit',
+        image: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=200&q=80',
+    },
+];
+
 const DriverWelcome = () => {
     const navigate = useNavigate();
     const { settings } = useSettings();
@@ -73,9 +88,9 @@ const DriverWelcome = () => {
                             <p className="text-xs font-medium text-slate-500">Why thousands choose {appName}</p>
                         </div>
                         <div className="flex -space-x-2">
-                            {[1, 2, 3].map((i) => (
-                                <div key={i} className="w-8 h-8 rounded-full border-2 border-white bg-slate-100 overflow-hidden shadow-sm">
-                                     <img src={`https://i.pravatar.cc/100?img=${i+20}`} alt="partner" className="w-full h-full object-cover" />
+                            {partnerAvatars.map((partner) => (
+                                <div key={partner.name} className="w-8 h-8 rounded-full border-2 border-white bg-slate-100 overflow-hidden shadow-sm">
+                                     <img src={partner.image} alt={partner.name} className="w-full h-full object-cover" />
                                 </div>
                             ))}
                             <div className="w-8 h-8 rounded-full border-2 border-white bg-slate-950 text-[9px] flex items-center justify-center text-white font-bold shadow-sm">

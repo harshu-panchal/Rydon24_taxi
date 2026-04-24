@@ -28,6 +28,7 @@ const LOCATION_COORDS = {
 
 const getCoords = (title, fallback = [75.8577, 22.7196]) => LOCATION_COORDS[title] || fallback;
 const DEFAULT_COORDS = [75.8577, 22.7196];
+const sanitizeLocationInput = (value) => String(value || '').replace(/^\s+/g, '').replace(/\s{2,}/g, ' ');
 
 const unwrapResults = (response) => {
   const payload = response?.data?.data || response?.data || response;
@@ -885,7 +886,7 @@ const SelectLocation = () => {
                 <input
                   type="text"
                   value={pickup}
-                  onChange={(e) => setPickup(e.target.value)}
+                  onChange={(e) => setPickup(sanitizeLocationInput(e.target.value))}
                   onFocus={() => setActiveInput('pickup')}
                   placeholder="Your pickup location"
                   className="w-full bg-transparent border-none text-[15px] font-medium text-slate-900 focus:outline-none placeholder:text-slate-300"
@@ -927,7 +928,7 @@ const SelectLocation = () => {
                         autoFocus={activeInput === idx}
                         placeholder={`Stop ${idx + 1} location...`}
                         onFocus={() => setActiveInput(idx)}
-                        onChange={(e) => updateStop(idx, e.target.value)}
+                        onChange={(e) => updateStop(idx, sanitizeLocationInput(e.target.value))}
                         className="w-full bg-transparent border-none text-[15px] font-medium text-slate-900 focus:outline-none placeholder:text-indigo-300"
                       />
                       {stop.length > 0 && (
@@ -966,7 +967,7 @@ const SelectLocation = () => {
                   autoFocus={activeInput === 'drop'}
                   placeholder="Enter drop location..."
                   onFocus={() => setActiveInput('drop')}
-                  onChange={(e) => setDrop(e.target.value)}
+                  onChange={(e) => setDrop(sanitizeLocationInput(e.target.value))}
                   className="w-full bg-transparent border-none text-[15px] font-medium text-slate-900 focus:outline-none placeholder:text-slate-300"
                 />
                 {drop.length > 0 && (

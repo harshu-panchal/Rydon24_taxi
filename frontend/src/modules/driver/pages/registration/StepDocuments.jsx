@@ -85,6 +85,18 @@ const isImageLikeFile = (file) => {
   return /\.(jpg|jpeg|png|webp|heic|heif|bmp|gif)$/i.test(String(file.name || ''));
 };
 
+const inferImageMeta = (file, dataUrl) => {
+  const mimeMatch = String(dataUrl || '').match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/i);
+  const mimeType = String(file?.type || mimeMatch?.[1] || 'image/jpeg').toLowerCase();
+  const extension = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
+  const originalName = String(file?.name || '').trim();
+
+  return {
+    mimeType,
+    fileName: originalName || `capture-${Date.now()}.${extension}`,
+  };
+};
+
 const StepDocuments = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -147,37 +159,37 @@ const StepDocuments = () => {
       return;
     }
 
-    if (!isImageLikeFile(file)) {
-      setError('Please upload an image file');
-      return;
-    }
-
-    const tempPreviewUrl = URL.createObjectURL(file);
     setUploading(key);
     setError('');
 
-    setDocs((prev) => ({
-      ...prev,
-      [key]: {
-        ...(prev[key] || {}),
-        previewUrl: tempPreviewUrl,
-        fileName: file.name,
-        mimeType: file.type,
-        uploaded: false,
-        uploading: true,
-      },
-    }));
-
     try {
       const dataUrl = await fileToDataUrl(file);
+      if (!String(dataUrl || '').startsWith('data:image/')) {
+        throw new Error('Please upload an image file');
+      }
+
+      const { fileName, mimeType } = inferImageMeta(file, dataUrl);
+
+      setDocs((prev) => ({
+        ...prev,
+        [key]: {
+          ...(prev[key] || {}),
+          previewUrl: dataUrl,
+          fileName,
+          mimeType,
+          uploaded: false,
+          uploading: true,
+        },
+      }));
+
       const response = await saveDriverDocuments({
         registrationId: session.registrationId,
         phone: session.phone,
         documents: {
           [key]: {
             dataUrl,
-            fileName: file.name,
-            mimeType: file.type,
+            fileName,
+            mimeType,
           },
         },
       });
@@ -185,10 +197,10 @@ const StepDocuments = () => {
 
       const uploadedDoc = payload?.documents?.[key] || payload?.session?.documents?.[key];
       const nextDoc = normalizeDocument(uploadedDoc) || {
-        previewUrl: tempPreviewUrl,
-        secureUrl: tempPreviewUrl,
-        fileName: file.name,
-        mimeType: file.type,
+        previewUrl: dataUrl,
+        secureUrl: dataUrl,
+        fileName,
+        mimeType,
         uploaded: true,
       };
 
@@ -214,7 +226,6 @@ const StepDocuments = () => {
       }));
     } finally {
       setUploading(null);
-      URL.revokeObjectURL(tempPreviewUrl);
     }
   };
 

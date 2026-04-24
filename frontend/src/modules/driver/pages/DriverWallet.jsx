@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
     AlertCircle,
     ArrowDownLeft,
-    ArrowLeft,
     ArrowUpRight,
     CheckCircle2,
     Clock3,
@@ -309,14 +308,7 @@ const DriverWallet = () => {
         <div className="min-h-screen bg-[#f5f1e8] px-4 pb-28 pt-4 text-slate-950">
             <div className="mx-auto max-w-md">
                 <header className="mb-4 flex items-center justify-between">
-                    <button
-                        type="button"
-                        onClick={() => navigate(-1)}
-                        className="grid h-11 w-11 place-items-center rounded-full bg-white text-slate-900 shadow-sm"
-                        aria-label="Go back"
-                    >
-                        <ArrowLeft size={20} />
-                    </button>
+                    <div className="h-11 w-11" />
                     <div className="text-center">
                         <h1 className="text-lg font-black tracking-tight">Driver wallet</h1>
                         <p className="text-xs font-bold text-slate-500">Cash commission and online earnings</p>

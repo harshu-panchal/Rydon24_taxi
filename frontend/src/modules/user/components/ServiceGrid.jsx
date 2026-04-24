@@ -22,7 +22,7 @@ const ServiceTile = ({ icon, label, description, path, accentClass, loading }) =
       whileHover={{ y: -1.5 }}
       whileTap={{ scale: 0.98 }}
       onClick={() => path && navigate(path)}
-      className="flex w-full flex-col items-center justify-center gap-1.5 rounded-[18px] border border-white/80 bg-white/90 px-1.5 py-2.5 shadow-[0_8px_14px_rgba(15,23,42,0.05)] transition-transform"
+      className="flex h-full min-h-[108px] w-full flex-col items-center justify-center gap-1.5 rounded-[18px] border border-white/80 bg-white/90 px-2 py-3 shadow-[0_8px_14px_rgba(15,23,42,0.05)] transition-transform"
     >
       <div className={`flex h-12 w-12 items-center justify-center rounded-[18px] ${accentClass || 'bg-gray-50'}`}>
         <img src={icon} alt={label} className="h-10 w-10 object-contain drop-shadow-sm" />
@@ -121,7 +121,7 @@ const ServiceGrid = () => {
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-4 gap-3">
+        <div className="mt-4 grid auto-rows-fr grid-cols-3 gap-3 md:grid-cols-4">
           {loading ? (
              [...Array(4)].map((_, i) => <ServiceTile key={i} loading />)
           ) : (

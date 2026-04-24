@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   AlertCircle,
-  ArrowLeft,
   Bike,
   Calendar,
   CheckCircle2,
@@ -222,12 +221,7 @@ const RideRequests = () => {
   return (
     <div className="min-h-screen bg-[#f8f9fb] font-sans select-none overflow-x-hidden p-5 pb-32">
       <header className="flex items-center justify-between mb-6 pt-2">
-        <button
-          onClick={() => navigate(-1)}
-          className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center text-slate-900 active:scale-95 transition-transform"
-        >
-          <ArrowLeft size={18} strokeWidth={2.5} />
-        </button>
+        <div className="w-10 h-10" />
         <div className="text-center">
           <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.22em]">Driver log</p>
           <h1 className="text-lg font-black text-slate-900 tracking-tight uppercase">History</h1>

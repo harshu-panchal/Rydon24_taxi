@@ -15,7 +15,7 @@ import { useSettings } from '../../../shared/context/SettingsContext';
 const HeaderGreeting = () => {
   const navigate = useNavigate();
   const { settings } = useSettings();
-  const appLogo = settings.general?.logo || settings.customization?.logo;
+  const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
   const appName = settings.general?.app_name || 'App';
   const [locationLabel, setLocationLabel] = useState(getSavedLocationLabel);
 
@@ -50,13 +50,20 @@ const HeaderGreeting = () => {
               animate={{ opacity: [0.3, 0.75, 0.3], scale: [0.92, 1.06, 0.92] }}
               transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
             />
-            <motion.img
-              src={appLogo}
-              alt={appName}
-              className="relative z-10 h-10 object-contain drop-shadow-sm"
-              animate={{ y: [0, -2, 0], scale: [1, 1.02, 1] }}
-              transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
-            />
+            {appLogo ? (
+              <motion.img
+                key={appLogo}
+                src={appLogo}
+                alt={appName}
+                className="relative z-10 h-10 object-contain drop-shadow-sm"
+                animate={{ y: [0, -2, 0], scale: [1, 1.02, 1] }}
+                transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
+              />
+            ) : (
+              <div className="relative z-10 flex h-10 min-w-[40px] items-center justify-center rounded-full bg-slate-900 px-3 text-[10px] font-black uppercase tracking-[0.18em] text-white">
+                {appName.slice(0, 2)}
+              </div>
+            )}
           </motion.div>
 
           <motion.button

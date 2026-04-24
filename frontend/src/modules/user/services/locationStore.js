@@ -13,12 +13,14 @@ export const getSavedLocation = () => {
     const saved = JSON.parse(window.localStorage.getItem(LOCATION_STORAGE_KEY) || '{}');
     const lat = Number(saved?.lat);
     const lon = Number(saved?.lon);
+    const updatedAt = Number(saved?.updatedAt);
     const address = String(saved?.address || '').trim();
 
     return {
       address,
       lat: Number.isFinite(lat) ? lat : null,
       lon: Number.isFinite(lon) ? lon : null,
+      updatedAt: Number.isFinite(updatedAt) ? updatedAt : null,
     };
   } catch {
     return null;

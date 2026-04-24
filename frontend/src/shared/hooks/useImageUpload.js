@@ -20,29 +20,21 @@ export const useImageUpload = (options = {}) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // 1. Basic Validation
-    if (!file.type.startsWith('image/')) {
-      toast.error('Please select a valid image file');
-      return;
-    }
-
-    // 2. Set local preview
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setPreview(reader.result);
-    };
-    reader.readAsDataURL(file);
-
-    // 3. Upload to Cloudinary (WebP converted by backend)
     try {
       setUploading(true);
-      
-      // Convert to base64 for the current backend implementation
+
       const base64 = await new Promise((resolve) => {
         const r = new FileReader();
         r.onloadend = () => resolve(r.result);
         r.readAsDataURL(file);
       });
+
+      if (!String(base64 || '').startsWith('data:image/')) {
+        toast.error('Please select a valid image file');
+        return;
+      }
+
+      setPreview(base64);
 
       const result = await uploadService.uploadImage(base64, folder);
       

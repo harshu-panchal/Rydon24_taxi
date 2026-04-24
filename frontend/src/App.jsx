@@ -687,7 +687,7 @@ function App() {
               <Route path="/taxi/driver" element={<DriverLayout />}>
                 <Route
                   index
-                  element={<Navigate to="/taxi/driver/home" replace />}
+                  element={<Navigate to="/taxi/driver/login" replace />}
                 />
                 <Route path="lang-select" element={<LanguageSelect />} />
                 <Route path="welcome" element={<DriverWelcome />} />

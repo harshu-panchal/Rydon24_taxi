@@ -16,8 +16,6 @@ import {
     ChevronRight,
     MapPin,
     User,
-    Menu,
-    Search,
     Shield,
     Mail,
     BarChart2
@@ -48,7 +46,8 @@ import SuvIcon from '@/assets/icons/SUV.png';
 
 import { socketService } from '../../../shared/api/socket';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../admin/utils/googleMaps';
-import { getCurrentDriver, getLocalDriverToken } from '../services/registrationService';
+import { getCurrentDriver, getDriverNotifications, getLocalDriverToken } from '../services/registrationService';
+import { getUnreadDriverNotificationCount, getVisibleDriverNotifications } from '../utils/notificationState';
 import {
     playRideRequestAlertSound,
     stopRideRequestAlertSound,
@@ -270,6 +269,7 @@ const DriverHome = () => {
     const [driverCoords, setDriverCoords] = useState(() => readStoredDriverCoords());
     const [statusMessage, setStatusMessage] = useState('');
     const [socketStatus, setSocketStatus] = useState('offline');
+    const [notificationCount, setNotificationCount] = useState(0);
     const [acceptingRideId, setAcceptingRideId] = useState('');
     const [isHydratingDriver, setIsHydratingDriver] = useState(true);
     const [isTogglingDuty, setIsTogglingDuty] = useState(false);
@@ -300,6 +300,17 @@ const DriverHome = () => {
 
     const { isLoaded } = useAppGoogleMapsLoader();
 
+    const refreshNotificationCount = useCallback(async () => {
+        try {
+            const response = await getDriverNotifications();
+            const results = response?.data?.results || [];
+            const visibleNotifications = getVisibleDriverNotifications(results);
+            setNotificationCount(getUnreadDriverNotificationCount(visibleNotifications));
+        } catch {
+            setNotificationCount(0);
+        }
+    }, []);
+
 
     useEffect(() => {
         const unlock = () => unlockRideRequestAlertSound();
@@ -312,6 +323,20 @@ const DriverHome = () => {
             window.removeEventListener('keydown', unlock);
         };
     }, []);
+
+    useEffect(() => {
+        refreshNotificationCount();
+
+        const handleFocus = () => {
+            refreshNotificationCount();
+        };
+
+        window.addEventListener('focus', handleFocus);
+
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+        };
+    }, [refreshNotificationCount]);
 
     useEffect(() => {
         // Automatically show modal if driver is blocked and tries to open the app
@@ -1036,7 +1061,7 @@ const DriverHome = () => {
                             initial={{ opacity: 0, y: 24, scale: 0.96 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: 24, scale: 0.96 }}
-                            className="absolute inset-x-5 bottom-32 z-[71] rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
+                            className="absolute left-1/2 top-1/2 z-[71] w-[calc(100%-2.5rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
                         >
                             <h3 className="text-[18px] font-black tracking-tight text-slate-950">Go offline?</h3>
                             <p className="mt-2 text-[13px] font-semibold leading-relaxed text-slate-500">
@@ -1068,15 +1093,6 @@ const DriverHome = () => {
 
             {/* --- TOP FLOATING UI --- */}
             <div className="fixed top-0 left-0 right-0 p-5 pt-12 flex items-start justify-between z-40 pointer-events-none max-w-md mx-auto">
-                {/* Menu Button */}
-                <button 
-                    onClick={() => navigate('/taxi/driver/profile')}
-                    className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-900 active:scale-90 transition-all pointer-events-auto border border-slate-100 relative"
-                >
-                    <Menu size={24} />
-                    <span className="absolute top-1.5 right-1.5 w-3 h-3 bg-rose-500 border-2 border-white rounded-full" />
-                </button>
-
                 {/* Earnings Pill */}
                 <div 
                     onClick={() => navigate('/taxi/driver/wallet')}
@@ -1088,22 +1104,17 @@ const DriverHome = () => {
                     </span>
                 </div>
 
-                <div className={`pointer-events-none rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] shadow-lg ${
-                    socketStatus === 'connected'
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                        : socketStatus === 'reconnecting'
-                            ? 'border-amber-200 bg-amber-50 text-amber-700'
-                            : 'border-slate-200 bg-white/95 text-slate-500'
-                }`}>
-                    {socketStatus}
-                </div>
-
-                {/* Search Button */}
+                {/* Notification Button */}
                 <button 
                     onClick={() => navigate('/taxi/driver/notifications')}
-                    className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-900 active:scale-90 transition-all pointer-events-auto border border-slate-100"
+                    className="relative w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-900 active:scale-90 transition-all pointer-events-auto border border-slate-100"
                 >
-                    <Search size={22} />
+                    <Bell size={22} />
+                    {notificationCount > 0 ? (
+                        <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-rose-500 border-2 border-white text-white text-[10px] font-black flex items-center justify-center shadow-sm">
+                            {notificationCount > 99 ? '99+' : notificationCount}
+                        </span>
+                    ) : null}
                 </button>
             </div>
 
@@ -1151,33 +1162,6 @@ const DriverHome = () => {
             {/* --- BOTTOM FLOATING UI --- */}
             <div className="fixed bottom-20 left-0 right-0 p-6 pb-4 z-40 flex flex-col pointer-events-none max-w-md mx-auto">
                 
-                {/* Status Message Overlay */}
-                <AnimatePresence mode="wait">
-                    {isOnline ? (
-                        <motion.div 
-                            key="online-status"
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: 20 }}
-                            className="self-center mb-6 bg-emerald-500 px-6 py-2 rounded-full shadow-[0_10px_20px_rgba(16,185,129,0.3)] border border-emerald-400/30 flex items-center gap-2"
-                        >
-                            <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                            <span className="text-[12px] font-black text-white uppercase tracking-widest">Seeking Rides</span>
-                        </motion.div>
-                    ) : (
-                        <motion.div 
-                            key="offline-status"
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: 20 }}
-                            className="self-center mb-6 bg-white/90 backdrop-blur-md px-6 py-2 rounded-full shadow-lg border border-slate-200 flex items-center gap-2"
-                        >
-                            <span className="w-2 h-2 bg-slate-400 rounded-full" />
-                            <span className="text-[12px] font-black text-slate-500 uppercase tracking-widest">You are Offline</span>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
                 <div className="flex items-end justify-center w-full">
                     {/* MAIN "GO" BUTTON */}
                     <motion.div 

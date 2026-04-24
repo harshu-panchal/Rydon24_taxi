@@ -2,7 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Bell, AlertCircle, RefreshCw, Radio, Trash2, CheckCircle2 } from 'lucide-react';
-import { getDriverNotifications, deleteDriverNotification, clearAllDriverNotifications } from '../../services/registrationService';
+import { getDriverNotifications } from '../../services/registrationService';
+import {
+  getVisibleDriverNotifications,
+  hideAllDriverNotifications,
+  hideDriverNotification,
+  markDriverNotificationsAsRead,
+} from '../../utils/notificationState';
 import toast from 'react-hot-toast';
 
 const formatNotificationTime = (value) => {
@@ -47,7 +53,10 @@ const DriverNotifications = () => {
 
     try {
       const response = await getDriverNotifications();
-      setNotifications(response?.data?.results || []);
+      const results = response?.data?.results || [];
+      const visibleNotifications = getVisibleDriverNotifications(results);
+      setNotifications(visibleNotifications);
+      markDriverNotificationsAsRead(visibleNotifications.map((notification) => notification.id || notification._id));
     } catch (requestError) {
       setError(requestError?.message || 'Failed to load notifications');
     } finally {
@@ -57,31 +66,30 @@ const DriverNotifications = () => {
 
   const handleClearAll = async () => {
     if (notifications.length === 0) return;
-    if (!window.confirm('Are you sure you want to clear all notifications?')) return;
 
     setClearing(true);
     try {
-      await clearAllDriverNotifications();
+      hideAllDriverNotifications(notifications.map((notification) => notification.id || notification._id));
       setNotifications([]);
       toast.success('All notifications cleared', {
         icon: <CheckCircle2 size={18} className="text-emerald-500" />,
         className: 'font-bold text-[13px] rounded-2xl shadow-xl border border-emerald-50 bg-white',
       });
-    } catch (err) {
-      toast.error(err?.message || 'Failed to clear notifications');
-    } finally {
+      setClearing(false);
+    } catch {
+      toast.error('Failed to clear notifications');
       setClearing(false);
     }
   };
 
   const handleRemoveSingle = async (id) => {
     try {
-      await deleteDriverNotification(id);
-      setNotifications(prev => prev.filter(n => n.id !== id));
+      hideDriverNotification(id);
+      setNotifications(prev => prev.filter((n) => String(n.id || n._id) !== String(id)));
       toast.success('Notification removed', {
         className: 'font-bold text-[13px] rounded-2xl shadow-xl border border-slate-50 bg-white',
       });
-    } catch (err) {
+    } catch {
       toast.error('Failed to remove notification');
     }
   };
@@ -110,32 +118,32 @@ const DriverNotifications = () => {
             {totalCount}
           </div>
         </div>
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={fetchNotifications}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 active:scale-95 transition-all disabled:opacity-50"
+          >
+            <RefreshCw size={12} strokeWidth={2.5} className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+          <button
+            type="button"
+            onClick={handleClearAll}
+            disabled={clearing || loading || notifications.length === 0}
+            className="inline-flex items-center gap-2 rounded-full border border-rose-100 bg-rose-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-rose-500 active:scale-95 transition-all disabled:opacity-50"
+          >
+            <Trash2 size={12} strokeWidth={2.5} />
+            Clear All
+          </button>
+        </div>
       </header>
 
       <div className="px-5 pt-4 space-y-2.5">
         <div className="flex items-center justify-between px-1">
           <p className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">Admin & System Alerts</p>
-          <div className="flex items-center gap-4">
-            {notifications.length > 0 && (
-              <button
-                type="button"
-                onClick={handleClearAll}
-                disabled={clearing || loading}
-                className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-rose-500 active:scale-95 transition-all disabled:opacity-50"
-              >
-                <Trash2 size={12} strokeWidth={2.5} />
-                Clear All
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={fetchNotifications}
-              className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-slate-500 active:scale-95 transition-all"
-            >
-              <RefreshCw size={12} strokeWidth={2.5} className={loading ? 'animate-spin' : ''} />
-              Refresh
-            </button>
-          </div>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{totalCount} visible</p>
         </div>
 
         {loading && Array.from({ length: 4 }).map((_, index) => <SkeletonCard key={index} />)}

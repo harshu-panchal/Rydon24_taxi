@@ -6,7 +6,7 @@ import { Check, Globe, ChevronRight } from 'lucide-react';
 const LanguageSelect = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const [selectedLang, setSelectedLang] = useState('english');
+    const [selectedLang, setSelectedLang] = useState(() => localStorage.getItem('driver_lang') || 'english');
     const isAuthenticatedDriver = Boolean(localStorage.getItem('driverToken') || localStorage.getItem('token')) && !location.state?.registrationFlow;
 
     const languages = [
