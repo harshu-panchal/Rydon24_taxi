@@ -195,7 +195,7 @@ const TransportRideSettings = () => {
                     helpLink
                  />
 
-                 <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-xl mt-12">
+               <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-xl mt-12">
                    <span className="text-[14px] font-bold text-slate-700">Can Round the Bill Values?</span>
                    <button
                      onClick={() => handleChange('can_round_the_bill_values', settings.can_round_the_bill_values === "1" ? "0" : "1")}
@@ -206,6 +206,7 @@ const TransportRideSettings = () => {
                      <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all duration-300 ${settings.can_round_the_bill_values === "1" ? 'right-1' : 'left-1'}`} />
                    </button>
                  </div>
+
               </div>
            </div>
 

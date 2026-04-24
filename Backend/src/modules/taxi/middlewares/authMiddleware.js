@@ -7,15 +7,25 @@ import { verifyAccessToken } from '../services/tokenService.js';
 
 const roleModelMap = {
   admin: Admin,
+  'super-admin': Admin,
   driver: Driver,
   owner: Owner,
   user: User,
 };
 
+const normalizeRole = (role = '') => {
+  const value = String(role || '').toLowerCase();
+  if (value === 'super-admin') {
+    return 'admin';
+  }
+  return value;
+};
+
 const attachResolvedAuth = (req, payload) => {
   req.auth = {
     sub: payload.sub,
-    role: payload.role,
+    role: normalizeRole(payload.role),
+    originalRole: payload.role,
   };
 };
 
@@ -51,11 +61,14 @@ export const authenticate = (allowedRoles = []) => async (req, _res, next) => {
 
     const payload = verifyAccessToken(token);
 
-    if (allowedRoles.length > 0 && !allowedRoles.includes(payload.role)) {
+    const normalizedRole = normalizeRole(payload.role);
+    const normalizedAllowedRoles = allowedRoles.map(normalizeRole);
+
+    if (normalizedAllowedRoles.length > 0 && !normalizedAllowedRoles.includes(normalizedRole)) {
       throw new ApiError(403, 'Insufficient permissions for this resource');
     }
 
-    const Model = roleModelMap[payload.role];
+    const Model = roleModelMap[payload.role] || roleModelMap[normalizedRole];
 
     if (!Model) {
       throw new ApiError(401, 'Unsupported auth role');
@@ -68,14 +81,14 @@ export const authenticate = (allowedRoles = []) => async (req, _res, next) => {
     }
 
     if (
-      payload.role === 'user' &&
+      normalizedRole === 'user' &&
       (entity.deletedAt || entity.isActive === false || entity.active === false)
     ) {
       throw new ApiError(401, 'User account is not active');
     }
 
     if (
-      payload.role === 'driver' &&
+      normalizedRole === 'driver' &&
       (entity.approve === false || String(entity.status || '').toLowerCase() === 'pending')
     ) {
       throw new ApiError(403, 'Driver account is pending approval');

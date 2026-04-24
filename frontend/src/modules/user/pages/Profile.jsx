@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { User, Wallet, Bell, Shield, LogOut, ChevronRight, HelpCircle, MapPin, Star, Package, Wrench, Gift, Trash2, Camera, Check } from 'lucide-react';
+import { User, Wallet, Bell, Shield, LogOut, ChevronRight, HelpCircle, MapPin, Star, Package, Wrench, Gift, Trash2, Check, BusFront } from 'lucide-react';
 import BottomNavbar from '../components/BottomNavbar';
 import { clearLocalUserSession, getLocalUserToken, userAuthService } from '../services/authService';
 import { clearCurrentRide } from '../services/currentRideService';
 import { socketService } from '../../../shared/api/socket';
-import { useImageUpload } from '../../../shared/hooks/useImageUpload';
 
 const MotionDiv = motion.div;
 const MotionButton = motion.button;
@@ -16,6 +15,7 @@ const menuItems = [
   { icon: Wallet, title: 'Wallet', sub: 'Balance, transactions & top-up', path: '/taxi/user/wallet', bg: 'bg-blue-50', color: 'text-blue-500' },
   { icon: MapPin, title: 'Saved Addresses', sub: 'Home, office & others', path: '/taxi/user/profile/addresses', bg: 'bg-emerald-50', color: 'text-emerald-500' },
   { icon: Package, title: 'My Rides', sub: 'History & receipts', path: '/taxi/user/activity', bg: 'bg-indigo-50', color: 'text-indigo-500' },
+  { icon: BusFront, title: 'Bus Bookings', sub: 'Tickets, seats & travel dates', path: '/taxi/user/profile/bus-bookings', bg: 'bg-orange-50', color: 'text-orange-500' },
   { icon: Bell, title: 'Notifications', sub: 'Offers & safety alerts', path: '/taxi/user/profile/notifications', bg: 'bg-purple-50', color: 'text-purple-500' },
   { icon: Gift, title: 'Refer & Earn', sub: 'Invite friends & get rewards', path: '/taxi/user/referral', bg: 'bg-amber-50', color: 'text-amber-500' },
   { icon: HelpCircle, title: 'Support', sub: 'Help center & ticketing', path: '/taxi/user/support/tickets', bg: 'bg-slate-50', color: 'text-slate-500' },
@@ -28,37 +28,6 @@ const Profile = () => {
     name: '',
     phone: '',
     profileImage: '',
-  });
-  const [isUploading, setIsUploading] = useState(false);
-  const [error, setError] = useState('');
-
-  const {
-    uploading: imageUploading,
-    preview: imagePreview,
-    handleFileChange: onProfileImageChange,
-  } = useImageUpload({
-    folder: 'user-profiles',
-    onSuccess: async (url) => {
-      const previousImage = profile.profileImage;
-      setIsUploading(true);
-      setProfile((prev) => ({ ...prev, profileImage: url }));
-
-      try {
-        await userAuthService.updateCurrentUser({
-          profileImage: url,
-        });
-        
-        // Update local storage as well
-        const stored = JSON.parse(localStorage.getItem('userInfo') || '{}');
-        localStorage.setItem('userInfo', JSON.stringify({ ...stored, profileImage: url }));
-      } catch (err) {
-        setProfile((prev) => ({ ...prev, profileImage: previousImage }));
-        setError(err?.message || 'Unable to update profile photo');
-      } finally {
-        setIsUploading(true); // Wait a bit for Cloudinary if needed, or set to false
-        setIsUploading(false);
-      }
-    },
   });
 
   useEffect(() => {
@@ -138,41 +107,18 @@ const Profile = () => {
           animate={{ opacity: 1, scale: 1 }}
           className="rounded-[28px] bg-white border border-slate-100 shadow-xl shadow-slate-900/5 p-5 flex items-center gap-5"
         >
-          <div className="relative group">
+          <div className="relative">
             <div className="w-15 h-15 rounded-[22px] bg-slate-900 flex items-center justify-center shadow-lg relative overflow-hidden">
-              {(imagePreview || profile.profileImage) ? (
+              {profile.profileImage ? (
                 <img 
-                  src={imagePreview || profile.profileImage} 
+                  src={profile.profileImage} 
                   alt="User" 
-                  className={`w-full h-full object-cover ${(imageUploading || isUploading) ? 'opacity-60' : ''}`} 
+                  className="w-full h-full object-cover"
                 />
               ) : (
                 <span className="text-xl font-bold text-white opacity-40">{initials || 'U'}</span>
               )}
-              
-              {/* Overlay on hover */}
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <Camera size={16} className="text-white" />
-              </div>
-
-              {/* Uploading indicator */}
-              {(imageUploading || isUploading) && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/35">
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                </div>
-              )}
             </div>
-
-            {/* File Input Label */}
-            <label className="absolute inset-0 cursor-pointer" aria-label="Upload profile image">
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={onProfileImageChange}
-                disabled={imageUploading || isUploading}
-              />
-            </label>
 
             <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-lg border-2 border-white flex items-center justify-center shadow-sm">
               <Check size={12} className="text-white" strokeWidth={4} />
@@ -194,9 +140,6 @@ const Profile = () => {
             <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Active</span>
           </div>
         </MotionDiv>
-        {error && (
-          <p className="mt-3 px-2 text-[11px] font-medium text-rose-500">{error}</p>
-        )}
       </div>
 
       {/* Menu Options */}

@@ -49,6 +49,13 @@ const AppModules = ({ mode: propMode }) => {
   const [entriesPerPage, setEntriesPerPage] = useState(10);
   const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [filters, setFilters] = useState({
+    service_type: '',
+    transport_type: '',
+    active: '',
+  });
   const { transportTypes } = useTaxiTransportTypes();
   
   const [formData, setFormData] = useState({
@@ -158,8 +165,48 @@ const AppModules = ({ mode: propMode }) => {
   };
 
   const filteredModules = useMemo(() => {
-    return modules.filter(m => (m.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [modules, searchTerm]);
+    return modules.filter((moduleItem) => {
+      const matchesSearch = (moduleItem.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesService =
+        !filters.service_type ||
+        String(moduleItem.service_type || '').toLowerCase() === String(filters.service_type).toLowerCase();
+      const matchesTransport =
+        !filters.transport_type ||
+        String(moduleItem.transport_type || '').toLowerCase() === String(filters.transport_type).toLowerCase();
+      const matchesStatus =
+        filters.active === '' || String(Boolean(moduleItem.active)) === String(filters.active === 'true');
+
+      return matchesSearch && matchesService && matchesTransport && matchesStatus;
+    });
+  }, [filters, modules, searchTerm]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredModules.length / entriesPerPage));
+  const paginatedModules = useMemo(() => {
+    const startIndex = (currentPage - 1) * entriesPerPage;
+    return filteredModules.slice(startIndex, startIndex + entriesPerPage);
+  }, [currentPage, entriesPerPage, filteredModules]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [entriesPerPage, filters, searchTerm]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  const updateFilter = (key, value) => {
+    setFilters((current) => ({ ...current, [key]: value }));
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      service_type: '',
+      transport_type: '',
+      active: '',
+    });
+  };
 
   if (isList) {
     return (
@@ -196,11 +243,21 @@ const AppModules = ({ mode: propMode }) => {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <button className="w-10 h-10 flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-400 hover:text-indigo-600 transition-colors">
-                    <Search size={18} />
-                  </button>
-                  <button className="flex items-center gap-2 px-5 py-2.5 bg-[#EF6C4D] text-white rounded-lg text-[13px] font-bold shadow-md hover:bg-[#D95B3D] transition-colors">
-                    <Filter size={16} /> Filters
+                  <div className="relative">
+                    <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Search modules"
+                      className="h-10 w-52 rounded-full border border-gray-200 bg-white pl-9 pr-4 text-[13px] font-medium text-slate-700 outline-none transition-colors focus:border-indigo-500"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsFilterOpen((current) => !current)}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-[#EF6C4D] text-white rounded-lg text-[13px] font-bold shadow-md hover:bg-[#D95B3D] transition-colors"
+                  >
+                    <Filter size={16} /> {isFilterOpen ? 'Hide Filters' : 'Filters'}
                   </button>
                   <button 
                     onClick={() => navigate("create")}
@@ -210,6 +267,73 @@ const AppModules = ({ mode: propMode }) => {
                   </button>
                 </div>
               </div>
+
+              <AnimatePresence initial={false}>
+                {isFilterOpen ? (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden border-t border-gray-100"
+                  >
+                    <div className="grid grid-cols-1 gap-4 px-8 py-6 md:grid-cols-4">
+                      <div>
+                        <label className={labelClass}>Module Service</label>
+                        <select
+                          value={filters.service_type}
+                          onChange={(e) => updateFilter('service_type', e.target.value)}
+                          className={selectClass}
+                        >
+                          <option value="">All services</option>
+                          <option value="normal">Normal</option>
+                          <option value="outstation">Outstation</option>
+                          <option value="rental">Rental</option>
+                          <option value="bid">Bid</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className={labelClass}>Transport Type</label>
+                        <select
+                          value={filters.transport_type}
+                          onChange={(e) => updateFilter('transport_type', e.target.value)}
+                          className={selectClass}
+                        >
+                          <option value="">All transport types</option>
+                          {transportTypes.map((type) => (
+                            <option key={type.value || type.id} value={type.value || type.id}>
+                              {type.label || type.name || type.value}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className={labelClass}>Status</label>
+                        <select
+                          value={filters.active}
+                          onChange={(e) => updateFilter('active', e.target.value)}
+                          className={selectClass}
+                        >
+                          <option value="">All statuses</option>
+                          <option value="true">Active</option>
+                          <option value="false">Inactive</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-end">
+                        <button
+                          type="button"
+                          onClick={clearFilters}
+                          className="h-[42px] w-full rounded-lg border border-gray-200 bg-white px-4 text-sm font-bold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                        >
+                          Reset Filters
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
 
               {/* Table Body matches Image 1 */}
               <div className="px-8 pb-8">
@@ -232,8 +356,8 @@ const AppModules = ({ mode: propMode }) => {
                             <Loader2 className="animate-spin text-indigo-600 mx-auto" size={32} />
                           </td>
                         </tr>
-                      ) : filteredModules.length > 0 ? (
-                        filteredModules.slice(0, entriesPerPage).map(m => (
+                      ) : paginatedModules.length > 0 ? (
+                        paginatedModules.map(m => (
                           <tr key={m._id || m.id} className="hover:bg-gray-50/50 transition-colors group border-b border-gray-50 last:border-0">
                             <td className="px-6 py-5">
                               <span className="text-[14px] font-bold text-slate-700">{m.name}</span>
@@ -275,6 +399,34 @@ const AppModules = ({ mode: propMode }) => {
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                <div className="mt-6 flex flex-col gap-4 border-t border-gray-100 pt-5 text-sm text-gray-500 md:flex-row md:items-center md:justify-between">
+                  <span>
+                    Showing {paginatedModules.length ? (currentPage - 1) * entriesPerPage + 1 : 0} to{' '}
+                    {(currentPage - 1) * entriesPerPage + paginatedModules.length} of {filteredModules.length} entries
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                      disabled={currentPage === 1}
+                      className="rounded-lg border border-gray-200 px-3 py-2 font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    <span className="min-w-[90px] text-center font-semibold text-slate-700">
+                      Page {currentPage} / {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                      disabled={currentPage === totalPages}
+                      className="rounded-lg border border-gray-200 px-3 py-2 font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

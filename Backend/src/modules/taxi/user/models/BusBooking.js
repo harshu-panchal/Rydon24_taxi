@@ -1,0 +1,122 @@
+import mongoose from 'mongoose';
+
+const passengerSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    age: {
+      type: Number,
+      default: null,
+    },
+    gender: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    phone: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    email: {
+      type: String,
+      default: '',
+      trim: true,
+      lowercase: true,
+    },
+  },
+  { _id: false },
+);
+
+const busBookingSchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TaxiUser',
+      required: true,
+      index: true,
+    },
+    busServiceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TaxiBusService',
+      required: true,
+      index: true,
+    },
+    bookingCode: {
+      type: String,
+      required: true,
+      trim: true,
+      unique: true,
+      index: true,
+    },
+    scheduleId: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    travelDate: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    seatIds: {
+      type: [String],
+      default: [],
+    },
+    seatLabels: {
+      type: [String],
+      default: [],
+    },
+    passenger: {
+      type: passengerSchema,
+      default: () => ({}),
+    },
+    amount: {
+      type: Number,
+      default: 0,
+    },
+    currency: {
+      type: String,
+      default: 'INR',
+      trim: true,
+      uppercase: true,
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'confirmed', 'failed', 'expired', 'cancelled'],
+      default: 'pending',
+      index: true,
+    },
+    expiresAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+    routeSnapshot: {
+      originCity: { type: String, default: '' },
+      destinationCity: { type: String, default: '' },
+      departureTime: { type: String, default: '' },
+      arrivalTime: { type: String, default: '' },
+      durationHours: { type: String, default: '' },
+      busName: { type: String, default: '' },
+      operatorName: { type: String, default: '' },
+      coachType: { type: String, default: '' },
+      busCategory: { type: String, default: '' },
+    },
+    payment: {
+      provider: { type: String, default: 'razorpay' },
+      orderId: { type: String, default: '', index: true },
+      paymentId: { type: String, default: '' },
+      signature: { type: String, default: '' },
+      status: { type: String, default: 'pending' },
+      paidAt: { type: Date, default: null },
+    },
+  },
+  { timestamps: true },
+);
+
+export const BusBooking =
+  mongoose.models.TaxiBusBooking || mongoose.model('TaxiBusBooking', busBookingSchema);

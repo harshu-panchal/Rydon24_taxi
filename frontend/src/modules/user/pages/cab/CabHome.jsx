@@ -1,7 +1,8 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 
 import imgShared    from '@/assets/3d images/AutoCab/taxi.png';
 import imgAirport   from '@/assets/3d images/AutoCab/airoplan.png';
@@ -64,6 +65,11 @@ const services = [
 
 const CabHome = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { settings } = useSettings();
+  const showBusService = String(settings.transportRide?.enable_bus_service || '0') === '1';
+  const visibleServices = services.filter((service) => showBusService || service.id !== 'bus');
+  const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_38%,#EEF2F7_100%)] max-w-lg mx-auto font-sans pb-12 relative overflow-hidden">
@@ -88,16 +94,16 @@ const CabHome = () => {
 
       <div className="px-5 pt-5 space-y-3">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">5 services available</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">{visibleServices.length} services available</p>
           <h2 className="mt-0.5 text-[16px] font-black tracking-tight text-slate-900">What do you need?</h2>
         </div>
 
-        {services.map((s, i) => (
+        {visibleServices.map((s, i) => (
           <motion.button key={s.id} type="button"
             initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, delay: 0.06 + i * 0.07 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => navigate(s.path)}
+            onClick={() => navigate(`${routePrefix}${s.path}`)}
             className="w-full flex items-center gap-4 rounded-[20px] border border-white/80 bg-white/90 shadow-[0_4px_14px_rgba(15,23,42,0.06)] px-4 py-4 text-left">
             <div className={`w-12 h-12 rounded-[16px] flex items-center justify-center shrink-0 overflow-visible ${s.accent}`}>
               <img src={s.img} alt={s.title} className="w-14 h-14 object-contain drop-shadow-md" />

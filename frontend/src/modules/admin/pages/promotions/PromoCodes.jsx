@@ -45,6 +45,12 @@ const createInitialFormData = () => ({
   active: true,
 });
 
+const createInitialFilters = () => ({
+  service_location_id: '',
+  transport_type: '',
+  active: '',
+});
+
 const HeaderBlock = ({ isCreateRoute, onBack }) => (
   <div className="mb-6">
     <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
@@ -101,6 +107,8 @@ const PromoCodes = () => {
   const [locations, setLocations] = useState([]);
   const [usersList, setUsersList] = useState([]);
   const [formData, setFormData] = useState(createInitialFormData);
+  const [filters, setFilters] = useState(createInitialFilters);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const token = localStorage.getItem('adminToken') || '';
 
@@ -167,6 +175,14 @@ const PromoCodes = () => {
     }));
   };
 
+  const handleFilterChange = (key, value) => {
+    setFilters((current) => ({ ...current, [key]: value }));
+  };
+
+  const clearFilters = () => {
+    setFilters(createInitialFilters());
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -202,7 +218,19 @@ const PromoCodes = () => {
     }
   };
 
-  const filteredPromos = promos;
+  const filteredPromos = promos.filter((promo) => {
+    const matchesLocation =
+      !filters.service_location_id ||
+      String(promo.service_location_id || '') === String(filters.service_location_id);
+    const matchesTransport =
+      !filters.transport_type ||
+      String(promo.transport_type || '').toLowerCase() === String(filters.transport_type).toLowerCase();
+    const matchesStatus =
+      filters.active === '' ||
+      String(Boolean(promo.active)) === String(filters.active === 'true');
+
+    return matchesLocation && matchesTransport && matchesStatus;
+  });
 
   return (
     <div className="min-h-full bg-gray-50 text-gray-900">
@@ -227,9 +255,10 @@ const PromoCodes = () => {
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <button
                     type="button"
+                    onClick={() => setIsFilterOpen((current) => !current)}
                     className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                   >
-                    <Filter size={16} /> Filters
+                    <Filter size={16} /> {isFilterOpen ? 'Hide Filters' : 'Filters'}
                   </button>
                   <button
                     type="button"
@@ -240,6 +269,63 @@ const PromoCodes = () => {
                   </button>
                 </div>
               </div>
+
+              {isFilterOpen ? (
+                <div className="mt-5 grid grid-cols-1 gap-4 border-t border-gray-100 pt-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+                  <div>
+                    <label className={labelClass}>Service Location</label>
+                    <select
+                      value={filters.service_location_id}
+                      onChange={(event) => handleFilterChange('service_location_id', event.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="">All service locations</option>
+                      {locations.map((locationItem) => (
+                        <option key={locationItem._id} value={locationItem._id}>
+                          {locationItem.service_location_name || locationItem.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Transport Type</label>
+                    <select
+                      value={filters.transport_type}
+                      onChange={(event) => handleFilterChange('transport_type', event.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="">All transport types</option>
+                      <option value="taxi">Taxi</option>
+                      <option value="delivery">Delivery</option>
+                      <option value="all">All</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Status</label>
+                    <select
+                      value={filters.active}
+                      onChange={(event) => handleFilterChange('active', event.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="">All statuses</option>
+                      <option value="true">Active</option>
+                      <option value="false">Disabled</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 md:w-auto"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

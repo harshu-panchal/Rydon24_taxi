@@ -23,7 +23,12 @@ const parseServiceAccountJson = (rawJson) => {
 
 const readServiceAccount = () => {
   if (env.firebase.serviceAccountJson) {
-    return parseServiceAccountJson(env.firebase.serviceAccountJson);
+    try {
+      return parseServiceAccountJson(env.firebase.serviceAccountJson);
+    } catch (error) {
+      console.error('Firebase service account JSON parsing failed:', error.message);
+      return null;
+    }
   }
 
   if (!env.firebase.serviceAccountPath) {
@@ -34,7 +39,17 @@ const readServiceAccount = () => {
     ? env.firebase.serviceAccountPath
     : path.resolve(process.cwd(), env.firebase.serviceAccountPath);
 
-  return parseServiceAccountJson(fs.readFileSync(credentialPath, 'utf8'));
+  if (!fs.existsSync(credentialPath)) {
+    console.warn(`Firebase service account file not found at ${credentialPath}. Falling back to env configuration if available.`);
+    return null;
+  }
+
+  try {
+    return parseServiceAccountJson(fs.readFileSync(credentialPath, 'utf8'));
+  } catch (error) {
+    console.error('Firebase service account file read failed:', error.message);
+    return null;
+  }
 };
 
 const getFirebaseApp = () => {

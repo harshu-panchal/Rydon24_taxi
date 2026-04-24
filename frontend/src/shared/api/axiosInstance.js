@@ -54,13 +54,22 @@ const getTokenPayload = (token) => {
   }
 };
 
+const normalizeAuthRole = (role) => {
+  const value = String(role || '').toLowerCase();
+  if (value === 'super-admin') {
+    return 'admin';
+  }
+  return value;
+};
+
 const getStoredTokenByRole = (role) => {
+  const normalizedRole = normalizeAuthRole(role);
   const entries = [
     localStorage.getItem(`${role}Token`),
     localStorage.getItem('token'),
   ].filter(Boolean);
 
-  return entries.find((token) => getTokenPayload(token)?.role === role) || null;
+  return entries.find((token) => normalizeAuthRole(getTokenPayload(token)?.role) === normalizedRole) || null;
 };
 
 const getRoleFromPathname = () => {
@@ -91,12 +100,12 @@ const getRoleFromPathname = () => {
 };
 
 const clearStaleAuthState = (role = '', staleToken = '') => {
-  const normalizedRole = String(role || '').toLowerCase();
+  const normalizedRole = normalizeAuthRole(role);
   const currentGenericToken = localStorage.getItem('token');
   const shouldClearGenericToken =
     !staleToken ||
     currentGenericToken === staleToken ||
-    getTokenPayload(currentGenericToken)?.role === normalizedRole;
+    normalizeAuthRole(getTokenPayload(currentGenericToken)?.role) === normalizedRole;
 
   if (shouldClearGenericToken) {
     localStorage.removeItem('token');
@@ -209,7 +218,7 @@ api.interceptors.response.use(
         const serverMessage = String(error.response.data?.message || '');
         const authHeader = error.config?.headers?.Authorization || error.config?.headers?.authorization || '';
         const token = String(authHeader).startsWith('Bearer ') ? String(authHeader).slice(7) : '';
-        const tokenRole = getTokenPayload(token)?.role || '';
+        const tokenRole = normalizeAuthRole(getTokenPayload(token)?.role || '');
 
         const shouldClearAuth =
           serverMessage === 'Authenticated account no longer exists' ||

@@ -2,7 +2,11 @@ import { Router } from 'express';
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { authenticateOrResolveUser } from '../../middlewares/authMiddleware.js';
 import {
+  createBusBookingOrder,
   createRazorpayWalletTopupOrder,
+  getBusSeatLayout,
+  getBusRouteSuggestions,
+  listMyBusBookings,
   getUserWallet,
   getCurrentUser,
   getUserNotifications,
@@ -12,12 +16,14 @@ import {
   registerUser,
   requestAccountDeletion,
   saveUserFcmToken,
+  searchBuses,
   signupUser,
   startUserOtpRequest,
   topupUserWallet,
   transferUserWallet,
   updateCurrentUser,
   uploadUserProfileImage,
+  verifyBusBookingPayment,
   verifyRazorpayWalletTopup,
   verifyUserOtpRequest,
   verifyUserPhoneForOtpLogin,
@@ -48,3 +54,9 @@ userRouter.post('/wallet/topup', authenticateOrResolveUser(['user']), asyncHandl
 userRouter.post('/wallet/transfer', authenticateOrResolveUser(['user']), asyncHandler(transferUserWallet));
 userRouter.post('/wallet/razorpay/order', authenticateOrResolveUser(['user']), asyncHandler(createRazorpayWalletTopupOrder));
 userRouter.post('/wallet/razorpay/verify', authenticateOrResolveUser(['user']), asyncHandler(verifyRazorpayWalletTopup));
+userRouter.get('/buses/routes', authenticateOrResolveUser(['user']), asyncHandler(getBusRouteSuggestions));
+userRouter.get('/buses/search', authenticateOrResolveUser(['user']), asyncHandler(searchBuses));
+userRouter.get('/buses/:id/seats', authenticateOrResolveUser(['user']), asyncHandler(getBusSeatLayout));
+userRouter.get('/bus-bookings', authenticateOrResolveUser(['user']), asyncHandler(listMyBusBookings));
+userRouter.post('/bus-bookings/order', authenticateOrResolveUser(['user']), asyncHandler(createBusBookingOrder));
+userRouter.post('/bus-bookings/verify', authenticateOrResolveUser(['user']), asyncHandler(verifyBusBookingPayment));

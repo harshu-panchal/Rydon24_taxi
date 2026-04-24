@@ -66,8 +66,18 @@ const DriverLayout = () => {
         const onboardingState = location.state || {};
         const token = localStorage.getItem('driverToken') || localStorage.getItem('token');
         const authenticatedHome = getAuthenticatedDriverHome();
+        const shouldVerifyOnboardingRoute =
+            Boolean(token)
+            && (
+                softEntryRoutes.has(currentPath)
+                || (
+                    currentPath === '/taxi/driver/lang-select'
+                    && !onboardingState.registrationFlow
+                    && !onboardingState.allowAuthenticated
+                )
+            );
 
-        if (onboardingRoutes.has(currentPath)) {
+        if (onboardingRoutes.has(currentPath) && !shouldVerifyOnboardingRoute) {
             setIsAllowed(true);
             setIsChecking(false);
             return;

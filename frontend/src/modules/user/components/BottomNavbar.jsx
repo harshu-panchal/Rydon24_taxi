@@ -1,24 +1,30 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Home, Clock, Map, User } from 'lucide-react';
-
-const navItems = [
-  { icon: Home,  label: 'Ride',    path: '/taxi/user'         },
-  { icon: Clock, label: 'History', path: '/taxi/user/activity' },
-  { icon: Map,   label: 'Travel',  path: '/taxi/user/support'  },
-  { icon: User,  label: 'Profile', path: '/taxi/user/profile'  },
-];
+import { Home, Clock, Map, User, BusFront } from 'lucide-react';
+import { useSettings } from '../../../shared/context/SettingsContext';
 
 const BottomNavbar = () => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { settings } = useSettings();
+  const showBusService = String(settings.transportRide?.enable_bus_service || '0') === '1';
+  const navItems = [
+    { icon: Home, label: 'Ride', path: '/taxi/user' },
+    { icon: Clock, label: 'History', path: '/taxi/user/activity' },
+    ...(showBusService ? [{ icon: BusFront, label: 'Bus', path: '/taxi/user/bus' }] : []),
+    { icon: Map, label: 'Travel', path: '/taxi/user/support' },
+    { icon: User, label: 'Profile', path: '/taxi/user/profile' },
+  ];
 
   return (
     <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto z-50 px-4 pb-5 pt-2">
       <div className="flex items-center justify-around bg-white/90 backdrop-blur-xl border border-white/80 rounded-[22px] shadow-[0_8px_32px_rgba(15,23,42,0.12)] px-2 py-1.5">
         {navItems.map(({ icon: Icon, label, path }) => {
-          const isActive = pathname === path;
+          const isActive =
+            path === '/taxi/user'
+              ? pathname === path
+              : pathname === path || pathname.startsWith(`${path}/`);
           return (
             <motion.button
               key={label}

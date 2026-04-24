@@ -64,6 +64,7 @@ export const createDefaultBusinessSettings = () => ({
     owner_mobile_password: '1',
   },
   transport_ride: {
+    enable_bus_service: '0',
     trip_dispatch_type: '1',
     maximum_time_for_accept_reject_bidding_ride: '60',
     maximum_time_for_find_drivers_for_bitting_ride: '300',

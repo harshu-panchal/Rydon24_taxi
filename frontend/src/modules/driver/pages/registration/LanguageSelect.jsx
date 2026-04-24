@@ -8,6 +8,10 @@ const LanguageSelect = () => {
     const location = useLocation();
     const [selectedLang, setSelectedLang] = useState(() => localStorage.getItem('driver_lang') || 'english');
     const isAuthenticatedDriver = Boolean(localStorage.getItem('driverToken') || localStorage.getItem('token')) && !location.state?.registrationFlow;
+    const authenticatedHome =
+        String(localStorage.getItem('role') || 'driver').toLowerCase() === 'owner'
+            ? '/taxi/driver/profile'
+            : '/taxi/driver/home';
 
     const languages = [
         { id: 'english', label: 'English', sub: 'Standard Experience', native: 'English' },
@@ -18,7 +22,7 @@ const LanguageSelect = () => {
 
     const handleConfirm = () => {
         localStorage.setItem('driver_lang', selectedLang);
-        navigate(isAuthenticatedDriver ? '/taxi/driver/profile' : '/taxi/driver/reg-phone', { replace: true });
+        navigate(isAuthenticatedDriver ? authenticatedHome : '/taxi/driver/reg-phone', { replace: true });
     };
 
     return (

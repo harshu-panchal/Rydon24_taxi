@@ -17,14 +17,16 @@ export const useImageUpload = (options = {}) => {
   const [imageUrl, setImageUrl] = useState(null);
 
   const handleFileChange = useCallback(async (e) => {
-    const file = e.target.files[0];
+    const input = e?.target || e?.currentTarget;
+    const file = input?.files?.[0];
     if (!file) return;
 
     try {
       setUploading(true);
 
-      const base64 = await new Promise((resolve) => {
+      const base64 = await new Promise((resolve, reject) => {
         const r = new FileReader();
+        r.onerror = () => reject(new Error('Unable to read selected image'));
         r.onloadend = () => resolve(r.result);
         r.readAsDataURL(file);
       });
@@ -47,6 +49,9 @@ export const useImageUpload = (options = {}) => {
       toast.error('Failed to upload image. Please try again.');
       onError(error);
     } finally {
+      if (input) {
+        input.value = '';
+      }
       setUploading(false);
     }
   }, [folder, onSuccess, onError]);

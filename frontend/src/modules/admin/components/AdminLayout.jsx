@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { socketService } from '../../../shared/api/socket';
 import { useSettings } from '../../../shared/context/SettingsContext';
+import { adminService } from '../services/adminService';
 import {
   BarChart3,
   Bell,
@@ -53,6 +54,70 @@ const hasActiveChild = (pathname, items = []) =>
 
 const flattenItems = (sections = []) =>
   sections.flatMap((section) => section.items ?? []);
+
+const flattenSearchEntries = (items = [], parentLabels = []) =>
+  items.flatMap((item) => {
+    const currentTrail = [...parentLabels, item.label].filter(Boolean);
+
+    if (item.path) {
+      return [
+        {
+          label: item.label,
+          path: item.path,
+          trail: parentLabels,
+          keywords: currentTrail.join(' ').toLowerCase(),
+        },
+      ];
+    }
+
+    if (item.subItems) {
+      return flattenSearchEntries(item.subItems, currentTrail);
+    }
+
+    return [];
+  });
+
+const NOTIFICATION_PAGE_SIZE = 5;
+
+const formatRelativeAdminTime = (value) => {
+  const date = value ? new Date(value) : null;
+
+  if (!date || Number.isNaN(date.getTime())) {
+    return 'Just now';
+  }
+
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.max(1, Math.floor(diffMs / 60000));
+
+  if (diffMinutes < 60) {
+    return `${diffMinutes}m ago`;
+  }
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `${diffHours}h ago`;
+  }
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) {
+    return `${diffDays}d ago`;
+  }
+
+  return date.toLocaleDateString();
+};
+
+const looksLikeCoordinateLabel = (value = '') =>
+  /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(String(value || '').trim());
+
+const formatAdminNotificationLocation = (value, fallback) => {
+  const text = String(value || '').trim();
+
+  if (!text || looksLikeCoordinateLabel(text)) {
+    return fallback;
+  }
+
+  return text;
+};
 
 const resolvePageTitle = (pathname, sections, appName) => {
   const findLabel = (items = []) => {
@@ -268,7 +333,20 @@ const AdminLayout = () => {
   const [isSidebarOpen] = useState(true);
   const [isCollapsed, setCollapsed] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [notificationTab, setNotificationTab] = useState('ride_requests');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [rideRequestFeed, setRideRequestFeed] = useState({
+    results: [],
+    paginator: { current_page: 1, last_page: 1, total: 0 },
+  });
+  const [bookingsFeed, setBookingsFeed] = useState([]);
+  const [rideRequestPage, setRideRequestPage] = useState(1);
+  const [bookingPage, setBookingPage] = useState(1);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
   const userMenuRef = useRef(null);
+  const notificationsMenuRef = useRef(null);
 
   const appName = settings.general?.app_name || 'App';
   const appLogo = settings.general?.logo || settings.customization?.logo;
@@ -503,6 +581,39 @@ const AdminLayout = () => {
   const mode = isOwnerRoute ? OWNER_MODE : ADMIN_MODE;
   const sidebarSections = mode === OWNER_MODE ? ownerSections : adminSections;
   const pageTitle = resolvePageTitle(location.pathname, sidebarSections, appName);
+  const searchEntries = useMemo(() => flattenSearchEntries(flattenItems(sidebarSections)), [sidebarSections]);
+  const filteredSearchEntries = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) {
+      return searchEntries.slice(0, 10);
+    }
+
+    return searchEntries
+      .filter((entry) => entry.keywords.includes(query) || entry.path.toLowerCase().includes(query))
+      .slice(0, 14);
+  }, [searchEntries, searchTerm]);
+
+  const pagedBookings = useMemo(() => {
+    const total = bookingsFeed.length;
+    const lastPage = Math.max(1, Math.ceil(total / NOTIFICATION_PAGE_SIZE));
+    const currentPage = Math.min(bookingPage, lastPage);
+    const start = (currentPage - 1) * NOTIFICATION_PAGE_SIZE;
+
+    return {
+      results: bookingsFeed.slice(start, start + NOTIFICATION_PAGE_SIZE),
+      paginator: {
+        current_page: currentPage,
+        last_page: lastPage,
+        total,
+      },
+    };
+  }, [bookingPage, bookingsFeed]);
+
+  const activeNotificationMeta =
+    notificationTab === 'ride_requests' ? rideRequestFeed.paginator : pagedBookings.paginator;
+
+  const totalNotificationItems =
+    Number(rideRequestFeed?.paginator?.total || 0) + Number(bookingsFeed.length || 0);
 
   const setMode = (nextMode) => {
     localStorage.setItem(MODE_STORAGE_KEY, nextMode);
@@ -521,6 +632,10 @@ const AdminLayout = () => {
       if (!userMenuRef.current?.contains(event.target)) {
         setIsUserMenuOpen(false);
       }
+
+      if (!notificationsMenuRef.current?.contains(event.target)) {
+        setIsNotificationsOpen(false);
+      }
     };
 
     document.addEventListener('mousedown', handleDocumentClick);
@@ -528,6 +643,84 @@ const AdminLayout = () => {
       document.removeEventListener('mousedown', handleDocumentClick);
     };
   }, []);
+
+  useEffect(() => {
+    setIsSearchOpen(false);
+    setSearchTerm('');
+    setIsNotificationsOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!isNotificationsOpen) return undefined;
+
+    let isMounted = true;
+
+    const fetchNotifications = async () => {
+      setNotificationsLoading(true);
+
+      try {
+        if (notificationTab === 'ride_requests') {
+          const response = await adminService.getRideRequests({
+            page: rideRequestPage,
+            limit: NOTIFICATION_PAGE_SIZE,
+            tab: 'all',
+            search: '',
+          });
+
+          if (!isMounted) return;
+
+          setRideRequestFeed({
+            results: response?.data?.results || response?.results || [],
+            paginator: response?.data?.paginator || response?.paginator || { current_page: 1, last_page: 1, total: 0 },
+          });
+          return;
+        }
+
+        const response = await adminService.getOwnerBookings();
+        if (!isMounted) return;
+
+        setBookingsFeed(response?.data?.results || response?.results || []);
+      } catch (error) {
+        console.error('Failed to load admin notifications:', error);
+
+        if (!isMounted) return;
+
+        if (notificationTab === 'ride_requests') {
+          setRideRequestFeed({
+            results: [],
+            paginator: { current_page: 1, last_page: 1, total: 0 },
+          });
+        } else {
+          setBookingsFeed([]);
+        }
+      } finally {
+        if (isMounted) {
+          setNotificationsLoading(false);
+        }
+      }
+    };
+
+    fetchNotifications();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [bookingPage, isNotificationsOpen, notificationTab, rideRequestPage]);
+
+  useEffect(() => {
+    if (!isSearchOpen) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setIsSearchOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isSearchOpen]);
 
   useEffect(() => {
     const token = localStorage.getItem('adminToken');
@@ -648,15 +841,199 @@ const AdminLayout = () => {
             <ModeSwitcher mode={mode} setMode={setMode} />
 
             <div className="mr-1 flex items-center gap-1 border-r border-gray-100 pr-4 leading-none">
-              <button className="rounded-lg p-2 text-gray-400 transition-all hover:bg-indigo-50 hover:text-indigo-600">
+              <button
+                type="button"
+                onClick={() => setIsSearchOpen((current) => !current)}
+                className="rounded-lg p-2 text-gray-400 transition-all hover:bg-indigo-50 hover:text-indigo-600"
+              >
                 <Search size={18} />
               </button>
-              <button className="rounded-lg p-2 text-emerald-500 transition-all hover:bg-emerald-50">
-                <Zap size={18} />
-              </button>
-              <button className="rounded-lg p-2 text-gray-400 transition-all hover:bg-indigo-50 hover:text-indigo-600">
-                <Bell size={18} />
-              </button>
+
+              <div ref={notificationsMenuRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsNotificationsOpen((current) => !current)}
+                  className="relative rounded-lg p-2 text-gray-400 transition-all hover:bg-indigo-50 hover:text-indigo-600"
+                >
+                  <Bell size={18} />
+                  {totalNotificationItems > 0 ? (
+                    <span className="absolute right-1.5 top-1.5 inline-flex h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" />
+                  ) : null}
+                </button>
+
+                <div
+                  className={`absolute right-0 top-full z-50 mt-2 w-[360px] overflow-hidden rounded-[24px] border border-slate-100 bg-white shadow-2xl transition-all ${
+                    isNotificationsOpen ? 'pointer-events-auto scale-100 opacity-100' : 'pointer-events-none scale-95 opacity-0'
+                  }`}
+                >
+                  <div className="border-b border-slate-100 px-4 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-extrabold text-slate-900">Notifications</p>
+                        <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                          Latest bookings and new ride requests
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700">
+                        {totalNotificationItems}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-slate-50 p-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNotificationTab('ride_requests');
+                          setRideRequestPage(1);
+                        }}
+                        className={`rounded-xl px-3 py-2 text-xs font-bold transition-all ${
+                          notificationTab === 'ride_requests'
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-900'
+                        }`}
+                      >
+                        Ride Requests
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNotificationTab('bookings');
+                          setBookingPage(1);
+                        }}
+                        className={`rounded-xl px-3 py-2 text-xs font-bold transition-all ${
+                          notificationTab === 'bookings'
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-900'
+                        }`}
+                      >
+                        Bookings
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="max-h-[420px] overflow-y-auto p-3">
+                    {notificationsLoading ? (
+                      <div className="flex items-center justify-center px-4 py-12 text-sm font-semibold text-slate-500">
+                        Loading notifications...
+                      </div>
+                    ) : notificationTab === 'ride_requests' ? (
+                      rideRequestFeed.results.length === 0 ? (
+                        <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-8 text-center">
+                          <p className="text-sm font-bold text-slate-900">No ride requests found</p>
+                          <p className="mt-1 text-xs font-semibold text-slate-500">New ride requests will show up here.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {rideRequestFeed.results.map((item) => (
+                            <button
+                              key={item.id || item.requestId}
+                              type="button"
+                              onClick={() => {
+                                navigate('/admin/trips');
+                                setIsNotificationsOpen(false);
+                              }}
+                              className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-bold text-slate-900">
+                                    {item.requestId} · {item.userName}
+                                  </p>
+                                  <p className="mt-1 truncate text-xs font-semibold text-slate-500">
+                                    Pickup: {formatAdminNotificationLocation(item.pickupLabel, 'Pickup location set')}
+                                  </p>
+                                </div>
+                                <span className="shrink-0 rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                                  {item.tripStatus || 'Upcoming'}
+                                </span>
+                              </div>
+                              <div className="mt-2 flex items-center justify-between gap-3 text-[11px] font-semibold text-slate-400">
+                                <span>
+                                  Destination: {formatAdminNotificationLocation(item.dropLabel, 'Destination set')}
+                                </span>
+                                <span>{formatRelativeAdminTime(item.date)}</span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    ) : pagedBookings.results.length === 0 ? (
+                      <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-8 text-center">
+                        <p className="text-sm font-bold text-slate-900">No bookings found</p>
+                        <p className="mt-1 text-xs font-semibold text-slate-500">Recent bookings will show up here.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {pagedBookings.results.map((item) => (
+                          <button
+                            key={item._id || item.id || item.booking_reference}
+                            type="button"
+                            onClick={() => {
+                              navigate('/admin/owners/bookings');
+                              setIsNotificationsOpen(false);
+                            }}
+                            className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-bold text-slate-900">
+                                  {item.booking_reference || 'Booking'} · {item.customer_name || 'Customer'}
+                                </p>
+                                <p className="mt-1 truncate text-xs font-semibold text-slate-500">
+                                  {item.pickup_location || 'Pickup'} to {item.dropoff_location || 'Drop'}
+                                </p>
+                              </div>
+                              <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+                                {item.booking_status || 'Pending'}
+                              </span>
+                            </div>
+                            <div className="mt-2 flex items-center justify-between gap-3 text-[11px] font-semibold text-slate-400">
+                              <span>{item.owner_id?.name || item.owner_id?.company_name || 'Owner booking'}</span>
+                              <span>{formatRelativeAdminTime(item.trip_date || item.createdAt)}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-4 py-3">
+                    <button
+                      type="button"
+                      disabled={(activeNotificationMeta?.current_page || 1) <= 1}
+                      onClick={() => {
+                        if (notificationTab === 'ride_requests') {
+                          setRideRequestPage((current) => Math.max(1, current - 1));
+                        } else {
+                          setBookingPage((current) => Math.max(1, current - 1));
+                        }
+                      }}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Previous
+                    </button>
+
+                    <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                      Page {activeNotificationMeta?.current_page || 1} of {activeNotificationMeta?.last_page || 1}
+                    </span>
+
+                    <button
+                      type="button"
+                      disabled={(activeNotificationMeta?.current_page || 1) >= (activeNotificationMeta?.last_page || 1)}
+                      onClick={() => {
+                        if (notificationTab === 'ride_requests') {
+                          setRideRequestPage((current) => current + 1);
+                        } else {
+                          setBookingPage((current) => current + 1);
+                        }
+                      }}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div ref={userMenuRef} className="relative">
@@ -692,6 +1069,73 @@ const AdminLayout = () => {
             </div>
           </div>
         </header>
+
+        {isSearchOpen && (
+          <div
+            className="fixed inset-0 z-[70] bg-slate-900/10 backdrop-blur-[1px]"
+            onClick={() => setIsSearchOpen(false)}
+          >
+            <div className="mx-auto mt-20 w-full max-w-2xl px-4">
+              <div
+                className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="border-b border-slate-100 px-5 py-4">
+                  <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <Search size={18} className="text-slate-400" />
+                    <input
+                      autoFocus
+                      type="text"
+                      value={searchTerm}
+                      onChange={(event) => setSearchTerm(event.target.value)}
+                      placeholder="Search sidebar options..."
+                      className="w-full bg-transparent text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIsSearchOpen(false)}
+                      className="rounded-lg px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-400 hover:bg-slate-200/70"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+
+                <div className="max-h-[420px] overflow-y-auto p-3">
+                  {filteredSearchEntries.length === 0 ? (
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-8 text-center">
+                      <p className="text-sm font-bold text-slate-900">No sidebar option found</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">Try searching for drivers, trips, pricing, reports, or settings.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {filteredSearchEntries.map((entry) => (
+                        <button
+                          key={entry.path}
+                          type="button"
+                          onClick={() => {
+                            navigate(entry.path);
+                            setIsSearchOpen(false);
+                            setSearchTerm('');
+                          }}
+                          className="flex w-full items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/50"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold text-slate-900">{entry.label}</p>
+                            <p className="mt-1 truncate text-[11px] font-semibold text-slate-500">
+                              {[...entry.trail, entry.path].join(' • ')}
+                            </p>
+                          </div>
+                          <ChevronRight size={16} className="shrink-0 text-slate-300" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <main className="no-scrollbar flex-1 overflow-y-auto p-4 scroll-smooth lg:p-8">
           <Outlet />

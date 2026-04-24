@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Users, 
   Car, 
@@ -27,8 +28,15 @@ import {
 import { adminService } from '../../services/adminService';
 import { BACKEND_LABEL } from '../../../../shared/api/runtimeConfig';
 
-const TopStatCard = ({ label, value, trend, icon: Icon, color, isLoading }) => (
-  <div className="bg-white p-5 rounded-[24px] border border-gray-100 shadow-sm relative overflow-hidden group min-h-[140px]">
+const TopStatCard = ({ label, value, trend, icon: Icon, color, isLoading, onClick, clickable = false }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={!clickable}
+    className={`w-full text-left bg-white p-5 rounded-[24px] border border-gray-100 shadow-sm relative overflow-hidden group min-h-[140px] ${
+      clickable ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md transition-all' : 'cursor-default'
+    }`}
+  >
     {isLoading ? (
       <div className="animate-pulse space-y-4">
         <div className="h-4 bg-gray-100 rounded w-1/2"></div>
@@ -54,7 +62,7 @@ const TopStatCard = ({ label, value, trend, icon: Icon, color, isLoading }) => (
         </div>
       </>
     )}
-  </div>
+  </button>
 );
 
 const MiniStat = ({ label, value, icon: Icon, color, isLoading }) => (
@@ -127,6 +135,7 @@ const SimpleBarChart = ({ data, colors }) => (
 );
 
 const MainDashboard = () => {
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     total_users: 0,
     total_drivers: 0,
@@ -170,9 +179,7 @@ const MainDashboard = () => {
          <div>
             <h1 className="text-xl font-semibold tracking-tight text-gray-900 leading-none uppercase">Dashboard</h1>
          </div>
-         <div className="flex items-center gap-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest">
-            Dashboard <ChevronRight size={12} className="mt-0.5" /> Dashboard
-         </div>
+         
       </div>
       {dashboardError ? (
         <div className="bg-amber-50 border border-amber-200 rounded-[24px] p-5 flex items-start gap-3">
@@ -195,6 +202,8 @@ const MainDashboard = () => {
             icon={UserPlus} 
             color="emerald" 
             isLoading={isLoading}
+            clickable
+            onClick={() => navigate('/admin/drivers')}
          />
          <TopStatCard 
             label="APPROVED DRIVERS" 
@@ -203,6 +212,8 @@ const MainDashboard = () => {
             icon={ShieldCheck} 
             color="blue" 
             isLoading={isLoading}
+            clickable
+            onClick={() => navigate('/admin/drivers')}
          />
          <TopStatCard 
             label="WAITING APPROVAL" 
@@ -211,6 +222,8 @@ const MainDashboard = () => {
             icon={Clock} 
             color="amber" 
             isLoading={isLoading}
+            clickable
+            onClick={() => navigate('/admin/drivers/pending')}
          />
          <TopStatCard 
             label="USERS REGISTERED" 
@@ -219,6 +232,8 @@ const MainDashboard = () => {
             icon={Users} 
             color="indigo" 
             isLoading={isLoading}
+            clickable
+            onClick={() => navigate('/admin/users')}
          />
       </div>
 
@@ -364,7 +379,11 @@ const MainDashboard = () => {
          
          {/* Cancel Stats grid */}
          <div className="grid grid-cols-2 gap-4 h-full">
-            <div className="bg-white p-6 rounded-[28px] border border-gray-50 shadow-sm flex items-center justify-between">
+            <button
+               type="button"
+               onClick={() => navigate('/admin/trips')}
+               className="w-full text-left bg-white p-6 rounded-[28px] border border-gray-50 shadow-sm flex items-center justify-between hover:-translate-y-0.5 hover:shadow-md transition-all"
+            >
                <div>
                   <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1 leading-none">Total Request Cancelled</p>
                   <p className="text-2xl font-semibold text-gray-950 tracking-tight leading-none">1</p>
@@ -372,8 +391,12 @@ const MainDashboard = () => {
                <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center">
                   <UserPlus size={18} />
                </div>
-            </div>
-            <div className="bg-white p-6 rounded-[28px] border border-gray-50 shadow-sm flex items-center justify-between">
+            </button>
+            <button
+               type="button"
+               onClick={() => navigate('/admin/trips')}
+               className="w-full text-left bg-white p-6 rounded-[28px] border border-gray-50 shadow-sm flex items-center justify-between hover:-translate-y-0.5 hover:shadow-md transition-all"
+            >
                <div>
                   <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest mb-1 leading-none">Cancelled By Users</p>
                   <p className="text-2xl font-semibold text-gray-950 tracking-tight leading-none">0</p>
@@ -381,8 +404,12 @@ const MainDashboard = () => {
                <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center">
                   <CircleAlert size={18} />
                </div>
-            </div>
-            <div className="bg-white p-6 rounded-[28px] border border-gray-50 shadow-sm flex items-center justify-between">
+            </button>
+            <button
+               type="button"
+               onClick={() => navigate('/admin/drivers')}
+               className="w-full text-left bg-white p-6 rounded-[28px] border border-gray-50 shadow-sm flex items-center justify-between hover:-translate-y-0.5 hover:shadow-md transition-all"
+            >
                <div>
                   <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest mb-1 leading-none">Cancelled By Drivers</p>
                   <p className="text-2xl font-semibold text-gray-950 tracking-tight leading-none">1</p>
@@ -390,8 +417,12 @@ const MainDashboard = () => {
                <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center">
                   <Car size={18} />
                </div>
-            </div>
-            <div className="bg-white p-6 rounded-[28px] border border-gray-50 shadow-sm flex items-center justify-between">
+            </button>
+            <button
+               type="button"
+               onClick={() => navigate('/admin/ongoing')}
+               className="w-full text-left bg-white p-6 rounded-[28px] border border-gray-50 shadow-sm flex items-center justify-between hover:-translate-y-0.5 hover:shadow-md transition-all"
+            >
                <div>
                   <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1 leading-none">Dispatcher Cancelled</p>
                   <p className="text-2xl font-semibold text-gray-950 tracking-tight leading-none">0</p>
@@ -399,7 +430,7 @@ const MainDashboard = () => {
                <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center">
                   <Zap size={18} />
                </div>
-            </div>
+            </button>
          </div>
       </div>
 

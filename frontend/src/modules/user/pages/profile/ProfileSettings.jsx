@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Mail, Smartphone, Camera, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowLeft, User, Mail, Smartphone, Camera, CheckCircle2, Loader2, ImagePlus } from 'lucide-react';
 import { userAuthService } from '../../services/authService';
 import { useImageUpload } from '../../../../shared/hooks/useImageUpload';
 import toast from 'react-hot-toast';
@@ -111,7 +111,7 @@ const ProfileSettings = () => {
       <div className="flex-1 p-5 space-y-10 overflow-y-auto no-scrollbar">
          {/* AVATAR EDIT AREA */}
          <div className="flex flex-col items-center gap-4 py-4">
-            <label className="relative group cursor-pointer active:scale-95 transition-all">
+            <div className="relative">
                 <div className="w-[110px] h-[110px] rounded-[42px] bg-slate-50 p-1.5 border border-slate-100 shadow-xl overflow-hidden relative">
                     <img 
                         src={avatarSrc} 
@@ -127,14 +127,42 @@ const ProfileSettings = () => {
                 <div className="absolute -bottom-1 -right-1 bg-white p-2.5 rounded-2xl shadow-xl border border-slate-50 text-slate-900">
                     <Camera size={18} strokeWidth={2.5} />
                 </div>
+            </div>
+            <div className="mt-1 grid w-full max-w-[280px] grid-cols-2 gap-2">
+              <label className={`relative flex h-11 items-center justify-center gap-2 rounded-2xl border text-[11px] font-bold uppercase tracking-wider transition-all ${
+                photoUploading
+                  ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+                  : 'cursor-pointer border-slate-200 bg-white text-slate-700 active:scale-[0.99]'
+              }`}>
+                <ImagePlus size={14} />
+                Gallery
                 <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={onPhotoFileChange}
-                    disabled={photoUploading}
+                  type="file"
+                  accept="image/*"
+                  disabled={photoUploading}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                  aria-label="Upload profile photo from gallery"
+                  onChange={onPhotoFileChange}
                 />
-            </label>
+              </label>
+              <label className={`relative flex h-11 items-center justify-center gap-2 rounded-2xl border text-[11px] font-bold uppercase tracking-wider transition-all ${
+                photoUploading
+                  ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+                  : 'cursor-pointer border-slate-900 bg-slate-950 text-white active:scale-[0.99]'
+              }`}>
+                <Camera size={14} />
+                Camera
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="user"
+                  disabled={photoUploading}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                  aria-label="Capture profile photo"
+                  onChange={onPhotoFileChange}
+                />
+              </label>
+            </div>
             <div className="text-center">
                 <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">
                     {photoUploading ? 'Optimizing For WebP...' : 'Change Profile Photo'}

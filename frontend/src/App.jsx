@@ -92,6 +92,7 @@ const CabSharing = lazy(() => import('./modules/user/pages/cabsharing/CabSharing
 const ProfileSettings = lazy(() => import('./modules/user/pages/profile/ProfileSettings'));
 const PaymentSettings = lazy(() => import('./modules/user/pages/profile/PaymentSettings'));
 const AddressSettings = lazy(() => import('./modules/user/pages/profile/AddressSettings'));
+const BusBookings = lazy(() => import('./modules/user/pages/profile/BusBookings'));
 // Driver Module - Common
 import DriverLayout from './modules/driver/components/DriverLayout';
 
@@ -382,9 +383,16 @@ const UserAccountInvalidationListener = () => {
     const handleAuthStale = (event) => {
       const staleToken = event.detail?.token || '';
       const currentUserToken = localStorage.getItem('userToken') || localStorage.getItem('token') || '';
+      const currentAdminToken = localStorage.getItem('adminToken') || '';
 
       if (event.detail?.role === 'user' && (!staleToken || staleToken === currentUserToken)) {
         handleLogout();
+        return;
+      }
+
+      if (event.detail?.role === 'admin' && (!staleToken || staleToken === currentAdminToken)) {
+        socketService.disconnect();
+        navigate('/admin/login');
       }
     };
 
@@ -401,6 +409,22 @@ const UserAccountInvalidationListener = () => {
   }, [location.pathname, navigate]);
 
   return null;
+};
+
+const DriverEntryRedirect = () => {
+  const token = localStorage.getItem('driverToken') || localStorage.getItem('token');
+  const role = String(localStorage.getItem('role') || 'driver').toLowerCase();
+
+  if (!token) {
+    return <Navigate to="/taxi/driver/login" replace />;
+  }
+
+  return (
+    <Navigate
+      to={role === 'owner' ? '/taxi/driver/profile' : '/taxi/driver/home'}
+      replace
+    />
+  );
 };
 
 function App() {
@@ -666,6 +690,10 @@ function App() {
                 element={<AddressSettings />}
               />
               <Route
+                path="/taxi/user/profile/bus-bookings"
+                element={<BusBookings />}
+              />
+              <Route
                 path="/taxi/user/profile/notifications"
                 element={<UserNotifications />}
               />
@@ -687,7 +715,7 @@ function App() {
               <Route path="/taxi/driver" element={<DriverLayout />}>
                 <Route
                   index
-                  element={<Navigate to="/taxi/driver/login" replace />}
+                  element={<DriverEntryRedirect />}
                 />
                 <Route path="lang-select" element={<LanguageSelect />} />
                 <Route path="welcome" element={<DriverWelcome />} />

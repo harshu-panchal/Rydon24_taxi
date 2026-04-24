@@ -82,20 +82,28 @@ export const SettingsProvider = ({ children }) => {
     customization: {
       admin_theme_color: '',
       currency_symbol: '',
-    }
+    },
+    transportRide: {
+      enable_bus_service: '0',
+    },
   });
   const [loading, setLoading] = useState(true);
 
   const fetchSettings = async () => {
     try {
-      const [genRes, cusRes] = await Promise.allSettled([
+      const [genRes, cusRes, transportRideRes] = await Promise.allSettled([
         api.get('/admin/general-settings/general'),
-        api.get('/admin/general-settings/customize')
+        api.get('/admin/general-settings/customize'),
+        api.get('/admin/general-settings/transport-ride'),
       ]);
 
       setSettings({
         general: genRes.status === 'fulfilled' ? (genRes.value.data?.settings || {}) : {},
-        customization: cusRes.status === 'fulfilled' ? (cusRes.value.data?.settings || {}) : {}
+        customization: cusRes.status === 'fulfilled' ? (cusRes.value.data?.settings || {}) : {},
+        transportRide:
+          transportRideRes.status === 'fulfilled'
+            ? (transportRideRes.value.data?.settings || {})
+            : { enable_bus_service: '0' },
       });
     } catch (err) {
       console.error('Failed to fetch settings:', err);

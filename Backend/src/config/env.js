@@ -58,7 +58,10 @@ export const env = {
   firebase: {
     databaseURL: process.env.FIREBASE_DATABASE_URL || '',
     serviceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '',
-    serviceAccountJson: process.env.FIREBASE_SERVICE_ACCOUNT_JSON || '',
+    serviceAccountJson:
+      process.env.FIREBASE_SERVICE_ACCOUNT_JSON ||
+      process.env.FIREBASE_SERVICE_ACCOUNT ||
+      '',
   },
   sms: {
     useDefaultOtp: process.env.USE_DEFAULT_OTP || 'false',

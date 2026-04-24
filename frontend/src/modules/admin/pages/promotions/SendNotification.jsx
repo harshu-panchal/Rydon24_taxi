@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { adminService } from '../../services/adminService';
 
 const Motion = motion;
 const LIST_PATH = '/admin/promotions/send-notification';
@@ -29,6 +30,11 @@ const createInitialFormData = () => ({
   push_title: '',
   message: '',
   image: null,
+});
+
+const createInitialFilters = () => ({
+  service_location_id: '',
+  send_to: '',
 });
 
 const HeaderBlock = ({ isCreateRoute, onBack }) => (
@@ -85,68 +91,24 @@ const SendNotification = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState(createInitialFormData);
+  const [filters, setFilters] = useState(createInitialFilters);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
-
-  const token = localStorage.getItem('adminToken') || '';
-  const baseUrl = globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin';
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const bootstrapRes = await fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/promotions/bootstrap`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (bootstrapRes.ok) {
-        const bootstrapData = await bootstrapRes.json();
-        if (bootstrapData.success) {
-          setNotifications(bootstrapData.data?.notifications || []);
-          setServiceLocations(bootstrapData.data?.service_locations || []);
-          return;
-        }
-      }
-
-      const notiRes = await fetch(`${baseUrl}/notifications`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (notiRes.ok) {
-        const notiData = await notiRes.json();
-        if (notiData.success) {
-          setNotifications(Array.isArray(notiData.data) ? notiData.data : notiData.data?.results || []);
-        }
-      } else if (notiRes.status === 501 || notiRes.status === 404) {
-        const fallbackRes = await fetch(`${baseUrl}/push-notifications`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (fallbackRes.ok) {
-          const fallbackData = await fallbackRes.json();
-          if (fallbackData.success) {
-            setNotifications(Array.isArray(fallbackData.data) ? fallbackData.data : fallbackData.data?.results || []);
-          }
-        } else {
-          setNotifications([]);
-        }
-      }
-
-      const slRes = await fetch(`${baseUrl}/service-locations`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (slRes.ok) {
-        const slData = await slRes.json();
-        if (slData.success) {
-          setServiceLocations(Array.isArray(slData.data) ? slData.data : slData.data?.results || []);
-        }
-      }
+      const bootstrapData = await adminService.getPromotionsBootstrap();
+      setNotifications(Array.isArray(bootstrapData?.data?.notifications) ? bootstrapData.data.notifications : []);
+      setServiceLocations(Array.isArray(bootstrapData?.data?.service_locations) ? bootstrapData.data.service_locations : []);
     } catch (error) {
       console.error('Error fetching notifications data:', error);
       setNotifications([]);
+      setServiceLocations([]);
     } finally {
       setLoading(false);
     }
-  }, [baseUrl, token]);
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -159,10 +121,28 @@ const SendNotification = () => {
     }
   }, [isCreateRoute]);
 
-  const rows = useMemo(() => notifications, [notifications]);
+  const rows = useMemo(() => {
+    return notifications.filter((item) => {
+      const matchesAudience =
+        !filters.send_to || String(item.send_to || '').toLowerCase() === String(filters.send_to).toLowerCase();
+      const matchesLocation =
+        !filters.service_location_id ||
+        String(item.service_location_id || item.service_location?._id || '') === String(filters.service_location_id);
+
+      return matchesAudience && matchesLocation;
+    });
+  }, [filters, notifications]);
 
   const handleFieldChange = (key, value) => {
     setFormData((current) => ({ ...current, [key]: value }));
+  };
+
+  const handleFilterChange = (key, value) => {
+    setFilters((current) => ({ ...current, [key]: value }));
+  };
+
+  const clearFilters = () => {
+    setFilters(createInitialFilters());
   };
 
   const handleImageChange = (event) => {
@@ -201,38 +181,18 @@ const SendNotification = () => {
         image: imageData,
       };
 
-      let res = await fetch(`${baseUrl}/notifications/send`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      let data = await res.json();
-
-      if (!data.success) {
-        res = await fetch(`${baseUrl}/notifications`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        });
-        data = await res.json();
-      }
+      const data = await adminService.sendNotification(payload);
 
       if (data.success) {
-        const deliveryReason = data.data?.delivery?.reason;
-        if (deliveryReason) {
-          alert(deliveryReason);
-        }
+        const deliveryMessage =
+          data.data?.message ||
+          data.data?.delivery?.reason ||
+          'Push notification sent successfully';
         setFormData(createInitialFormData());
         setImagePreview(null);
         await fetchData();
         navigate(LIST_PATH);
+        alert(deliveryMessage);
       } else {
         alert(data.message || 'Failed to send notification');
       }
@@ -248,19 +208,7 @@ const SendNotification = () => {
     if (!window.confirm('Are you sure you want to delete this notification?')) return;
 
     try {
-      let res = await fetch(`${baseUrl}/notifications/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!res.ok) {
-        res = await fetch(`${baseUrl}/push-notifications/${id}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      }
-
-      const data = await res.json();
+      const data = await adminService.deleteNotification(id);
       if (data.success) {
         await fetchData();
       }
@@ -292,9 +240,10 @@ const SendNotification = () => {
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <button
                     type="button"
+                    onClick={() => setIsFilterOpen((current) => !current)}
                     className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                   >
-                    <Filter size={16} /> Filters
+                    <Filter size={16} /> {isFilterOpen ? 'Hide Filters' : 'Filters'}
                   </button>
                   <button
                     type="button"
@@ -305,6 +254,50 @@ const SendNotification = () => {
                   </button>
                 </div>
               </div>
+
+              {isFilterOpen ? (
+                <div className="mt-5 grid grid-cols-1 gap-4 border-t border-gray-100 pt-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                  <div>
+                    <FieldLabel>Service Location</FieldLabel>
+                    <select
+                      value={filters.service_location_id}
+                      onChange={(event) => handleFilterChange('service_location_id', event.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="">All service locations</option>
+                      {serviceLocations.map((loc) => (
+                        <option key={loc._id || loc.id} value={loc._id || loc.id}>
+                          {loc.service_location_name || loc.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <FieldLabel>Send To</FieldLabel>
+                    <select
+                      value={filters.send_to}
+                      onChange={(event) => handleFilterChange('send_to', event.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="">All audiences</option>
+                      <option value="all">All</option>
+                      <option value="drivers">Drivers</option>
+                      <option value="users">Users</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 md:w-auto"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
