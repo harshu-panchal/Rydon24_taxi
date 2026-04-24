@@ -1,12 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  CheckCircle2,
-  ChevronRight,
   Clock,
   Mail,
   ShieldCheck,
-  LayoutDashboard,
   Search,
   CheckCircle
 } from "lucide-react";
@@ -57,22 +54,6 @@ const RegistrationStatus = () => {
 
   const appName = settings.general?.app_name || "App";
   const appLogo = settings.general?.logo || settings.customization?.logo;
-
-  const handleDashboard = () => {
-    if (checking) {
-      return;
-    }
-
-    const normalizedRole =
-      String(
-        localStorage.getItem("role") || location.state?.role || "driver",
-      ).toLowerCase() === "owner"
-        ? "owner"
-        : "driver";
-    navigate(
-      normalizedRole === "owner" ? "/taxi/driver/profile" : "/taxi/driver/home",
-    );
-  };
 
   useEffect(() => {
     if (location.state?.role) {
@@ -262,24 +243,6 @@ const RegistrationStatus = () => {
             <p className="text-xs font-medium text-amber-900 leading-relaxed italic">
                 You will receive a notification once your account is activated. Usually takes 24-48 hours.
             </p>
-        </div>
-
-        <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200/70 bg-white/88 p-5 backdrop-blur-md">
-            <div className="mx-auto max-w-sm">
-                <button
-                    onClick={handleDashboard}
-                    disabled={checking}
-                    className={`flex h-14 w-full items-center justify-center gap-2 rounded-[22px] text-[15px] font-semibold tracking-[0.01em] shadow-[0_18px_40px_rgba(15,23,42,0.12)] transition-all ${
-                        !checking
-                            ? 'bg-slate-950 text-white hover:bg-slate-900'
-                            : 'pointer-events-none bg-slate-200 text-slate-500 shadow-none'
-                    }`}
-                >
-                    <LayoutDashboard size={18} />
-                    {checking ? "Waiting for Audit..." : "Go to Dashboard"}
-                    {!checking && <ChevronRight size={17} strokeWidth={2.8} />}
-                </button>
-            </div>
         </div>
       </main>
     </div>

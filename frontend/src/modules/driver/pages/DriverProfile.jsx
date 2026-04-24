@@ -91,6 +91,7 @@ const DriverProfile = () => {
     const driverNumber = useMemo(() => driver?.vehicleNumber || 'N/A', [driver?.vehicleNumber]);
     const driverColor = useMemo(() => driver?.vehicleColor || 'N/A', [driver?.vehicleColor]);
     const driverRating = useMemo(() => Number(driver?.rating || 0), [driver?.rating]);
+    const hasProfileImage = Boolean(imagePreview || driver?.profileImage);
 
     const {
         uploading: imageUploading,
@@ -186,18 +187,22 @@ const DriverProfile = () => {
                     </div>
                     {/* Integrated Profile Image */}
                     <div className="relative">
-                        <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center shadow-lg relative overflow-hidden group">
-                             {(imagePreview || driver?.profileImage) ? (
+                        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg relative overflow-hidden group ${
+                            hasProfileImage ? 'bg-slate-900' : 'bg-slate-100 border border-slate-200'
+                        }`}>
+                             {hasProfileImage ? (
                                 <img
                                     src={imagePreview || driver?.profileImage}
                                     alt={driverName}
                                     className={`w-full h-full object-cover ${(imageUploading || isUploadingProfile) ? 'opacity-60' : ''}`}
                                 />
                              ) : (
-                                <User size={32} className="text-white" strokeWidth={1.5} />
+                                <User size={30} className="text-slate-500" strokeWidth={1.8} />
                              )}
-                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                 <Camera size={16} className="text-white" />
+                             <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center ${
+                                hasProfileImage ? 'bg-black/40' : 'bg-white/70'
+                             }`}>
+                                 <Camera size={16} className={hasProfileImage ? 'text-white' : 'text-slate-700'} />
                              </div>
                              {(imageUploading || isUploadingProfile) ? (
                                 <div className="absolute inset-0 flex items-center justify-center bg-black/35">
@@ -214,9 +219,11 @@ const DriverProfile = () => {
                                 disabled={imageUploading || isUploadingProfile}
                             />
                         </label>
-                        <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-lg border-2 border-white flex items-center justify-center shadow-sm">
-                             <Check size={12} className="text-white" strokeWidth={4} />
-                        </div>
+                        {hasProfileImage ? (
+                            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-lg border-2 border-white flex items-center justify-center shadow-sm">
+                                 <Check size={12} className="text-white" strokeWidth={4} />
+                            </div>
+                        ) : null}
                     </div>
                 </div>
                 <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 border border-slate-100">

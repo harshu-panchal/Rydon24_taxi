@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowLeft, User, Mail, Phone, Lock, ChevronRight } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -30,6 +30,13 @@ const StepPersonal = () => {
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+
+    useEffect(() => {
+        saveDriverRegistrationSession({
+            ...session,
+            ...formData,
+        });
+    }, [formData]);
 
     const handleContinue = async () => {
         const fullName = formData.fullName.trim();
@@ -128,12 +135,6 @@ const StepPersonal = () => {
                     </section>
                 </header>
 
-                {error && (
-                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700 shadow-[0_10px_30px_rgba(244,63,94,0.08)]">
-                        {error}
-                    </div>
-                )}
-
                 <section className="space-y-4 rounded-[30px] border border-slate-200/70 bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
                     <div className="space-y-1 px-1 pt-1">
                         <h2 className="text-base font-semibold tracking-[-0.03em] text-slate-950">Profile information</h2>
@@ -224,17 +225,23 @@ const StepPersonal = () => {
                                         <input
                                             type="password"
                                             value={formData.password}
-                                            onChange={(e) => setFormData(p => ({ ...p, password: e.target.value }))}
+                                            onChange={(e) => setFormData(p => ({ ...p, password: e.target.value.replace(/\s/g, '') }))}
                                             placeholder="Minimum 6 characters"
                                             className="w-full border-none bg-transparent p-0 text-[16px] font-semibold text-slate-950 outline-none focus:outline-none focus:ring-0 placeholder:text-slate-400"
                                         />
-                                        <p className="text-xs text-slate-500">Use something secure but easy for you to remember.</p>
+                                        <p className="text-xs text-slate-500">Use something secure but easy for you to remember. Spaces are not allowed.</p>
                                     </div>
                                 </div>
                             </div>
                         )}
                     </div>
                 </section>
+
+                {error && (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700 shadow-[0_10px_30px_rgba(244,63,94,0.08)]">
+                        {error}
+                    </div>
+                )}
 
                 <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200/70 bg-white/88 p-5 backdrop-blur-md">
                     <div className="mx-auto max-w-sm">

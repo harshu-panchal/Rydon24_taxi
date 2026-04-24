@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Gift, ChevronRight, Tag } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -17,6 +17,13 @@ const StepReferral = () => {
     const [referral, setReferral] = useState(session.referralCode || '');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+
+    useEffect(() => {
+        saveDriverRegistrationSession({
+            ...session,
+            referralCode: referral,
+        });
+    }, [referral]);
 
     const handleNext = async (skip = false) => {
         setLoading(true);

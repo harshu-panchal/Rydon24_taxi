@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { 
     Clock, 
     ShieldCheck, 
-    ChevronRight, 
     HelpCircle, 
     CheckCircle2, 
     FileText,
@@ -86,13 +85,6 @@ const ApplicationStatus = () => {
                 >
                   Contact Support <HelpCircle size={20} strokeWidth={2.5} />
                 </button>
-                <motion.button 
-                    whileTap={{ scale: 0.96 }}
-                    onClick={() => navigate('/taxi/driver/dashboard')}
-                    className="w-full h-16 bg-taxi-primary text-taxi-text py-4 rounded-3xl flex items-center justify-center gap-3 text-[18px] font-black shadow-xl border border-taxi-primary/80 active:scale-95 transition-all tracking-tight uppercase"
-                >
-                    Back to Dashboard <ChevronRight size={20} strokeWidth={3} />
-                </motion.button>
             </div>
         </div>
     );

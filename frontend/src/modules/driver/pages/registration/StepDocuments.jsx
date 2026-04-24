@@ -410,7 +410,7 @@ const StepDocuments = () => {
                             )}
                         </div>
                         <div className="grid grid-cols-2 gap-2">
-                          <label className={`relative flex h-11 items-center justify-center gap-2 rounded-2xl border text-[11px] font-bold uppercase tracking-wider transition-all ${
+                          <label className={`relative flex h-11 items-center justify-center gap-2 text-center rounded-2xl border text-[11px] font-bold uppercase tracking-wider transition-all ${
                             isUploading
                               ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
                               : 'cursor-pointer border-slate-200 bg-white text-slate-700 active:scale-[0.99]'
@@ -426,7 +426,7 @@ const StepDocuments = () => {
                               onChange={(event) => handleFileChange(field.key, event)}
                             />
                           </label>
-                          <label className={`relative flex h-11 items-center justify-center gap-2 rounded-2xl border text-[11px] font-bold uppercase tracking-wider transition-all ${
+                          <label className={`relative flex h-11 items-center justify-center gap-2 text-center rounded-2xl border text-[11px] font-bold uppercase tracking-wider transition-all ${
                             isUploading
                               ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
                               : 'cursor-pointer border-slate-900 bg-slate-950 text-white active:scale-[0.99]'

@@ -3,6 +3,7 @@ import { GoogleMap, MarkerF } from '@react-google-maps/api';
 import {
   ArrowLeft,
   Calendar,
+  CircleUserRound,
   ChevronRight,
   Download,
   Eye,
@@ -25,6 +26,7 @@ const DriverDetails = () => {
   const [walletForm, setWalletForm] = useState({ amount: '', operation: 'credit', isSubmitting: false });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [avatarFailed, setAvatarFailed] = useState(false);
 
   const tabs = [
     'Driver Profile',
@@ -39,6 +41,7 @@ const DriverDetails = () => {
   const fetchProfile = async () => {
     setIsLoading(true);
     setError('');
+    setAvatarFailed(false);
     try {
       const token = localStorage.getItem('adminToken');
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
@@ -127,6 +130,7 @@ const DriverDetails = () => {
     });
   }, [profile]);
   const chart = profile?.chart || { months: [], earnings: [], trips: { completed: [], cancelled: [] } };
+  const profileImage = String(profile?.image || '').trim();
 
   const acceptanceRate = requests.length
     ? Math.round((stats.completed_trips / requests.length) * 100)
@@ -185,7 +189,18 @@ const DriverDetails = () => {
         <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr_280px] gap-6 items-center">
           <div className="flex items-center gap-4">
             <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-100 border border-gray-200">
-              <img src={profile.image} alt={profile.name} className="w-full h-full object-cover" />
+              {profileImage && !avatarFailed ? (
+                <img
+                  src={profileImage}
+                  alt={profile.name}
+                  className="w-full h-full object-cover"
+                  onError={() => setAvatarFailed(true)}
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-slate-100 text-slate-400">
+                  <CircleUserRound size={42} strokeWidth={1.75} />
+                </div>
+              )}
             </div>
             <div>
               <h2 className="text-lg font-semibold text-gray-900">{profile.name}</h2>

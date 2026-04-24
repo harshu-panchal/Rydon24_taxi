@@ -59,6 +59,14 @@ const StepVehicle = () => {
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const trimmedModel = String(formData.model || '').trim();
+
+    useEffect(() => {
+        saveDriverRegistrationSession({
+            ...session,
+            ...formData,
+        });
+    }, [formData]);
 
     useEffect(() => {
         let active = true;
@@ -137,6 +145,11 @@ const StepVehicle = () => {
 
                 if (!VEHICLE_NUMBER_REGEX.test(normalizedNumber)) {
                     setError('Vehicle number must be in this format: PP09KK1234');
+                    return;
+                }
+
+                if (/^\d+$/.test(trimmedModel)) {
+                    setError('Vehicle model cannot contain only numbers');
                     return;
                 }
             }
@@ -230,12 +243,6 @@ const StepVehicle = () => {
                         </div>
                     </section>
                 </header>
-
-                {error && (
-                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700 shadow-[0_10px_30px_rgba(244,63,94,0.08)]">
-                        {error}
-                    </div>
-                )}
 
                 <div className="space-y-5">
                     {!isOwner && (
@@ -472,6 +479,12 @@ const StepVehicle = () => {
                         Your vehicle information will be visible to passengers for safety and identification.
                     </p>
                 </div>
+
+                {error && (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700 shadow-[0_10px_30px_rgba(244,63,94,0.08)]">
+                        {error}
+                    </div>
+                )}
 
                 <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200/70 bg-white/88 p-5 backdrop-blur-md">
                     <div className="mx-auto max-w-sm">
