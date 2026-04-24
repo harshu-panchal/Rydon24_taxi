@@ -3191,6 +3191,91 @@ const toAdminRideRow = (ride) => {
   };
 };
 
+const toAdminDeliveryRow = (ride) => {
+  const requestCode = `DEL_${String(ride._id).slice(-12).toUpperCase()}`;
+  const status = String(ride.status || '').toLowerCase();
+  const liveStatus = String(ride.liveStatus || '').toLowerCase();
+  const parcel = ride.deliveryId?.parcel || {};
+
+  let tripStatus = 'UPCOMING';
+  if (status === RIDE_STATUS.COMPLETED) {
+    tripStatus = 'COMPLETED';
+  } else if (status === RIDE_STATUS.CANCELLED) {
+    tripStatus = 'CANCELLED';
+  } else if (
+    status === RIDE_STATUS.ONGOING ||
+    liveStatus === RIDE_LIVE_STATUS.STARTED ||
+    liveStatus === RIDE_LIVE_STATUS.ARRIVED
+  ) {
+    tripStatus = 'ON_TRIP';
+  }
+
+  return {
+    id: String(ride._id),
+    requestId: requestCode,
+    date: ride.createdAt,
+    userName: ride.userId?.name || parcel.senderName || 'Unknown User',
+    driverName: ride.driverId?.name || 'Unassigned',
+    transportType: ride.driverId?.vehicleType || ride.vehicleIconType || 'Parcel',
+    tripStatus,
+    rideStatus: ride.status,
+    liveStatus: ride.liveStatus,
+    paymentOption: String(ride.paymentMethod || 'cash').toUpperCase(),
+    fare: Number(ride.fare || 0),
+    pickupLabel: ride.pickupAddress || formatRidePointLabel(ride.pickupLocation, 'Pickup'),
+    dropLabel: ride.dropAddress || formatRidePointLabel(ride.dropLocation, 'Drop'),
+    pickupLocation: ride.pickupLocation,
+    dropLocation: ride.dropLocation,
+    parcel: {
+      category: parcel.category || '',
+      senderName: parcel.senderName || '',
+      receiverName: parcel.receiverName || '',
+    },
+  };
+};
+
+const toAdminIntercityTripRow = (ride) => {
+  const requestCode = `INT_${String(ride._id).slice(-12).toUpperCase()}`;
+  const status = String(ride.status || '').toLowerCase();
+  const liveStatus = String(ride.liveStatus || '').toLowerCase();
+  const intercity = ride.intercity || {};
+
+  let tripStatus = 'UPCOMING';
+  if (status === RIDE_STATUS.COMPLETED) {
+    tripStatus = 'COMPLETED';
+  } else if (status === RIDE_STATUS.CANCELLED) {
+    tripStatus = 'CANCELLED';
+  } else if (
+    status === RIDE_STATUS.ONGOING ||
+    liveStatus === RIDE_LIVE_STATUS.STARTED ||
+    liveStatus === RIDE_LIVE_STATUS.ARRIVED
+  ) {
+    tripStatus = 'ON_TRIP';
+  }
+
+  const fromCity = String(intercity.fromCity || '').trim();
+  const toCity = String(intercity.toCity || '').trim();
+
+  return {
+    id: String(ride._id),
+    requestId: requestCode,
+    date: ride.createdAt,
+    userName: ride.userId?.name || 'Unknown User',
+    driverName: ride.driverId?.name || 'Unassigned',
+    transportType: intercity.vehicleName || ride.driverId?.vehicleType || ride.vehicleIconType || 'Intercity',
+    tripStatus,
+    rideStatus: ride.status,
+    liveStatus: ride.liveStatus,
+    paymentOption: String(ride.paymentMethod || 'cash').toUpperCase(),
+    fare: Number(ride.fare || 0),
+    pickupLabel: ride.pickupAddress || formatRidePointLabel(ride.pickupLocation, 'Pickup'),
+    dropLabel: ride.dropAddress || formatRidePointLabel(ride.dropLocation, 'Drop'),
+    routeLabel: [fromCity, toCity].filter(Boolean).join(' -> '),
+    tripType: intercity.tripType || '',
+    travelDate: intercity.travelDate || '',
+  };
+};
+
 
 
 
