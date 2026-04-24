@@ -118,12 +118,6 @@ const Login = () => {
            <Link to="/privacy" className="underline text-black hover:opacity-70 transition-colors ml-1">Privacy Policy</Link>
         </p>
       </form>
-
-      {/* Language Toggle */}
-      <div className="mt-12 pt-8 border-t border-gray-100 flex justify-center gap-6">
-        <button className="text-xs font-bold text-black border-b-2 border-black pb-1">ENGLISH</button>
-        <button className="text-xs font-bold text-gray-400 hover:text-gray-600 transition-colors">हिंदी</button>
-      </div>
     </AuthLayout>
   );
 };

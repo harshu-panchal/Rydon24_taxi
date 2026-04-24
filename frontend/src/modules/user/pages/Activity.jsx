@@ -11,7 +11,6 @@ import {
   ActivityLoadingState,
   ActivitySupportState,
 } from '../components/activity/ActivityStates';
-import { API_BASE_URL } from '../../../shared/api/runtimeConfig';
 import api from '../../../shared/api/axiosInstance';
 import { normalizeRide, PAGE_SIZE, TABS } from '../components/activity/activityHelpers';
 
@@ -42,32 +41,13 @@ const Activity = () => {
       setError('');
 
       try {
-        const mePayload = await api.get('/users/me');
-        const userId = String(
-          mePayload?.user?.id ||
-          mePayload?.user?._id ||
-          mePayload?.data?.user?.id ||
-          mePayload?.data?.user?._id ||
-          '',
-        );
-
-        if (!userId) {
-          throw new Error('Could not resolve current user.');
-        }
-
-        const response = await fetch(`${API_BASE_URL}/rides?limit=${PAGE_SIZE}&page=${currentPage}`, {
-          method: 'GET',
-          headers: {
-            Accept: 'application/json',
-            'x-user-id': userId,
+        const response = await api.get('/rides', {
+          params: {
+            limit: PAGE_SIZE,
+            page: currentPage,
           },
-          cache: 'no-store',
         });
-        const payload = await response.json().catch(() => null);
-
-        if (!response.ok) {
-          throw new Error(payload?.message || 'Could not load your ride history.');
-        }
+        const payload = response?.data || response || {};
 
         const rides = payload?.results || payload?.data?.results || [];
         const nextPagination = payload?.pagination || payload?.data?.pagination || null;
