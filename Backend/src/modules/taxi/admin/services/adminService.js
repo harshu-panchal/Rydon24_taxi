@@ -2251,7 +2251,7 @@ export const getDriverRatingDetail = async (id) => {
       vehicle_make: driver.vehicleMake || '',
       vehicle_model: driver.vehicleModel || '',
       vehicle_number: driver.vehicleNumber || '',
-      image: driver.profile_image || driver.avatar || 'https://i.pravatar.cc/200?img=12',
+      image: driver.profile_image || driver.avatar || '',
       vehicle_image: 'https://img.freepik.com/free-vector/yellow-passenger-transport-taxi-car_1017-4886.jpg',
     },
     reviews: rides.map((ride) => ({
@@ -2891,7 +2891,7 @@ export const getDriverProfile = async (id) => {
       color: driver.vehicleColor || '',
       number: driver.vehicleNumber || '',
     },
-    image: driver.profile_image || driver.avatar || 'https://i.pravatar.cc/200?img=12',
+    image: driver.profile_image || driver.avatar || '',
     vehicle_image: 'https://img.freepik.com/free-vector/yellow-passenger-transport-taxi-car_1017-4886.jpg',
     stats: {
       total_trips: rides.length,
@@ -3217,6 +3217,48 @@ export const listOngoingRides = async (query = {}) => {
     rows = rows.filter((row) => row.tripStatus === 'UPCOMING');
   } else if (tab === 'ongoing') {
     rows = rows.filter((row) => row.tripStatus === 'ONGOING');
+  }
+
+  if (search) {
+    rows = rows.filter((row) =>
+      [
+        row.requestId,
+        row.userName,
+        row.driverName,
+        row.transportType,
+        row.pickupLabel,
+        row.dropLabel,
+      ].some((value) => String(value || '').toLowerCase().includes(search)),
+    );
+  }
+
+  return buildPaginator(rows, page, limit);
+};
+
+export const listRideRequests = async (query = {}) => {
+  const page = Number(query.page || 1);
+  const limit = Number(query.limit || 10);
+  const tab = String(query.tab || 'all').toLowerCase();
+  const search = String(query.search || '').trim().toLowerCase();
+
+  const rides = await Ride.find({
+    serviceType: { $nin: ['parcel', 'intercity'] },
+  })
+    .sort({ createdAt: -1 })
+    .populate('userId', 'name phone')
+    .populate('driverId', 'name phone vehicleType vehicleNumber')
+    .lean();
+
+  let rows = rides.map(toAdminRideRow);
+
+  if (tab === 'completed') {
+    rows = rows.filter((row) => row.tripStatus === 'COMPLETED');
+  } else if (tab === 'cancelled') {
+    rows = rows.filter((row) => row.tripStatus === 'CANCELLED');
+  } else if (tab === 'upcoming') {
+    rows = rows.filter((row) => row.tripStatus === 'UPCOMING');
+  } else if (tab === 'on trip' || tab === 'on_trip' || tab === 'ongoing') {
+    rows = rows.filter((row) => row.tripStatus === 'ACCEPTED' || row.tripStatus === 'ONGOING');
   }
 
   if (search) {

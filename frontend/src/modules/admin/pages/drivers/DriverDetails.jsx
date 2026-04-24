@@ -16,6 +16,20 @@ import { DELHI_CENTER, HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from 
 
 const mapContainerStyle = { width: '100%', height: '100%' };
 
+const getDocumentImages = (doc = {}) => {
+  if (Array.isArray(doc?.images) && doc.images.length) {
+    return doc.images.filter(Boolean);
+  }
+
+  return [
+    doc?.previewUrl,
+    doc?.secureUrl,
+    doc?.image,
+    doc?.url,
+    doc?.fileUrl,
+  ].filter(Boolean);
+};
+
 const DriverDetails = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -87,13 +101,7 @@ const DriverDetails = () => {
     const raw = profile?.documents;
     if (Array.isArray(raw)) {
       return raw.map((doc) => {
-        const images = Array.isArray(doc?.images)
-          ? doc.images.filter(Boolean)
-          : doc?.image
-            ? [doc.image]
-            : doc?.url
-              ? [doc.url]
-              : [];
+        const images = getDocumentImages(doc);
         return {
           name: doc?.name || '',
           identify_number: doc?.identify_number ?? doc?.identifyNumber ?? doc?.number ?? doc?.id_number ?? '',
@@ -110,13 +118,7 @@ const DriverDetails = () => {
     return Object.entries(raw).flatMap(([key, value]) => {
       if (!value) return [];
       const normalizeOne = (doc) => {
-        const images = Array.isArray(doc?.images)
-          ? doc.images.filter(Boolean)
-          : doc?.image
-            ? [doc.image]
-            : doc?.url
-              ? [doc.url]
-              : [];
+        const images = getDocumentImages(doc);
         return {
           name: doc?.name || key,
           identify_number: doc?.identify_number ?? doc?.identifyNumber ?? doc?.number ?? doc?.id_number ?? '',
@@ -477,27 +479,34 @@ const DriverDetails = () => {
                           <td className="px-4 py-3 capitalize">{doc.status}</td>
                           <td className="px-4 py-3">{doc.comment}</td>
                           <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              {(doc.images || []).slice(0, 1).map((url, i) => (
-                                <button
-                                  key={`view-${i}`}
-                                  onClick={() => window.open(url, '_blank')}
-                                  className="px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100 transition-colors inline-flex items-center gap-1"
-                                >
-                                  <Eye size={12} /> View
-                                </button>
-                              ))}
-                              {(doc.images || []).slice(0, 1).map((url, i) => (
-                                <a
-                                  key={`download-${i}`}
-                                  href={url}
-                                  download
-                                  className="px-3 py-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 rounded-md hover:bg-emerald-100 transition-colors inline-flex items-center gap-1"
-                                >
-                                  <Download size={12} /> Download
-                                </a>
-                              ))}
-                            </div>
+                            {doc.images?.length ? (
+                              <div className="flex flex-wrap items-center gap-2">
+                                {doc.images.map((url, i) => (
+                                  <button
+                                    key={`view-${i}`}
+                                    type="button"
+                                    onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+                                    className="px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100 transition-colors inline-flex items-center gap-1"
+                                  >
+                                    <Eye size={12} /> {doc.images.length > 1 ? `View ${i + 1}` : 'View'}
+                                  </button>
+                                ))}
+                                {doc.images.map((url, i) => (
+                                  <a
+                                    key={`download-${i}`}
+                                    href={url}
+                                    download
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="px-3 py-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 rounded-md hover:bg-emerald-100 transition-colors inline-flex items-center gap-1"
+                                  >
+                                    <Download size={12} /> {doc.images.length > 1 ? `Download ${i + 1}` : 'Download'}
+                                  </a>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-xs font-medium text-slate-400">No file uploaded</span>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <button className="px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 rounded-md hover:bg-rose-100 transition-colors">

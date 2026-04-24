@@ -150,6 +150,8 @@ export const adminService = {
     api.get(`/admin/ongoing-rides?page=${page}&limit=${limit}&tab=${encodeURIComponent(tab)}&search=${encodeURIComponent(search)}`),
   getRideRequests: ({ page = 1, limit = 10, tab = 'all', search = '' } = {}) =>
     api.get(`/admin/ride-requests?page=${page}&limit=${limit}&tab=${encodeURIComponent(tab)}&search=${encodeURIComponent(search)}`),
+  listRideRequests: ({ page = 1, limit = 10, tab = 'all', search = '' } = {}) =>
+    api.get(`/admin/ride-requests?page=${page}&limit=${limit}&tab=${encodeURIComponent(tab)}&search=${encodeURIComponent(search)}`),
   getDeliveries: ({ page = 1, limit = 10, tab = 'all', search = '' } = {}) =>
     api.get(`/admin/deliveries?page=${page}&limit=${limit}&tab=${encodeURIComponent(tab)}&search=${encodeURIComponent(search)}`),
   getTrips: ({ page = 1, limit = 10, tab = 'all', search = '' } = {}) =>
