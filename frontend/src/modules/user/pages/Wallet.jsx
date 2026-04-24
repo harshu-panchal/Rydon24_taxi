@@ -216,7 +216,7 @@ const Wallet = () => {
                           amount === val ? 'bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-200' : 'bg-white border-gray-100 text-gray-500'
                         }`}
                       >
-                        +Rs{val}
+                        +Rs {val}
                       </button>
                     ))}
                   </div>
@@ -281,9 +281,9 @@ const Wallet = () => {
                 className="text-4xl font-black tracking-tighter"
               >
                 {walletLoading ? (
-                  <>Rs0<span className="text-white/20 text-2xl">.00</span></>
+                  <>Rs 0<span className="text-white/20 text-2xl">.00</span></>
                 ) : (
-                  <>Rs{balanceText.whole}<span className="text-white/20 text-2xl">.{balanceText.decimals}</span></>
+                  <>Rs {balanceText.whole}<span className="text-white/20 text-2xl">.{balanceText.decimals}</span></>
                 )}
               </Motion.h2>
               {walletError && <p className="text-[11px] font-bold text-red-300 mt-2">{walletError}</p>}
@@ -362,7 +362,7 @@ const Wallet = () => {
                   </div>
                   <div className="text-right shrink-0">
                     <h4 className={`text-[16px] font-black tracking-tight ${isDebit ? 'text-gray-900' : 'text-emerald-600'}`}>
-                      {sign}Rs{amountText}
+                      {sign}Rs {amountText}
                     </h4>
                     <div className="flex items-center gap-1 justify-end mt-0.5">
                       <span className={`text-[8px] font-black uppercase tracking-widest ${isDebit ? 'text-red-400' : 'text-emerald-400'}`}>

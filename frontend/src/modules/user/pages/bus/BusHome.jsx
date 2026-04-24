@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Calendar, ChevronRight, BusFront, ArrowRightLeft, Loader2, Route } from 'lucide-react';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 import userBusService from '../../services/busService';
+import BottomNavbar from '../../components/BottomNavbar';
 
 const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
 const getTomorrowDate = () => {
@@ -302,6 +303,8 @@ const BusHome = () => {
           Search Buses <ChevronRight size={18} strokeWidth={3} className="opacity-80" />
         </motion.button>
       </div>
+
+      <BottomNavbar />
     </div>
   );
 };

@@ -140,12 +140,16 @@ const RideComplete = () => {
     }
   }, [isSubmitted, navigate, rideId, routeHome]);
 
-  const handleShare = () => {
+  const handleShare = async () => {
     const text = `Rydon24 Receipt\n${rideDate} ${rideTime}\nDriver: ${driver.name}\nFrom: ${pickup}\nTo: ${drop}\nTotal: Rs ${totalBill}`;
 
     if (navigator.share) {
-      navigator.share({ title: 'Rydon24 Receipt', text }).catch(() => {});
-      return;
+      try {
+        await navigator.share({ title: 'Rydon24 Receipt', text });
+        return;
+      } catch (_error) {
+        return;
+      }
     }
 
     navigator.clipboard?.writeText(text).then(() => {
@@ -190,9 +194,6 @@ const RideComplete = () => {
       }
       setIsSubmitted(true);
       clearCurrentRide();
-      window.setTimeout(() => {
-        navigate(routeHome, { replace: true });
-      }, 1200);
     } catch (submitError) {
       setError(submitError?.message || 'Could not submit feedback right now.');
     } finally {
@@ -227,7 +228,14 @@ const RideComplete = () => {
               <CheckCircle2 size={30} className="text-white" />
             </div>
             <p className="text-[20px] font-black text-slate-900">Thanks for rating your driver</p>
-            <p className="text-[13px] font-bold text-slate-500">Wrapping up your trip receipt...</p>
+            <p className="text-[13px] font-bold text-slate-500">Your feedback has been saved successfully.</p>
+            <button
+              type="button"
+              onClick={() => navigate(routeHome, { replace: true })}
+              className="mt-2 rounded-[16px] bg-slate-900 px-6 py-3 text-[13px] font-black text-white shadow-[0_12px_24px_rgba(15,23,42,0.18)]"
+            >
+              Continue
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

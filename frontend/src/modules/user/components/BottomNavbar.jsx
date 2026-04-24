@@ -13,7 +13,7 @@ const BottomNavbar = () => {
     { icon: Home, label: 'Ride', path: '/taxi/user' },
     { icon: Clock, label: 'History', path: '/taxi/user/activity' },
     ...(showBusService ? [{ icon: BusFront, label: 'Bus', path: '/taxi/user/bus' }] : []),
-    { icon: Map, label: 'Travel', path: '/taxi/user/support' },
+    { icon: Map, label: 'Support', path: '/taxi/user/support' },
     { icon: User, label: 'Profile', path: '/taxi/user/profile' },
   ];
 

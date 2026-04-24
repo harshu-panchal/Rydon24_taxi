@@ -72,6 +72,7 @@ const SupportChatPanel = ({
   subtitle = 'Live messages with admin',
   preferredRole,
   className = '',
+  initialDraft = '',
 }) => {
   const session = useMemo(
     () => getChatSession(preferredRole || (mode === 'admin' ? 'admin' : undefined)),
@@ -105,6 +106,7 @@ const SupportChatPanel = ({
   const [error, setError] = useState('');
   const [isConnected, setIsConnected] = useState(socketService.isConnected());
   const bottomRef = useRef(null);
+  const appliedInitialDraftRef = useRef('');
 
   const selectedConversation = useMemo(
     () => conversations.find((item) => item.conversationKey === selectedConversationKey) || null,
@@ -468,6 +470,17 @@ const SupportChatPanel = ({
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    const normalizedInitialDraft = String(initialDraft || '').trim();
+
+    if (!normalizedInitialDraft || appliedInitialDraftRef.current === normalizedInitialDraft) {
+      return;
+    }
+
+    setDraft((current) => current || normalizedInitialDraft);
+    appliedInitialDraftRef.current = normalizedInitialDraft;
+  }, [initialDraft]);
+
   const handleSelectConversation = (conversationKey) => {
     const parsedConversation = parseSupportConversationKey(conversationKey);
     setSelectedConversationKey(parsedConversation?.canonicalKey || conversationKey);
@@ -577,27 +590,29 @@ const SupportChatPanel = ({
 
   return (
     <div className={`overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.08)] ${className}`}>
-      <div className="flex items-center justify-between border-b border-slate-200/60 bg-white px-6 py-5 shrink-0">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200/60 bg-white px-4 py-4 sm:px-6 sm:py-5 shrink-0">
+        <div className="flex min-w-0 items-center gap-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#405189] text-white shadow-lg shadow-indigo-600/10">
             <MessageCircle size={20} />
           </div>
-          <div>
-            <h2 className="text-[18px] font-black text-slate-900 tracking-tight">{title}</h2>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <h2 className="truncate text-[18px] font-black tracking-tight text-slate-900">{title}</h2>
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Desk Terminal</span>
               <span className="w-1 h-1 rounded-full bg-slate-300" />
               <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600">{subtitle}</p>
             </div>
           </div>
         </div>
-        <div className={`flex items-center gap-2.5 rounded-xl border px-4 py-2 transition-all ${
+        <div className={`max-w-full shrink-0 rounded-xl border px-3 py-2 transition-all ${
           isConnected ? 'border-emerald-100 bg-emerald-50 text-emerald-700 shadow-sm shadow-emerald-500/5' : 'border-rose-100 bg-rose-50 text-rose-700'
         }`}>
-          <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-          <span className="text-[11px] font-black uppercase tracking-widest">
+          <div className="flex items-center gap-2.5">
+            <div className={`h-2 w-2 shrink-0 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+            <span className="whitespace-normal text-[10px] font-black uppercase tracking-[0.18em] sm:text-[11px] sm:tracking-widest">
             {isConnected ? 'Connection: Live' : 'Connection: Offline'}
-          </span>
+            </span>
+          </div>
         </div>
       </div>
 
@@ -674,8 +689,8 @@ const SupportChatPanel = ({
         )}
 
         <main className="flex min-h-0 flex-col bg-[linear-gradient(180deg,#fbfcff_0%,#f6f8fc_100%)]">
-          <div className="flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-white px-4 py-4 sm:px-5">
+            <div className="flex min-w-0 items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-500">
                 {selectedConversation?.peer?.role === 'driver' ? <CircleUser size={20} /> : <Bot size={20} />}
               </div>
@@ -694,25 +709,27 @@ const SupportChatPanel = ({
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (selectedConversationKey) {
-                  socketService.emit('chat:read', { conversationKey: selectedConversationKey });
-                }
-              }}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 transition-colors hover:bg-slate-50"
-            >
-              <RefreshCcw size={14} className="inline-block" />
-            </button>
-            <button
-              type="button"
-              onClick={handleClearChat}
-              disabled={!selectedConversationKey || messages.length === 0 || deleting}
-              className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-rose-600 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Trash2 size={14} className="inline-block" />
-            </button>
+            <div className="flex shrink-0 items-center gap-2 self-start">
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectedConversationKey) {
+                    socketService.emit('chat:read', { conversationKey: selectedConversationKey });
+                  }
+                }}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 transition-colors hover:bg-slate-50"
+              >
+                <RefreshCcw size={14} className="inline-block" />
+              </button>
+              <button
+                type="button"
+                onClick={handleClearChat}
+                disabled={!selectedConversationKey || messages.length === 0 || deleting}
+                className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-rose-600 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Trash2 size={14} className="inline-block" />
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-auto px-5 py-5">

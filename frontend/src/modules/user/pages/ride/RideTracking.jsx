@@ -776,7 +776,7 @@ const RideTracking = () => {
     lastMapPanPositionRef.current = driverPosition;
   }, [activeDestination, driverPosition, map, routePath, tripStatus]);
 
-  const handleShare = () => {
+  const handleShare = async () => {
     const text = `I'm riding with Rydon24!\nDriver: ${driver.name} (${driver.plate || driver.vehicleNumber || 'Assigned'})\nFrom: ${pickupLabel}\nTo: ${dropLabel}`;
     const copyToClipboard = () => {
       navigator.clipboard?.writeText(text).then(() => {
@@ -786,8 +786,15 @@ const RideTracking = () => {
     };
 
     if (navigator.share) {
-      navigator.share({ title: 'Track My Ride', text }).catch(copyToClipboard);
-    } else {
+      try {
+        await navigator.share({ title: 'Track My Ride', text });
+        return;
+      } catch (_error) {
+        return;
+      }
+    }
+
+    if (navigator.clipboard?.writeText) {
       copyToClipboard();
     }
   };

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Bike, Camera, Car, CheckCircle2, Edit3, LoaderCircle, Save, Truck, X } from 'lucide-react';
+import { ArrowLeft, Bike, Camera, Car, CheckCircle2, Edit3, ImagePlus, LoaderCircle, Save, Truck, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
     getCurrentDriver,
@@ -163,6 +163,10 @@ const VehicleFleet = () => {
 
     const handleChange = (field, value) => {
         setFormData((prev) => ({ ...prev, [field]: value }));
+    };
+
+    const handleVehicleImageSelected = (event) => {
+        onVehicleImageChange(event);
     };
 
     const handleSave = async () => {
@@ -371,17 +375,31 @@ const VehicleFleet = () => {
                                                 </div>
                                             )}
                                         </div>
-                                        <label className="inline-flex h-11 flex-1 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-[12px] font-bold text-slate-700">
-                                            {imageUploading ? <LoaderCircle size={16} className="animate-spin" /> : <Camera size={16} />}
-                                            {imageUploading ? 'Uploading...' : 'Upload Image'}
-                                            <input
-                                                type="file"
-                                                accept="image/*"
-                                                className="hidden"
-                                                onChange={onVehicleImageChange}
-                                                disabled={imageUploading}
-                                            />
-                                        </label>
+                                        <div className="flex flex-1 flex-col gap-2">
+                                            <label className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-[12px] font-bold text-slate-700">
+                                                {imageUploading ? <LoaderCircle size={16} className="animate-spin" /> : <ImagePlus size={16} />}
+                                                {imageUploading ? 'Uploading...' : 'Choose From Gallery'}
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    className="hidden"
+                                                    onChange={handleVehicleImageSelected}
+                                                    disabled={imageUploading}
+                                                />
+                                            </label>
+                                            <label className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-[12px] font-bold text-slate-700">
+                                                {imageUploading ? <LoaderCircle size={16} className="animate-spin" /> : <Camera size={16} />}
+                                                {imageUploading ? 'Uploading...' : 'Use Camera'}
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    capture="environment"
+                                                    className="hidden"
+                                                    onChange={handleVehicleImageSelected}
+                                                    disabled={imageUploading}
+                                                />
+                                            </label>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

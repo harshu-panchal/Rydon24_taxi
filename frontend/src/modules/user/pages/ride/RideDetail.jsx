@@ -18,6 +18,18 @@ const formatTime = (value) => {
   return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 };
 
+const pickFirstString = (...values) => {
+  for (const value of values) {
+    const normalized = String(value || '').trim();
+
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return '';
+};
+
 const coordLabel = (location, fallback) => {
   const [lng, lat] = location?.coordinates || [];
   if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
@@ -67,10 +79,20 @@ const RideDetail = () => {
     const fare = Number(ride?.fare || 0);
     const taxes = Math.max(Math.round(fare * 0.18), 0);
     const status = String(ride?.status || ride?.liveStatus || 'trip').toLowerCase();
+    const rideCode = String(ride?.rideId || ride?._id || ride?.id || id || 'ride');
 
     return {
-      pickup: coordLabel(ride?.pickupLocation, 'Pickup location'),
-      drop: coordLabel(ride?.dropLocation, 'Drop location'),
+      pickup: pickFirstString(
+        ride?.pickupAddress,
+        ride?.pickup?.address,
+        ride?.pickup?.name,
+      ) || coordLabel(ride?.pickupLocation || ride?.pickup, 'Pickup location'),
+      drop: pickFirstString(
+        ride?.dropAddress,
+        ride?.drop?.address,
+        ride?.drop?.name,
+        ride?.destinationAddress,
+      ) || coordLabel(ride?.dropLocation || ride?.drop, 'Drop location'),
       fare,
       taxes,
       baseFare: Math.max(fare - taxes, 0),
@@ -82,14 +104,27 @@ const RideDetail = () => {
       rating: driver.rating || '4.9',
       plate: driver.vehicleNumber || 'Assigned',
       vehicle: driver.vehicleType || ride?.vehicleIconType || 'Taxi',
+      rideCode,
+      shortRideCode: rideCode.length > 14 ? `${rideCode.slice(0, 6)}...${rideCode.slice(-4)}` : rideCode,
     };
   }, [ride]);
 
-  const handleShare = () => {
-    const text = `My Rydon24 Trip #RDG${id || 'ride'} - ${details.pickup} to ${details.drop} | Rs ${details.fare}.00`;
+  const handleShare = async () => {
+    const text = `My Rydon24 trip #${details.shortRideCode} - ${details.pickup} to ${details.drop} | Rs ${details.fare}.00`;
     if (navigator.share) {
-      navigator.share({ title: 'Rydon24 Trip', text }).catch(() => {});
-    } else {
+      try {
+        await navigator.share({
+          title: 'Rydon24 Trip',
+          text,
+          url: window.location.href,
+        });
+        return;
+      } catch (_error) {
+        return;
+      }
+    }
+
+    if (navigator.clipboard?.writeText) {
       navigator.clipboard?.writeText(text).then(() => {
         setShareToast(true);
         setTimeout(() => setShareToast(false), 2500);
@@ -107,24 +142,29 @@ const RideDetail = () => {
             exit={{ opacity: 0, y: -20 }}
             className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white px-5 py-3 rounded-2xl text-sm font-black shadow-2xl whitespace-nowrap"
           >
-            Trip details copied!
+            Trip details copied
           </motion.div>
         )}
       </AnimatePresence>
 
-      <header className="bg-white p-5 flex items-center justify-between border-b border-gray-50 shadow-sm sticky top-0 z-20">
-        <div className="flex items-center gap-4">
+      <header className="bg-white p-5 flex items-start justify-between gap-3 border-b border-gray-50 shadow-sm sticky top-0 z-20">
+        <div className="flex min-w-0 items-start gap-4">
           <button onClick={() => navigate(-1)} className="p-2 -ml-2 active:scale-95 transition-all">
             <ArrowLeft size={24} className="text-gray-900" strokeWidth={3} />
           </button>
-          <div>
-            <h1 className="text-[17px] font-black text-gray-900 leading-none">Trip ID: #RDG{id || 'ride'}</h1>
-            <p className="text-[11px] font-bold text-gray-400 mt-1 uppercase tracking-widest">
+          <div className="min-w-0">
+            <h1
+              className="truncate text-[17px] font-black text-gray-900 leading-none"
+              title={`Trip ID: #${details.rideCode}`}
+            >
+              Trip ID: #{details.shortRideCode}
+            </h1>
+            <p className="mt-1 truncate text-[11px] font-bold uppercase tracking-widest text-gray-400">
               {details.statusLabel}: {formatLongDate(details.timeSource)}
             </p>
           </div>
         </div>
-        <button onClick={handleShare} className="active:scale-90 transition-all">
+        <button onClick={handleShare} className="shrink-0 active:scale-90 transition-all">
           <Share2 size={20} className="text-gray-400 hover:text-gray-900 transition-colors" />
         </button>
       </header>

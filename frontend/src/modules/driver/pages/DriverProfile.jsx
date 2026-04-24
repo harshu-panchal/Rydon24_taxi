@@ -15,7 +15,6 @@ import {
     Star, 
     Route, 
     ChevronRight,
-    Camera,
     CheckCircle2,
     Wallet,
     Info,
@@ -27,8 +26,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
-import { useImageUpload } from '../../../shared/hooks/useImageUpload';
-import { clearDriverAuthState, getCurrentDriver, updateDriverProfile } from '../services/registrationService';
+import { clearDriverAuthState, getCurrentDriver } from '../services/registrationService';
 
 const DriverProfile = () => {
     const navigate = useNavigate();
@@ -37,7 +35,6 @@ const DriverProfile = () => {
     const [driver, setDriver] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
-    const [isUploadingProfile, setIsUploadingProfile] = useState(false);
 
     useEffect(() => {
         let active = true;
@@ -92,32 +89,7 @@ const DriverProfile = () => {
     const driverColor = useMemo(() => driver?.vehicleColor || 'N/A', [driver?.vehicleColor]);
     const driverRating = useMemo(() => Number(driver?.rating || 0), [driver?.rating]);
 
-    const {
-        uploading: imageUploading,
-        preview: imagePreview,
-        handleFileChange: onProfileImageChange,
-    } = useImageUpload({
-        folder: 'driver-profiles',
-        onSuccess: async (url) => {
-            const previousImage = driver?.profileImage || '';
-            setIsUploadingProfile(true);
-            setDriver((prev) => ({ ...(prev || {}), profileImage: url }));
-
-            try {
-                await updateDriverProfile({
-                    name: driver?.name || '',
-                    email: driver?.email || '',
-                    profileImage: url,
-                });
-            } catch (uploadError) {
-                setDriver((prev) => ({ ...(prev || {}), profileImage: previousImage }));
-                setError(uploadError?.message || 'Unable to update profile photo');
-            } finally {
-                setIsUploadingProfile(false);
-            }
-        },
-    });
-    const hasProfileImage = Boolean(imagePreview || driver?.profileImage);
+    const hasProfileImage = Boolean(driver?.profileImage);
 
     const sections = [
         ...(isOwner ? [{
@@ -192,33 +164,14 @@ const DriverProfile = () => {
                         }`}>
                              {hasProfileImage ? (
                                 <img
-                                    src={imagePreview || driver?.profileImage}
+                                    src={driver?.profileImage}
                                     alt={driverName}
-                                    className={`w-full h-full object-cover ${(imageUploading || isUploadingProfile) ? 'opacity-60' : ''}`}
+                                    className="w-full h-full object-cover"
                                 />
                              ) : (
                                 <User size={30} className="text-slate-500" strokeWidth={1.8} />
                              )}
-                             <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center ${
-                                hasProfileImage ? 'bg-black/40' : 'bg-white/70'
-                             }`}>
-                                 <Camera size={16} className={hasProfileImage ? 'text-white' : 'text-slate-700'} />
-                             </div>
-                             {(imageUploading || isUploadingProfile) ? (
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/35">
-                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                </div>
-                             ) : null}
                         </div>
-                        <label className="absolute inset-0 cursor-pointer" aria-label="Upload profile image">
-                            <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={onProfileImageChange}
-                                disabled={imageUploading || isUploadingProfile}
-                            />
-                        </label>
                         {hasProfileImage ? (
                             <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-lg border-2 border-white flex items-center justify-center shadow-sm">
                                  <Check size={12} className="text-white" strokeWidth={4} />

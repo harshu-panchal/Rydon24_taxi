@@ -10,6 +10,7 @@ const Motion = motion;
 const NAME_REGEX = /^[A-Za-z]+(?:[ .'-][A-Za-z]+)*$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const normalizeName = (value) => String(value || '').replace(/[^A-Za-z .'-]/g, '').replace(/\s+/g, ' ');
+const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 
 const EditProfile = () => {
     const navigate = useNavigate();
@@ -57,14 +58,14 @@ const EditProfile = () => {
     const handleSave = async () => {
         const nextErrors = {};
         const trimmedName = String(formData.name || '').trim();
-        const email = String(formData.email || '').trim().toLowerCase();
+        const email = normalizeEmail(formData.email);
 
         if (!NAME_REGEX.test(trimmedName)) {
             nextErrors.name = 'Full name can contain alphabets only';
         }
 
         if (email && !EMAIL_REGEX.test(email)) {
-            nextErrors.email = 'Enter email like aa@gmail.com';
+            nextErrors.email = 'Please enter a valid email address, example aa@gmail.com';
         }
 
         setErrors(nextErrors);
@@ -179,7 +180,11 @@ const EditProfile = () => {
                                 value={field.value}
                                 disabled={field.disabled}
                                 onChange={(e) => {
-                                    const value = field.key === 'name' ? normalizeName(e.target.value) : e.target.value;
+                                    const value = field.key === 'name'
+                                        ? normalizeName(e.target.value)
+                                        : field.key === 'email'
+                                            ? normalizeEmail(e.target.value)
+                                            : e.target.value;
                                     setFormData(prev => ({ ...prev, [field.key]: value }));
                                     setErrors((prev) => ({ ...prev, [field.key]: '' }));
                                 }}

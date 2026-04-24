@@ -1,11 +1,13 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, MessageCircle, Phone, HelpCircle, AlertCircle, XCircle, ShieldCheck, ChevronRight } from 'lucide-react';
 import BottomNavbar from '../../components/BottomNavbar';
 
 const Support = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
 
   const helpTopics = [
     { title: "Driver didn't arrive", Icon: XCircle, iconClass: 'text-rose-500', ringClass: 'bg-rose-50/70' },
@@ -18,8 +20,12 @@ const Support = () => {
     window.open('tel:+919876543210', '_self');
   };
 
-  const handleChat = () => {
-    navigate('/ride/chat?admin=true&role=user');
+  const openSupportChat = (topicTitle = '') => {
+    const initialDraft = topicTitle ? `Hi, I need help with: ${topicTitle}.` : '';
+
+    navigate(`${routePrefix}/ride/chat?admin=true&role=user`, {
+      state: initialDraft ? { initialDraft } : undefined,
+    });
   };
 
   return (
@@ -49,7 +55,7 @@ const Support = () => {
           <motion.button
             type="button"
             whileTap={{ scale: 0.98 }}
-            onClick={handleChat}
+            onClick={() => openSupportChat()}
             className="relative overflow-hidden rounded-2xl border border-white/80 bg-white/80 p-4 text-left shadow-[0_14px_34px_rgba(15,23,42,0.07)]"
           >
             <div className="absolute inset-0 bg-[radial-gradient(140px_100px_at_20%_25%,rgba(249,115,22,0.18),transparent_60%)]" aria-hidden="true" />
@@ -93,7 +99,7 @@ const Support = () => {
                 key={topic.title}
                 type="button"
                 whileTap={{ scale: 0.99 }}
-                onClick={handleChat}
+                onClick={() => openSupportChat(topic.title)}
                 className="w-full text-left bg-white/85 backdrop-blur-sm rounded-2xl p-3.5 border border-white/80 shadow-[0_14px_34px_rgba(15,23,42,0.07)] flex items-center justify-between gap-3 transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(15,23,42,0.09)] active:translate-y-0"
               >
                 <div className="flex items-center gap-3 min-w-0">

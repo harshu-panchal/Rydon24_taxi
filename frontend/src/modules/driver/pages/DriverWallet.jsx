@@ -159,18 +159,14 @@ const DriverWallet = () => {
         );
         const availableForOrders = toNumber(wallet.availableForOrders, toNumber(wallet.balance) - minimumBalance);
         const minimumTopUp = toNumber(wallet.minimumTopUpAmount, toNumber(settings.minimum_amount_added_to_wallet, 0));
-        const minimumTransfer = toNumber(wallet.minimumTransferAmount, toNumber(settings.minimum_wallet_amount_for_transfer, 0));
         const walletEnabled = wallet.isWalletEnabled ?? isEnabled(settings.show_wallet_feature_for_driver, true);
-        const transferEnabled = wallet.isTransferEnabled ?? isEnabled(settings.enable_wallet_transfer_driver, true);
         const canReceiveOrders = walletEnabled && !wallet.isBlocked && availableForOrders >= 0;
 
         return {
             minimumBalance,
             availableForOrders,
             minimumTopUp,
-            minimumTransfer,
             walletEnabled,
-            transferEnabled,
             canReceiveOrders,
         };
     }, [settings, wallet]);
@@ -368,21 +364,14 @@ const DriverWallet = () => {
                             </div>
                         )}
 
-                        <section className="grid grid-cols-2 gap-3">
+                        <section>
                             <button
                                 type="button"
                                 onClick={() => setShowTopUp(true)}
                                 disabled={!rules.walletEnabled}
-                                className="flex h-13 items-center justify-center gap-2 rounded-2xl bg-[#009b72] text-sm font-black uppercase tracking-[0.08em] text-white shadow-sm disabled:bg-slate-200 disabled:text-slate-400"
+                                className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-[#009b72] text-sm font-black uppercase tracking-[0.08em] text-white shadow-sm disabled:bg-slate-200 disabled:text-slate-400"
                             >
                                 Top up <ArrowUpRight size={17} />
-                            </button>
-                            <button
-                                type="button"
-                                disabled
-                                className="flex h-13 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white text-sm font-black uppercase tracking-[0.08em] text-slate-400"
-                            >
-                                Transfer soon
                             </button>
                         </section>
 
@@ -403,13 +392,8 @@ const DriverWallet = () => {
                             </div>
                         </section>
 
-                        <section className="grid grid-cols-2 gap-3">
+                        <section className="grid grid-cols-1 gap-3">
                             <StatPill label="Top-up minimum" value={money(rules.minimumTopUp)} tone="dark" />
-                            <StatPill
-                                label="Transfer minimum"
-                                value={money(rules.minimumTransfer)}
-                                tone={rules.transferEnabled ? 'good' : 'warn'}
-                            />
                         </section>
 
                         <section className="space-y-3">

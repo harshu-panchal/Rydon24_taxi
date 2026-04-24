@@ -1,12 +1,40 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 
 const ExplorerSection = () => {
+  const navigate = useNavigate();
   const cities = [
-    { title: 'Airport Indore', image: '/Gemini_Generated_Image_ob17d1ob17d1ob17.png', label: '10 min', code: 'IDR' },
-    { title: 'Indore Junction', image: '/train_station_illustration.png', label: '5 min', code: 'JCT' },
-    { title: 'Rajwada', image: '/Gemini_Generated_Image_17lko817lko817lk.png', label: '15 min', code: 'RAJ' },
+    {
+      title: 'Airport Indore',
+      image: '/Gemini_Generated_Image_ob17d1ob17d1ob17.png',
+      label: '10 min',
+      code: 'IDR',
+      drop: 'Devi Ahilya Bai Holkar Airport, Indore',
+    },
+    {
+      title: 'Indore Junction',
+      image: '/train_station_illustration.png',
+      label: '5 min',
+      code: 'JCT',
+      drop: 'Indore Junction Railway Station, Indore',
+    },
+    {
+      title: 'Rajwada',
+      image: '/Gemini_Generated_Image_17lko817lko817lk.png',
+      label: '15 min',
+      code: 'RAJ',
+      drop: 'Rajwada Palace, Indore',
+    },
   ];
+
+  const handleExploreDestination = (city) => {
+    navigate('/taxi/user/ride/select-location', {
+      state: {
+        drop: city.drop || city.title,
+      },
+    });
+  };
 
   return (
     <div className="px-5">
@@ -19,7 +47,12 @@ const ExplorerSection = () => {
 
       <div className="flex gap-4 overflow-x-auto no-scrollbar scroll-smooth pb-5 px-1">
         {cities.map((city, idx) => (
-          <div key={idx} className="flex-shrink-0 w-[214px] group transition-all active:scale-[0.98] cursor-pointer">
+          <button
+            key={idx}
+            type="button"
+            onClick={() => handleExploreDestination(city)}
+            className="flex-shrink-0 w-[214px] group text-left transition-all active:scale-[0.98] cursor-pointer"
+          >
             <div className="rounded-[20px] bg-white/92 border border-white/80 shadow-[0_18px_40px_rgba(15,23,42,0.07)] overflow-hidden h-[136px] transition-all relative">
               <img
                 src={city.image}
@@ -42,15 +75,19 @@ const ExplorerSection = () => {
                 Just {city.label} from your location
               </p>
             </div>
-          </div>
+          </button>
         ))}
 
-        <div className="flex-shrink-0 w-[128px] flex flex-col justify-center items-center gap-2 bg-white/75 border border-white/80 rounded-[18px] active:scale-95 transition-all text-slate-500 font-black h-[136px] self-start shadow-[0_14px_32px_rgba(15,23,42,0.05)]">
+        <button
+          type="button"
+          onClick={() => handleExploreDestination(cities[0])}
+          className="flex-shrink-0 w-[128px] flex flex-col justify-center items-center gap-2 bg-white/75 border border-white/80 rounded-[18px] active:scale-95 transition-all text-slate-500 font-black h-[136px] self-start shadow-[0_14px_32px_rgba(15,23,42,0.05)]"
+        >
           <div className="w-10 h-10 rounded-full bg-slate-50 border border-white/80 shadow-sm flex items-center justify-center">
             <ArrowRight size={18} strokeWidth={2.5} className="text-slate-300" />
           </div>
           <span className="text-[11px] uppercase tracking-[0.14em]">View All</span>
-        </div>
+        </button>
       </div>
     </div>
   );
