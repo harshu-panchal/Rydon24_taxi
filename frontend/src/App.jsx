@@ -2,9 +2,11 @@ import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { MapPin, FileText } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 import { socketService } from './shared/api/socket';
 import { SettingsProvider } from './shared/context/SettingsContext';
 import AppAutoUpdater from './modules/shared/components/AppAutoUpdater';
+import { addRealtimeNotification } from './modules/user/utils/realtimeNotificationStore';
 import './App.css';
 
 
@@ -377,8 +379,41 @@ const UserAccountInvalidationListener = () => {
       navigate('/taxi/user/login', { replace: true });
     };
 
+    const handleAdminChatMessage = (payload = {}) => {
+      const senderRole = String(payload.senderRole || payload.sender?.role || '').toLowerCase();
+      const receiverRole = String(payload.receiverRole || payload.receiver?.role || '').toLowerCase();
+      const messageBody = String(payload.message || payload.body || '').trim();
+
+      if (senderRole !== 'admin' || !messageBody) {
+        return;
+      }
+
+      if (receiverRole && receiverRole !== 'user') {
+        return;
+      }
+
+      const notificationWasAdded = addRealtimeNotification({
+        id: `support-chat:${payload.id || payload._id || `${Date.now()}-${messageBody}`}`,
+        title: 'Support message',
+        body: messageBody,
+        sentAt: payload.createdAt || new Date().toISOString(),
+        type: 'support',
+        source: 'support-chat',
+      });
+
+      if (!notificationWasAdded) {
+        return;
+      }
+
+      toast(messageBody, {
+        duration: 4500,
+        className: 'font-bold text-[13px] rounded-2xl shadow-xl border border-sky-50 bg-white',
+      });
+    };
+
     const socket = socketService.connect({ role: 'user' });
     socketService.on('account:deleted', handleLogout);
+    socketService.on('chat:message', handleAdminChatMessage);
 
     const handleAuthStale = (event) => {
       const staleToken = event.detail?.token || '';
@@ -400,6 +435,7 @@ const UserAccountInvalidationListener = () => {
 
     return () => {
       socketService.off('account:deleted', handleLogout);
+      socketService.off('chat:message', handleAdminChatMessage);
       window.removeEventListener('app:auth-stale', handleAuthStale);
 
       if (socket) {

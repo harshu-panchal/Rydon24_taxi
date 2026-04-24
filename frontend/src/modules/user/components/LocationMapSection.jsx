@@ -344,10 +344,6 @@ const LocationMapSection = () => {
           </div>
         </div>
       </div>
-
-      <p className="mt-2 text-[10px] font-bold text-slate-400">
-        {centerCoords.lat.toFixed(5)}, {centerCoords.lon.toFixed(5)} · Google Maps
-      </p>
     </motion.section>
   );
 };

@@ -4,6 +4,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Bell, Trash2, Tag, ShieldCheck, Star, AlertCircle, RefreshCw, Megaphone, CheckCircle2 } from 'lucide-react';
 import BottomNavbar from '../components/BottomNavbar';
 import { userAuthService } from '../services/authService';
+import {
+  USER_NOTIFICATIONS_UPDATED_EVENT,
+  clearRealtimeNotifications,
+  getRealtimeNotifications,
+  isRealtimeNotification,
+  removeRealtimeNotification,
+} from '../utils/realtimeNotificationStore';
 import toast from 'react-hot-toast';
 
 const formatNotificationTime = (value) => {
@@ -39,17 +46,29 @@ const SkeletonCard = () => (
 
 const Notifications = () => {
   const navigate = useNavigate();
-  const [notifications, setNotifications] = useState([]);
+  const [serverNotifications, setServerNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [clearing, setClearing] = useState(false);
+
+  const notifications = useMemo(() => {
+    const merged = [...serverNotifications, ...getRealtimeNotifications()];
+
+    return merged
+      .filter((notification) => notification?.id)
+      .sort((left, right) => {
+        const leftTime = new Date(left.sentAt || 0).getTime();
+        const rightTime = new Date(right.sentAt || 0).getTime();
+        return rightTime - leftTime;
+      });
+  }, [serverNotifications]);
 
   const fetchNotifications = async () => {
     setLoading(true);
     setError(null);
     try {
       const response = await userAuthService.getNotifications();
-      setNotifications(response?.data?.results || []);
+      setServerNotifications(response?.data?.results || []);
     } catch (err) {
       setError(err?.message || 'Failed to load notifications');
     } finally {
@@ -59,6 +78,18 @@ const Notifications = () => {
 
   useEffect(() => { fetchNotifications(); }, []);
 
+  useEffect(() => {
+    const handleRealtimeNotificationsUpdated = () => {
+      setServerNotifications((current) => [...current]);
+    };
+
+    window.addEventListener(USER_NOTIFICATIONS_UPDATED_EVENT, handleRealtimeNotificationsUpdated);
+
+    return () => {
+      window.removeEventListener(USER_NOTIFICATIONS_UPDATED_EVENT, handleRealtimeNotificationsUpdated);
+    };
+  }, []);
+
   const handleClearAll = async () => {
     if (notifications.length === 0) return;
     if (!window.confirm('Are you sure you want to clear all notifications?')) return;
@@ -66,7 +97,8 @@ const Notifications = () => {
     setClearing(true);
     try {
       await userAuthService.clearAllNotifications();
-      setNotifications([]);
+      clearRealtimeNotifications();
+      setServerNotifications([]);
       toast.success('All notifications cleared', {
         icon: <CheckCircle2 size={18} className="text-emerald-500" />,
         className: 'font-bold text-[13px] rounded-2xl shadow-xl border border-emerald-50 bg-white',
@@ -79,9 +111,17 @@ const Notifications = () => {
   };
 
   const handleRemoveSingle = async (id) => {
+    if (isRealtimeNotification(id)) {
+      removeRealtimeNotification(id);
+      toast.success('Notification removed', {
+        className: 'font-bold text-[13px] rounded-2xl shadow-xl border border-slate-50 bg-white',
+      });
+      return;
+    }
+
     try {
       await userAuthService.deleteNotification(id);
-      setNotifications(prev => prev.filter(n => n.id !== id));
+      setServerNotifications((prev) => prev.filter((notification) => notification.id !== id));
       toast.success('Notification removed', {
         className: 'font-bold text-[13px] rounded-2xl shadow-xl border border-slate-50 bg-white',
       });
