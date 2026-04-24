@@ -12,6 +12,7 @@ import {
   Phone,
 } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { adminService } from '../../services/adminService';
 import { DELHI_CENTER, HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../utils/googleMaps';
 import BikeIcon from '@/assets/icons/bike.png';
 import CarIcon from '@/assets/icons/car.png';
@@ -70,6 +71,7 @@ const DriverDetails = () => {
   const [activeTab, setActiveTab] = useState('Driver Profile');
   const [profile, setProfile] = useState(null);
   const [walletForm, setWalletForm] = useState({ amount: '', operation: 'credit', isSubmitting: false });
+  const [walletHistory, setWalletHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [avatarFailed, setAvatarFailed] = useState(false);
@@ -91,13 +93,18 @@ const DriverDetails = () => {
     try {
       const token = localStorage.getItem('adminToken');
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const res = await fetch(
-        `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/drivers/${id}/profile`,
-        { headers },
-      );
+      const [res, walletRes] = await Promise.all([
+        fetch(
+          `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/drivers/${id}/profile`,
+          { headers },
+        ),
+        adminService.getDriverWalletHistory(id).catch(() => null),
+      ]);
       const data = await res.json();
       if (res.ok && data.success) {
         setProfile(data.data);
+        const walletPayload = walletRes?.data?.data || walletRes?.data || walletRes || {};
+        setWalletHistory(Array.isArray(walletPayload?.results) ? walletPayload.results : []);
       } else {
         setError(data.message || 'Unable to load driver profile');
       }
@@ -125,7 +132,7 @@ const DriverDetails = () => {
     return { lat: profile.location.lat, lng: profile.location.lng };
   }, [profile]);
   const shouldLoadMap = activeTab === 'Driver Profile';
-  const { isLoaded, loadError } = useAppGoogleMapsLoader(shouldLoadMap);
+  const { isLoaded, loadError } = useAppGoogleMapsLoader();
   const vehicleMapIconUrl = useMemo(
     () => getMapIconForVehicle(profile?.vehicleIconType || profile?.vehicle_image || profile?.vehicle?.type),
     [profile],
@@ -144,6 +151,7 @@ const DriverDetails = () => {
 
   const stats = profile?.stats || {};
   const earnings = profile?.earnings || {};
+  const wallet = profile?.wallet || {};
   const requests = profile?.requests || [];
   const withdrawals = profile?.withdrawals || [];
   const documents = useMemo(() => {
@@ -379,16 +387,16 @@ const DriverDetails = () => {
               <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="border border-gray-100 rounded-lg p-4">
-                    <p className="text-sm text-gray-500">Total Amount</p>
-                    <p className="text-2xl font-semibold text-gray-900">₹ {earnings.total_earnings || 0}</p>
+                    <p className="text-sm text-gray-500">Total Credited</p>
+                    <p className="text-2xl font-semibold text-gray-900">₹ {wallet.total_credits || 0}</p>
                   </div>
                   <div className="border border-gray-100 rounded-lg p-4">
-                    <p className="text-sm text-gray-500">Spend Amount</p>
-                    <p className="text-2xl font-semibold text-gray-900">₹ {earnings.spend_amount || 0}</p>
+                    <p className="text-sm text-gray-500">Total Debited</p>
+                    <p className="text-2xl font-semibold text-gray-900">₹ {wallet.total_debits || 0}</p>
                   </div>
                   <div className="border border-gray-100 rounded-lg p-4">
-                    <p className="text-sm text-gray-500">Balance Amount</p>
-                    <p className="text-2xl font-semibold text-gray-900">₹ {earnings.balance_amount || 0}</p>
+                    <p className="text-sm text-gray-500">Available Balance</p>
+                    <p className="text-2xl font-semibold text-gray-900">₹ {wallet.balance || 0}</p>
                   </div>
                 </div>
               </div>
@@ -451,6 +459,42 @@ const DriverDetails = () => {
                   >
                     {walletForm.isSubmitting ? 'Saving...' : 'Submit'}
                   </button>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100">
+                  <h3 className="text-sm font-semibold text-gray-900">Wallet Transactions</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-100 text-xs text-gray-500">
+                        <th className="px-6 py-3">Date</th>
+                        <th className="px-4 py-3">Type</th>
+                        <th className="px-4 py-3">Amount</th>
+                        <th className="px-4 py-3">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
+                      {walletHistory.length === 0 ? (
+                        <tr>
+                          <td colSpan="4" className="px-6 py-12 text-center text-gray-400">No wallet transactions found.</td>
+                        </tr>
+                      ) : (
+                        walletHistory.map((item) => (
+                          <tr key={item._id}>
+                            <td className="px-6 py-3">{item.createdAt ? new Date(item.createdAt).toLocaleString('en-IN') : 'N/A'}</td>
+                            <td className="px-4 py-3 capitalize">{String(item.type || '').replace(/_/g, ' ') || 'N/A'}</td>
+                            <td className={`px-4 py-3 font-semibold ${Number(item.amount || 0) < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                              ₹ {Math.abs(Number(item.amount || 0))}
+                            </td>
+                            <td className="px-4 py-3">{item.description || '-'}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
@@ -580,32 +624,34 @@ const DriverDetails = () => {
       ) : (
         <>
           <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-            <h3 className="text-base font-semibold text-gray-900 mb-4">General Report</h3>
+            <h3 className="text-base font-semibold text-gray-900 mb-4">Wallet Overview</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="border border-gray-100 rounded-lg p-4">
-                <p className="text-sm text-gray-500">Today Trips</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.today_trips || 0}</p>
+                <p className="text-sm text-gray-500">Wallet Balance</p>
+                <p className="text-2xl font-semibold text-gray-900">Rs. {wallet.balance || 0}</p>
               </div>
               <div className="border border-gray-100 rounded-lg p-4">
-                <p className="text-sm text-gray-500">Today Earnings</p>
-                <p className="text-2xl font-semibold text-gray-900">₹ {earnings.today_earnings || 0}</p>
+                <p className="text-sm text-gray-500">Cash Limit</p>
+                <p className="text-2xl font-semibold text-gray-900">Rs. {wallet.cash_limit || 0}</p>
               </div>
               <div className="border border-gray-100 rounded-lg p-4">
-                <p className="text-sm text-gray-500">Total Trips</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.total_trips || 0}</p>
+                <p className="text-sm text-gray-500">Total Credited</p>
+                <p className="text-2xl font-semibold text-gray-900">Rs. {wallet.total_credits || 0}</p>
               </div>
               <div className="border border-gray-100 rounded-lg p-4">
-                <p className="text-sm text-gray-500">Total Earnings</p>
-                <p className="text-2xl font-semibold text-gray-900">₹ {earnings.total_earnings || 0}</p>
+                <p className="text-sm text-gray-500">Total Debited</p>
+                <p className="text-2xl font-semibold text-gray-900">Rs. {wallet.total_debits || 0}</p>
               </div>
               <div className="border border-gray-100 rounded-lg p-4">
-                <p className="text-sm text-gray-500">Today Cancelled</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.today_cancelled || 0}</p>
+                <p className="text-sm text-gray-500">Wallet Status</p>
+                <p className={`text-2xl font-semibold ${wallet.is_blocked ? 'text-rose-600' : 'text-emerald-600'}`}>
+                  {wallet.is_blocked ? 'Blocked' : 'Active'}
+                </p>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6"> 
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h3 className="text-base font-semibold text-gray-900 mb-4">Driver Location</h3>
               <div className="h-80 rounded-xl overflow-hidden border border-gray-100">
@@ -617,7 +663,7 @@ const DriverDetails = () => {
                   <div className="h-full flex items-center justify-center text-sm text-gray-500 bg-gray-50">
                     Live driver location is not available yet.
                   </div>
-                ) : HAS_VALID_GOOGLE_MAPS_KEY && isLoaded ? (
+                ) : shouldLoadMap && HAS_VALID_GOOGLE_MAPS_KEY && isLoaded ? (
                   <GoogleMap
                     mapContainerStyle={mapContainerStyle}
                     center={mapCenter}
@@ -628,7 +674,7 @@ const DriverDetails = () => {
                   </GoogleMap>
                 ) : (
                   <div className="h-full flex items-center justify-center text-sm text-gray-500 bg-gray-50">
-                    {HAS_VALID_GOOGLE_MAPS_KEY ? 'Loading map on demand...' : 'Configure `VITE_GOOGLE_MAPS_API_KEY` to show map.'}
+                    {HAS_VALID_GOOGLE_MAPS_KEY ? 'Loading map...' : 'Configure `VITE_GOOGLE_MAPS_API_KEY` to show map.'}
                   </div>
                 )}
               </div>
@@ -775,3 +821,6 @@ export default DriverDetails;
       ))}
     </svg>
   );
+
+
+

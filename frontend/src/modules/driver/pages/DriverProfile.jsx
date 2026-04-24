@@ -91,7 +91,6 @@ const DriverProfile = () => {
     const driverNumber = useMemo(() => driver?.vehicleNumber || 'N/A', [driver?.vehicleNumber]);
     const driverColor = useMemo(() => driver?.vehicleColor || 'N/A', [driver?.vehicleColor]);
     const driverRating = useMemo(() => Number(driver?.rating || 0), [driver?.rating]);
-    const hasProfileImage = Boolean(imagePreview || driver?.profileImage);
 
     const {
         uploading: imageUploading,
@@ -118,6 +117,7 @@ const DriverProfile = () => {
             }
         },
     });
+    const hasProfileImage = Boolean(imagePreview || driver?.profileImage);
 
     const sections = [
         ...(isOwner ? [{

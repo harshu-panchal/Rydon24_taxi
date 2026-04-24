@@ -2892,7 +2892,13 @@ export const getDriverProfile = async (id) => {
     const amount = Number(item?.amount || 0);
     return amount < 0 ? total + Math.abs(amount) : total;
   }, 0);
+  const creditAmount = walletTransactions.reduce((total, item) => {
+    const amount = Number(item?.amount || 0);
+    return amount > 0 ? total + amount : total;
+  }, 0);
   const balanceAmount = Number(driver?.wallet?.balance || 0);
+  const cashLimit = Number(driver?.wallet?.cashLimit ?? 500);
+  const isWalletBlocked = Boolean(driver?.wallet?.isBlocked);
 
   const driverLocation = driver.location?.coordinates || [];
   const lastRideLocation = rides.find((ride) => Array.isArray(ride.lastDriverLocation?.coordinates));
@@ -2931,6 +2937,14 @@ export const getDriverProfile = async (id) => {
       by_card: Number(byCard.toFixed(2)),
       spend_amount: Number(spendAmount.toFixed(2)),
       balance_amount: Number(balanceAmount.toFixed(2)),
+    },
+    wallet: {
+      balance: Number(balanceAmount.toFixed(2)),
+      cash_limit: Number(cashLimit.toFixed(2)),
+      is_blocked: isWalletBlocked,
+      total_credits: Number(creditAmount.toFixed(2)),
+      total_debits: Number(spendAmount.toFixed(2)),
+      transaction_count: walletTransactions.length,
     },
     location: hasValidLocation ? { lat, lng } : null,
   };

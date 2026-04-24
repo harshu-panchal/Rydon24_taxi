@@ -39,15 +39,11 @@ const OTPVerification = () => {
             return undefined;
         }
 
-        if (isLoginFlow && debugOtp && /^\d{4}$/.test(String(debugOtp))) {
-            setOtp(String(debugOtp).split(''));
-        }
-
         const interval = setInterval(() => {
             setTimer(prev => (prev > 0 ? prev - 1 : 0));
         }, 1000);
         return () => clearInterval(interval);
-    }, [debugOtp, isLoginFlow, navigate, phone]);
+    }, [navigate, phone, isLoginFlow]);
 
     const handleChange = (index, value) => {
         if (!/^\d*$/.test(value)) return;
@@ -203,7 +199,8 @@ const OTPVerification = () => {
                                 type="tel"
                                 inputMode="numeric"
                                 pattern="[0-9]*"
-                                autoComplete={index === 0 ? 'one-time-code' : 'off'}
+                                autoComplete="off"
+                                name={`driver-otp-${index}`}
                                 maxLength={1}
                                 value={digit}
                                 onChange={e => handleChange(index, e.target.value)}
