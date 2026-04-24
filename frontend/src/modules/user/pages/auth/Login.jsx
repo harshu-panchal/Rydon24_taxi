@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import AuthLayout from '../../components/AuthLayout';
-import { ChevronDown, Phone } from 'lucide-react';
+import { Phone } from 'lucide-react';
 import { userAuthService } from '../../services/authService';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 
@@ -48,11 +48,10 @@ const Login = () => {
           <label htmlFor="phone" className="text-sm font-semibold text-gray-700 tracking-tight ml-1">
             Mobile Number
           </label>
-          <div className="flex items-center gap-3 bg-[#F6F6F6] rounded-2xl p-4 focus-within:ring-2 focus-within:ring-black/5 focus-within:bg-white transition-all border border-transparent">
-            <div className="flex items-center gap-2 pr-3 border-r border-gray-200 opacity-70 group cursor-pointer">
+            <div className="flex items-center gap-3 bg-[#F6F6F6] rounded-2xl p-4 focus-within:ring-2 focus-within:ring-black/5 focus-within:bg-white transition-all border border-transparent">
+            <div className="flex items-center gap-2 pr-3 border-r border-gray-200 opacity-70">
                <img src="https://flagcdn.com/w40/in.png" alt="India" className="w-5 h-3.5 object-cover rounded-sm" />
                <span className="text-[15px] font-bold text-gray-800">+91</span>
-               <ChevronDown size={14} className="text-gray-400 group-hover:text-black transition-colors" />
             </div>
             <div className="flex-1 flex items-center gap-3">
                <Phone size={18} className="text-gray-400 opacity-50" />

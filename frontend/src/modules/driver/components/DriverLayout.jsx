@@ -52,6 +52,8 @@ const getAuthenticatedDriverHome = () => (
         : '/taxi/driver/home'
 );
 
+const getPendingDriverRoute = () => '/taxi/driver/registration-status';
+
 const DriverLayout = () => {
     const location = useLocation();
     const navigate = useNavigate();
@@ -64,21 +66,6 @@ const DriverLayout = () => {
         const onboardingState = location.state || {};
         const token = localStorage.getItem('driverToken') || localStorage.getItem('token');
         const authenticatedHome = getAuthenticatedDriverHome();
-
-        if (token && softEntryRoutes.has(currentPath)) {
-            navigate(authenticatedHome, { replace: true });
-            return;
-        }
-
-        if (
-            token
-            && currentPath === '/taxi/driver/lang-select'
-            && !onboardingState.registrationFlow
-            && !onboardingState.allowAuthenticated
-        ) {
-            navigate(authenticatedHome, { replace: true });
-            return;
-        }
 
         if (onboardingRoutes.has(currentPath)) {
             setIsAllowed(true);
@@ -114,12 +101,25 @@ const DriverLayout = () => {
 
                 if (!isApproved) {
                     setIsAllowed(false);
-                    navigate('/taxi/driver/registration-status', { replace: true });
+                    navigate(getPendingDriverRoute(), { replace: true });
                     return;
                 }
 
                 setIsAllowed(true);
                 verifiedTokenRef.current = token;
+
+                if (softEntryRoutes.has(currentPath)) {
+                    navigate(authenticatedHome, { replace: true });
+                    return;
+                }
+
+                if (
+                    currentPath === '/taxi/driver/lang-select'
+                    && !onboardingState.registrationFlow
+                    && !onboardingState.allowAuthenticated
+                ) {
+                    navigate(authenticatedHome, { replace: true });
+                }
             } catch (error) {
                 if (!active) {
                     return;
@@ -139,11 +139,11 @@ const DriverLayout = () => {
                 }
 
                 if (error?.status === 403) {
-                    navigate('/taxi/driver/registration-status', { replace: true });
+                    navigate(getPendingDriverRoute(), { replace: true });
                     return;
                 }
 
-                navigate('/taxi/driver/registration-status', { replace: true });
+                navigate(getPendingDriverRoute(), { replace: true });
             } finally {
                 if (active) {
                     setIsChecking(false);
