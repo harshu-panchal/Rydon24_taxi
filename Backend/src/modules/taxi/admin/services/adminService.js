@@ -5069,18 +5069,19 @@ export const deleteOwner = async (id) => {
     return serializeDriverNeededDocument(item);
   };
 
-  export const listDriverDocumentUploadFields = async ({ activeOnly = true } = {}) => {
-    const items = await listDriverNeededDocuments({ activeOnly, includeFields: true });
-    return items.flatMap((item) =>
-      item.fields.map((field) => ({
-        ...field,
-        template_id: item.id,
-        template_name: item.name,
-        image_type: item.image_type,
-        has_expiry_date: item.has_expiry_date,
-        has_identify_number: item.has_identify_number,
-      })),
-    );
+export const listDriverDocumentUploadFields = async ({ activeOnly = true } = {}) => {
+  const items = await listDriverNeededDocuments({ activeOnly, includeFields: true });
+  return items.flatMap((item) =>
+    item.fields.map((field) => ({
+      ...field,
+      template_id: item.id,
+      template_name: item.name,
+      account_type: item.account_type,
+      image_type: item.image_type,
+      has_expiry_date: item.has_expiry_date,
+      has_identify_number: item.has_identify_number,
+    })),
+  );
   };
 
   export const createDriverNeededDocument = async (payload) => {

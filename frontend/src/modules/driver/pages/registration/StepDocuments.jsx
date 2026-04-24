@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { 
     ArrowLeft, 
     Camera, 
     CheckCircle2, 
     FileText, 
+    ImagePlus,
     ShieldCheck, 
     AlertCircle,
     ChevronRight,
@@ -54,6 +55,36 @@ const fileToDataUrl = (file) =>
     reader.readAsDataURL(file);
   });
 
+const normalizeSignupRole = (role) =>
+  String(role || 'driver').toLowerCase() === 'owner' ? 'owner' : 'driver';
+
+const matchesDocumentRole = (accountType, role) => {
+  const normalizedAccountType = String(accountType || 'individual').trim().toLowerCase();
+  const normalizedRole = normalizeSignupRole(role);
+
+  if (normalizedAccountType === 'both') {
+    return true;
+  }
+
+  if (normalizedRole === 'owner') {
+    return normalizedAccountType === 'fleet_drivers';
+  }
+
+  return normalizedAccountType === 'individual';
+};
+
+const isImageLikeFile = (file) => {
+  if (!file) {
+    return false;
+  }
+
+  if (String(file.type || '').startsWith('image/')) {
+    return true;
+  }
+
+  return /\.(jpg|jpeg|png|webp|heic|heif|bmp|gif)$/i.test(String(file.name || ''));
+};
+
 const StepDocuments = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -61,8 +92,8 @@ const StepDocuments = () => {
     ...getStoredDriverRegistrationSession(),
     ...(location.state || {}),
   };
+  const normalizedRole = normalizeSignupRole(session.role);
 
-  const inputRefs = useRef({});
   const [templates, setTemplates] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
   const [docs, setDocs] = useState(() =>
@@ -93,17 +124,20 @@ const StepDocuments = () => {
   }, []);
 
   const documentTemplates = useMemo(
-    () => normalizeDriverDocumentTemplates(templates),
-    [templates],
+    () =>
+      normalizeDriverDocumentTemplates(templates).filter((template) =>
+        matchesDocumentRole(template.account_type, normalizedRole),
+      ),
+    [normalizedRole, templates],
   );
   const uploadFields = useMemo(
     () => flattenDriverDocumentFields(documentTemplates),
     [documentTemplates],
   );
-
-  const openPicker = (key) => {
-    inputRefs.current[key]?.click();
-  };
+  const requiredUploadFields = useMemo(
+    () => uploadFields.filter((item) => Boolean(item.isRequired)),
+    [uploadFields],
+  );
 
   const handleFileChange = async (key, event) => {
     const file = event.target.files?.[0];
@@ -113,7 +147,7 @@ const StepDocuments = () => {
       return;
     }
 
-    if (!file.type.startsWith('image/')) {
+    if (!isImageLikeFile(file)) {
       setError('Please upload an image file');
       return;
     }
@@ -185,13 +219,13 @@ const StepDocuments = () => {
   };
 
   const isComplete =
-    uploadFields.every((item) => Boolean(docs[item.key]?.uploaded)) &&
+    requiredUploadFields.every((item) => Boolean(docs[item.key]?.uploaded || docs[item.key]?.secureUrl)) &&
     !uploading &&
     !templatesLoading;
 
   const handleSubmit = async () => {
     if (!isComplete) {
-      setError(uploading ? 'Please wait for the current upload to finish' : 'Please upload every document image');
+      setError(uploading ? 'Please wait for the current upload to finish' : 'Please upload every required document image');
       return;
     }
 
@@ -302,7 +336,9 @@ const StepDocuments = () => {
                            {template.fields.length > 1 ? 'Multiple Sides' : 'Single Document'}
                         </span>
                         <div className="w-1 h-1 rounded-full bg-slate-200" />
-                        <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Mandatory</span>
+                        <span className={`text-[10px] font-bold uppercase tracking-wider ${template.is_required ? 'text-emerald-600' : 'text-slate-400'}`}>
+                          {template.is_required ? 'Mandatory' : 'Optional'}
+                        </span>
                     </div>
                   </div>
                   <div className="rounded-full bg-slate-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-slate-500 border border-slate-100">
@@ -314,37 +350,23 @@ const StepDocuments = () => {
                   {template.fields.map((field) => {
                     const document = docs[field.key];
                     const isUploading = uploading === field.key;
+                    const isRequired = Boolean(field.required ?? field.isRequired);
 
                     return (
                       <div key={field.key} className="space-y-2">
-                        <label className="block text-[11px] font-semibold text-slate-500 ml-1">{field.label}</label>
+                        <div className="flex items-center justify-between gap-2">
+                          <label className="block text-[11px] font-semibold text-slate-500 ml-1">{field.label}</label>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${isRequired ? 'text-emerald-600' : 'text-slate-400'}`}>
+                            {isRequired ? 'Required' : 'Optional'}
+                          </span>
+                        </div>
                         <div
-                            onKeyDown={(event) => {
-                                if (event.key === 'Enter' || event.key === ' ') {
-                                    event.preventDefault();
-                                    openPicker(field.key);
-                                }
-                            }}
-                            tabIndex={0}
-                            role="button"
-                            onClick={() => openPicker(field.key)}
                             className={`relative min-h-[140px] rounded-2xl border-2 transition-all overflow-hidden flex flex-col items-center justify-center gap-2 ${
                                 document?.previewUrl
                                     ? 'border-emerald-500/20 bg-emerald-50/10'
                                     : 'border-dashed border-slate-200 bg-[#fcfcfb] hover:border-slate-300'
                             }`}
                         >
-                            <input
-                                ref={(element) => {
-                                    inputRefs.current[field.key] = element;
-                                }}
-                                type="file"
-                                accept="image/*"
-                                capture="environment"
-                                className="hidden"
-                                onChange={(event) => handleFileChange(field.key, event)}
-                            />
-
                             {isUploading ? (
                                 <div className="flex flex-col items-center gap-3">
                                     <div className="w-6 h-6 border-2 border-slate-200 border-t-slate-900 rounded-full animate-spin" />
@@ -376,6 +398,41 @@ const StepDocuments = () => {
                                 </>
                             )}
                         </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <label className={`relative flex h-11 items-center justify-center gap-2 rounded-2xl border text-[11px] font-bold uppercase tracking-wider transition-all ${
+                            isUploading
+                              ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+                              : 'cursor-pointer border-slate-200 bg-white text-slate-700 active:scale-[0.99]'
+                          }`}>
+                            <ImagePlus size={14} />
+                            Gallery
+                            <input
+                              type="file"
+                              accept="image/*"
+                              disabled={isUploading}
+                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                              aria-label={`Upload ${field.label} from gallery`}
+                              onChange={(event) => handleFileChange(field.key, event)}
+                            />
+                          </label>
+                          <label className={`relative flex h-11 items-center justify-center gap-2 rounded-2xl border text-[11px] font-bold uppercase tracking-wider transition-all ${
+                            isUploading
+                              ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+                              : 'cursor-pointer border-slate-900 bg-slate-950 text-white active:scale-[0.99]'
+                          }`}>
+                            <Camera size={14} />
+                            Camera
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              disabled={isUploading}
+                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                              aria-label={`Capture ${field.label} from camera`}
+                              onChange={(event) => handleFileChange(field.key, event)}
+                            />
+                          </label>
+                        </div>
                       </div>
                     );
                   })}
@@ -388,7 +445,7 @@ const StepDocuments = () => {
         <div className="bg-amber-50/50 p-4 rounded-3xl flex gap-3 mt-4 border border-amber-100">
           <AlertCircle size={18} className="text-amber-600 shrink-0" />
           <p className="text-xs font-medium text-amber-900 leading-relaxed">
-            Ensure all photos are well-lit and all text is clearly readable to avoid rejection.
+            Choose Gallery or Camera for each document. Ensure all photos are well-lit and all text is clearly readable to avoid rejection.
           </p>
         </div>
 

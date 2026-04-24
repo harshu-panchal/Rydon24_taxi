@@ -31,10 +31,25 @@ const VEHICLE_TYPE_MAP = {
 const normalizePhone = (phone) => String(phone || '').replace(/\D/g, '').trim();
 
 const normalizeRole = (role) => (String(role || 'driver').toLowerCase() === 'owner' ? 'owner' : 'driver');
+const matchesDocumentRole = (accountType, role) => {
+  const normalizedAccountType = String(accountType || 'individual').trim().toLowerCase();
+  const normalizedRole = normalizeRole(role);
+
+  if (normalizedAccountType === 'both') {
+    return true;
+  }
+
+  if (normalizedRole === 'owner') {
+    return normalizedAccountType === 'fleet_drivers';
+  }
+
+  return normalizedAccountType === 'individual';
+};
 
 const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000));
 
 const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
+const getVisibleOtp = (otp) => (process.env.NODE_ENV !== 'production' ? String(otp) : null);
 
 const getVehicleType = (vehicleTypeId, registerFor = '') => {
   const type = VEHICLE_TYPE_MAP[String(vehicleTypeId || registerFor || '').trim().toLowerCase()];
@@ -232,7 +247,11 @@ export const startDriverOnboarding = async ({ phone, role = 'driver' }) => {
     otp,
     purpose: 'driver onboarding OTP',
   });
-  const debugOtp = smsDispatch.mode === 'debug' && process.env.NODE_ENV !== 'production' ? otp : null;
+  const debugOtp = getVisibleOtp(otp);
+
+  if (debugOtp) {
+    console.log(`[onboardingService] OTP for ${normalizedPhone} = ${debugOtp} (${smsDispatch.mode})`);
+  }
 
   return {
     message: smsDispatch.mode === 'live' ? 'OTP sent successfully' : 'OTP generated successfully',
@@ -495,7 +514,9 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
   }
 
   const configuredUploadFields = await listDriverDocumentUploadFields({ activeOnly: true });
-  const requiredDocuments = configuredUploadFields.map((field) => field.key);
+  const requiredDocuments = configuredUploadFields
+    .filter((field) => Boolean(field.required) && matchesDocumentRole(field.account_type, session.role))
+    .map((field) => field.key);
   const missingDocuments = requiredDocuments.filter((key) => !normalizedDocuments?.[key]);
 
   if (missingDocuments.length > 0) {

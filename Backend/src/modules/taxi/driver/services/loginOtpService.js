@@ -12,6 +12,7 @@ const normalizePhone = (phone) => String(phone || '').replace(/\D/g, '').trim();
 const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000));
 
 const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
+const getVisibleOtp = (otp) => (process.env.NODE_ENV !== 'production' ? String(otp) : null);
 
 const getSession = async (phone) => {
   const session = await DriverLoginSession.findOne({ phone: normalizePhone(phone) }).select('+otpHash');
@@ -90,7 +91,11 @@ export const startDriverLoginOtp = async ({ phone }) => {
     otp,
     purpose: 'driver login OTP',
   });
-  const debugOtp = smsDispatch.mode === 'debug' && process.env.NODE_ENV !== 'production' ? otp : null;
+  const debugOtp = getVisibleOtp(otp);
+
+  if (debugOtp) {
+    console.log(`[loginOtpService] OTP for ${normalizedPhone} = ${debugOtp} (${smsDispatch.mode})`);
+  }
 
   return {
     message: smsDispatch.mode === 'live' ? 'OTP sent successfully' : 'OTP generated successfully',

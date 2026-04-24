@@ -22,6 +22,7 @@ export const validateUserPhone = (phone) => {
 const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000));
 
 const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
+const getVisibleOtp = (otp) => (process.env.NODE_ENV !== 'production' ? String(otp) : null);
 
 const ensureUserCanLogin = (user) => {
   if (user?.deletedAt || user?.isActive === false || user?.active === false) {
@@ -95,7 +96,11 @@ export const startUserOtp = async ({ phone }) => {
     otp,
     purpose: 'user OTP',
   });
-  const debugOtp = smsDispatch.mode === 'debug' && process.env.NODE_ENV !== 'production' ? otp : null;
+  const debugOtp = getVisibleOtp(otp);
+
+  if (debugOtp) {
+    console.log(`[userOtpService] OTP for ${normalizedPhone} = ${debugOtp} (${smsDispatch.mode})`);
+  }
 
   return {
     message: smsDispatch.mode === 'live' ? 'OTP sent successfully' : 'OTP generated successfully',
