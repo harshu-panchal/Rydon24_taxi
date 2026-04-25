@@ -19,7 +19,7 @@ const SupportTickets = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [typeFilter, setTypeFilter] = useState('all');
+  const [userTypeFilter, setUserTypeFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [selectedTicketCode, setSelectedTicketCode] = useState('');
   const [selectedTicket, setSelectedTicket] = useState(null);
@@ -34,7 +34,7 @@ const SupportTickets = () => {
         adminSupportService.getTicketStats(),
         adminSupportService.listTickets({
           status: statusFilter,
-          userType: typeFilter,
+          userType: userTypeFilter,
           search: search || undefined,
           page: 1,
           limit: 100,
@@ -51,7 +51,7 @@ const SupportTickets = () => {
 
   useEffect(() => {
     loadData();
-  }, [statusFilter, typeFilter]);
+  }, [statusFilter, userTypeFilter]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -173,8 +173,8 @@ const SupportTickets = () => {
               <option value="closed">Closed</option>
             </select>
             <select
-              value={typeFilter}
-              onChange={(event) => setTypeFilter(event.target.value)}
+              value={userTypeFilter}
+              onChange={(event) => setUserTypeFilter(event.target.value)}
               className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
             >
               <option value="all">All user types</option>
@@ -197,7 +197,6 @@ const SupportTickets = () => {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Ticket ID</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Title</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">User</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Type</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">Action</th>
                 </tr>
@@ -205,13 +204,13 @@ const SupportTickets = () => {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-sm text-gray-400">
+                    <td colSpan={5} className="px-4 py-12 text-center text-sm text-gray-400">
                       Loading support tickets...
                     </td>
                   </tr>
                 ) : tickets.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-sm text-gray-400">
+                    <td colSpan={5} className="px-4 py-12 text-center text-sm text-gray-400">
                       No support ticket found.
                     </td>
                   </tr>
@@ -224,7 +223,6 @@ const SupportTickets = () => {
                         <p className="font-medium text-gray-800">{ticket.requesterName}</p>
                         <p className="text-xs text-gray-500">{ticket.userType}</p>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{ticket.supportType}</td>
                       <td className="px-4 py-3">
                         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadgeClass(ticket.status)}`}>
                           {ticket.status}

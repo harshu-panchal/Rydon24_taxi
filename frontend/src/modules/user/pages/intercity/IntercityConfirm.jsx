@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { AlertTriangle, CheckCircle2, Home, LoaderCircle, MapPin, Calendar, Users, Car, Share2 } from 'lucide-react';
 import api from '../../../../shared/api/axiosInstance';
 import { getLocalUserToken, userAuthService } from '../../services/authService';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const generateBookingId = () => 'IC-' + Math.random().toString(36).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6).padEnd(6, '0');
 const DEFAULT_VEHICLE = { name: 'Mini Cab' };
@@ -19,6 +20,8 @@ const unwrapLoginPayload = (response) => {
 const IntercityConfirm = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { settings } = useSettings();
+  const appName = settings.general?.app_name || 'App';
   const state = useMemo(() => location.state || {}, [location.state]);
 
   const [bookingId] = useState(() => state.bookingId || generateBookingId());
@@ -120,7 +123,7 @@ const IntercityConfirm = () => {
     const text = `Intercity booking confirmed!\nID: ${bookingId}\n${fromCity} → ${toCity}\nDate: ${date}\nVehicle: ${vehicle.name}\nPassengers: ${passengers}\nFare: ₹${fare.toLocaleString()}`;
     try {
       if (navigator.share) {
-        await navigator.share({ title: 'Rydon24 Intercity Booking', text });
+        await navigator.share({ title: `${appName} Intercity Booking`, text });
       } else {
         await navigator.clipboard.writeText(text);
         setShareToast(true);

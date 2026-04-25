@@ -2,10 +2,13 @@ import React, { useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { CheckCircle2, MapPin, Clock, Camera, Home, Upload } from 'lucide-react';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const RentalConfirmed = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { settings } = useSettings();
+  const appName = settings.general?.app_name || 'App';
   const state = location.state || {};
   if (!state.vehicle) { navigate('/rental'); return null; }
 
@@ -54,7 +57,7 @@ const RentalConfirmed = () => {
             </div>
             <div className="flex items-center gap-2.5">
               <MapPin size={13} className="text-orange-400 shrink-0" />
-              <p className="text-[11px] font-black text-slate-700">Rydon24 Hub — Sector 12, City Center</p>
+              <p className="text-[11px] font-black text-slate-700">{appName} Hub — Sector 12, City Center</p>
             </div>
             <div className="border-t border-slate-50 pt-2.5 flex justify-between">
               <div>

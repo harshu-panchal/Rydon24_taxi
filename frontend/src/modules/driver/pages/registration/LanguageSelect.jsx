@@ -2,10 +2,14 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Check, Globe, ChevronRight } from 'lucide-react';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const LanguageSelect = () => {
     const navigate = useNavigate();
     const location = useLocation();
+    const { settings } = useSettings();
+    const appName = settings.general?.app_name || 'App';
+    const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
     const [selectedLang, setSelectedLang] = useState(() => localStorage.getItem('driver_lang') || 'english');
     const isAuthenticatedDriver = Boolean(localStorage.getItem('driverToken') || localStorage.getItem('token')) && !location.state?.registrationFlow;
     const authenticatedHome =
@@ -29,7 +33,13 @@ const LanguageSelect = () => {
         <div className="min-h-screen bg-[#F8F9FA] font-sans select-none overflow-x-hidden flex flex-col p-6 pt-12 pb-10">
             {/* Branding */}
             <div className="mb-12 flex flex-col items-center text-center space-y-4">
-                <img src="/Rydon24.png" alt="RYDON24" className="h-10 object-contain drop-shadow-sm" />
+                {appLogo ? (
+                    <img src={appLogo} alt={appName} className="h-10 object-contain drop-shadow-sm" />
+                ) : (
+                    <div className="rounded-2xl bg-white px-4 py-2 text-lg font-black tracking-tight text-slate-900 shadow-sm">
+                        {appName}
+                    </div>
+                )}
                 <div className="space-y-1">
                     <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight">Choose Language</h1>
                     <p className="text-[15px] font-medium text-slate-400">Select your preferred communication language</p>

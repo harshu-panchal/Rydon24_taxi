@@ -297,7 +297,7 @@ const GeneralSettings = () => {
         {/* Extra Metadata */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12 pt-4">
            <InputField label="Footer Content 1" name="footer_1" value={settings.general.footer_1} onChange={(n, v) => handleChange('general', n, v)} placeholder={`2026 © ${configuredAppName}.`} />
-           <InputField label="Footer Content 2" name="footer_2" value={settings.general.footer_2} onChange={(n, v) => handleChange('general', n, v)} placeholder="Design & Develop by Appzeto" />
+           <InputField label="Footer Content 2" name="footer_2" value={settings.general.footer_2} onChange={(n, v) => handleChange('general', n, v)} placeholder={`Design & Develop by ${configuredAppName}`} />
         </div>
 
         {/* Operational Styling */}

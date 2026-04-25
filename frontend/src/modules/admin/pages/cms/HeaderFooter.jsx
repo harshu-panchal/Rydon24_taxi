@@ -8,9 +8,12 @@ import {
   Globe
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import Rydon24Logo from '@/assets/rydon24_logo.png';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const HeaderFooter = () => {
+  const { settings } = useSettings();
+  const appName = settings.general?.app_name || 'App';
+  const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
   const [loading, setLoading] = useState(false);
   const [colors, setColors] = useState({
     headerBg: '#ffffff',
@@ -130,7 +133,11 @@ const HeaderFooter = () => {
            {/* Preview Mockup */}
            <div className="mb-10 bg-gray-50 rounded-xl p-8 border border-gray-100 shadow-inner">
               <div className="w-full bg-white rounded-lg p-5 border border-gray-200 shadow-sm flex items-center justify-between">
-                 <img src={Rydon24Logo} alt="Preview Logo" className="h-5 opacity-80" />
+                 {appLogo ? (
+                   <img src={appLogo} alt={`${appName} logo`} className="h-5 opacity-80" />
+                 ) : (
+                   <span className="text-sm font-black tracking-tight text-slate-900">{appName}</span>
+                 )}
                  <nav className="flex gap-8">
                     <span className="text-[11px] font-bold text-indigo-600 uppercase tracking-widest underline decoration-2 underline-offset-8 cursor-pointer">Home</span>
                     <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest cursor-pointer hover:text-gray-600 transition-colors">About Us</span>

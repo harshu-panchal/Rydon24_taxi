@@ -33,7 +33,7 @@ const Signup = () => {
   const [error, setError] = useState('');
   const [otpSending, setOtpSending] = useState(false);
   const navigate = useNavigate();
-  const appName = settings.general?.app_name || 'Appzeto';
+  const appName = settings.general?.app_name || 'App';
   const isValidPhone = /^\d{10}$/.test(formData.phone);
   const isValidPassword = formData.password.length >= 5;
   const hasVerifiedSignupContext = Boolean(location.state?.otpVerified) || Boolean(preservedPhone);

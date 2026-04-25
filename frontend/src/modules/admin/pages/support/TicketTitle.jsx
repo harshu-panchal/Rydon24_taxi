@@ -3,12 +3,10 @@ import { ChevronRight, Edit2, Plus, Trash2 } from 'lucide-react';
 import { adminSupportService } from '../../../shared/services/supportTicketService';
 
 const USER_TYPES = ['user', 'driver', 'owner'];
-const SUPPORT_TYPES = ['general', 'request'];
 
 const initialForm = {
   title: '',
   userType: 'user',
-  supportType: 'general',
   active: true,
 };
 
@@ -47,7 +45,7 @@ const TicketTitle = () => {
     const query = String(search || '').trim().toLowerCase();
     if (!query) return rows;
     return rows.filter((row) =>
-      [row.title, row.userType, row.supportType].some((value) =>
+      [row.title, row.userType].some((value) =>
         String(value || '').toLowerCase().includes(query),
       ),
     );
@@ -66,7 +64,6 @@ const TicketTitle = () => {
       const payload = {
         title: form.title.trim(),
         userType: form.userType,
-        supportType: form.supportType,
         active: form.active,
       };
 
@@ -90,7 +87,6 @@ const TicketTitle = () => {
     setForm({
       title: row.title || '',
       userType: row.userType || 'user',
-      supportType: row.supportType || 'general',
       active: Boolean(row.active),
     });
   };
@@ -162,35 +158,19 @@ const TicketTitle = () => {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold text-gray-500">User Type</label>
-                <select
-                  value={form.userType}
-                  onChange={(event) => setForm((prev) => ({ ...prev, userType: event.target.value }))}
-                  className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-800 outline-none transition-colors focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                >
-                  {USER_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold text-gray-500">Support Type</label>
-                <select
-                  value={form.supportType}
-                  onChange={(event) => setForm((prev) => ({ ...prev, supportType: event.target.value }))}
-                  className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-800 outline-none transition-colors focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                >
-                  {SUPPORT_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-gray-500">User Type</label>
+              <select
+                value={form.userType}
+                onChange={(event) => setForm((prev) => ({ ...prev, userType: event.target.value }))}
+                className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-800 outline-none transition-colors focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              >
+                {USER_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700">
@@ -241,7 +221,6 @@ const TicketTitle = () => {
                 <tr className="border-b border-gray-100 bg-gray-50">
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Title</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">User Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Support Type</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">Action</th>
                 </tr>
@@ -249,13 +228,13 @@ const TicketTitle = () => {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-400">
+                    <td colSpan={4} className="px-4 py-10 text-center text-sm text-gray-400">
                       Loading titles...
                     </td>
                   </tr>
                 ) : filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-400">
+                    <td colSpan={4} className="px-4 py-10 text-center text-sm text-gray-400">
                       No support title found.
                     </td>
                   </tr>
@@ -264,7 +243,6 @@ const TicketTitle = () => {
                     <tr key={row.id} className="border-b border-gray-50 last:border-b-0">
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.title}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{row.userType}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{row.supportType}</td>
                       <td className="px-4 py-3">
                         <button
                           type="button"

@@ -3,9 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Plus, History, Gift } from 'lucide-react';
 import { userAuthService } from '../services/authService';
+import { useSettings } from '../../../shared/context/SettingsContext';
 
 const Wallet = () => {
   const navigate = useNavigate();
+  const { settings } = useSettings();
+  const appName = settings.general?.app_name || 'App';
 
   const [showAddMoney, setShowAddMoney] = React.useState(false);
   const [amount, setAmount] = React.useState('');
@@ -105,7 +108,7 @@ const Wallet = () => {
         key: order.keyId,
         amount: order.amount,
         currency: order.currency || 'INR',
-        name: 'Rydon24',
+        name: appName,
         description: 'Wallet Topup',
         order_id: order.orderId,
         prefill: {
@@ -325,7 +328,7 @@ const Wallet = () => {
           </div>
           <div className="flex-1">
             <h4 className="text-[15px] font-black text-gray-900 tracking-tight">Refer & Earn Rs50</h4>
-            <p className="text-[11px] font-bold text-gray-400 mt-0.5 uppercase tracking-wider">Invite friends to Rydon24</p>
+            <p className="text-[11px] font-bold text-gray-400 mt-0.5 uppercase tracking-wider">Invite friends to {appName}</p>
           </div>
           <ArrowLeft size={20} className="text-orange-200 rotate-180 group-hover:text-orange-500 transition-colors" />
         </div>

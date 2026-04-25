@@ -15,6 +15,7 @@ import { useNavigate } from 'react-router-dom';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import api from '../../../shared/api/axiosInstance';
 import { socketService } from '../../../shared/api/socket';
+import { useSettings } from '../../../shared/context/SettingsContext';
 
 const emptyWallet = {
     balance: 0,
@@ -102,6 +103,8 @@ const StatPill = ({ label, value, tone = 'dark' }) => {
 
 const DriverWallet = () => {
     const navigate = useNavigate();
+    const { settings: appSettings } = useSettings();
+    const appName = appSettings.general?.app_name || 'App';
     const [wallet, setWallet] = useState(emptyWallet);
     const [transactions, setTransactions] = useState([]);
     const [settings, setSettings] = useState({});
@@ -235,7 +238,7 @@ const DriverWallet = () => {
                 key: orderData.keyId,
                 amount: orderData.amount,
                 currency: orderData.currency || 'INR',
-                name: 'Appzeto Taxi',
+                name: appName,
                 description: 'Wallet Top-up',
                 order_id: orderData.orderId,
                 handler: async (response) => {

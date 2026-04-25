@@ -5,7 +5,7 @@ import { useSettings } from '../../../shared/context/SettingsContext';
 
 const AuthLayout = ({ children, title, subtitle }) => {
   const { settings } = useSettings();
-  const appName = settings.general?.app_name || 'Appzeto';
+  const appName = settings.general?.app_name || 'App';
   const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
 
   return (

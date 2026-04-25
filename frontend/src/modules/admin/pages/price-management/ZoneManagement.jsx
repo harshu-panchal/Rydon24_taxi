@@ -19,7 +19,8 @@ import {
   Globe,
   Info,
   Layers,
-  MousePointer2
+  MousePointer2,
+  X
 } from "lucide-react";
 import {
   GoogleMap,
@@ -38,6 +39,7 @@ import {
 const inputClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors";
 const labelClass = "block text-xs font-semibold text-gray-500 mb-1.5";
 const cardClass = "bg-white rounded-xl border border-gray-200 p-6 shadow-sm";
+const ADMIN_LANGUAGE_OPTIONS = ['English', 'Hindi', 'Arabic', 'French', 'Spanish'];
 
 const ZoneManagement = ({ mode: initialMode = "list" }) => {
   const navigate = useNavigate();
@@ -58,6 +60,7 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
   const mapRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('English');
+  const [isPeakInfoOpen, setIsPeakInfoOpen] = useState(false);
 
   // Map & Drawing States
   const [polygonCoords, setPolygonCoords] = useState([]);
@@ -66,7 +69,7 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
   // Form State
   const [formData, setFormData] = useState({
     service_location_id: '',
-    name: { English: '', Arabic: '', French: '', Spanish: '' },
+    name: { English: '', Hindi: '', Arabic: '', French: '', Spanish: '' },
     unit: '',
     peak_zone_ride_count: '',
     peak_zone_radius: '',
@@ -111,7 +114,7 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
       }
 
       if (id && initialMode === 'edit') {
-        const zoneToEdit = Array.isArray(zones) && zones.find(z => (z._id || z.id) === id);
+        const zoneToEdit = Array.isArray(zoneData) && zoneData.find(z => (z._id || z.id) === id);
         if (zoneToEdit) handleEdit(zoneToEdit);
       }
     } catch (err) {
@@ -215,7 +218,7 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
     setEditingId(null);
     setFormData({
       service_location_id: '',
-      name: { English: '', Arabic: '', French: '', Spanish: '' },
+      name: { English: '', Hindi: '', Arabic: '', French: '', Spanish: '' },
       unit: '',
       peak_zone_ride_count: '',
       peak_zone_radius: '',
@@ -256,10 +259,17 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
   const handleEdit = (zone) => {
     const zid = zone._id || zone.id;
     setEditingId(zid);
-    let zoneName = typeof zone.name === 'string' ? zone.name : (zone.name?.English || zone.zone_name || '');
+    const localizedNames = typeof zone.name === 'object' && zone.name !== null ? zone.name : {};
+    let zoneName = typeof zone.name === 'string' ? zone.name : (localizedNames.English || zone.zone_name || '');
     setFormData({
       service_location_id: zone.service_location_id || '',
-      name: { English: zoneName, Arabic: '', French: '', Spanish: '' },
+      name: {
+        English: zoneName,
+        Hindi: localizedNames.Hindi || '',
+        Arabic: localizedNames.Arabic || '',
+        French: localizedNames.French || '',
+        Spanish: localizedNames.Spanish || '',
+      },
       unit: zone.unit || '',
       peak_zone_ride_count: zone.peak_zone_ride_count || '',
       peak_zone_radius: zone.peak_zone_radius || '',
@@ -491,7 +501,7 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
 
                       <div>
                         <div className="flex items-center gap-1 border-b border-gray-100 mb-4">
-                          {['English', 'Arabic', 'French', 'Spanish'].map(lang => (
+                          {ADMIN_LANGUAGE_OPTIONS.map(lang => (
                             <button
                               key={lang}
                               onClick={() => setActiveTab(lang)}
@@ -572,7 +582,13 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
                            <label className={labelClass + " mb-0"}>Peak Zone Surge percentage *</label>
-                           <button className="text-[10px] font-semibold text-indigo-600 hover:text-indigo-700 tracking-wider uppercase">How It Works</button>
+                           <button
+                             type="button"
+                             onClick={() => setIsPeakInfoOpen((current) => !current)}
+                             className="text-[10px] font-semibold text-indigo-600 hover:text-indigo-700 tracking-wider uppercase"
+                           >
+                             How It Works
+                           </button>
                         </div>
                         <input 
                            type="number" value={formData.peak_zone_surge_percentage}
@@ -580,6 +596,11 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                            placeholder="Enter Surge percentage"
                            className={inputClass}
                         />
+                        {isPeakInfoOpen ? (
+                          <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-xs font-medium leading-relaxed text-indigo-900">
+                            When ride demand inside the zone crosses the peak ride count during the selection duration, this surge percentage is applied for the configured peak zone duration before normal pricing resumes.
+                          </div>
+                        ) : null}
                       </div>
                    </div>
                 </div>
@@ -603,87 +624,92 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
 
               {/* Map Section */}
               <div className="xl:col-span-8 space-y-6">
-                <div className="bg-white rounded-xl border border-gray-200 p-2 shadow-sm relative overflow-hidden h-[650px]">
-                   {isLoaded ? (
-                     <div className="w-full h-full rounded-lg overflow-hidden relative">
-                       <div className="absolute left-6 top-6 z-10 w-full max-w-md pr-12">
-                            <div className="flex h-12 w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white/95 px-4 shadow-2xl backdrop-blur-sm">
-                               <Search className="text-gray-400" size={18} />
-                               <Autocomplete 
-                                  onLoad={a => setAutocomplete(a)} 
-                                  onPlaceChanged={onPlaceChanged}
-                                  className="flex-1"
-                                >
-                                  <input 
-                                    type="text" placeholder="Search for a city" 
-                                    className="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none placeholder:text-gray-400"
-                                  />
-                               </Autocomplete>
-                            </div>
-                       </div>
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                   <div className="flex flex-col gap-3 border-b border-gray-100 px-4 py-4 md:flex-row md:items-center md:justify-between">
+                      <div className="w-full md:max-w-md">
+                        <div className="flex h-12 w-full items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 shadow-sm">
+                           <Search className="text-gray-400" size={18} />
+                           <Autocomplete 
+                              onLoad={a => setAutocomplete(a)} 
+                              onPlaceChanged={onPlaceChanged}
+                              className="flex-1"
+                            >
+                              <input 
+                                type="text" placeholder="Search for a city or zone" 
+                                className="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none placeholder:text-gray-400"
+                              />
+                           </Autocomplete>
+                        </div>
+                      </div>
 
-                       {/* Clear Map button - Stacked Vertically on the Right */}
-                       <div className="absolute right-3 top-[100px] z-50 flex flex-col gap-2">
-                             <button 
-                               onClick={() => setPolygonCoords([])}
-                               className="flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-[11px] font-black uppercase tracking-widest text-rose-600 shadow-2xl transition-all border border-gray-100 hover:bg-rose-50 active:scale-95"
-                             >
-                                Clear Map
-                             </button>
-                       </div>
-                       
-                       <GoogleMap
-                         mapContainerStyle={{ width: '100%', height: '100%' }}
-                         center={mapCenter} zoom={12}
-                         onLoad={m => { mapRef.current = m; }}
-                         options={{
-                            styles: [
-                                { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
-                                { elementType: "labels.icon", stylers: [{ visibility: "off" }] }
-                            ],
-                            disableDefaultUI: false,
-                            zoomControl: true,
-                            mapTypeControl: true,
-                            streetViewControl: false,
-                            fullscreenControl: true
-                         }}
-                       >
-                         <DrawingManager
-                           onPolygonComplete={onPolygonComplete}
+                      <div className="flex flex-wrap items-center justify-between gap-3 md:justify-end">
+                        <div className="rounded-full bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-500">
+                          State and city labels remain visible while you draw zone boundaries.
+                        </div>
+                        <button 
+                          type="button"
+                          onClick={() => setPolygonCoords([])}
+                          className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-[11px] font-black uppercase tracking-widest text-rose-600 shadow-sm transition-all border border-gray-200 hover:bg-rose-50 active:scale-95"
+                        >
+                          <X size={14} />
+                          Clear Map
+                        </button>
+                      </div>
+                   </div>
+
+                   <div className="h-[620px] p-2">
+                     {isLoaded ? (
+                       <div className="w-full h-full rounded-lg overflow-hidden relative">
+                         <GoogleMap
+                           mapContainerStyle={{ width: '100%', height: '100%' }}
+                           center={mapCenter} zoom={12}
+                           onLoad={m => { mapRef.current = m; }}
                            options={{
-                             drawingControl: true,
-                             drawingControlOptions: {
-                               position: window.google.maps.ControlPosition.RIGHT_TOP,
-                               drawingModes: [window.google.maps.drawing.OverlayType.POLYGON],
-                             },
-                             polygonOptions: {
-                               fillColor: '#4f46e5',
-                               fillOpacity: 0.15,
-                               strokeColor: '#4f46e5',
-                               strokeWeight: 2,
-                               editable: true,
-                             },
+                              mapTypeId: 'roadmap',
+                              disableDefaultUI: false,
+                              zoomControl: true,
+                              mapTypeControl: true,
+                              streetViewControl: false,
+                              fullscreenControl: true
                            }}
-                         />
-                         {polygonCoords.length > 0 && (
-                           <Polygon
-                             paths={polygonCoords}
-                             options={{ fillColor: '#4f46e5', strokeColor: '#4f46e5', strokeWeight: 2, fillOpacity: 0.25, editable: true, draggable: true }}
+                         >
+                           <DrawingManager
+                             onPolygonComplete={onPolygonComplete}
+                             options={{
+                               drawingControl: true,
+                               drawingControlOptions: {
+                                 position: window.google.maps.ControlPosition.TOP_RIGHT,
+                                 drawingModes: [window.google.maps.drawing.OverlayType.POLYGON],
+                               },
+                               polygonOptions: {
+                                 fillColor: '#4f46e5',
+                                 fillOpacity: 0.15,
+                                 strokeColor: '#4f46e5',
+                                 strokeWeight: 2,
+                                 editable: true,
+                               },
+                             }}
                            />
-                         )}
-                         {countryBoundaryPaths.map((path, index) => (
-                            <Polygon
-                              key={index} paths={path}
-                              options={{ strokeColor: '#f43f5e', fillOpacity: 0.05, fillColor: '#f43f5e', strokeWeight: 1.5, strokeDasharray: '5,5', clickable: false }}
-                            />
-                         ))}
-                       </GoogleMap>
-                     </div>
-                   ) : (
-                     <div className="flex items-center justify-center h-full bg-gray-50 rounded-lg">
-                        <Loader2 className="animate-spin text-gray-300" size={32} />
-                     </div>
-                   )}
+                           {polygonCoords.length > 0 && (
+                             <Polygon
+                               paths={polygonCoords}
+                               options={{ fillColor: '#4f46e5', strokeColor: '#4f46e5', strokeWeight: 2, fillOpacity: 0.25, editable: true, draggable: true }}
+                             />
+                           )}
+                           {countryBoundaryPaths.map((path, index) => (
+                              <Polygon
+                                key={index} paths={path}
+                                options={{ strokeColor: '#f43f5e', fillOpacity: 0.05, fillColor: '#f43f5e', strokeWeight: 1.5, strokeDasharray: '5,5', clickable: false }}
+                              />
+                           ))}
+                         </GoogleMap>
+                       </div>
+                     ) : (
+                       <div className="flex h-full items-center justify-center bg-gray-50 rounded-lg">
+                          <Loader2 className="animate-spin text-gray-300" size={32} />
+                       </div>
+                     )}
+                   </div>
                 </div>
 
                 <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-amber-800 flex items-start gap-3 shadow-sm">

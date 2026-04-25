@@ -8,6 +8,7 @@ import carIcon from '../../../../assets/icons/car.png';
 import bikeIcon from '../../../../assets/icons/bike.png';
 import autoIcon from '../../../../assets/icons/auto.png';
 import deliveryIcon from '../../../../assets/icons/Delivery.png';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const TIP_OPTIONS = [0, 20, 50, 100];
 
@@ -35,6 +36,8 @@ const getVehicleIcon = (serviceType = 'ride', driver = {}) => {
 };
 
 const RideComplete = () => {
+  const { settings } = useSettings();
+  const appName = settings.general?.app_name || 'App';
   const navigate = useNavigate();
   const location = useLocation();
   const storedRide = useMemo(() => getCurrentRide(), []);
@@ -173,11 +176,11 @@ const RideComplete = () => {
   }, [isSubmitted, navigate, rideId, routeHome]);
 
   const handleShare = async () => {
-    const text = `Rydon24 Receipt\n${rideDate} ${rideTime}\nDriver: ${driver.name}\nFrom: ${pickup}\nTo: ${drop}\nTotal: Rs ${totalBill}`;
+    const text = `${appName} Receipt\n${rideDate} ${rideTime}\nDriver: ${driver.name}\nFrom: ${pickup}\nTo: ${drop}\nTotal: Rs ${totalBill}`;
 
     if (navigator.share) {
       try {
-        await navigator.share({ title: 'Rydon24 Receipt', text });
+        await navigator.share({ title: `${appName} Receipt`, text });
         return;
       } catch (_error) {
         return;

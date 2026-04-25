@@ -7,8 +7,8 @@ const SupportChat = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-[#f8f9fb] p-4 pb-8 pt-6 font-sans">
-      <header className="mb-4 flex items-center gap-4">
+    <div className="flex min-h-screen flex-col bg-white font-sans">
+      <header className="sticky top-0 z-30 flex items-center gap-4 border-b border-slate-200 bg-white px-4 py-4 shadow-sm">
         <button
           onClick={() => navigate('/taxi/driver/help-support')}
           className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-100 bg-white shadow-sm"
@@ -23,7 +23,8 @@ const SupportChat = () => {
         preferredRole="driver"
         title="Driver Support Chat"
         subtitle="Live Messages"
-        className="rounded-3xl"
+        surface="plain"
+        className="flex-1"
       />
     </div>
   );

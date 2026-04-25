@@ -111,6 +111,7 @@ const SupportChatPanel = ({
   preferredRole,
   className = '',
   initialDraft = '',
+  surface = 'card',
 }) => {
   const session = useMemo(
     () => getChatSession(preferredRole || (mode === 'admin' ? 'admin' : undefined)),
@@ -118,6 +119,7 @@ const SupportChatPanel = ({
   );
   const isAdminPanel = mode === 'admin';
   const isLiveEnabled = session.isAuthenticated;
+  const isPlainSurface = surface === 'plain';
 
   useEffect(() => {
     if (!session.role || session.role === 'guest') {
@@ -603,7 +605,7 @@ const SupportChatPanel = ({
 
   if (!isLiveEnabled) {
     return (
-      <div className={`rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm ${className}`}>
+      <div className={`${isPlainSurface ? 'h-full bg-white p-6' : 'rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm'} ${className}`}>
         <div className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white">
             <ShieldCheck size={20} />
@@ -621,8 +623,8 @@ const SupportChatPanel = ({
   }
 
   return (
-    <div className={`overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.08)] ${className}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200/60 bg-white px-4 py-4 sm:px-6 sm:py-5 shrink-0">
+    <div className={`${isPlainSurface ? 'flex h-full flex-col overflow-hidden bg-white' : 'overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.08)]'} ${className}`}>
+      <div className={`flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-slate-200/60 bg-white px-4 py-4 sm:px-6 sm:py-5 ${isPlainSurface ? 'sticky top-0 z-20' : ''}`}>
         <div className="flex min-w-0 items-center gap-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#405189] text-white shadow-lg shadow-indigo-600/10">
             <MessageCircle size={20} />
@@ -648,10 +650,10 @@ const SupportChatPanel = ({
         </div>
       </div>
 
-      <div className={`grid min-h-[calc(100vh-220px)] ${isAdminPanel ? 'xl:grid-cols-[380px_1fr]' : 'grid-cols-1'}`}>
+      <div className={`grid min-h-0 flex-1 ${isPlainSurface ? 'h-full' : 'min-h-[calc(100vh-220px)]'} ${isAdminPanel ? 'xl:grid-cols-[380px_1fr]' : 'grid-cols-1'}`}>
         {isAdminPanel && (
-          <aside className="border-r-[1.5px] border-slate-200/60 bg-[#F8FAFC]">
-            <div className="border-b border-slate-200/60 p-5 bg-white">
+          <aside className="flex min-h-0 flex-col border-r-[1.5px] border-slate-200/60 bg-[#F8FAFC]">
+            <div className="shrink-0 border-b border-slate-200/60 bg-white p-5">
               <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3.5 transition-all focus-within:border-indigo-600/30 focus-within:ring-4 focus-within:ring-indigo-600/5">
                 <Search size={16} className="text-slate-400" />
                 <input
@@ -663,7 +665,7 @@ const SupportChatPanel = ({
               </div>
             </div>
 
-            <div className="max-h-[calc(100vh-300px)] space-y-2 overflow-auto p-3">
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
               {visibleConversations.map((conversation) => (
                 <button
                   key={conversation.conversationKey}
@@ -721,7 +723,7 @@ const SupportChatPanel = ({
         )}
 
         <main className="flex min-h-0 flex-col bg-[linear-gradient(180deg,#fbfcff_0%,#f6f8fc_100%)]">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-white px-4 py-4 sm:px-5">
+          <div className={`flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-white px-4 py-4 sm:px-5 ${isPlainSurface ? 'sticky top-0 z-10' : ''}`}>
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-500">
                 {selectedConversation?.peer?.role === 'driver' ? <CircleUser size={20} /> : <Bot size={20} />}
@@ -812,7 +814,7 @@ const SupportChatPanel = ({
             )}
           </div>
 
-          <div className="border-t border-slate-100 bg-white p-4">
+          <div className={`border-t border-slate-100 bg-white p-4 ${isPlainSurface ? 'sticky bottom-0 z-10' : ''}`}>
             <AnimatePresence>
               {error && (
                 <AnimatedError

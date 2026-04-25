@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { socketService } from '../../../shared/api/socket';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import { adminService } from '../services/adminService';
+import toast from 'react-hot-toast';
 import {
   BarChart3,
   Bell,
@@ -41,6 +42,7 @@ import {
 const ADMIN_MODE = 'admin';
 const OWNER_MODE = 'owner';
 const MODE_STORAGE_KEY = 'adminPanelMode';
+const SIDEBAR_EXPANSION_STORAGE_KEY = 'adminSidebarExpandedGroups';
 
 const pathMatches = (pathname, targetPath) =>
   pathname === targetPath || pathname.startsWith(`${targetPath}/`);
@@ -78,6 +80,21 @@ const flattenSearchEntries = (items = [], parentLabels = []) =>
   });
 
 const NOTIFICATION_PAGE_SIZE = 5;
+
+const dedupeAdminChatNotifications = (items = []) => {
+  const seen = new Set();
+
+  return items.filter((item) => {
+    const key = String(item.id || '').trim();
+
+    if (!key || seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+};
 
 const formatRelativeAdminTime = (value) => {
   const date = value ? new Date(value) : null;
@@ -157,16 +174,33 @@ const SidebarItem = ({ icon, label, path, isCollapsed }) => (
   </NavLink>
 );
 
-const SidebarGroup = ({ icon, label, subItems, isCollapsed, pathname, forceOpen = false }) => {
+const SidebarGroup = ({
+  icon,
+  label,
+  subItems,
+  isCollapsed,
+  pathname,
+  forceOpen = false,
+  groupKey,
+  expandedGroups,
+  setExpandedGroups,
+}) => {
   const isActive = hasActiveChild(pathname, subItems);
-  const [isOpen, setIsOpen] = useState(false);
+  const isOpen = expandedGroups.includes(groupKey);
   const isExpanded = forceOpen || isActive || isOpen;
+  const toggleGroup = () => {
+    setExpandedGroups((current) =>
+      current.includes(groupKey)
+        ? current.filter((key) => key !== groupKey)
+        : [...current, groupKey]
+    );
+  };
 
   return (
     <div className="space-y-1">
       <button
         type="button"
-        onClick={() => setIsOpen((current) => !current)}
+        onClick={toggleGroup}
         className={`group w-full flex items-center justify-between px-4 py-2.5 rounded-lg transition-all duration-200 ${
           isActive || isExpanded ? 'text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'
         }`}
@@ -193,6 +227,9 @@ const SidebarGroup = ({ icon, label, subItems, isCollapsed, pathname, forceOpen 
                 subItems={item.subItems}
                 pathname={pathname}
                 forceOpen={forceOpen}
+                groupKey={`${groupKey}:${item.label}`}
+                expandedGroups={expandedGroups}
+                setExpandedGroups={setExpandedGroups}
               />
             ) : (
               <NavLink
@@ -216,16 +253,31 @@ const SidebarGroup = ({ icon, label, subItems, isCollapsed, pathname, forceOpen 
   );
 };
 
-const NestedGroup = ({ label, subItems, pathname, forceOpen = false }) => {
+const NestedGroup = ({
+  label,
+  subItems,
+  pathname,
+  forceOpen = false,
+  groupKey,
+  expandedGroups,
+  setExpandedGroups,
+}) => {
   const isActive = hasActiveChild(pathname, subItems);
-  const [isOpen, setIsOpen] = useState(false);
+  const isOpen = expandedGroups.includes(groupKey);
   const isExpanded = forceOpen || isActive || isOpen;
+  const toggleGroup = () => {
+    setExpandedGroups((current) =>
+      current.includes(groupKey)
+        ? current.filter((key) => key !== groupKey)
+        : [...current, groupKey]
+    );
+  };
 
   return (
     <div className="space-y-1">
       <button
         type="button"
-        onClick={() => setIsOpen((current) => !current)}
+        onClick={toggleGroup}
         className={`group w-full flex items-center justify-between px-3 py-1.5 rounded-lg transition-all ${
           isActive || isExpanded ? 'text-white' : 'text-slate-500 hover:text-slate-200'
         }`}
@@ -342,14 +394,39 @@ const AdminLayout = () => {
     paginator: { current_page: 1, last_page: 1, total: 0 },
   });
   const [bookingsFeed, setBookingsFeed] = useState([]);
+  const [chatNotifications, setChatNotifications] = useState([]);
   const [rideRequestPage, setRideRequestPage] = useState(1);
   const [bookingPage, setBookingPage] = useState(1);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [expandedSidebarGroups, setExpandedSidebarGroups] = useState(() => {
+    if (typeof window === 'undefined') {
+      return [];
+    }
+
+    try {
+      const saved = window.localStorage.getItem(SIDEBAR_EXPANSION_STORAGE_KEY);
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
+    }
+  });
   const userMenuRef = useRef(null);
   const notificationsMenuRef = useRef(null);
 
   const appName = settings.general?.app_name || 'App';
   const appLogo = settings.general?.logo || settings.customization?.logo;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(
+      SIDEBAR_EXPANSION_STORAGE_KEY,
+      JSON.stringify(expandedSidebarGroups)
+    );
+  }, [expandedSidebarGroups]);
 
   const adminSections = useMemo(
     () => [
@@ -611,10 +688,14 @@ const AdminLayout = () => {
   }, [bookingPage, bookingsFeed]);
 
   const activeNotificationMeta =
-    notificationTab === 'ride_requests' ? rideRequestFeed.paginator : pagedBookings.paginator;
+    notificationTab === 'ride_requests'
+      ? rideRequestFeed.paginator
+      : notificationTab === 'bookings'
+        ? pagedBookings.paginator
+        : { current_page: 1, last_page: 1, total: chatNotifications.length };
 
   const totalNotificationItems =
-    Number(rideRequestFeed?.paginator?.total || 0) + Number(bookingsFeed.length || 0);
+    Number(rideRequestFeed?.paginator?.total || 0) + Number(bookingsFeed.length || 0) + Number(chatNotifications.length || 0);
 
   const setMode = (nextMode) => {
     localStorage.setItem(MODE_STORAGE_KEY, nextMode);
@@ -677,6 +758,10 @@ const AdminLayout = () => {
           return;
         }
 
+        if (notificationTab === 'chats') {
+          return;
+        }
+
         const response = await adminService.getOwnerBookings();
         if (!isMounted) return;
 
@@ -691,7 +776,7 @@ const AdminLayout = () => {
             results: [],
             paginator: { current_page: 1, last_page: 1, total: 0 },
           });
-        } else {
+        } else if (notificationTab === 'bookings') {
           setBookingsFeed([]);
         }
       } finally {
@@ -732,7 +817,7 @@ const AdminLayout = () => {
 
     if (!token) return undefined;
 
-    socketService.connect({ role: 'admin' });
+    socketService.connect({ role: 'admin', token });
 
     socketService.on('new_sos', (data) => {
       console.log('SOS ALERT RECEIVED:', data);
@@ -743,9 +828,49 @@ const AdminLayout = () => {
       console.log('New driver registration:', data);
     });
 
+    const handleSupportChatNotification = (payload = {}) => {
+      const senderRole = String(payload.senderRole || payload.sender?.role || '').toLowerCase();
+      const receiverRole = String(payload.receiverRole || payload.receiver?.role || '').toLowerCase();
+      const messageBody = String(payload.message || payload.body || '').trim();
+
+      if (!messageBody || senderRole === 'admin' || receiverRole !== 'admin') {
+        return;
+      }
+
+      const senderName =
+        String(payload.sender?.name || '').trim() ||
+        (senderRole === 'driver' ? 'Driver' : senderRole === 'user' ? 'User' : 'Support contact');
+
+      const nextItem = {
+        id: `support-chat:${payload.id || payload._id || payload.conversationKey || `${Date.now()}-${messageBody}`}`,
+        title: `${senderName} sent a new chat`,
+        body: messageBody,
+        senderRole: senderRole || 'user',
+        createdAt: payload.createdAt || new Date().toISOString(),
+      };
+
+      let wasAdded = false;
+
+      setChatNotifications((current) => {
+        const next = dedupeAdminChatNotifications([nextItem, ...current]).slice(0, 25);
+        wasAdded = next.some((item) => item.id === nextItem.id) && !current.some((item) => item.id === nextItem.id);
+        return next;
+      });
+
+      if (wasAdded) {
+        toast(nextItem.body, {
+          duration: 4500,
+          className: 'font-bold text-[13px] rounded-2xl shadow-xl border border-sky-50 bg-white',
+        });
+      }
+    };
+
+    socketService.on('chat:message', handleSupportChatNotification);
+
     return () => {
       socketService.off('new_sos');
       socketService.off('new_driver_registration');
+      socketService.off('chat:message', handleSupportChatNotification);
     };
   }, [navigate]);
 
@@ -820,6 +945,9 @@ const AdminLayout = () => {
                       forceOpen={mode === OWNER_MODE}
                       isCollapsed={isCollapsed}
                       pathname={location.pathname}
+                      groupKey={`${section.title}:${item.label}`}
+                      expandedGroups={expandedSidebarGroups}
+                      setExpandedGroups={setExpandedSidebarGroups}
                     />
                   ) : (
                     <SidebarItem key={item.path} {...item} isCollapsed={isCollapsed} />
@@ -872,7 +1000,7 @@ const AdminLayout = () => {
                       <div>
                         <p className="text-sm font-extrabold text-slate-900">Notifications</p>
                         <p className="mt-1 text-[11px] font-semibold text-slate-500">
-                          Latest bookings and new ride requests
+                          Latest bookings, ride requests, and support chats
                         </p>
                       </div>
                       <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700">
@@ -880,7 +1008,7 @@ const AdminLayout = () => {
                       </span>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-slate-50 p-1">
+                    <div className="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-slate-50 p-1">
                       <button
                         type="button"
                         onClick={() => {
@@ -908,6 +1036,19 @@ const AdminLayout = () => {
                         }`}
                       >
                         Bookings
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNotificationTab('chats');
+                        }}
+                        className={`rounded-xl px-3 py-2 text-xs font-bold transition-all ${
+                          notificationTab === 'chats'
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-900'
+                        }`}
+                      >
+                        Chats
                       </button>
                     </div>
                   </div>
@@ -958,7 +1099,7 @@ const AdminLayout = () => {
                           ))}
                         </div>
                       )
-                    ) : pagedBookings.results.length === 0 ? (
+                    ) : notificationTab === 'bookings' ? pagedBookings.results.length === 0 ? (
                       <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-8 text-center">
                         <p className="text-sm font-bold text-slate-900">No bookings found</p>
                         <p className="mt-1 text-xs font-semibold text-slate-500">Recent bookings will show up here.</p>
@@ -991,6 +1132,39 @@ const AdminLayout = () => {
                             <div className="mt-2 flex items-center justify-between gap-3 text-[11px] font-semibold text-slate-400">
                               <span>{item.owner_id?.name || item.owner_id?.company_name || 'Owner booking'}</span>
                               <span>{formatRelativeAdminTime(item.trip_date || item.createdAt)}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : chatNotifications.length === 0 ? (
+                      <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-8 text-center">
+                        <p className="text-sm font-bold text-slate-900">No new chats found</p>
+                        <p className="mt-1 text-xs font-semibold text-slate-500">New user and driver support messages will show up here.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {chatNotifications.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              navigate('/admin/chat');
+                              setChatNotifications([]);
+                              setIsNotificationsOpen(false);
+                            }}
+                            className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-bold text-slate-900">{item.title}</p>
+                                <p className="mt-1 truncate text-xs font-semibold text-slate-500">{item.body}</p>
+                              </div>
+                              <span className="shrink-0 rounded-full bg-sky-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-sky-700">
+                                {item.senderRole}
+                              </span>
+                            </div>
+                            <div className="mt-2 flex items-center justify-end text-[11px] font-semibold text-slate-400">
+                              <span>{formatRelativeAdminTime(item.createdAt)}</span>
                             </div>
                           </button>
                         ))}

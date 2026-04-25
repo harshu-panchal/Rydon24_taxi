@@ -21,6 +21,7 @@ import { adminService } from '../../services/adminService';
 import { BACKEND_LABEL } from '../../../../shared/api/runtimeConfig';
 
 const currency = (value) => Number(value || 0).toFixed(2);
+const DASHBOARD_REFRESH_INTERVAL_MS = 20000;
 
 const TopStatCard = ({ label, value, trend, icon: Icon, accentClass, iconClass, isLoading, onClick, clickable = false }) => (
   <button
@@ -206,25 +207,71 @@ const MainDashboard = () => {
   const navigate = useNavigate();
   const [dashboard, setDashboard] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [dashboardError, setDashboardError] = useState('');
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
+    let isMounted = true;
+
+    const fetchDashboardData = async ({ silent = false } = {}) => {
       try {
-        setIsLoading(true);
+        if (silent) {
+          setIsRefreshing(true);
+        } else {
+          setIsLoading(true);
+        }
         const response = await adminService.getDashboardData();
         const data = response?.data || response;
+        if (!isMounted) {
+          return;
+        }
+
         setDashboard(data || {});
         setDashboardError('');
+        setLastUpdatedAt(new Date());
       } catch (err) {
         console.error('Dashboard Fetch Error:', err);
+        if (!isMounted) {
+          return;
+        }
+
         setDashboardError(`Dashboard data is unavailable right now. Start the backend on ${BACKEND_LABEL} to load live metrics.`);
       } finally {
+        if (!isMounted) {
+          return;
+        }
+
         setIsLoading(false);
+        setIsRefreshing(false);
       }
     };
 
     fetchDashboardData();
+
+    const intervalId = window.setInterval(() => {
+      fetchDashboardData({ silent: true });
+    }, DASHBOARD_REFRESH_INTERVAL_MS);
+
+    const handleWindowFocus = () => {
+      fetchDashboardData({ silent: true });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchDashboardData({ silent: true });
+      }
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   const todayTrips = dashboard?.todayTrips || {};
@@ -250,6 +297,19 @@ const MainDashboard = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold uppercase leading-none tracking-tight text-gray-900">Dashboard</h1>
+        </div>
+        <div className="flex items-center gap-3">
+          {lastUpdatedAt ? (
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+              Updated {lastUpdatedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </p>
+          ) : null}
+          {isRefreshing ? (
+            <div className="flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-700">
+              <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              Live Refresh
+            </div>
+          ) : null}
         </div>
       </div>
 

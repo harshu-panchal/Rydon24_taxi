@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight } from 'lucide-react';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const FALLBACK_SLIDES = [
   {
@@ -32,6 +33,8 @@ const FALLBACK_SLIDES = [
 
 const Onboarding = () => {
   const navigate = useNavigate();
+  const { settings } = useSettings();
+  const appName = settings.general?.app_name || 'App';
   const [slides, setSlides] = useState(FALLBACK_SLIDES);
   const [current, setCurrent] = useState(0);
   const [direction, setDirection] = useState(1);
@@ -65,6 +68,7 @@ const Onboarding = () => {
 
   const slide = slides[current];
   const isLast = current === slides.length - 1;
+  const slideBody = String(slide?.body || '').replace(/Rydon24/gi, appName);
 
   const variants = {
     enter:  (dir) => ({ x: dir > 0 ? 60 : -60, opacity: 0 }),
@@ -106,7 +110,7 @@ const Onboarding = () => {
             </div>
             {/* Text */}
             <h1 className="text-[28px] font-black text-white leading-tight tracking-tight mb-3">{slide.title}</h1>
-            <p className="text-[14px] font-bold text-white/75 leading-relaxed max-w-[280px]">{slide.body}</p>
+            <p className="text-[14px] font-bold text-white/75 leading-relaxed max-w-[280px]">{slideBody}</p>
           </motion.div>
         </AnimatePresence>
       </div>

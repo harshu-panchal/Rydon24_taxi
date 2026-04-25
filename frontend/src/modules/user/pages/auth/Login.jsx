@@ -13,7 +13,7 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(() => String(location.state?.error || ''));
   const navigate = useNavigate();
-  const appName = settings.general?.app_name || 'Appzeto';
+  const appName = settings.general?.app_name || 'App';
 
   const isValidPhone = phoneNumber.length === 10 && /^\d+$/.test(phoneNumber);
 

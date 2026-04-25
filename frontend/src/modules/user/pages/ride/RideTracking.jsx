@@ -12,6 +12,7 @@ import carIcon from '../../../../assets/icons/car.png';
 import bikeIcon from '../../../../assets/icons/bike.png';
 import autoIcon from '../../../../assets/icons/auto.png';
 import deliveryIcon from '../../../../assets/icons/Delivery.png';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
 const DEFAULT_CENTER = { lat: 22.7196, lng: 75.8577 };
@@ -256,6 +257,8 @@ const RideTracking = () => {
   const [driverImageBroken, setDriverImageBroken] = useState(false);
   const [vehicleImageFallback, setVehicleImageFallback] = useState('');
   const [vehicleImageBroken, setVehicleImageBroken] = useState(false);
+  const { settings } = useSettings();
+  const appName = settings.general?.app_name || 'App';
   const navigate = useNavigate();
   const location = useLocation();
   const storedRide = useMemo(() => getCurrentRide(), []);
@@ -777,7 +780,7 @@ const RideTracking = () => {
   }, [activeDestination, driverPosition, map, routePath, tripStatus]);
 
   const handleShare = async () => {
-    const text = `I'm riding with Rydon24!\nDriver: ${driver.name} (${driver.plate || driver.vehicleNumber || 'Assigned'})\nFrom: ${pickupLabel}\nTo: ${dropLabel}`;
+    const text = `I'm riding with ${appName}!\nDriver: ${driver.name} (${driver.plate || driver.vehicleNumber || 'Assigned'})\nFrom: ${pickupLabel}\nTo: ${dropLabel}`;
     const copyToClipboard = () => {
       navigator.clipboard?.writeText(text).then(() => {
         setShareToast(true);
@@ -787,7 +790,7 @@ const RideTracking = () => {
 
     if (navigator.share) {
       try {
-        await navigator.share({ title: 'Track My Ride', text });
+        await navigator.share({ title: `Track My Ride - ${appName}`, text });
         return;
       } catch (_error) {
         return;

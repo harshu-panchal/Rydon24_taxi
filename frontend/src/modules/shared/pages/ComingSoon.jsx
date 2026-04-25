@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Rocket, Bell, Bike, Car, Landmark, Bus } from 'lucide-react';
+import { useSettings } from '../../../shared/context/SettingsContext';
 
 // Feature metadata per route
 const FEATURE_META = {
@@ -61,7 +62,10 @@ const DEFAULT_META = {
 const ComingSoon = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { settings } = useSettings();
+  const appName = settings.general?.app_name || 'App';
   const meta = FEATURE_META[location.pathname] || DEFAULT_META;
+  const subtitle = String(meta.subtitle || '').replace(/RYDON24/gi, appName);
 
   return (
     <div className="min-h-screen bg-white max-w-lg mx-auto flex flex-col font-sans">
@@ -96,7 +100,7 @@ const ComingSoon = () => {
             {meta.tag}
           </span>
           <h1 className="text-3xl font-black text-gray-900 tracking-tight leading-tight">{meta.title}</h1>
-          <p className={`text-[14px] font-black ${meta.accent} uppercase tracking-widest`}>{meta.subtitle}</p>
+          <p className={`text-[14px] font-black ${meta.accent} uppercase tracking-widest`}>{subtitle}</p>
           <p className="text-[14px] font-bold text-gray-400 leading-relaxed max-w-xs mt-1">{meta.description}</p>
         </motion.div>
 

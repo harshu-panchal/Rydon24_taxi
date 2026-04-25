@@ -1,10 +1,11 @@
 import { env } from '../../../config/env.js';
 import { ApiError } from '../../../utils/ApiError.js';
+import { AdminBusinessSetting } from '../admin/models/AdminBusinessSetting.js';
 
 const SMS_INDIA_HUB_ENDPOINT = 'http://cloud.smsindiahub.in/api/mt/SendSMS';
 const DLT_TEMPLATE_TEXT =
   'Welcome to the ##var## powered by SMSINDIAHUB. Your OTP for registration is ##var##';
-const BRAND_NAME = 'Rydon24';
+const DEFAULT_BRAND_NAME = 'App';
 
 const isTruthy = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
 
@@ -111,6 +112,18 @@ const parseProviderResponse = (responseText) => {
   }
 };
 
+const getConfiguredBrandName = async () => {
+  try {
+    const settings = await AdminBusinessSetting.findOne({ scope: 'default' })
+      .select('general.app_name')
+      .lean();
+
+    return readValue(settings?.general?.app_name, DEFAULT_BRAND_NAME);
+  } catch {
+    return DEFAULT_BRAND_NAME;
+  }
+};
+
 const renderOtpMessage = ({ appName, otp }) =>
   DLT_TEMPLATE_TEXT.replace('##var##', String(appName)).replace('##var##', String(otp));
 
@@ -192,6 +205,7 @@ export const sendOtpSms = async ({ phone, otp, purpose = 'otp' }) => {
   }
 
   const config = getSmsIndiaHubConfig();
+  const brandName = await getConfiguredBrandName();
   const authModes = config.apiKey ? ['apiKey', 'credentials'] : ['credentials'];
   let finalResponse = null;
   let finalResponseText = '';
@@ -201,7 +215,7 @@ export const sendOtpSms = async ({ phone, otp, purpose = 'otp' }) => {
     const payload = buildSmsPayload({
       phone,
       otp,
-      appName: BRAND_NAME,
+      appName: brandName,
       authMode,
     });
     const requestBody = payload.toString();

@@ -93,6 +93,18 @@ const getIstMonthKey = (value = new Date()) => {
   return `${year}-${month}`;
 };
 
+const getConfiguredAppName = async () => {
+  try {
+    const settings = await AdminBusinessSetting.findOne({ scope: "default" })
+      .select("general.app_name")
+      .lean();
+
+    return String(settings?.general?.app_name || "").trim() || "App";
+  } catch {
+    return "App";
+  }
+};
+
 const pruneDailyActivity = (items = []) =>
   (Array.isArray(items) ? items : [])
     .filter((item) => item?.date)
@@ -1363,12 +1375,13 @@ export const createDriverPaymentQr = async (req, res) => {
   let payload;
 
   try {
+    const appName = await getConfiguredAppName();
     const qr = await razorpayRequest({
       method: "POST",
       path: "/payments/qr_codes",
       body: {
         type: "upi_qr",
-        name: "Appzeto Taxi Fare",
+        name: `${appName} Taxi Fare`,
         usage: "single_use",
         fixed_amount: true,
         payment_amount: amountInPaise,

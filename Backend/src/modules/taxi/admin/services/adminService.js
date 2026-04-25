@@ -1150,7 +1150,7 @@ const buildLegacyOwnerSeeds = (serviceLocationId) => [
     transport_type: 'taxi',
     service_location_id: serviceLocationId,
     legacy_service_location_id: LEGACY_OWNER_SERVICE_LOCATION.legacy_id,
-    company_name: 'Zyder',
+    company_name: 'Taxi',
     owner_name: null,
     name: 'Demo owner',
     surname: null,

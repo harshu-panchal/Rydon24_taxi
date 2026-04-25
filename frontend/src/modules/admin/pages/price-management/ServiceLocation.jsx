@@ -32,6 +32,8 @@ const DEFAULT_TIMEZONES = [
   'America/Los_Angeles'
 ];
 
+const ADMIN_LANGUAGE_OPTIONS = ['English', 'Hindi', 'Arabic', 'French', 'Spanish'];
+
 const defaultFormData = {
   name: '',
   country: '',
@@ -302,7 +304,7 @@ const ServiceLocation = ({ mode }) => {
         <div className="bg-white rounded-[32px] border border-gray-100 shadow-xl shadow-gray-200/20 overflow-hidden p-10">
            {/* Language Tabs */}
            <div className="flex items-center gap-8 border-b border-gray-100 mb-10">
-              {['English', 'Arabic', 'French', 'Spanish'].map(lang => (
+              {ADMIN_LANGUAGE_OPTIONS.map(lang => (
                 <button 
                   key={lang}
                   onClick={() => setActiveLangTab(lang)}

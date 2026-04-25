@@ -34,6 +34,7 @@ import {
 } from '../../../shared/utils/referralTranslationFields';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const inputClass =
   'w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors';
@@ -57,7 +58,7 @@ const ToolbarButton = ({ children, onClick, title, active = false }) => (
   </button>
 );
 
-const HtmlEditor = ({ label, value, onChange, plainText = false }) => {
+const HtmlEditor = ({ label, value, onChange, plainText = false, appName = 'App' }) => {
   const editorRef = useRef(null);
   const [activeHeading, setActiveHeading] = useState('P');
   const [isFocused, setIsFocused] = useState(false);
@@ -276,7 +277,7 @@ const HtmlEditor = ({ label, value, onChange, plainText = false }) => {
             className="min-h-[180px] px-8 py-3 text-xs text-gray-700 outline-none prose prose-xs max-w-none leading-relaxed overflow-y-auto bg-white custom-html-editor font-medium"
           />
           <div className="px-3 py-1 border-t border-gray-50 flex justify-end">
-            <span className="text-[9px] text-gray-300 font-bold uppercase tracking-tighter">Powered by appzeto</span>
+            <span className="text-[9px] text-gray-300 font-bold uppercase tracking-tighter">Powered by {appName}</span>
           </div>
         </div>
       )}
@@ -375,6 +376,8 @@ const PreviewCard = ({ title, code, bannerText, blocks }) => (
 
 const ReferralTranslation = () => {
   const navigate = useNavigate();
+  const { settings } = useSettings();
+  const appName = settings.general?.app_name || 'App';
   const [records, setRecords] = useState([]);
   const [selectedLanguageCode, setSelectedLanguageCode] = useState('');
   const [loading, setLoading] = useState(true);
@@ -585,6 +588,7 @@ const ReferralTranslation = () => {
                 {USER_REFERRAL_TRANSLATION_FIELDS.map((field) => (
                   <HtmlEditor
                     key={field.key}
+                    appName={appName}
                     label={field.label}
                     plainText={field.plainText}
                     value={selectedRecord.user_referral?.[field.key] || ''}
@@ -610,6 +614,7 @@ const ReferralTranslation = () => {
                 {DRIVER_REFERRAL_TRANSLATION_FIELDS.map((field) => (
                   <HtmlEditor
                     key={field.key}
+                    appName={appName}
                     label={field.label}
                     plainText={field.plainText}
                     value={selectedRecord.driver_referral?.[field.key] || ''}

@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Bike, HelpCircle, Repeat, Share2, Star } from 'lucide-react';
 import api from '../../../../shared/api/axiosInstance';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const unwrap = (response) => response?.data || response;
 
@@ -40,6 +41,8 @@ const coordLabel = (location, fallback) => {
 };
 
 const RideDetail = () => {
+  const { settings } = useSettings();
+  const appName = settings.general?.app_name || 'App';
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -110,11 +113,11 @@ const RideDetail = () => {
   }, [ride]);
 
   const handleShare = async () => {
-    const text = `My Rydon24 trip #${details.shortRideCode} - ${details.pickup} to ${details.drop} | Rs ${details.fare}.00`;
+    const text = `My ${appName} trip #${details.shortRideCode} - ${details.pickup} to ${details.drop} | Rs ${details.fare}.00`;
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'Rydon24 Trip',
+          title: `${appName} Trip`,
           text,
           url: window.location.href,
         });

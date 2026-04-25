@@ -12,8 +12,12 @@ import {
 } from 'lucide-react';
 import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const MailSettings = () => {
+  const { settings: appSettings } = useSettings();
+  const appName = appSettings.general?.app_name || 'App';
+  const mailPlaceholderDomain = appName.toLowerCase().replace(/[^a-z0-9]+/g, '') || 'app';
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -207,7 +211,7 @@ const MailSettings = () => {
                           className={inputClass}
                           value={settings.mail_from_address || ''}
                           onChange={(e) => updateField('mail_from_address', e.target.value)}
-                          placeholder="noreply@appzeto.com"
+                          placeholder={`noreply@${mailPlaceholderDomain}.com`}
                           required
                          />
                       </div>
@@ -217,7 +221,7 @@ const MailSettings = () => {
                           className={inputClass}
                           value={settings.mail_from_name || ''}
                           onChange={(e) => updateField('mail_from_name', e.target.value)}
-                          placeholder="Appzeto Admin"
+                          placeholder={`${appName} Admin`}
                           required
                          />
                       </div>

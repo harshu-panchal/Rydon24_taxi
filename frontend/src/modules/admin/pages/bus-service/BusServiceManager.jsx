@@ -551,11 +551,11 @@ const BusServiceManager = () => {
             <div className="grid gap-5 md:grid-cols-2">
               <div>
                 <label className={labelClassName}>Operator Name</label>
-                <input className={fieldClassName} value={draft.operatorName} onChange={(event) => updateDraft('operatorName', event.target.value)} placeholder="Rydon Intercity" />
+                <input className={fieldClassName} value={draft.operatorName} onChange={(event) => updateDraft('operatorName', event.target.value)} placeholder="Intercity Operator" />
               </div>
               <div>
                 <label className={labelClassName}>Bus Name</label>
-                <input className={fieldClassName} value={draft.busName} onChange={(event) => updateDraft('busName', event.target.value)} placeholder="Rydon24 Sleeper Express" />
+                <input className={fieldClassName} value={draft.busName} onChange={(event) => updateDraft('busName', event.target.value)} placeholder="Sleeper Express" />
               </div>
               <div>
                 <label className={labelClassName}>Service Number</label>

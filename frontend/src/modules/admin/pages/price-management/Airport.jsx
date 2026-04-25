@@ -27,6 +27,11 @@ import { DELHI_CENTER, useAppGoogleMapsLoader } from '../../utils/googleMaps';
 const inputClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors";
 const labelClass = "block text-xs font-semibold text-gray-500 mb-1.5";
 const cardClass = "bg-white rounded-xl border border-gray-200 p-6";
+const AIRPORT_STATUS_OPTIONS = [
+  { value: '', label: 'All statuses' },
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+];
 
 const MAP_CONTAINER_STYLE = {
   width: '100%',
@@ -53,12 +58,17 @@ const Airport = ({ mode: initialMode = "list" }) => {
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [entriesPerPage, setEntriesPerPage] = useState(10);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [selectedAirportId, setSelectedAirportId] = useState(id || null);
   const [formData, setFormData] = useState(defaultFormData);
   const [mapCenter, setMapCenter] = useState(DELHI_CENTER);
   const [autocomplete, setAutocomplete] = useState(null);
   const [boundaryCoords, setBoundaryCoords] = useState([]);
+  const [filters, setFilters] = useState({
+    service_location_id: '',
+    status: '',
+  });
   const mapRef = useRef(null);
   const { isLoaded, loadError } = useAppGoogleMapsLoader();
 
@@ -124,12 +134,23 @@ const Airport = ({ mode: initialMode = "list" }) => {
 
   const filteredAirports = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
-    if (!query) return airports;
-    return airports.filter(airport => [
-      airport.name, airport.code, airport.terminal,
-      airport.service_location_id?.name
-    ].filter(Boolean).some(val => String(val).toLowerCase().includes(query)));
-  }, [airports, searchTerm]);
+    return airports.filter((airport) => {
+      const matchesSearch = !query || [
+        airport.name,
+        airport.code,
+        airport.terminal,
+        airport.service_location_id?.name,
+        airport.service_location_id?.service_location_name,
+      ].filter(Boolean).some((val) => String(val).toLowerCase().includes(query));
+      const airportServiceLocationId = String(airport.service_location_id?._id || airport.service_location_id || '');
+      const matchesServiceLocation =
+        !filters.service_location_id || airportServiceLocationId === String(filters.service_location_id);
+      const matchesStatus =
+        !filters.status || String(airport.status || 'active').toLowerCase() === filters.status;
+
+      return matchesSearch && matchesServiceLocation && matchesStatus;
+    });
+  }, [airports, filters, searchTerm]);
 
   const updatePinnedLocation = (lat, lng) => {
     const nextLat = Number(lat);
@@ -211,6 +232,7 @@ const Airport = ({ mode: initialMode = "list" }) => {
   };
 
   const clearBoundary = () => { setBoundaryCoords([]); };
+  const clearFilters = () => setFilters({ service_location_id: '', status: '' });
 
   return (
     <div className="min-h-screen bg-gray-50 p-6 lg:p-8 animate-in fade-in duration-500 font-sans">
@@ -260,11 +282,60 @@ const Airport = ({ mode: initialMode = "list" }) => {
                       className="pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-indigo-500 transition-all w-64"
                     />
                   </div>
-                  <button className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">
+                  <button
+                    type="button"
+                    onClick={() => setIsFilterOpen((current) => !current)}
+                    className={`p-2 rounded-lg transition-all ${isFilterOpen ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
+                  >
                     <Filter size={18} />
                   </button>
                 </div>
               </div>
+
+              {isFilterOpen ? (
+                <div className="grid grid-cols-1 gap-4 border-b border-gray-100 bg-white px-4 py-4 md:grid-cols-3">
+                  <div>
+                    <label className={labelClass}>Service Location</label>
+                    <select
+                      value={filters.service_location_id}
+                      onChange={(e) => setFilters((current) => ({ ...current, service_location_id: e.target.value }))}
+                      className={inputClass}
+                    >
+                      <option value="">All service locations</option>
+                      {serviceLocations.map((sl) => (
+                        <option key={sl._id || sl.id} value={sl._id || sl.id}>
+                          {sl.name || sl.service_location_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Status</label>
+                    <select
+                      value={filters.status}
+                      onChange={(e) => setFilters((current) => ({ ...current, status: e.target.value }))}
+                      className={inputClass}
+                    >
+                      {AIRPORT_STATUS_OPTIONS.map((option) => (
+                        <option key={option.value || 'all'} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      className="h-[42px] w-full rounded-lg border border-gray-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                    >
+                      Reset Filters
+                    </button>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -456,33 +527,34 @@ const Airport = ({ mode: initialMode = "list" }) => {
                 <div className="bg-white rounded-xl border border-gray-200 p-2 h-[600px] shadow-sm relative overflow-hidden">
                   {isLoaded ? (
                     <div className="w-full h-full rounded-lg overflow-hidden relative">
-                       <div className="absolute left-6 top-6 z-10 w-full max-w-md pr-12">
-        <div className="flex h-12 w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white/95 px-4 shadow-2xl backdrop-blur-sm">
-          <Search className="text-gray-400" size={18} />
-          <Autocomplete
-            onLoad={(a) => setAutocomplete(a)}
-            onPlaceChanged={handlePlaceChanged}
-            className="flex-1"
-          >
-            <input
-              type="text"
-              placeholder="Search for a city or airport"
-              className="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none placeholder:text-gray-400"
-            />
-          </Autocomplete>
-        </div>
-      </div>
+                       <div className="absolute inset-x-4 top-4 z-10 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div className="w-full md:max-w-md">
+                            <div className="flex h-12 w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white/95 px-4 shadow-xl backdrop-blur-sm">
+                              <Search className="text-gray-400" size={18} />
+                              <Autocomplete
+                                onLoad={(a) => setAutocomplete(a)}
+                                onPlaceChanged={handlePlaceChanged}
+                                className="flex-1"
+                              >
+                                <input
+                                  type="text"
+                                  placeholder="Search for a city or airport"
+                                  className="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none placeholder:text-gray-400"
+                                />
+                              </Autocomplete>
+                            </div>
+                          </div>
 
-      {boundaryCoords.length > 0 && (
-        <div className="absolute right-3 top-[100px] z-50 flex flex-col gap-2">
-          <button
-            onClick={clearBoundary}
-            className="flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-[11px] font-black uppercase tracking-widest text-rose-600 shadow-2xl transition-all border border-gray-100 hover:bg-rose-50 active:scale-95"
-          >
-            Clear Boundary
-          </button>
-        </div>
-      )}
+                          {boundaryCoords.length > 0 ? (
+                            <button
+                              type="button"
+                              onClick={clearBoundary}
+                              className="self-start rounded-xl bg-white px-4 py-2.5 text-[11px] font-black uppercase tracking-widest text-rose-600 shadow-xl transition-all border border-gray-100 hover:bg-rose-50 active:scale-95"
+                            >
+                              Clear Boundary
+                            </button>
+                          ) : null}
+                       </div>
                        
                        <GoogleMap
                          mapContainerStyle={MAP_CONTAINER_STYLE}

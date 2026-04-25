@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const StatCard = ({ title, value, change, icon: Icon, color }) => (
   <div className="bg-white rounded-lg p-6 border border-gray-100 shadow-sm flex flex-col justify-between h-full group hover:shadow-md transition-shadow">
@@ -120,6 +121,8 @@ const LineChartMock = ({ color, data }) => {
 };
 
 const ReferralDashboard = () => {
+  const { settings } = useSettings();
+  const appName = settings.general?.app_name || 'App';
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -246,8 +249,8 @@ const ReferralDashboard = () => {
 
       {/* FOOTER */}
       <footer className="mt-20 flex items-center justify-between text-[11px] font-bold text-gray-400 uppercase tracking-widest border-t border-gray-100 pt-6">
-         <div>2026 © Appzeto.</div>
-         <div>Design & Develop by Appzeto</div>
+         <div>2026 © {appName}.</div>
+         <div>Design & Develop by {appName}</div>
          <div>App version 2.3</div>
       </footer>
     </div>
