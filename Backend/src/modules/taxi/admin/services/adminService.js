@@ -700,6 +700,8 @@ const serializeAirport = (item) => ({
   boundary_coordinates: Array.isArray(item.boundary?.coordinates?.[0])
     ? item.boundary.coordinates[0].map(([lng, lat]) => ({ lat: Number(lat), lng: Number(lng) }))
     : [],
+  airport_surge: Number(item.airport_surge ?? 0),
+  support_airport_fee: Number(item.support_airport_fee ?? 0),
   status: item.status || (item.active === false ? 'inactive' : 'active'),
   active: item.active !== false,
   createdAt: item.createdAt,
@@ -4866,6 +4868,8 @@ export const deleteOwner = async (id) => {
             coordinates: [normalizeAirportBoundary(payload.boundary_coordinates)],
           }
           : undefined,
+      airport_surge: Math.max(0, Number(payload.airport_surge ?? 0) || 0),
+      support_airport_fee: Math.max(0, Number(payload.support_airport_fee ?? 0) || 0),
       status,
       active: status === 'active',
     });
@@ -4921,6 +4925,12 @@ export const deleteOwner = async (id) => {
             coordinates: [normalizeAirportBoundary(payload.boundary_coordinates)],
           }
           : undefined;
+    }
+    if (payload.airport_surge !== undefined) {
+      item.airport_surge = Math.max(0, Number(payload.airport_surge ?? 0) || 0);
+    }
+    if (payload.support_airport_fee !== undefined) {
+      item.support_airport_fee = Math.max(0, Number(payload.support_airport_fee ?? 0) || 0);
     }
 
     item.location =

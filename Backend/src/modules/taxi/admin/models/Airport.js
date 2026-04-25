@@ -84,6 +84,16 @@ const airportSchema = new mongoose.Schema(
       type: polygonSchema,
       default: undefined,
     },
+    airport_surge: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    support_airport_fee: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     status: {
       type: String,
       enum: ['active', 'inactive'],

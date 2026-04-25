@@ -39,6 +39,8 @@ const defaultFormData = {
   status: 'active',
   latitude: '',
   longitude: '',
+  airport_surge: '',
+  support_airport_fee: '',
 };
 
 const Airport = ({ mode: initialMode = "list" }) => {
@@ -186,6 +188,8 @@ const Airport = ({ mode: initialMode = "list" }) => {
       service_location_id: airport.service_location_id?._id || airport.service_location_id || '',
       latitude: airport.latitude ?? '',
       longitude: airport.longitude ?? '',
+      airport_surge: airport.airport_surge ?? '',
+      support_airport_fee: airport.support_airport_fee ?? '',
       status: airport.status || 'active',
     });
     setBoundaryCoords(Array.isArray(airport.boundary_coordinates) ? airport.boundary_coordinates : []);
@@ -394,6 +398,40 @@ const Airport = ({ mode: initialMode = "list" }) => {
                           className={inputClass}
                         />
                       </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className={labelClass}>
+                            <Globe size={12} className="inline mr-1 text-gray-400" />
+                            Airport Surge Fee
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={formData.airport_surge}
+                            onChange={(e) => setFormData(p => ({ ...p, airport_surge: e.target.value }))}
+                            placeholder="Enter airport surge fee"
+                            className={inputClass}
+                          />
+                        </div>
+
+                        <div>
+                          <label className={labelClass}>
+                            <Globe size={12} className="inline mr-1 text-gray-400" />
+                            Support Airport Fee
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={formData.support_airport_fee}
+                            onChange={(e) => setFormData(p => ({ ...p, support_airport_fee: e.target.value }))}
+                            placeholder="Enter support airport fee"
+                            className={inputClass}
+                          />
+                        </div>
+                      </div>
                    </div>
                 </div>
 
@@ -452,13 +490,11 @@ const Airport = ({ mode: initialMode = "list" }) => {
                          onLoad={m => { mapRef.current = m; }}
                          onClick={handleMapClick}
                          options={{
-                            styles: [
-                                { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
-                                { elementType: "labels.icon", stylers: [{ visibility: "off" }] }
-                            ],
+                            mapTypeId: 'roadmap',
                             disableDefaultUI: false,
                             zoomControl: true,
                             mapTypeControl: true,
+                            clickableIcons: true,
                             streetViewControl: false,
                             fullscreenControl: true
                          }}
