@@ -39,6 +39,7 @@ import { PaymentGateway } from '../models/PaymentGateway.js';
 import { PaymentMethod } from '../models/PaymentMethod.js';
 import { OnboardingScreen } from '../models/OnboardingScreen.js';
 import { WithdrawalRequest } from '../models/WithdrawalRequest.js';
+import { SupportTicket } from '../../support/models/SupportTicket.js';
 import TaxiTransportType from '../models/TaxiTransportType.js';
 import { comparePassword, hashPassword } from '../../driver/services/authService.js';
 import { RIDE_LIVE_STATUS, RIDE_STATUS, VEHICLE_TYPES } from '../../constants/index.js';
@@ -128,6 +129,13 @@ const toDocumentKey = (value = '') => {
         : `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`,
     )
     .join('');
+};
+
+const normalizeVehicleTransportType = (value = '') => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'delivery') return 'delivery';
+  if (normalized === 'both' || normalized === 'all') return 'both';
+  return 'taxi';
 };
 
 const BUS_DAY_OPTIONS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -1037,7 +1045,9 @@ const resolveVehicleForImport = async (vehicleLabel, transportType) => {
 
   return Vehicle.findOne({
     name: new RegExp(`^${escapeRegex(candidate)}$`, 'i'),
-    ...(transportType ? { transport_type: transportType } : {}),
+    ...(transportType
+      ? { transport_type: { $in: [normalizeVehicleTransportType(transportType), 'both'] } }
+      : {}),
   }).lean();
 };
 
@@ -3566,7 +3576,12 @@ export const deleteOngoingRide = async (rideId) => {
 
 export const listVehicleTypes = async (queryParams = {}) => {
   const query = {};
-  if (queryParams.transport_type) query.transport_type = queryParams.transport_type;
+  if (queryParams.transport_type) {
+    const normalizedTransportType = normalizeVehicleTransportType(queryParams.transport_type);
+    query.transport_type = normalizedTransportType === 'both'
+      ? 'both'
+      : { $in: [normalizedTransportType, 'both'] };
+  }
   const items = await Vehicle.find(query).sort({ createdAt: -1 }).lean();
   const results = items.map((item) => ({
     ...item,
@@ -3680,17 +3695,18 @@ export const createVehicleType = async (payload) => {
   }
 
   const mapIcon = payload.map_icon ?? payload.mapIcon ?? payload.icon ?? payload.image ?? '';
+  const transportType = normalizeVehicleTransportType(payload.transport_type);
 
   const vehicle = await Vehicle.create({
     name: payload.name.trim(),
     short_description: payload.short_description ?? '',
     description: payload.description ?? '',
-    transport_type: payload.transport_type,
+    transport_type: transportType,
     dispatch_type: payload.dispatch_type || 'normal',
     icon_types: payload.icon_types || 'car',
     capacity: Number(payload.capacity || 0),
     size: payload.size ?? '',
-    is_taxi: payload.is_taxi || payload.transport_type,
+    is_taxi: payload.is_taxi || transportType,
     is_accept_share_ride: Number(payload.is_accept_share_ride || 0) ? 1 : 0,
     image: payload.image ?? mapIcon,
     icon: mapIcon,
@@ -3726,7 +3742,7 @@ export const updateVehicleType = async (id, payload) => {
     vehicle.description = payload.description ?? '';
   }
   if (payload.transport_type !== undefined) {
-    vehicle.transport_type = payload.transport_type;
+    vehicle.transport_type = normalizeVehicleTransportType(payload.transport_type);
   }
   if (payload.dispatch_type !== undefined) {
     vehicle.dispatch_type = payload.dispatch_type || 'normal';
@@ -4717,35 +4733,230 @@ export const deleteOwner = async (id) => {
     };
   };
 
-  export const getDashboardData = async () => {
-    const [totalUsers, totalDrivers, totalOwners] = await Promise.all([
-      User.countDocuments(),
-      Driver.countDocuments(),
-      Owner.countDocuments(),
-    ]);
+export const getDashboardData = async () => {
+  const [totalUsers, totalDrivers, totalOwners, approvedDrivers, rides, supportTicketStats] = await Promise.all([
+    User.countDocuments(),
+    Driver.countDocuments(),
+    Owner.countDocuments(),
+    Driver.countDocuments({ approve: true }),
+    Ride.find()
+      .select('status liveStatus fare paymentMethod commissionAmount driverEarnings driverId createdAt updatedAt completedAt')
+      .sort({ createdAt: -1 })
+      .lean(),
+    SupportTicket.aggregate([
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+  ]);
 
-    const approvedDrivers = await Driver.countDocuments({ approve: true });
+  const now = new Date();
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  const endOfToday = new Date(now);
+  endOfToday.setHours(23, 59, 59, 999);
 
-    // Dummy aggregation for now, until real transaction models are connected
+  const getRideEventDate = (ride) => {
+    const status = String(ride?.status || '').toLowerCase();
+    if (status === RIDE_STATUS.COMPLETED) {
+      return ride?.completedAt || ride?.updatedAt || ride?.createdAt || null;
+    }
+    if (status === RIDE_STATUS.CANCELLED) {
+      return ride?.updatedAt || ride?.createdAt || null;
+    }
+    return ride?.createdAt || ride?.updatedAt || null;
+  };
+
+  const isWithinRange = (date, rangeStart, rangeEnd) => {
+    const value = date ? new Date(date) : null;
+    if (!value || Number.isNaN(value.getTime())) return false;
+    return value >= rangeStart && value <= rangeEnd;
+  };
+
+  const isCompletedRide = (ride) => String(ride?.status || '').toLowerCase() === RIDE_STATUS.COMPLETED;
+  const isCancelledRide = (ride) => String(ride?.status || '').toLowerCase() === RIDE_STATUS.CANCELLED;
+  const isScheduledRide = (ride) => !isCompletedRide(ride) && !isCancelledRide(ride);
+
+  const completedRides = rides.filter(isCompletedRide);
+  const cancelledRides = rides.filter(isCancelledRide);
+  const scheduledRides = rides.filter(isScheduledRide);
+
+  const todayCompletedRides = completedRides.filter((ride) => isWithinRange(getRideEventDate(ride), startOfToday, endOfToday));
+  const todayCancelledRides = cancelledRides.filter((ride) => isWithinRange(getRideEventDate(ride), startOfToday, endOfToday));
+  const todayScheduledRides = scheduledRides.filter((ride) => isWithinRange(getRideEventDate(ride), startOfToday, endOfToday));
+
+  const sumFare = (items) =>
+    items.reduce((total, ride) => total + Number(ride?.fare || 0), 0);
+  const sumCommission = (items) =>
+    items.reduce((total, ride) => {
+      const fare = Number(ride?.fare || 0);
+      const explicitCommission = Number(ride?.commissionAmount);
+      const fallbackCommission = Math.max(fare - Number(ride?.driverEarnings || 0), 0);
+      return total + (Number.isFinite(explicitCommission) ? explicitCommission : fallbackCommission);
+    }, 0);
+  const sumDriverEarnings = (items) =>
+    items.reduce((total, ride) => {
+      const fare = Number(ride?.fare || 0);
+      const commission = Number(ride?.commissionAmount || 0);
+      const earning = Number.isFinite(Number(ride?.driverEarnings))
+        ? Number(ride?.driverEarnings)
+        : Math.max(fare - commission, 0);
+      return total + earning;
+    }, 0);
+
+  const totalOverallFare = sumFare(completedRides);
+  const totalTodayFare = sumFare(todayCompletedRides);
+  const totalOverallCommission = sumCommission(completedRides);
+  const totalTodayCommission = sumCommission(todayCompletedRides);
+  const totalOverallDriverEarnings = sumDriverEarnings(completedRides);
+  const totalTodayDriverEarnings = sumDriverEarnings(todayCompletedRides);
+
+  const overallByCash = sumFare(completedRides.filter((ride) => String(ride?.paymentMethod || 'cash').toLowerCase() === 'cash'));
+  const overallByCard = sumFare(completedRides.filter((ride) => String(ride?.paymentMethod || '').toLowerCase() === 'online'));
+  const todayByCash = sumFare(todayCompletedRides.filter((ride) => String(ride?.paymentMethod || 'cash').toLowerCase() === 'cash'));
+  const todayByCard = sumFare(todayCompletedRides.filter((ride) => String(ride?.paymentMethod || '').toLowerCase() === 'online'));
+
+  const buildRecentMonthKeys = (monthCount = 4) => {
+    const months = [];
+    for (let index = monthCount - 1; index >= 0; index -= 1) {
+      const date = new Date(now.getFullYear(), now.getMonth() - index, 1);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      months.push({
+        key,
+        label: date.toLocaleString('en-IN', { month: 'short' }),
+      });
+    }
+    return months;
+  };
+
+  const recentMonths = buildRecentMonthKeys(4);
+  const recentMonthMap = new Map(
+    recentMonths.map((month) => [
+      month.key,
+      {
+        ...month,
+        amount: 0,
+        total: 0,
+        byUser: 0,
+        byDriver: 0,
+        noDriver: 0,
+      },
+    ]),
+  );
+
+  completedRides.forEach((ride) => {
+    const eventDate = getRideEventDate(ride);
+    if (!eventDate) return;
+    const date = new Date(eventDate);
+    if (Number.isNaN(date.getTime())) return;
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const month = recentMonthMap.get(key);
+    if (!month) return;
+    month.amount += Number(ride?.fare || 0);
+  });
+
+  cancelledRides.forEach((ride) => {
+    const eventDate = getRideEventDate(ride);
+    if (!eventDate) return;
+    const date = new Date(eventDate);
+    if (Number.isNaN(date.getTime())) return;
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const month = recentMonthMap.get(key);
+    if (!month) return;
+    month.total += 1;
+    if (!ride?.driverId) {
+      month.noDriver += 1;
+    } else {
+      month.byUser += 1;
+    }
+  });
+
+  const overallChart = recentMonths.map((month) => {
+    const entry = recentMonthMap.get(month.key);
     return {
+      label: month.label,
+      amount: Number((entry?.amount || 0).toFixed(2)),
+    };
+  });
+
+  const cancelChartSeries = recentMonths.map((month) => {
+    const entry = recentMonthMap.get(month.key);
+    return {
+      label: month.label,
+      total: entry?.total || 0,
+      byUser: entry?.byUser || 0,
+      byDriver: entry?.byDriver || 0,
+      noDriver: entry?.noDriver || 0,
+    };
+  });
+
+  const supportTicketCounts = supportTicketStats.reduce(
+    (acc, item) => {
+      const key = String(item?._id || '').toLowerCase();
+      acc[key] = Number(item?.count || 0);
+      return acc;
+    },
+    { pending: 0, assigned: 0, closed: 0 },
+  );
+
+  return {
       totalUsers,
       totalDrivers: {
         total: totalDrivers,
         approved: approvedDrivers,
         declined: totalDrivers - approvedDrivers
       },
-      total_earnings: 124500,
+      totalOwners,
+      total_earnings: Number(totalOverallFare.toFixed(2)),
       payment_success_rate: 99.4,
-      todayEarnings: 1450,
-      overallEarnings: {
-        today: 1450,
-        by_cash: 950,
-        by_wallet: 200,
-        by_card: 300,
-        admin_commission: 195,
-        driver_earnings: 1255,
+      notifiedSos: {
+        total: supportTicketCounts.pending,
+        pending: supportTicketCounts.pending,
+        assigned: supportTicketCounts.assigned,
+        closed: supportTicketCounts.closed,
       },
-      cancelChart: { total: 7, byUser: 3, byDriver: 3, noDriver: 1 },
+      todayTrips: {
+        total: todayCompletedRides.length + todayCancelledRides.length + todayScheduledRides.length,
+        completed: todayCompletedRides.length,
+        cancelled: todayCancelledRides.length,
+        scheduled: todayScheduledRides.length,
+      },
+      overallTrips: {
+        total: rides.length,
+        completed: completedRides.length,
+        cancelled: cancelledRides.length,
+        scheduled: scheduledRides.length,
+      },
+      todayEarnings: {
+        total: Number(totalTodayFare.toFixed(2)),
+        by_cash: Number(todayByCash.toFixed(2)),
+        by_wallet: 0,
+        by_card: Number(todayByCard.toFixed(2)),
+        admin_commission: Number(totalTodayCommission.toFixed(2)),
+        driver_earnings: Number(totalTodayDriverEarnings.toFixed(2)),
+      },
+      overallEarnings: {
+        total: Number(totalOverallFare.toFixed(2)),
+        by_cash: Number(overallByCash.toFixed(2)),
+        by_wallet: 0,
+        by_card: Number(overallByCard.toFixed(2)),
+        admin_commission: Number(totalOverallCommission.toFixed(2)),
+        driver_earnings: Number(totalOverallDriverEarnings.toFixed(2)),
+        chart: overallChart,
+      },
+      cancelChart: {
+        total: cancelledRides.length,
+        byUser: cancelledRides.filter((ride) => ride?.driverId).length,
+        byDriver: 0,
+        noDriver: cancelledRides.filter((ride) => !ride?.driverId).length,
+        chart: cancelChartSeries,
+      },
+      performance_index: rides.length
+        ? Number((((completedRides.length || 0) / rides.length) * 100).toFixed(1))
+        : 0,
     };
   };
 

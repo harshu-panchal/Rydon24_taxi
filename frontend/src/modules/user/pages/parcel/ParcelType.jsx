@@ -1,7 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertCircle, ArrowLeft, ChevronRight, Loader2, Package } from 'lucide-react';
+import { 
+  AlertCircle, 
+  ArrowLeft, 
+  ChevronRight, 
+  Loader2, 
+  Package, 
+  Truck, 
+  Bike, 
+  CarFront, 
+  Sparkles,
+  Search,
+  Info,
+  CheckCircle2,
+  PackageCheck
+} from 'lucide-react';
 import api from '../../../../shared/api/axiosInstance';
 
 import imgDocuments from '@/assets/3d images/documents.png';
@@ -18,53 +32,59 @@ const fallbackCategories = [
     id: '1',
     title: 'Documents',
     img: imgDocuments,
-    desc: 'Office files, paper',
-    accentClass: 'bg-[linear-gradient(135deg,#FFF7ED_0%,#FFE5C2_100%)]',
+    desc: 'Paper, office files, certificates',
+    accentClass: 'from-blue-50 to-indigo-100/50',
+    iconColor: 'text-blue-600',
   },
   {
     id: '2',
     title: 'Groceries',
     img: imgGrocery,
-    desc: 'Daily veggies',
-    accentClass: 'bg-[linear-gradient(135deg,#F0FDF4_0%,#BBF7D0_100%)]',
+    desc: 'Daily essentials, fresh produce',
+    accentClass: 'from-emerald-50 to-teal-100/50',
+    iconColor: 'text-emerald-600',
   },
   {
     id: '3',
     title: 'Gifts',
     img: imgGifts,
-    desc: 'Cake, gift box',
-    accentClass: 'bg-[linear-gradient(135deg,#FDF4FF_0%,#F3E8FF_100%)]',
+    desc: 'Cakes, flowers, surprises',
+    accentClass: 'from-pink-50 to-rose-100/50',
+    iconColor: 'text-pink-600',
   },
   {
     id: '4',
     title: 'Clothes',
     img: imgClothes,
-    desc: 'Laundry, dresses',
-    accentClass: 'bg-[linear-gradient(135deg,#EFF6FF_0%,#DBEAFE_100%)]',
+    desc: 'Apparels, laundry, fashion',
+    accentClass: 'from-violet-50 to-purple-100/50',
+    iconColor: 'text-violet-600',
   },
   {
     id: '5',
     title: 'Electronics',
     img: imgElectronics,
-    desc: 'Phone, cables',
-    accentClass: 'bg-[linear-gradient(135deg,#FEFCE8_0%,#FDE68A_100%)]',
+    desc: 'Phones, gadgets, accessories',
+    accentClass: 'from-amber-50 to-orange-100/50',
+    iconColor: 'text-amber-600',
   },
   {
     id: '6',
     title: 'Others',
     img: imgOthers,
-    desc: 'Any other item',
-    accentClass: 'bg-[linear-gradient(135deg,#F8FAFC_0%,#E2E8F0_100%)]',
+    desc: 'Any other delivery item',
+    accentClass: 'from-slate-50 to-slate-200/50',
+    iconColor: 'text-slate-600',
   },
 ];
 
 const accentClasses = [
-  'bg-[linear-gradient(135deg,#FFF7ED_0%,#FFE5C2_100%)]',
-  'bg-[linear-gradient(135deg,#F0FDF4_0%,#BBF7D0_100%)]',
-  'bg-[linear-gradient(135deg,#FDF4FF_0%,#F3E8FF_100%)]',
-  'bg-[linear-gradient(135deg,#EFF6FF_0%,#DBEAFE_100%)]',
-  'bg-[linear-gradient(135deg,#FEFCE8_0%,#FDE68A_100%)]',
-  'bg-[linear-gradient(135deg,#F8FAFC_0%,#E2E8F0_100%)]',
+  'from-blue-50 to-indigo-100/50',
+  'from-emerald-50 to-teal-100/50',
+  'from-pink-50 to-rose-100/50',
+  'from-violet-50 to-purple-100/50',
+  'from-amber-50 to-orange-100/50',
+  'from-slate-50 to-slate-200/50',
 ];
 
 const imageMatchers = [
@@ -97,34 +117,82 @@ const formatGoodsType = (item, index) => {
     id: String(item?._id || item?.id || index + 1),
     title: title || `Category ${index + 1}`,
     img: savedIcon || resolveCategoryImage(title),
-    desc: moduleAccess === 'Both' ? 'Available for all delivery types' : `${moduleAccess} delivery`,
+    desc: moduleAccess === 'Both' ? 'Standard Delivery' : `${moduleAccess} delivery`,
     accentClass: accentClasses[index % accentClasses.length],
     goodsTypeFor: rawModuleAccess || 'both',
     raw: item,
   };
 };
 
+const getVehicleIcon = (vehicle = {}) => {
+  const iconType = String(vehicle.icon_types || vehicle.name || '').trim().toLowerCase();
+  if (iconType.includes('bike')) return Bike;
+  if (iconType.includes('truck') || iconType.includes('mover') || iconType.includes('lcv') || iconType.includes('hcv') || iconType.includes('mcv')) {
+    return Truck;
+  }
+  return CarFront;
+};
+
+const formatVehicleType = (item, index) => {
+  const transportType = String(item?.transport_type || 'delivery').trim().toLowerCase();
+  const capabilityLabel = transportType === 'both' ? 'Hybrid' : 'Parcel Only';
+  const description = String(item?.short_description || item?.description || '').trim();
+
+  return {
+    id: String(item?._id || item?.id || `vehicle-${index + 1}`),
+    name: String(item?.name || 'Vehicle').trim(),
+    description: description || 'Optimized for parcel delivery',
+    transportType,
+    capabilityLabel,
+    image: String(item?.image || item?.map_icon || item?.icon || '').trim(),
+    capacity: Number(item?.capacity || 0),
+    iconType: String(item?.icon_types || '').trim(),
+  };
+};
+
 const ParcelType = () => {
   const [categories, setCategories] = useState(fallbackCategories);
   const [selectedType, setSelectedType] = useState(fallbackCategories[0]?.title || '');
+  const [vehicleTypes, setVehicleTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedVehicleId, setSelectedVehicleId] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
     let isMounted = true;
 
-    const fetchGoodsTypes = async () => {
+    const fetchData = async () => {
       setLoading(true);
       setLoadError('');
 
       try {
-        const response = await api.get('/users/goods-types');
-        const items = response?.results || response?.data?.results || response?.data?.goods_types || [];
+        const [goodsResponse, vehicleResponse] = await Promise.all([
+          api.get('/users/goods-types'),
+          api.get('/users/vehicle-types'),
+        ]);
+        const items = goodsResponse?.results || goodsResponse?.data?.results || goodsResponse?.data?.goods_types || [];
         const activeItems = items.filter((item) => Number(item?.active ?? 1) === 1);
         const mappedCategories = (activeItems.length ? activeItems : items).map(formatGoodsType);
+        
+        const vehicleItems = vehicleResponse?.results || vehicleResponse?.data?.results || vehicleResponse?.data?.goods_types || [];
+        const mappedVehicles = vehicleItems
+          .filter((item) => item?.active !== false && Number(item?.status ?? 1) !== 0)
+          .filter((item) => {
+            const transportType = String(item?.transport_type || 'delivery').trim().toLowerCase();
+            return transportType === 'delivery' || transportType === 'both';
+          })
+          .map(formatVehicleType);
 
         if (!isMounted) return;
+
+        if (mappedVehicles.length > 0) {
+          setVehicleTypes(mappedVehicles);
+          setSelectedVehicleId((current) => 
+            mappedVehicles.some(v => v.id === current) ? current : mappedVehicles[0].id
+          );
+        }
 
         if (mappedCategories.length > 0) {
           setCategories(mappedCategories);
@@ -139,8 +207,9 @@ const ParcelType = () => {
         }
       } catch {
         if (!isMounted) return;
-        setLoadError('Unable to load goods types right now.');
+        setLoadError('Unable to load latest categories.');
         setCategories(fallbackCategories);
+        setVehicleTypes([]);
         setSelectedType((current) => current || fallbackCategories[0]?.title || '');
       } finally {
         if (isMounted) {
@@ -149,12 +218,20 @@ const ParcelType = () => {
       }
     };
 
-    fetchGoodsTypes();
+    fetchData();
 
     return () => {
       isMounted = false;
     };
   }, []);
+
+  const filteredCategories = useMemo(() => {
+    if (!searchQuery) return categories;
+    return categories.filter(cat => 
+      cat.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      cat.desc.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [categories, searchQuery]);
 
   const selected = useMemo(
     () => categories.find((category) => category.title === selectedType) || categories[0],
@@ -162,196 +239,259 @@ const ParcelType = () => {
   );
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_38%,#EEF2F7_100%)] max-w-lg mx-auto flex flex-col font-sans relative overflow-hidden">
-      {/* Ambient blobs matching home page */}
-      <div className="absolute -top-16 right-[-40px] h-44 w-44 rounded-full bg-orange-100/60 blur-3xl pointer-events-none" />
-      <div className="absolute top-52 left-[-60px] h-52 w-52 rounded-full bg-emerald-100/60 blur-3xl pointer-events-none" />
+    <div className="min-h-screen bg-[#FDFDFF] max-w-lg mx-auto flex flex-col font-sans relative overflow-x-hidden">
+      {/* Dynamic Ambient Background */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute -top-[10%] -right-[10%] w-[70%] h-[40%] bg-indigo-50/40 rounded-full blur-[100px] animate-pulse" />
+        <div className="absolute top-[20%] -left-[20%] w-[80%] h-[50%] bg-orange-50/30 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[10%] right-[0%] w-[60%] h-[40%] bg-blue-50/40 rounded-full blur-[100px]" />
+      </div>
 
-      {/* Header */}
+      {/* Modern Header */}
       <Motion.header
-        initial={{ opacity: 0, y: -10 }}
+        initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: 'easeOut' }}
-        className="bg-white/90 backdrop-blur-md px-5 py-5 flex items-center gap-4 border-b border-white/80 shadow-[0_4px_20px_rgba(15,23,42,0.05)] sticky top-0 z-20"
+        className="sticky top-0 z-40 px-6 py-6 bg-white/70 backdrop-blur-xl border-b border-gray-100"
       >
-        <Motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={() => navigate(-1)}
-          className="w-9 h-9 rounded-[12px] border border-white/80 bg-white/90 flex items-center justify-center shadow-[0_4px_12px_rgba(15,23,42,0.07)] active:scale-90 transition-all shrink-0"
-        >
-          <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
-        </Motion.button>
-        <div className="flex-1 min-w-0">
-          <p className="text-[9px] font-black uppercase tracking-[0.26em] text-slate-400">Parcel Delivery</p>
-          <h1 className="text-[19px] font-black tracking-tight text-slate-900 leading-tight">What are you sending?</h1>
+        <div className="flex items-center justify-between mb-6">
+          <Motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => navigate(-1)}
+            className="w-10 h-10 rounded-2xl bg-white shadow-sm border border-gray-100 flex items-center justify-center text-gray-900"
+          >
+            <ArrowLeft size={20} strokeWidth={2.5} />
+          </Motion.button>
+          
+          <div className="flex flex-col items-center text-center">
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-600 mb-0.5">Step 01</span>
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
+              <div className="w-1.5 h-1.5 rounded-full bg-gray-200" />
+              <div className="w-1.5 h-1.5 rounded-full bg-gray-200" />
+            </div>
+          </div>
+
+          <div className="w-10 h-10 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+            <Package size={20} />
+          </div>
         </div>
-        <div className="rounded-full border border-white/80 bg-white/90 px-3 py-1.5 text-[10px] font-black text-slate-600 shadow-sm shrink-0">
-          <Package size={12} className="inline mr-1 text-orange-400" />
-          {categories.length} types
+
+        <div className="space-y-1">
+          <h1 className="text-2xl font-black tracking-tight text-gray-900">What are you sending?</h1>
+          <p className="text-sm font-medium text-gray-500">Select the category that matches your item</p>
         </div>
       </Motion.header>
 
-      {/* Content */}
-      <div className="flex-1 px-5 pt-5 pb-32 overflow-y-auto no-scrollbar">
-
-        {/* Section label */}
-        <Motion.div
-          initial={{ opacity: 0, y: 8 }}
+      {/* Main Content Area */}
+      <main className="flex-1 px-6 pt-6 pb-32 z-10">
+        
+        {/* Search Bar */}
+        <Motion.div 
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.08, ease: 'easeOut' }}
-          className="mb-4"
+          transition={{ delay: 0.1 }}
+          className="relative mb-8"
         >
-          <p className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">Step 1 of 3</p>
-          <h2 className="mt-0.5 text-[16px] font-black tracking-tight text-slate-900">Select Category</h2>
-          <p className="mt-0.5 text-[11px] font-bold text-slate-500">Tap a category that best describes your item.</p>
+          <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-gray-400">
+            <Search size={18} />
+          </div>
+          <input 
+            type="text"
+            placeholder="Search categories..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-gray-50/50 border border-gray-100 rounded-2xl py-4 pl-12 pr-4 text-sm font-semibold text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all"
+          />
         </Motion.div>
 
-        {loadError ? (
-          <Motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-4 flex items-center gap-2 rounded-[16px] border border-amber-200 bg-amber-50/90 px-3.5 py-3 text-[11px] font-bold text-amber-700"
+        {/* Fleet Teaser Section */}
+        {!searchQuery && (
+          <Motion.section 
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.2 }}
+            className="mb-8"
           >
-            <AlertCircle size={15} className="shrink-0" />
-            <span>{loadError} Showing saved defaults for now.</span>
-          </Motion.div>
-        ) : null}
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">Available Fleet</h3>
+              <div className="px-2 py-0.5 rounded-full bg-green-50 text-[10px] font-black text-green-600 flex items-center gap-1">
+                <div className="w-1 h-1 rounded-full bg-green-600 animate-pulse" />
+                ACTIVE
+              </div>
+            </div>
+
+            <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-6 px-6">
+              {vehicleTypes.length > 0 ? (
+                vehicleTypes.map((vehicle, idx) => {
+                  const isVehicleSelected = selectedVehicleId === vehicle.id;
+                  return (
+                    <Motion.button 
+                      key={vehicle.id}
+                      whileTap={{ scale: 0.96 }}
+                      onClick={() => setSelectedVehicleId(vehicle.id)}
+                      className={`min-w-[150px] text-left bg-white rounded-[32px] p-5 border transition-all duration-300 ${
+                        isVehicleSelected 
+                          ? 'border-indigo-600 shadow-md ring-2 ring-indigo-500/10' 
+                          : 'border-gray-100 shadow-sm hover:shadow-md'
+                      }`}
+                    >
+                      <div className={`w-full h-24 rounded-2xl bg-gradient-to-br ${accentClasses[idx % accentClasses.length]} flex items-center justify-center mb-4 transition-transform ${isVehicleSelected ? 'scale-105' : ''}`}>
+                        {vehicle.image ? (
+                          <img src={vehicle.image} alt={vehicle.name} className="w-20 h-20 object-contain drop-shadow-md" />
+                        ) : (
+                          React.createElement(getVehicleIcon(vehicle), { size: 40, className: 'text-gray-700' })
+                        )}
+                      </div>
+                      <div className="space-y-1 px-1">
+                        <h4 className={`text-[15px] font-black leading-none transition-colors ${isVehicleSelected ? 'text-indigo-600' : 'text-gray-900'}`}>
+                          {vehicle.name}
+                        </h4>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{vehicle.capabilityLabel}</p>
+                      </div>
+                    </Motion.button>
+                  );
+                })
+              ) : (
+                [...Array(3)].map((_, idx) => (
+                  <div key={idx} className="min-w-[150px] h-[160px] bg-gray-50/50 rounded-[32px] border border-dashed border-gray-200 flex items-center justify-center">
+                    <Loader2 className="w-8 h-8 text-gray-300 animate-spin" />
+                  </div>
+                ))
+              )}
+            </div>
+          </Motion.section>
+        )}
 
         {/* Category Grid */}
-        <Motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.12, ease: 'easeOut' }}
-          className="grid grid-cols-2 gap-3 sm:grid-cols-3"
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">Categories</h3>
+            {filteredCategories.length === 0 && (
+              <span className="text-[10px] font-bold text-red-500">No results found</span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <AnimatePresence mode="popLayout">
+              {loading ? (
+                [...Array(6)].map((_, idx) => (
+                  <div key={`shimmer-${idx}`} className="h-44 bg-gray-50 rounded-[32px] animate-pulse border border-gray-100" />
+                ))
+              ) : (
+                filteredCategories.map((cat, idx) => {
+                  const isSelected = selectedType === cat.title;
+                  return (
+                    <Motion.button
+                      layout
+                      key={cat.id}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setSelectedType(cat.title)}
+                      className={`relative group h-48 rounded-[32px] p-5 flex flex-col items-start transition-all duration-300 border ${
+                        isSelected 
+                          ? 'bg-white border-indigo-600 shadow-[0_20px_40px_rgba(79,70,229,0.12)]' 
+                          : 'bg-white border-gray-100 shadow-sm hover:border-gray-200'
+                      }`}
+                    >
+                      {/* Selection Badge */}
+                      {isSelected && (
+                        <Motion.div 
+                          layoutId="selection-badge"
+                          className="absolute top-4 right-4 text-indigo-600"
+                        >
+                          <CheckCircle2 size={24} fill="currentColor" className="text-white" />
+                          <CheckCircle2 size={24} className="absolute inset-0" />
+                        </Motion.div>
+                      )}
+
+                      {/* Icon Box */}
+                      <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${cat.accentClass} flex items-center justify-center mb-auto transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3`}>
+                        <img 
+                          src={cat.img} 
+                          alt={cat.title} 
+                          className="w-11 h-11 object-contain drop-shadow-lg"
+                        />
+                      </div>
+
+                      <div className="text-left w-full mt-3">
+                        <h4 className={`text-sm font-black leading-tight mb-1.5 transition-colors line-clamp-2 ${
+                          isSelected ? 'text-gray-900' : 'text-gray-800'
+                        }`}>
+                          {cat.title}
+                        </h4>
+                        <p className={`text-[10px] font-bold transition-colors line-clamp-1 ${
+                          isSelected ? 'text-indigo-600/80' : 'text-gray-400'
+                        }`}>
+                          {cat.desc}
+                        </p>
+                      </div>
+                    </Motion.button>
+                  );
+                })
+              )}
+            </AnimatePresence>
+          </div>
+        </section>
+
+        {/* Info Tip */}
+        <Motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          className="mt-8 p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100 flex gap-3 items-start"
         >
-          {loading ? (
-            [...Array(6)].map((_, index) => (
-              <div
-                key={`loading-${index}`}
-                className="rounded-[20px] border border-white/80 bg-white/75 p-4 shadow-[0_4px_14px_rgba(15,23,42,0.05)]"
-              >
-                <div className="mx-auto h-14 w-14 animate-pulse rounded-[16px] bg-slate-100" />
-                <div className="mt-3 h-3 animate-pulse rounded-full bg-slate-100" />
-                <div className="mx-auto mt-2 h-2.5 w-3/4 animate-pulse rounded-full bg-slate-100" />
-              </div>
-            ))
-          ) : (
-            categories.map((cat, i) => {
-              const isSelected = selectedType === cat.title;
-              return (
-                <Motion.button
-                  key={cat.id}
-                  type="button"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, delay: 0.1 + i * 0.05, ease: 'easeOut' }}
-                  whileTap={{ scale: 0.96 }}
-                  onClick={() => setSelectedType(cat.title)}
-                  className={`relative flex min-h-[172px] flex-col items-center justify-start gap-2.5 rounded-[20px] p-4 border transition-all text-center ${
-                    isSelected
-                      ? 'border-orange-200 bg-white shadow-[0_8px_24px_rgba(249,115,22,0.15)]'
-                      : 'border-white/80 bg-white/90 shadow-[0_4px_14px_rgba(15,23,42,0.05)] hover:border-slate-200'
-                  }`}
-                >
-                  {/* Selected indicator dot */}
-                  <AnimatePresence>
-                    {isSelected && (
-                      <Motion.div
-                        initial={{ scale: 0, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-orange-500"
-                      />
-                    )}
-                  </AnimatePresence>
-
-                  {/* 3D image container */}
-                  <div className={`w-14 h-14 rounded-[16px] flex items-center justify-center transition-all overflow-visible ${
-                    isSelected ? 'shadow-lg scale-110' : ''
-                  } ${cat.accentClass}`}>
-                    <img
-                      src={cat.img}
-                      alt={cat.title}
-                      className="w-12 h-12 object-contain drop-shadow-md"
-                    />
-                  </div>
-
-                  {/* Labels */}
-                  <div className="w-full">
-                    <span className={`block min-h-[40px] break-words text-[11px] font-black leading-[1.15] tracking-tight sm:text-[12px] ${
-                      isSelected ? 'text-slate-900' : 'text-slate-600'
-                    }`}>
-                      {cat.title}
-                    </span>
-                    <span className="mt-1 block break-words text-[9px] font-bold leading-[1.2] text-slate-400 sm:text-[9.5px]">
-                      {cat.desc}
-                    </span>
-                  </div>
-                </Motion.button>
-              );
-            })
-          )}
+          <Info size={16} className="text-indigo-600 shrink-0 mt-0.5" />
+          <p className="text-[11px] font-semibold text-indigo-900/70 leading-relaxed">
+            Ensure your items are properly packed. Our delivery partners carry standard sized parcels. For oversized items, please contact support.
+          </p>
         </Motion.div>
+      </main>
 
-        {/* Selected preview card */}
-        <AnimatePresence mode="wait">
-          {!loading && selected && (
-            <Motion.div
-              key={selected.title}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.25 }}
-              className="mt-5 flex items-center gap-3 rounded-[18px] border border-white/80 bg-white/90 px-4 py-3.5 shadow-[0_4px_14px_rgba(15,23,42,0.05)]"
-            >
-              <div className={`w-9 h-9 rounded-[12px] flex items-center justify-center ${selected.accentClass}`}>
-                <img src={selected.img} alt={selected.title} className="w-7 h-7 object-contain drop-shadow-sm" />
+      {/* Premium Sticky Footer */}
+      <div className="fixed bottom-0 left-0 right-0 p-6 z-50">
+        <div className="max-w-lg mx-auto">
+          {/* Glass Overlay for Footer Background */}
+          <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-white via-white/95 to-transparent pointer-events-none" />
+          
+          <Motion.button
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.98 }}
+            disabled={loading || !selectedType}
+            onClick={() =>
+              navigate('/parcel/contacts', {
+                state: {
+                  parcelType: selectedType,
+                  selectedGoodsType: selected,
+                  goodsTypeFor: selected?.goodsTypeFor || 'both',
+                  selectedVehicleId: selectedVehicleId,
+                  selectedVehicle: vehicleTypes.find(v => v.id === selectedVehicleId),
+                },
+              })
+            }
+            className="relative w-full group overflow-hidden bg-gray-900 disabled:bg-gray-400 text-white rounded-[24px] py-5 px-8 flex items-center justify-between shadow-[0_20px_40px_rgba(0,0,0,0.15)] transition-all"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-violet-600 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            
+            <div className="relative flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center">
+                <PackageCheck size={20} />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Selected</p>
-                <p className="text-[13px] font-black text-slate-900 leading-tight">{selected.title}</p>
-                <p className="text-[10px] font-bold text-slate-400">{selected.desc}</p>
+              <div className="text-left">
+                <span className="block text-[10px] font-black uppercase tracking-widest text-white/50">Next Step</span>
+                <span className="block text-base font-black">Configure Details</span>
               </div>
-              <div className="w-5 h-5 rounded-full bg-orange-500 flex items-center justify-center shrink-0">
-                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                  <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-            </Motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+            </div>
 
-      {/* Sticky CTA */}
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 pb-6 pt-3 bg-gradient-to-t from-[#EEF2F7] via-[#F3F4F6]/95 to-transparent pointer-events-none z-30">
-        <Motion.button
-          type="button"
-          whileTap={{ scale: 0.98 }}
-          onClick={() =>
-            navigate('/parcel/details', {
-              state: {
-                parcelType: selectedType,
-                selectedGoodsType: selected,
-                goodsTypeFor: selected?.goodsTypeFor || 'both',
-              },
-            })
-          }
-          disabled={loading || !selectedType}
-          className="pointer-events-auto w-full bg-slate-900 py-4 rounded-[18px] text-[15px] font-black text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] active:bg-black transition-all flex items-center justify-center gap-2"
-        >
-          {loading ? (
-            <>
-              <Loader2 size={17} className="animate-spin opacity-70" strokeWidth={2.5} />
-              <span>Loading Categories</span>
-            </>
-          ) : (
-            <>
-              <span>Next: Item Details</span>
-              <ChevronRight size={17} className="opacity-50" strokeWidth={3} />
-            </>
-          )}
-        </Motion.button>
+            <div className="relative flex items-center gap-2">
+              <span className="text-xs font-bold text-white/70">Continue</span>
+              <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center group-hover:translate-x-1 transition-transform">
+                <ChevronRight size={18} />
+              </div>
+            </div>
+          </Motion.button>
+        </div>
       </div>
     </div>
   );

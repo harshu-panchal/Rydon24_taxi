@@ -45,6 +45,7 @@ const RideComplete = () => {
   const [selectedTip, setSelectedTip] = useState(() => Number(state.feedback?.tipAmount || 0));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(Boolean(state.feedback?.submittedAt));
+  const [showSubmittedOverlay, setShowSubmittedOverlay] = useState(false);
   const [shareToast, setShareToast] = useState(false);
   const [error, setError] = useState('');
   const [vehicleImageBroken, setVehicleImageBroken] = useState(false);
@@ -112,6 +113,37 @@ const RideComplete = () => {
 
     fetchTipSettings();
   }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const hydrateCompletedRide = async () => {
+      if (!rideId) return;
+
+      try {
+        const response = await api.get(`/rides/${rideId}`);
+        const payload = response?.data?.data || response?.data || response || {};
+        const feedback = payload?.feedback || null;
+
+        if (!active || !feedback) {
+          return;
+        }
+
+        setRating(Number(feedback.rating || 0));
+        setComment(feedback.comment || '');
+        setSelectedTip(Number(feedback.tipAmount || 0));
+        setIsSubmitted(Boolean(feedback.submittedAt));
+      } catch (rideError) {
+        console.error('Failed to refresh completed ride receipt:', rideError);
+      }
+    };
+
+    hydrateCompletedRide();
+
+    return () => {
+      active = false;
+    };
+  }, [rideId]);
 
   useEffect(() => {
     setVehicleImageBroken(false);
@@ -190,9 +222,12 @@ const RideComplete = () => {
 
       const payload = response?.data?.data || response?.data || response;
       if (payload?.feedback) {
+        setRating(Number(payload.feedback.rating || rating));
         setComment(payload.feedback.comment || comment);
+        setSelectedTip(Number(payload.feedback.tipAmount || 0));
       }
       setIsSubmitted(true);
+      setShowSubmittedOverlay(true);
       clearCurrentRide();
     } catch (submitError) {
       setError(submitError?.message || 'Could not submit feedback right now.');
@@ -217,7 +252,7 @@ const RideComplete = () => {
       </AnimatePresence>
 
       <AnimatePresence>
-        {isSubmitted && (
+        {showSubmittedOverlay && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -350,32 +385,45 @@ const RideComplete = () => {
         </div>
 
         <div className="rounded-[20px] border border-white/80 bg-white/95 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
-          <p className="text-center text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-            {tipsEnabled ? 'Tip your driver' : 'Driver tips disabled'}
-          </p>
-          {tipsEnabled && minimumTipAmount > 0 ? (
-            <p className="mt-2 text-center text-[11px] font-bold text-slate-500">Minimum tip amount: Rs {minimumTipAmount}</p>
-          ) : null}
-          <div className="mt-3 flex flex-wrap justify-center gap-2">
-            {availableTipOptions.map((amount) => (
-              <button
-                key={amount}
-                type="button"
-                onClick={() => {
-                  setSelectedTip(amount);
-                  setError('');
-                }}
-                disabled={!tipsEnabled && amount > 0}
-                className={`rounded-full border px-4 py-2 text-[11px] font-black transition-all ${
-                  selectedTip === amount
-                    ? 'border-orange-500 bg-orange-500 text-white shadow-[0_8px_18px_rgba(249,115,22,0.24)]'
-                    : 'border-slate-100 bg-slate-50 text-slate-600'
-                } ${!tipsEnabled && amount > 0 ? 'cursor-not-allowed opacity-50' : ''}`}
-              >
-                {amount === 0 ? 'No tip' : `Rs ${amount}`}
-              </button>
-            ))}
-          </div>
+          {isSubmitted ? (
+            <div className="text-center">
+              <p className="text-center text-[10px] font-black uppercase tracking-[0.22em] text-emerald-500">
+                Feedback submitted
+              </p>
+              <p className="mt-2 text-[12px] font-bold text-slate-500">
+                Rating: {rating || 0}/5 {selectedTip > 0 ? `| Tip added: Rs ${Number(selectedTip || 0).toFixed(2)}` : '| No tip added'}
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="text-center text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                {tipsEnabled ? 'Tip your driver' : 'Driver tips disabled'}
+              </p>
+              {tipsEnabled && minimumTipAmount > 0 ? (
+                <p className="mt-2 text-center text-[11px] font-bold text-slate-500">Minimum tip amount: Rs {minimumTipAmount}</p>
+              ) : null}
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
+                {availableTipOptions.map((amount) => (
+                  <button
+                    key={amount}
+                    type="button"
+                    onClick={() => {
+                      setSelectedTip(amount);
+                      setError('');
+                    }}
+                    disabled={!tipsEnabled && amount > 0}
+                    className={`rounded-full border px-4 py-2 text-[11px] font-black transition-all ${
+                      selectedTip === amount
+                        ? 'border-orange-500 bg-orange-500 text-white shadow-[0_8px_18px_rgba(249,115,22,0.24)]'
+                        : 'border-slate-100 bg-slate-50 text-slate-600'
+                    } ${!tipsEnabled && amount > 0 ? 'cursor-not-allowed opacity-50' : ''}`}
+                  >
+                    {amount === 0 ? 'No tip' : `Rs ${amount}`}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         <div className="rounded-[20px] border border-white/80 bg-white/95 px-4 py-4 text-center shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
@@ -389,11 +437,12 @@ const RideComplete = () => {
                   setRating(value);
                   setError('');
                 }}
+                disabled={isSubmitted}
                 className={`flex h-11 w-11 items-center justify-center rounded-[12px] transition-all ${
                   rating >= value
                     ? 'bg-orange-500 shadow-[0_10px_20px_rgba(249,115,22,0.24)]'
                     : 'bg-slate-100'
-                }`}
+                } ${isSubmitted ? 'cursor-default' : ''}`}
               >
                 <Star size={19} className={rating >= value ? 'fill-white text-white' : 'text-slate-300'} />
               </button>
@@ -410,6 +459,7 @@ const RideComplete = () => {
               onChange={(event) => setComment(event.target.value)}
               rows={3}
               maxLength={500}
+              disabled={isSubmitted}
               placeholder="Tell us about the trip"
               className="w-full resize-none rounded-[12px] border border-slate-100 bg-white px-3 py-2 text-[13px] font-bold text-slate-900 outline-none placeholder:text-slate-300"
             />
@@ -423,7 +473,7 @@ const RideComplete = () => {
             disabled={isSubmitting || isSubmitted}
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-[16px] bg-slate-900 py-3.5 text-[14px] font-black text-white shadow-[0_12px_24px_rgba(15,23,42,0.18)] disabled:opacity-60"
           >
-            {isSubmitting ? 'Saving your feedback...' : isSubmitted ? 'Feedback saved' : 'Submit rating'}
+            {isSubmitting ? 'Saving your feedback...' : isSubmitted ? 'Feedback already saved' : 'Submit rating'}
             <ChevronRight size={16} />
           </button>
 

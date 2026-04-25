@@ -1,82 +1,77 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Users, 
-  Car, 
-  CheckCircle2, 
-  Clock, 
-  Wallet, 
-  IndianRupee, 
-  TrendingUp, 
-  ArrowUpRight, 
-  ArrowDownRight, 
-  History, 
-  CircleAlert,
-  ChevronRight,
-  TrendingDown,
-  Zap,
-  MoreHorizontal,
+import {
+  ArrowDownRight,
+  ArrowUpRight,
   Bell,
+  Car,
+  CircleAlert,
+  Clock,
+  CreditCard,
+  History,
+  IndianRupee,
   Search,
   ShieldCheck,
-  CreditCard,
   UserCheck,
   UserPlus,
-  SearchIcon,
-  ShieldAlert
+  Users,
+  Wallet,
 } from 'lucide-react';
 import { adminService } from '../../services/adminService';
 import { BACKEND_LABEL } from '../../../../shared/api/runtimeConfig';
 
-const TopStatCard = ({ label, value, trend, icon: Icon, color, isLoading, onClick, clickable = false }) => (
+const currency = (value) => Number(value || 0).toFixed(2);
+
+const TopStatCard = ({ label, value, trend, icon: Icon, accentClass, iconClass, isLoading, onClick, clickable = false }) => (
   <button
     type="button"
     onClick={onClick}
     disabled={!clickable}
-    className={`w-full text-left bg-white p-5 rounded-[24px] border border-gray-100 shadow-sm relative overflow-hidden group min-h-[140px] ${
-      clickable ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md transition-all' : 'cursor-default'
+    className={`w-full overflow-hidden rounded-[24px] border border-gray-100 bg-white p-5 text-left shadow-sm ${
+      clickable ? 'cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md' : 'cursor-default'
     }`}
   >
     {isLoading ? (
       <div className="animate-pulse space-y-4">
-        <div className="h-4 bg-gray-100 rounded w-1/2"></div>
-        <div className="h-8 bg-gray-100 rounded w-3/4"></div>
+        <div className="h-4 w-1/2 rounded bg-gray-100" />
+        <div className="h-8 w-3/4 rounded bg-gray-100" />
       </div>
     ) : (
       <>
-        <div className="flex justify-between items-start mb-3">
-           <div>
-             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider leading-none mb-1.5">{label}</p>
-             <h4 className="text-2xl font-semibold text-gray-950 tracking-tight leading-none">{value}</h4>
-           </div>
-           {trend !== undefined && (
-             <div className={`flex items-center gap-1 text-[10px] font-semibold ${trend > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                {trend > 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />} {Math.abs(trend)}%
-             </div>
-           )}
+        <div className="mb-3 flex items-start justify-between">
+          <div>
+            <p className="mb-1.5 text-[10px] font-semibold uppercase leading-none tracking-wider text-gray-400">{label}</p>
+            <h4 className="text-2xl font-semibold leading-none tracking-tight text-gray-950">{value}</h4>
+          </div>
+          {trend !== undefined ? (
+            <div className={`flex items-center gap-1 text-[10px] font-semibold ${trend > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+              {trend > 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+              {Math.abs(trend)}%
+            </div>
+          ) : null}
         </div>
         <div className="flex justify-end">
-           <div className={`w-10 h-10 rounded-xl bg-${color}-50 text-${color}-500 border border-${color}-100 flex items-center justify-center shadow-sm`}>
-              <Icon size={18} strokeWidth={2.5} />
-           </div>
+          <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${accentClass} ${iconClass}`}>
+            <Icon size={18} strokeWidth={2.5} />
+          </div>
         </div>
       </>
     )}
   </button>
 );
 
-const MiniStat = ({ label, value, icon: Icon, color, isLoading }) => (
-  <div className="bg-gray-50/50 p-4 rounded-[20px] border border-gray-100 flex items-center justify-between group hover:bg-white transition-all cursor-default min-h-[64px]">
+const MiniStat = ({ label, value, icon: Icon, accentClass, iconClass, isLoading }) => (
+  <div className="flex min-h-[64px] cursor-default items-center justify-between rounded-[20px] border border-gray-100 bg-gray-50/50 p-4 transition-all hover:bg-white">
     {isLoading ? (
-      <div className="animate-pulse flex-1 h-4 bg-gray-100 rounded w-full"></div>
+      <div className="h-4 w-full animate-pulse rounded bg-gray-100" />
     ) : (
       <>
         <div>
-          <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1 leading-none">{label}</p>
-          <p className="text-[15px] font-semibold text-gray-950 tracking-tight leading-none">₹ {value}</p>
+          <p className="mb-1 text-[9px] font-semibold uppercase leading-none tracking-wider text-gray-400">{label}</p>
+          <p className="text-[15px] font-semibold leading-none tracking-tight text-gray-950">Rs {value}</p>
         </div>
-        <div className={`w-8 h-8 rounded-lg bg-${color}-200/20 text-${color}-600 border border-${color}-200/50 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform`}>
-           <Icon size={14} strokeWidth={2.5} />
+        <div className={`flex h-8 w-8 items-center justify-center rounded-lg border ${accentClass} ${iconClass}`}>
+          <Icon size={14} strokeWidth={2.5} />
         </div>
       </>
     )}
@@ -84,22 +79,26 @@ const MiniStat = ({ label, value, icon: Icon, color, isLoading }) => (
 );
 
 const SimpleDonut = ({ data, colors }) => {
-  const total = data.reduce((a, b) => a + b, 0);
+  const total = data.reduce((sum, value) => sum + Number(value || 0), 0);
   let cumulative = 0;
-  
+
   return (
-    <div className="relative w-48 h-48 flex items-center justify-center mx-auto">
-      <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
-        {data.map((val, i) => {
-          const percent = (val / total) * 100;
-          const offset = (cumulative / total) * 100;
-          cumulative += val;
+    <div className="relative mx-auto flex h-48 w-48 items-center justify-center">
+      <svg viewBox="0 0 36 36" className="h-full w-full -rotate-90 transform">
+        {data.map((rawValue, index) => {
+          const value = Number(rawValue || 0);
+          const percent = total > 0 ? (value / total) * 100 : 0;
+          const offset = total > 0 ? (cumulative / total) * 100 : 0;
+          cumulative += value;
+
           return (
             <circle
-              key={i}
-              cx="18" cy="18" r="15.915"
+              key={colors[index] || index}
+              cx="18"
+              cy="18"
+              r="15.915"
               fill="transparent"
-              stroke={colors[i]}
+              stroke={colors[index]}
               strokeWidth="4"
               strokeDasharray={`${percent} ${100 - percent}`}
               strokeDashoffset={-offset}
@@ -109,331 +108,384 @@ const SimpleDonut = ({ data, colors }) => {
         })}
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mt-1">Total</p>
-        <p className="text-xl font-bold text-gray-950 tracking-tight leading-none">{total}</p>
+        <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Total</p>
+        <p className="text-xl font-bold leading-none tracking-tight text-gray-950">{total}</p>
       </div>
     </div>
   );
 };
 
-const SimpleBarChart = ({ data, colors }) => (
-  <div className="flex items-end gap-3 h-48 px-4 justify-between w-full">
-     {data.map((val, i) => (
-       <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
-          <div className="relative w-full overflow-hidden rounded-lg bg-gray-50 h-full flex items-end">
-            <div 
-              style={{ height: `${(val / Math.max(...data)) * 100}%` }}
-              className={`w-full bg-${colors[i]}-500/80 group-hover:bg-${colors[i]}-500 transition-all duration-500 rounded-t-sm`}
-            />
+const SimpleBarChart = ({ data, color = '#10B981' }) => {
+  const values = data.map((item) => Number(item?.total || 0));
+  const maxValue = Math.max(...values, 0);
+
+  return (
+    <div className="flex h-48 w-full items-end justify-between gap-3 px-4">
+      {data.map((item) => {
+        const heightPercent = maxValue > 0 ? (Number(item?.total || 0) / maxValue) * 100 : 0;
+
+        return (
+          <div key={item.label} className="group flex flex-1 flex-col items-center gap-2">
+            <div className="relative flex h-full w-full items-end overflow-hidden rounded-lg bg-gray-50">
+              <div
+                style={{ height: `${heightPercent}%`, backgroundColor: color }}
+                className="w-full rounded-t-sm transition-all duration-500 group-hover:opacity-90"
+                title={`${item.label}: ${item.total}`}
+              />
+            </div>
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">{item.label}</span>
           </div>
-          <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
-            {['Jan','Feb','Mar','Apr'][i]}
+        );
+      })}
+    </div>
+  );
+};
+
+const EarningsLineChart = ({ points }) => {
+  const [hoveredPoint, setHoveredPoint] = useState(null);
+  const safePoints = Array.isArray(points) && points.length ? points : [];
+  const maxValue = Math.max(...safePoints.map((item) => Number(item?.amount || 0)), 0);
+
+  const chartPoints = safePoints.map((item, index) => {
+    const x = safePoints.length === 1 ? 200 : (index / (safePoints.length - 1)) * 400;
+    const y = maxValue > 0 ? 90 - (Number(item?.amount || 0) / maxValue) * 60 : 90;
+    return { ...item, x, y };
+  });
+
+  const linePath = chartPoints
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
+    .join(' ');
+
+  const areaPath = chartPoints.length
+    ? `${linePath} L ${chartPoints[chartPoints.length - 1].x} 100 L ${chartPoints[0].x} 100 Z`
+    : '';
+
+  return (
+    <div className="relative mt-auto h-48 w-full">
+      {hoveredPoint ? (
+        <div className="absolute left-0 top-0 z-10 rounded-xl border border-emerald-100 bg-white/95 px-3 py-2 text-[11px] font-bold text-slate-700 shadow-lg">
+          <p className="uppercase tracking-wider text-slate-400">{hoveredPoint.label}</p>
+          <p>Rs {currency(hoveredPoint.amount)}</p>
+        </div>
+      ) : null}
+
+      <svg viewBox="0 0 400 100" className="h-full w-full">
+        <defs>
+          <linearGradient id="dashboardLineFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#27AE60" stopOpacity="0.24" />
+            <stop offset="100%" stopColor="#27AE60" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={areaPath} fill="url(#dashboardLineFill)" />
+        <path d={linePath} fill="transparent" stroke="#27AE60" strokeWidth="3" />
+        {chartPoints.map((point) => (
+          <circle
+            key={point.label}
+            cx={point.x}
+            cy={point.y}
+            r="4.5"
+            fill="#27AE60"
+            className="cursor-pointer"
+            onMouseEnter={() => setHoveredPoint(point)}
+            onMouseLeave={() => setHoveredPoint(null)}
+          />
+        ))}
+      </svg>
+      <div className="mt-4 flex items-center justify-between px-2">
+        {safePoints.map((point) => (
+          <span key={point.label} className="text-[9px] font-semibold uppercase tracking-wider text-gray-400">
+            {point.label}
           </span>
-       </div>
-     ))}
-  </div>
-);
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const MainDashboard = () => {
   const navigate = useNavigate();
-  const [stats, setStats] = useState({
-    total_users: 0,
-    total_drivers: 0,
-    approved_drivers: 0,
-    pending_drivers: 0,
-    isLoading: true
-  });
+  const [dashboard, setDashboard] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [dashboardError, setDashboardError] = useState('');
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const dashboardData = await adminService.getDashboardData();
-        const data = dashboardData?.data || dashboardData;
+        setIsLoading(true);
+        const response = await adminService.getDashboardData();
+        const data = response?.data || response;
+        setDashboard(data || {});
         setDashboardError('');
-
-        setStats({
-          total_users: data?.totalUsers || 0,
-          total_drivers: data?.totalDrivers?.total || 0,
-          approved_drivers: data?.totalDrivers?.approved || 0, 
-          pending_drivers: data?.totalDrivers?.declined || 0,
-          isLoading: false
-        });
       } catch (err) {
         console.error('Dashboard Fetch Error:', err);
         setDashboardError(`Dashboard data is unavailable right now. Start the backend on ${BACKEND_LABEL} to load live metrics.`);
-        setStats(prev => ({ ...prev, isLoading: false }));
+      } finally {
+        setIsLoading(false);
       }
     };
 
     fetchDashboardData();
   }, []);
 
-  const { isLoading } = stats;
+  const todayTrips = dashboard?.todayTrips || {};
+  const overallTrips = dashboard?.overallTrips || {};
+  const todayEarnings = dashboard?.todayEarnings || {};
+  const overallEarnings = dashboard?.overallEarnings || {};
+  const cancelChart = dashboard?.cancelChart || {};
+  const notifiedSos = dashboard?.notifiedSos || {};
+
+  const todayTripSeries = useMemo(
+    () => [todayTrips.completed || 0, todayTrips.cancelled || 0, todayTrips.scheduled || 0],
+    [todayTrips.cancelled, todayTrips.completed, todayTrips.scheduled],
+  );
+  const overallTripSeries = useMemo(
+    () => [overallTrips.completed || 0, overallTrips.cancelled || 0, overallTrips.scheduled || 0],
+    [overallTrips.cancelled, overallTrips.completed, overallTrips.scheduled],
+  );
+  const earningsChartPoints = useMemo(() => overallEarnings.chart || [], [overallEarnings.chart]);
+  const cancelChartPoints = useMemo(() => cancelChart.chart || [], [cancelChart.chart]);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700 font-sans text-gray-950 bg-[#f8fbff] -m-8 p-8 min-h-screen">
-      
-      {/* ── HEADER (Compact) ── */}
+    <div className="min-h-screen -m-8 space-y-8 bg-[#f8fbff] p-8 font-sans text-gray-950 animate-in fade-in duration-700">
       <div className="flex items-center justify-between">
-         <div>
-            <h1 className="text-xl font-semibold tracking-tight text-gray-900 leading-none uppercase">Dashboard</h1>
-         </div>
-         
+        <div>
+          <h1 className="text-xl font-semibold uppercase leading-none tracking-tight text-gray-900">Dashboard</h1>
+        </div>
       </div>
+
       {dashboardError ? (
-        <div className="bg-amber-50 border border-amber-200 rounded-[24px] p-5 flex items-start gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+        <div className="flex items-start gap-3 rounded-[24px] border border-amber-200 bg-amber-50 p-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
             <CircleAlert size={18} />
           </div>
           <div>
-            <p className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider">Backend Offline</p>
-            <p className="text-sm font-semibold text-amber-900 mt-1">{dashboardError}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-800">Backend Offline</p>
+            <p className="mt-1 text-sm font-semibold text-amber-900">{dashboardError}</p>
           </div>
         </div>
       ) : null}
 
-      {/* ── TOP STATS ROW ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-         <TopStatCard 
-            label="DRIVERS REGISTERED" 
-            value={stats?.total_drivers || "0"} 
-            trend={100} 
-            icon={UserPlus} 
-            color="emerald" 
-            isLoading={isLoading}
-            clickable
-            onClick={() => navigate('/admin/drivers')}
-         />
-         <TopStatCard 
-            label="APPROVED DRIVERS" 
-            value={stats?.approved_drivers || "0"} 
-            trend={100} 
-            icon={ShieldCheck} 
-            color="blue" 
-            isLoading={isLoading}
-            clickable
-            onClick={() => navigate('/admin/drivers')}
-         />
-         <TopStatCard 
-            label="WAITING APPROVAL" 
-            value={stats?.pending_drivers || "0"} 
-            trend={0} 
-            icon={Clock} 
-            color="amber" 
-            isLoading={isLoading}
-            clickable
-            onClick={() => navigate('/admin/drivers/pending')}
-         />
-         <TopStatCard 
-            label="USERS REGISTERED" 
-            value={stats?.total_users || "0"} 
-            trend={100} 
-            icon={Users} 
-            color="indigo" 
-            isLoading={isLoading}
-            clickable
-            onClick={() => navigate('/admin/users')}
-         />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <TopStatCard
+          label="Drivers Registered"
+          value={dashboard?.totalDrivers?.total || 0}
+          trend={100}
+          icon={UserPlus}
+          accentClass="border-emerald-100 bg-emerald-50"
+          iconClass="text-emerald-500"
+          isLoading={isLoading}
+          clickable
+          onClick={() => navigate('/admin/drivers')}
+        />
+        <TopStatCard
+          label="Approved Drivers"
+          value={dashboard?.totalDrivers?.approved || 0}
+          trend={100}
+          icon={ShieldCheck}
+          accentClass="border-blue-100 bg-blue-50"
+          iconClass="text-blue-500"
+          isLoading={isLoading}
+          clickable
+          onClick={() => navigate('/admin/drivers')}
+        />
+        <TopStatCard
+          label="Waiting Approval"
+          value={dashboard?.totalDrivers?.declined || 0}
+          trend={0}
+          icon={Clock}
+          accentClass="border-amber-100 bg-amber-50"
+          iconClass="text-amber-500"
+          isLoading={isLoading}
+          clickable
+          onClick={() => navigate('/admin/drivers/pending')}
+        />
+        <TopStatCard
+          label="Users Registered"
+          value={dashboard?.totalUsers || 0}
+          trend={100}
+          icon={Users}
+          accentClass="border-indigo-100 bg-indigo-50"
+          iconClass="text-indigo-500"
+          isLoading={isLoading}
+          clickable
+          onClick={() => navigate('/admin/users')}
+        />
       </div>
 
-      {/* ── SOS SECTION ── */}
-      <div className="bg-white border border-gray-100 rounded-[28px] overflow-hidden shadow-sm p-8 text-center space-y-4">
-         <h3 className="text-left text-[14px] font-semibold text-gray-400 uppercase tracking-wider mb-4">Notified SOS</h3>
-         <div className="py-10 flex flex-col items-center">
-            <div className="w-24 h-24 bg-blue-50/50 rounded-full flex items-center justify-center relative mb-4">
-               <div className="absolute inset-0 border-2 border-dashed border-blue-200 rounded-full animate-[spin_10s_linear_infinite]"></div>
-               <div className="bg-white p-4 rounded-2xl shadow-xl border border-blue-50 relative z-10">
-                  <div className="relative">
-                     <History size={32} className="text-blue-500" />
-                     <Search size={16} className="absolute -bottom-1 -right-1 text-gray-950 font-semibold p-0.5 bg-white rounded-full border border-gray-100" />
-                  </div>
-               </div>
+      <div className="overflow-hidden rounded-[28px] border border-gray-100 bg-white p-8 text-center shadow-sm">
+        <h3 className="mb-4 text-left text-[14px] font-semibold uppercase tracking-wider text-gray-400">Notified SOS</h3>
+        <div className="flex flex-col items-center py-6">
+          <div className="relative mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-blue-50/50">
+            <div className="absolute inset-0 rounded-full border-2 border-dashed border-blue-200 animate-[spin_10s_linear_infinite]" />
+            <div className="relative z-10 rounded-2xl border border-blue-50 bg-white p-4 shadow-xl">
+              <div className="relative">
+                <History size={32} className="text-blue-500" />
+                <Search size={16} className="absolute -bottom-1 -right-1 rounded-full border border-gray-100 bg-white p-0.5 font-semibold text-gray-950" />
+              </div>
             </div>
-            <p className="text-[16px] font-semibold text-gray-950 uppercase tracking-tight">No Data Found</p>
-         </div>
-      </div>
-
-      {/* ── TODAY PROGRESS GRID ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 ring-0">
-         
-         {/* Today Trips Chart Section */}
-         <div className="bg-white border border-gray-100 rounded-[32px] p-8 shadow-sm flex flex-col">
-            <h3 className="text-[14px] font-semibold text-gray-400 uppercase tracking-wider mb-10">Today Trips</h3>
-            <div className="flex-1 flex flex-col md:flex-row items-center gap-10">
-               <div className="flex-1">
-                  <SimpleDonut data={[1, 0, 0]} colors={['#3B4687', '#EB5757', '#2D9CDB']} />
-               </div>
-               <div className="space-y-4 min-w-[160px]">
-                  {[
-                    { l: 'Completed Rides', c: '#3B4687' },
-                    { l: 'Cancelled Rides', c: '#EB5757' },
-                    { l: 'Scheduled Rides', c: '#2D9CDB' }
-                  ].map((item, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                       <div className="w-3 h-3 rounded-sm" style={{backgroundColor: item.c}} />
-                       <span className="text-[12px] font-semibold text-gray-600 uppercase tracking-tight leading-none">{item.l}</span>
-                    </div>
-                  ))}
-               </div>
-            </div>
-         </div>
-
-         {/* Today Stats Section */}
-         <div className="grid grid-cols-2 gap-4 h-full">
-            <MiniStat label="Today Earnings" value="145.00" icon={IndianRupee} color="blue" />
-            <MiniStat label="By Cash" value="145.00" icon={Wallet} color="emerald" />
-            <MiniStat label="By Wallet" value="0.00" icon={Wallet} color="amber" />
-            <MiniStat label="By Card/Online" value="0.00" icon={CreditCard} color="rose" />
-            <MiniStat label="Admin Commission" value="19.45" icon={ShieldCheck} color="indigo" />
-            <MiniStat label="Drivers Earnings" value="125.55" icon={UserCheck} color="gray" />
-         </div>
-
-      </div>
-
-      {/* ── OVERALL PROGRESS GRID ── */}
-      <div className="bg-white border border-gray-100 rounded-[32px] p-8 shadow-sm w-full">
-          <h3 className="text-[14px] font-semibold text-gray-400 uppercase tracking-wider mb-10">Overall Trips</h3>
-          <div className="flex flex-col md:flex-row items-center gap-10">
-             <div className="flex justify-center w-full md:w-auto md:flex-1">
-                <SimpleDonut data={[1, 0, 0]} colors={['#2D9CDB', '#EB5757', '#27AE60']} />
-             </div>
-             <div className="space-y-4 min-w-[160px] md:pr-10">
-                {[
-                  { l: 'Completed Rides', c: '#2D9CDB' },
-                  { l: 'Cancelled Rides', c: '#EB5757' },
-                  { l: 'Scheduled Rides', c: '#27AE60' }
-                ].map((item, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                     <div className="w-3 h-3 rounded-sm" style={{backgroundColor: item.c}} />
-                     <span className="text-[12px] font-semibold text-gray-600 uppercase tracking-tight leading-none">{item.l}</span>
-                  </div>
-                ))}
-             </div>
           </div>
+          <p className="text-[34px] font-black leading-none tracking-tight text-gray-950">
+            {isLoading ? '--' : notifiedSos.total || 0}
+          </p>
+          <p className="mt-2 text-[16px] font-semibold uppercase tracking-tight text-gray-950">
+            {Number(notifiedSos.total || 0) > 0 ? 'Pending safety/support alerts' : 'No active alerts'}
+          </p>
+          <p className="mt-2 text-[12px] font-semibold text-gray-500">
+            Assigned: {notifiedSos.assigned || 0} | Closed: {notifiedSos.closed || 0}
+          </p>
+        </div>
       </div>
 
-      {/* ── OVERALL EARNINGS GRID ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-         {/* Overall Earnings chart */}
-         <div className="bg-white border border-gray-100 rounded-[32px] p-8 shadow-sm flex flex-col">
-            <h3 className="text-[14px] font-semibold text-gray-400 uppercase tracking-wider mb-10">Overall Earnings</h3>
-            <div className="relative h-48 w-full mt-auto">
-               <svg viewBox="0 0 400 100" className="w-full h-full">
-                  <path 
-                    d="M 0 90 L 100 88 L 200 89 L 300 85 L 400 60" 
-                    fill="transparent" 
-                    stroke="#27AE60" 
-                    strokeWidth="3" 
-                    className="animate-[draw_2s_ease-out_forwards]"
-                  />
-                  <linearGradient id="lineFill" x1="0" y1="0" x2="0" y2="1">
-                     <stop offset="0%" stopColor="#27AE60" stopOpacity="0.2"/>
-                     <stop offset="100%" stopColor="#27AE60" stopOpacity="0"/>
-                  </linearGradient>
-                  <path 
-                    d="M 0 90 L 100 88 L 200 89 L 300 85 L 400 60 L 400 100 L 0 100 Z" 
-                    fill="url(#lineFill)"
-                  />
-               </svg>
-               <div className="flex justify-between items-center px-2 mt-4">
-                  {['Jan','Feb','Mar','Apr'].map((m,i) => (
-                     <span key={i} className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider">{m}</span>
-                  ))}
-               </div>
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+        <div className="flex flex-col rounded-[32px] border border-gray-100 bg-white p-8 shadow-sm">
+          <h3 className="mb-10 text-[14px] font-semibold uppercase tracking-wider text-gray-400">Today Trips</h3>
+          <div className="flex flex-1 flex-col items-center gap-10 md:flex-row">
+            <div className="flex-1">
+              <SimpleDonut data={todayTripSeries} colors={['#3B4687', '#EB5757', '#2D9CDB']} />
             </div>
-         </div>
-         
-         {/* Overall Stats grid */}
-         <div className="grid grid-cols-2 gap-4 h-full">
-            <MiniStat label="Overall Earnings" value="145.00" icon={IndianRupee} color="rose" />
-            <MiniStat label="By Cash" value="145.00" icon={Wallet} color="amber" />
-            <MiniStat label="By Wallet" value="0.00" icon={Wallet} color="emerald" />
-            <MiniStat label="By Card/Online" value="0.00" icon={CreditCard} color="blue" />
-            <MiniStat label="Admin Commission" value="19.45" icon={ShieldCheck} color="indigo" />
-            <MiniStat label="Drivers Earnings" value="125.55" icon={UserCheck} color="gray" />
-         </div>
-      </div>
-
-      {/* ── CANCELLATION SUMMARY GRID ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-         {/* Cancellation Bar Chart */}
-         <div className="bg-white border border-gray-100 rounded-[32px] p-8 shadow-sm flex flex-col">
-            <h3 className="text-[14px] font-semibold text-gray-400 uppercase tracking-wider mb-10">Cancellation Chart</h3>
-            <div className="h-48 w-full mt-auto">
-               <SimpleBarChart data={[0, 0, 0, 1]} colors={['emerald', 'amber', 'rose', 'emerald']} />
-            </div>
-            <div className="flex justify-center flex-wrap gap-4 mt-8">
-                {[
-                  { l: 'Cancelled Due to No Drivers', c: '#3F51B5' },
-                  { l: 'Cancelled By Users', c: '#FFB300' },
-                  { l: 'Cancelled By Drivers', c: '#009688' }
-                ].map((item, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                     <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: item.c}} />
-                     <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-tight">{item.l}</span>
+            <div className="min-w-[180px] space-y-4">
+              {[
+                { label: 'Completed Rides', color: '#3B4687', value: todayTrips.completed || 0 },
+                { label: 'Cancelled Rides', color: '#EB5757', value: todayTrips.cancelled || 0 },
+                { label: 'Scheduled Rides', color: '#2D9CDB', value: todayTrips.scheduled || 0 },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-3 w-3 rounded-sm" style={{ backgroundColor: item.color }} />
+                    <span className="text-[12px] font-semibold uppercase leading-none tracking-tight text-gray-600">{item.label}</span>
                   </div>
-                ))}
+                  <span className="text-[14px] font-black text-gray-950">{item.value}</span>
+                </div>
+              ))}
             </div>
-         </div>
-         
-         {/* Cancel Stats grid */}
-         <div className="grid grid-cols-2 gap-4 h-full">
-            <button
-               type="button"
-               onClick={() => navigate('/admin/trips')}
-               className="w-full text-left bg-white p-6 rounded-[28px] border border-gray-50 shadow-sm flex items-center justify-between hover:-translate-y-0.5 hover:shadow-md transition-all"
-            >
-               <div>
-                  <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1 leading-none">Total Request Cancelled</p>
-                  <p className="text-2xl font-semibold text-gray-950 tracking-tight leading-none">1</p>
-               </div>
-               <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center">
-                  <UserPlus size={18} />
-               </div>
-            </button>
-            <button
-               type="button"
-               onClick={() => navigate('/admin/trips')}
-               className="w-full text-left bg-white p-6 rounded-[28px] border border-gray-50 shadow-sm flex items-center justify-between hover:-translate-y-0.5 hover:shadow-md transition-all"
-            >
-               <div>
-                  <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest mb-1 leading-none">Cancelled By Users</p>
-                  <p className="text-2xl font-semibold text-gray-950 tracking-tight leading-none">0</p>
-               </div>
-               <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center">
-                  <CircleAlert size={18} />
-               </div>
-            </button>
-            <button
-               type="button"
-               onClick={() => navigate('/admin/drivers')}
-               className="w-full text-left bg-white p-6 rounded-[28px] border border-gray-50 shadow-sm flex items-center justify-between hover:-translate-y-0.5 hover:shadow-md transition-all"
-            >
-               <div>
-                  <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest mb-1 leading-none">Cancelled By Drivers</p>
-                  <p className="text-2xl font-semibold text-gray-950 tracking-tight leading-none">1</p>
-               </div>
-               <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center">
-                  <Car size={18} />
-               </div>
-            </button>
-            <button
-               type="button"
-               onClick={() => navigate('/admin/ongoing')}
-               className="w-full text-left bg-white p-6 rounded-[28px] border border-gray-50 shadow-sm flex items-center justify-between hover:-translate-y-0.5 hover:shadow-md transition-all"
-            >
-               <div>
-                  <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1 leading-none">Dispatcher Cancelled</p>
-                  <p className="text-2xl font-semibold text-gray-950 tracking-tight leading-none">0</p>
-               </div>
-               <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center">
-                  <Zap size={18} />
-               </div>
-            </button>
-         </div>
+          </div>
+        </div>
+
+        <div className="grid h-full grid-cols-2 gap-4">
+          <MiniStat label="Today Earnings" value={currency(todayEarnings.total)} icon={IndianRupee} accentClass="border-blue-200/50 bg-blue-200/20" iconClass="text-blue-600" isLoading={isLoading} />
+          <MiniStat label="By Cash" value={currency(todayEarnings.by_cash)} icon={Wallet} accentClass="border-emerald-200/50 bg-emerald-200/20" iconClass="text-emerald-600" isLoading={isLoading} />
+          <MiniStat label="By Wallet" value={currency(todayEarnings.by_wallet)} icon={Wallet} accentClass="border-amber-200/50 bg-amber-200/20" iconClass="text-amber-600" isLoading={isLoading} />
+          <MiniStat label="By Card/Online" value={currency(todayEarnings.by_card)} icon={CreditCard} accentClass="border-rose-200/50 bg-rose-200/20" iconClass="text-rose-600" isLoading={isLoading} />
+          <MiniStat label="Admin Commission" value={currency(todayEarnings.admin_commission)} icon={ShieldCheck} accentClass="border-indigo-200/50 bg-indigo-200/20" iconClass="text-indigo-600" isLoading={isLoading} />
+          <MiniStat label="Drivers Earnings" value={currency(todayEarnings.driver_earnings)} icon={UserCheck} accentClass="border-gray-200/70 bg-gray-200/30" iconClass="text-gray-700" isLoading={isLoading} />
+        </div>
       </div>
 
+      <div className="w-full rounded-[32px] border border-gray-100 bg-white p-8 shadow-sm">
+        <h3 className="mb-10 text-[14px] font-semibold uppercase tracking-wider text-gray-400">Overall Trips</h3>
+        <div className="flex flex-col items-center gap-10 md:flex-row">
+          <div className="flex w-full justify-center md:w-auto md:flex-1">
+            <SimpleDonut data={overallTripSeries} colors={['#2D9CDB', '#EB5757', '#27AE60']} />
+          </div>
+          <div className="min-w-[180px] space-y-4 md:pr-10">
+            {[
+              { label: 'Completed Rides', color: '#2D9CDB', value: overallTrips.completed || 0 },
+              { label: 'Cancelled Rides', color: '#EB5757', value: overallTrips.cancelled || 0 },
+              { label: 'Scheduled Rides', color: '#27AE60', value: overallTrips.scheduled || 0 },
+            ].map((item) => (
+              <div key={item.label} className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-3 w-3 rounded-sm" style={{ backgroundColor: item.color }} />
+                  <span className="text-[12px] font-semibold uppercase leading-none tracking-tight text-gray-600">{item.label}</span>
+                </div>
+                <span className="text-[14px] font-black text-gray-950">{item.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+        <div className="flex flex-col rounded-[32px] border border-gray-100 bg-white p-8 shadow-sm">
+          <h3 className="mb-10 text-[14px] font-semibold uppercase tracking-wider text-gray-400">Overall Earnings</h3>
+          <EarningsLineChart points={earningsChartPoints} />
+        </div>
+
+        <div className="grid h-full grid-cols-2 gap-4">
+          <MiniStat label="Overall Earnings" value={currency(overallEarnings.total)} icon={IndianRupee} accentClass="border-rose-200/50 bg-rose-200/20" iconClass="text-rose-600" isLoading={isLoading} />
+          <MiniStat label="By Cash" value={currency(overallEarnings.by_cash)} icon={Wallet} accentClass="border-amber-200/50 bg-amber-200/20" iconClass="text-amber-600" isLoading={isLoading} />
+          <MiniStat label="By Wallet" value={currency(overallEarnings.by_wallet)} icon={Wallet} accentClass="border-emerald-200/50 bg-emerald-200/20" iconClass="text-emerald-600" isLoading={isLoading} />
+          <MiniStat label="By Card/Online" value={currency(overallEarnings.by_card)} icon={CreditCard} accentClass="border-blue-200/50 bg-blue-200/20" iconClass="text-blue-600" isLoading={isLoading} />
+          <MiniStat label="Admin Commission" value={currency(overallEarnings.admin_commission)} icon={ShieldCheck} accentClass="border-indigo-200/50 bg-indigo-200/20" iconClass="text-indigo-600" isLoading={isLoading} />
+          <MiniStat label="Drivers Earnings" value={currency(overallEarnings.driver_earnings)} icon={UserCheck} accentClass="border-gray-200/70 bg-gray-200/30" iconClass="text-gray-700" isLoading={isLoading} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+        <div className="flex flex-col rounded-[32px] border border-gray-100 bg-white p-8 shadow-sm">
+          <h3 className="mb-10 text-[14px] font-semibold uppercase tracking-wider text-gray-400">Cancellation Chart</h3>
+          <div className="h-48 w-full mt-auto">
+            <SimpleBarChart data={cancelChartPoints} color="#10B981" />
+          </div>
+          <div className="mt-8 flex flex-wrap justify-center gap-4">
+            {[
+              { label: 'Cancelled Due to No Drivers', color: '#3F51B5' },
+              { label: 'Cancelled By Users', color: '#FFB300' },
+              { label: 'Cancelled By Drivers', color: '#009688' },
+            ].map((item) => (
+              <div key={item.label} className="flex items-center gap-2">
+                <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                <span className="text-[9px] font-semibold uppercase tracking-tight text-gray-400">{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid h-full grid-cols-2 gap-4">
+          <button
+            type="button"
+            onClick={() => navigate('/admin/trips')}
+            className="flex w-full items-center justify-between rounded-[28px] border border-gray-50 bg-white p-6 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <div>
+              <p className="mb-1 text-[9px] font-semibold uppercase leading-none tracking-wider text-gray-400">Total Request Cancelled</p>
+              <p className="text-2xl font-semibold leading-none tracking-tight text-gray-950">{cancelChart.total || 0}</p>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-500">
+              <Bell size={18} />
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/admin/trips')}
+            className="flex w-full items-center justify-between rounded-[28px] border border-gray-50 bg-white p-6 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <div>
+              <p className="mb-1 text-[9px] font-semibold uppercase leading-none tracking-widest text-gray-400">Cancelled By Users</p>
+              <p className="text-2xl font-semibold leading-none tracking-tight text-gray-950">{cancelChart.byUser || 0}</p>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-50 text-amber-500">
+              <CircleAlert size={18} />
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/admin/drivers')}
+            className="flex w-full items-center justify-between rounded-[28px] border border-gray-50 bg-white p-6 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <div>
+              <p className="mb-1 text-[9px] font-semibold uppercase leading-none tracking-widest text-gray-400">Cancelled By Drivers</p>
+              <p className="text-2xl font-semibold leading-none tracking-tight text-gray-950">{cancelChart.byDriver || 0}</p>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-500">
+              <Car size={18} />
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/admin/ongoing')}
+            className="flex w-full items-center justify-between rounded-[28px] border border-gray-50 bg-white p-6 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <div>
+              <p className="mb-1 text-[9px] font-semibold uppercase leading-none tracking-wider text-gray-400">Cancelled By No Driver</p>
+              <p className="text-2xl font-semibold leading-none tracking-tight text-gray-950">{cancelChart.noDriver || 0}</p>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-50 text-cyan-500">
+              <UserPlus size={18} />
+            </div>
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

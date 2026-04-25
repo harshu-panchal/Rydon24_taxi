@@ -28,7 +28,6 @@ const RideDetail = lazy(() => import('./modules/user/pages/ride/RideDetail'));
 
 // Parcel Module Pages
 const ParcelType = lazy(() => import('./modules/user/pages/parcel/ParcelType'));
-const ParcelDetails = lazy(() => import('./modules/user/pages/parcel/ParcelDetails'));
 const SenderReceiverDetails = lazy(() => import('./modules/user/pages/parcel/SenderReceiverDetails'));
 
 // Profile & History
@@ -502,7 +501,7 @@ function App() {
               <Route path="/ride/detail/:id" element={<RideDetail />} />
 
               <Route path="/parcel/type" element={<ParcelType />} />
-              <Route path="/parcel/details" element={<ParcelDetails />} />
+              <Route path="/parcel/details" element={<SenderReceiverDetails />} />
               <Route
                 path="/parcel/contacts"
                 element={<SenderReceiverDetails />}
@@ -618,7 +617,7 @@ function App() {
               <Route path="/taxi/user/parcel/type" element={<ParcelType />} />
               <Route
                 path="/taxi/user/parcel/details"
-                element={<ParcelDetails />}
+                element={<SenderReceiverDetails />}
               />
               <Route
                 path="/taxi/user/parcel/contacts"

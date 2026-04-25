@@ -1,16 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
-  ArrowLeft,
-  User,
-  Phone,
-  MapPin,
   AlertCircle,
+  ArrowLeft,
   CheckCircle2,
   ChevronRight,
-  LoaderCircle,
+  Contact,
+  LocateFixed,
+  MapPin,
+  Mic,
   Navigation,
+  PackageCheck,
+  Phone,
+  Plus,
+  User,
   X,
 } from 'lucide-react';
 import { GoogleMap } from '@react-google-maps/api';
@@ -41,9 +45,7 @@ const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
 const getCoords = (title, fallback = [75.8577, 22.7196]) => LOCATION_COORDS[title] || fallback;
 
 const readStoredUserInfo = () => {
-  if (typeof window === 'undefined') {
-    return {};
-  }
+  if (typeof window === 'undefined') return {};
 
   try {
     return JSON.parse(window.localStorage.getItem('userInfo') || '{}');
@@ -73,113 +75,58 @@ const formatCoordLabel = (coords) => {
 const formatLatLngLabel = (position) => `${position.lat.toFixed(5)}, ${position.lng.toFixed(5)}`;
 
 const PhoneInput = ({ label, value, onChange, error, name, onClearError }) => (
-  <div className="space-y-1">
-    <label className="text-[12px] font-black text-gray-400 ml-1">{label}</label>
+  <div className="space-y-2">
+    <label className="ml-1 text-[11px] font-black uppercase tracking-widest text-slate-400">{label}</label>
     <div
-      className={`flex items-center gap-3 rounded-2xl p-4 ring-2 transition-all ${
+      className={`flex items-center gap-3 rounded-[18px] border p-4 transition-all ${
         error
-          ? 'bg-red-50 ring-red-100'
+          ? 'border-red-200 bg-red-50'
           : value && PHONE_REGEX.test(value)
-            ? 'bg-green-50 ring-green-100'
-            : 'bg-gray-50/50 ring-transparent'
+            ? 'border-emerald-100 bg-emerald-50'
+            : 'border-slate-200 bg-slate-50/80'
       }`}
     >
       <Phone
         size={18}
         className={
-          error ? 'text-red-400' : value && PHONE_REGEX.test(value) ? 'text-green-500' : 'text-gray-400'
+          error ? 'text-red-500' : value && PHONE_REGEX.test(value) ? 'text-emerald-500' : 'text-slate-400'
         }
       />
       <input
         type="tel"
         maxLength={10}
-        className="flex-1 bg-transparent border-none text-[15px] font-bold text-gray-900 focus:outline-none placeholder:text-gray-300"
+        className="flex-1 bg-transparent text-[15px] font-semibold text-slate-900 outline-none placeholder:text-slate-300"
         value={value}
         placeholder="10-digit mobile number"
-        onChange={(e) => {
-          const val = e.target.value.replace(/\D/g, '');
-          onChange(val);
+        onChange={(event) => {
+          const nextValue = event.target.value.replace(/\D/g, '');
+          onChange(nextValue);
           if (onClearError) onClearError(name);
         }}
       />
-      {value && PHONE_REGEX.test(value) && <CheckCircle2 size={16} className="text-green-500 shrink-0" />}
+      {value && PHONE_REGEX.test(value) ? <CheckCircle2 size={18} className="shrink-0 text-emerald-500" /> : null}
     </div>
-    <AnimatePresence>
-      {error && (
-        <Motion.p
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0 }}
-          className="text-[11px] font-black text-red-500 ml-2 flex items-center gap-1"
-        >
-          <AlertCircle size={11} strokeWidth={3} />
-          {error}
-        </Motion.p>
-      )}
-    </AnimatePresence>
-  </div>
-);
-
-const AddressField = ({ label, value, onChange, error, suggestions, onPickSuggestion }) => (
-  <div className="space-y-2">
-    <label className="text-[12px] font-black text-gray-400 ml-1">{label}</label>
-    <div className={`rounded-2xl p-4 ring-2 transition-all ${error ? 'bg-red-50 ring-red-100' : 'bg-gray-50/50 ring-transparent'}`}>
-      <div className="flex items-center gap-3">
-        <MapPin size={18} className={error ? 'text-red-400' : 'text-blue-500'} />
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Enter area or landmark"
-          className="flex-1 bg-transparent border-none text-[15px] font-bold text-gray-900 focus:outline-none placeholder:text-gray-300"
-        />
-      </div>
-      {suggestions.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {suggestions.map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => onPickSuggestion(item)}
-              className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600 shadow-sm"
-            >
-              {item}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-    <AnimatePresence>
-      {error && (
-        <Motion.p
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0 }}
-          className="text-[11px] font-black text-red-500 ml-2 flex items-center gap-1"
-        >
-          <AlertCircle size={11} strokeWidth={3} />
-          {error}
-        </Motion.p>
-      )}
-    </AnimatePresence>
+    {error ? (
+      <p className="ml-2 flex items-center gap-1 text-[11px] font-black text-red-500">
+        <AlertCircle size={11} strokeWidth={3} />
+        {error}
+      </p>
+    ) : null}
   </div>
 );
 
 const MapPickerSheet = ({ open, title, confirmLabel, value, initialCoords, onClose, onConfirm }) => {
   const { isLoaded, loadError } = useAppGoogleMapsLoader();
   const [center, setCenter] = useState(coordPairToLatLng(initialCoords));
-  const [isDragging, setIsDragging] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState(value || formatCoordLabel(initialCoords));
-  const [isResolvingAddress, setIsResolvingAddress] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
+  const [isResolvingAddress, setIsResolvingAddress] = useState(false);
   const mapRef = useRef(null);
   const draggingRef = useRef(false);
   const geocodeTimerRef = useRef(null);
 
   useEffect(() => {
-    if (!open) {
-      return undefined;
-    }
+    if (!open) return undefined;
 
     const resetTimer = setTimeout(() => {
       setCenter(coordPairToLatLng(initialCoords));
@@ -190,9 +137,7 @@ const MapPickerSheet = ({ open, title, confirmLabel, value, initialCoords, onClo
   }, [initialCoords, open, value]);
 
   useEffect(() => {
-    if (!open || !isLoaded || !window.google?.maps?.Geocoder) {
-      return undefined;
-    }
+    if (!open || !isLoaded || !window.google?.maps?.Geocoder) return undefined;
 
     clearTimeout(geocodeTimerRef.current);
     geocodeTimerRef.current = setTimeout(() => {
@@ -209,31 +154,25 @@ const MapPickerSheet = ({ open, title, confirmLabel, value, initialCoords, onClo
 
         setSelectedAddress(formatLatLngLabel(center));
       });
-    }, 500);
+    }, 450);
 
     return () => clearTimeout(geocodeTimerRef.current);
   }, [center, isLoaded, open]);
 
   const commitMapCenter = () => {
-    if (!mapRef.current) {
-      return;
-    }
-
+    if (!mapRef.current) return;
     const mapCenter = mapRef.current.getCenter();
-    if (!mapCenter) {
-      return;
-    }
+    if (!mapCenter) return;
 
-    const next = { lat: mapCenter.lat(), lng: mapCenter.lng() };
-    setCenter((current) => {
-      const samePoint = Math.abs(current.lat - next.lat) < 0.000001 && Math.abs(current.lng - next.lng) < 0.000001;
-      return samePoint ? current : next;
+    setCenter({
+      lat: mapCenter.lat(),
+      lng: mapCenter.lng(),
     });
   };
 
   const useCurrentLocation = () => {
     if (!navigator.geolocation) {
-      setSelectedAddress('Location permission is not available on this device.');
+      setSelectedAddress('Location access is not available on this device.');
       return;
     }
 
@@ -254,70 +193,36 @@ const MapPickerSheet = ({ open, title, confirmLabel, value, initialCoords, onClo
       },
       () => {
         setIsLocating(false);
-        setSelectedAddress('Could not fetch your current location. Move the map manually.');
+        setSelectedAddress('Could not fetch your current location.');
       },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
     );
   };
 
-  if (!open) {
-    return null;
-  }
+  if (!open) return null;
 
   return (
     <AnimatePresence>
-      <Motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 bg-slate-950/55 backdrop-blur-[2px] px-0 py-0 sm:px-4 sm:py-6"
-      >
+      <Motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-sm">
         <Motion.div
-          initial={{ opacity: 0, y: 24 }}
+          initial={{ opacity: 0, y: '100%' }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 24 }}
-          className="mx-auto flex h-full max-w-lg flex-col overflow-hidden bg-white shadow-2xl sm:rounded-[30px]"
+          exit={{ opacity: 0, y: '100%' }}
+          transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+          className="absolute inset-x-0 bottom-0 top-[10%] mx-auto flex max-w-lg flex-col overflow-hidden rounded-t-[34px] bg-white shadow-2xl"
         >
-          <div className="flex items-start justify-between border-b border-gray-100 px-5 py-4">
-            <div className="min-w-0 pr-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-gray-400">Map Picker</p>
-              <h3 className="mt-1 text-[20px] font-black tracking-tight text-gray-900">{title}</h3>
-              <p className="mt-1 line-clamp-1 text-[11px] font-bold text-gray-500">{value || 'Move the map and confirm the exact point.'}</p>
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Map Picker</p>
+              <h3 className="text-lg font-black tracking-tight text-slate-900">{title}</h3>
             </div>
-            <button type="button" onClick={onClose} className="rounded-2xl bg-gray-50 p-2.5 text-slate-700 active:scale-95">
-              <X size={18} strokeWidth={2.8} />
+            <button type="button" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-50 text-slate-500">
+              <X size={18} />
             </button>
           </div>
 
           <div className="relative flex-1 bg-slate-100">
-            {!HAS_VALID_GOOGLE_MAPS_KEY && (
-              <div className="flex h-full items-center justify-center px-6 text-center">
-                <div className="rounded-[20px] bg-white/95 px-5 py-4 shadow-sm">
-                  <p className="text-[12px] font-black text-slate-900">Google Maps key missing</p>
-                  <p className="mt-1 text-[11px] font-bold text-slate-500">Set `VITE_GOOGLE_MAPS_API_KEY` in `frontend/.env`.</p>
-                </div>
-              </div>
-            )}
-
-            {HAS_VALID_GOOGLE_MAPS_KEY && loadError && (
-              <div className="flex h-full items-center justify-center px-6 text-center">
-                <div className="rounded-[20px] bg-white/95 px-5 py-4 shadow-sm">
-                  <p className="text-[12px] font-black text-slate-900">Map failed to load</p>
-                  <p className="mt-1 text-[11px] font-bold text-slate-500">Check Google Maps browser key restrictions.</p>
-                </div>
-              </div>
-            )}
-
-            {HAS_VALID_GOOGLE_MAPS_KEY && !loadError && !isLoaded && (
-              <div className="flex h-full items-center justify-center">
-                <div className="flex items-center gap-2 rounded-[18px] bg-white/95 px-4 py-3 shadow-sm">
-                  <LoaderCircle size={18} className="animate-spin text-slate-500" />
-                  <span className="text-[12px] font-black text-slate-700">Loading map</span>
-                </div>
-              </div>
-            )}
-
-            {HAS_VALID_GOOGLE_MAPS_KEY && !loadError && isLoaded && (
+            {HAS_VALID_GOOGLE_MAPS_KEY && isLoaded ? (
               <GoogleMap
                 mapContainerStyle={MAP_CONTAINER_STYLE}
                 center={center}
@@ -330,63 +235,41 @@ const MapPickerSheet = ({ open, title, confirmLabel, value, initialCoords, onClo
                 }}
                 onDragStart={() => {
                   draggingRef.current = true;
-                  setIsDragging(true);
                 }}
                 onDragEnd={() => {
                   draggingRef.current = false;
-                  setIsDragging(false);
                   commitMapCenter();
                 }}
                 onIdle={() => {
-                  if (!mapRef.current || draggingRef.current) {
-                    return;
-                  }
-
+                  if (!mapRef.current || draggingRef.current) return;
                   commitMapCenter();
                 }}
                 options={{
                   disableDefaultUI: true,
-                  zoomControl: true,
+                  zoomControl: false,
                   clickableIcons: false,
                   streetViewControl: false,
                   fullscreenControl: false,
-                  mapTypeControl: false,
-                  gestureHandling: 'greedy',
                 }}
               />
+            ) : (
+              <div className="flex h-full items-center justify-center px-6 text-center text-sm font-bold text-slate-500">
+                {loadError ? 'Map could not be loaded right now.' : 'Loading map...'}
+              </div>
             )}
 
-            <Motion.div
-              aria-hidden="true"
-              className="pointer-events-none absolute left-1/2 top-1/2 z-20"
-              animate={{ y: isDragging ? -12 : 0 }}
-              transition={{ duration: 0.16, ease: 'easeOut' }}
-            >
-              <div className="relative -translate-x-1/2 -translate-y-full">
-                <div className="absolute left-1/2 top-full h-4 w-5 -translate-x-1/2 rounded-full bg-slate-950/30 blur-[3px]" />
-                <div className="relative flex h-[46px] w-9 justify-center">
-                  <div className="absolute top-0 flex h-9 w-9 items-center justify-center rounded-full bg-slate-950 shadow-[0_12px_24px_rgba(15,23,42,0.28)] ring-4 ring-white">
-                    <div className="h-2.5 w-2.5 rounded-full bg-white" />
-                  </div>
-                  <div className="absolute top-[27px] h-0 w-0 border-l-[8px] border-r-[8px] border-t-[15px] border-l-transparent border-r-transparent border-t-slate-950" />
-                </div>
+            <div className="pointer-events-none absolute inset-x-0 top-0 px-4 pt-4">
+              <div className="rounded-[22px] border border-white bg-white/92 px-4 py-4 shadow-xl backdrop-blur-md">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                  {isResolvingAddress ? 'Resolving address...' : 'Selected location'}
+                </p>
+                <p className="mt-1 text-[13px] font-semibold text-slate-700">{selectedAddress}</p>
               </div>
-            </Motion.div>
+            </div>
 
-            <div className="pointer-events-none absolute left-4 right-4 top-4 z-20 rounded-[20px] border border-white/80 bg-white/95 px-4 py-3 shadow-[0_12px_34px_rgba(15,23,42,0.12)]">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[12px] bg-orange-50 text-primary">
-                  <MapPin size={17} strokeWidth={2.7} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                    {isResolvingAddress ? 'Finding Address' : 'Selected Point'}
-                  </p>
-                  <p className="mt-1 line-clamp-2 text-[12px] font-black leading-snug text-slate-900">
-                    {isResolvingAddress ? 'Reading the map pin...' : selectedAddress}
-                  </p>
-                  <p className="mt-1 text-[10px] font-bold text-slate-400">{formatLatLngLabel(center)}</p>
-                </div>
+            <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-full">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full border-4 border-white bg-blue-600 shadow-xl">
+                <MapPin size={18} className="text-white" />
               </div>
             </div>
 
@@ -394,24 +277,126 @@ const MapPickerSheet = ({ open, title, confirmLabel, value, initialCoords, onClo
               type="button"
               onClick={useCurrentLocation}
               disabled={isLocating}
-              className="absolute bottom-4 left-4 z-20 inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/95 px-3.5 py-2 text-[11px] font-black text-slate-700 shadow-sm active:scale-[0.99] disabled:opacity-70"
+              className="absolute bottom-4 right-4 z-20 flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-100 bg-white text-slate-900 shadow-xl"
             >
-              <Navigation size={14} className={isLocating ? 'animate-pulse' : ''} strokeWidth={2.5} />
-              {isLocating ? 'Locating...' : 'Use My Location'}
+              <LocateFixed size={20} className={isLocating ? 'animate-pulse text-blue-600' : ''} />
             </button>
           </div>
 
-          <div className="border-t border-gray-100 px-5 py-4">
-            <div className="mb-3 rounded-2xl bg-slate-50 px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Confirming</p>
-              <p className="mt-1 line-clamp-2 text-[12px] font-black leading-snug text-slate-900">{selectedAddress}</p>
-            </div>
+          <div className="bg-white px-5 pb-8 pt-5">
             <button
               type="button"
               onClick={() => onConfirm(latLngToCoordPair(center), selectedAddress)}
-              className="flex h-14 w-full items-center justify-center rounded-[18px] bg-slate-900 text-[14px] font-black uppercase tracking-wide text-white shadow-lg"
+              className="flex h-14 w-full items-center justify-center gap-2 rounded-[20px] bg-slate-900 text-sm font-black text-white shadow-[0_14px_28px_rgba(15,23,42,0.18)]"
             >
               {confirmLabel}
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </Motion.div>
+      </Motion.div>
+    </AnimatePresence>
+  );
+};
+
+const ContactDetailsSheet = ({
+  open,
+  onClose,
+  senderName,
+  setSenderName,
+  senderMobile,
+  setSenderMobile,
+  receiverName,
+  setReceiverName,
+  receiverMobile,
+  setReceiverMobile,
+  errors,
+  clearError,
+}) => {
+  if (!open) return null;
+
+  return (
+    <AnimatePresence>
+      <Motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-sm">
+        <Motion.div
+          initial={{ opacity: 0, y: '100%' }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: '100%' }}
+          transition={{ type: 'spring', damping: 26, stiffness: 220 }}
+          className="absolute inset-x-0 bottom-0 mx-auto max-w-lg overflow-hidden rounded-t-[34px] bg-white shadow-2xl"
+        >
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Booking Details</p>
+              <h3 className="text-lg font-black tracking-tight text-slate-900">Sender & receiver</h3>
+            </div>
+            <button type="button" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-50 text-slate-500">
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="max-h-[75vh] space-y-6 overflow-y-auto px-5 py-5">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                  <User size={16} />
+                </div>
+                <p className="text-sm font-black text-slate-900">Sender</p>
+              </div>
+
+              <div className="space-y-2">
+                <div className={`flex items-center gap-3 rounded-[18px] border px-4 py-3 ${errors.senderName ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-slate-50/80'}`}>
+                  <User size={16} className="text-slate-400" />
+                  <input
+                    type="text"
+                    value={senderName}
+                    placeholder="Sender name"
+                    onChange={(event) => {
+                      setSenderName(event.target.value);
+                      clearError('senderName');
+                    }}
+                    className="flex-1 bg-transparent text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-300"
+                  />
+                </div>
+                {errors.senderName ? <p className="text-[11px] font-black text-red-500">{errors.senderName}</p> : null}
+              </div>
+
+              <PhoneInput label="Mobile Number" value={senderMobile} onChange={setSenderMobile} error={errors.senderMobile} name="senderMobile" onClearError={clearError} />
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
+                  <Contact size={16} />
+                </div>
+                <p className="text-sm font-black text-slate-900">Receiver</p>
+              </div>
+
+              <div className="space-y-2">
+                <div className={`flex items-center gap-3 rounded-[18px] border px-4 py-3 ${errors.receiverName ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-slate-50/80'}`}>
+                  <User size={16} className="text-slate-400" />
+                  <input
+                    type="text"
+                    value={receiverName}
+                    placeholder="Receiver name"
+                    onChange={(event) => {
+                      setReceiverName(event.target.value);
+                      clearError('receiverName');
+                    }}
+                    className="flex-1 bg-transparent text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-300"
+                  />
+                </div>
+                {errors.receiverName ? <p className="text-[11px] font-black text-red-500">{errors.receiverName}</p> : null}
+              </div>
+
+              <PhoneInput label="Mobile Number" value={receiverMobile} onChange={setReceiverMobile} error={errors.receiverMobile} name="receiverMobile" onClearError={clearError} />
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 px-5 py-4">
+            <button type="button" onClick={onClose} className="flex h-14 w-full items-center justify-center gap-2 rounded-[20px] bg-slate-900 text-sm font-black text-white shadow-[0_14px_28px_rgba(15,23,42,0.18)]">
+              Save Details
+              <ChevronRight size={16} />
             </button>
           </div>
         </Motion.div>
@@ -435,6 +420,7 @@ const SenderReceiverDetails = () => {
   const [pickupCoords, setPickupCoords] = useState(() => parcelState.pickupCoords || getCoords(parcelState.pickup || '', [75.8577, 22.7196]));
   const [dropCoords, setDropCoords] = useState(() => parcelState.dropCoords || getCoords(parcelState.drop || '', [75.8577, 22.7196]));
   const [activeMapPicker, setActiveMapPicker] = useState(null);
+  const [isContactSheetOpen, setIsContactSheetOpen] = useState(false);
   const [isLocatingPickup, setIsLocatingPickup] = useState(false);
   const [errors, setErrors] = useState({});
 
@@ -446,43 +432,19 @@ const SenderReceiverDetails = () => {
         const response = await userAuthService.getCurrentUser();
         const user = response?.data?.user || response?.data?.data || {};
 
-        if (!active || (!user?.name && !user?.phone)) {
-          return;
-        }
+        if (!active || (!user?.name && !user?.phone)) return;
 
         const nextName = user.name || '';
         const nextPhone = user.phone || '';
 
         if (nextName || nextPhone) {
-          window.localStorage.setItem('userInfo', JSON.stringify({
-            ...storedUser,
-            ...user,
-          }));
+          window.localStorage.setItem('userInfo', JSON.stringify({ ...storedUser, ...user }));
         }
 
-        setSenderName((current) => {
-          const normalized = String(current || '').trim();
-          const storedName = String(storedUser?.name || '').trim();
-
-          if (!normalized || normalized === storedName) {
-            return nextName || current;
-          }
-
-          return current;
-        });
-
-        setSenderMobile((current) => {
-          const normalized = String(current || '').trim();
-          const storedPhone = String(storedUser?.phone || '').trim();
-
-          if (!normalized || normalized === storedPhone) {
-            return nextPhone || current;
-          }
-
-          return current;
-        });
+        setSenderName((current) => (!String(current || '').trim() || String(current || '').trim() === String(storedUser?.name || '').trim() ? nextName || current : current));
+        setSenderMobile((current) => (!String(current || '').trim() || String(current || '').trim() === String(storedUser?.phone || '').trim() ? nextPhone || current : current));
       } catch {
-        // Keep local fallback if profile fetch is unavailable.
+        // ignore and keep fallback info
       }
     };
 
@@ -505,9 +467,9 @@ const SenderReceiverDetails = () => {
   const validate = () => {
     const nextErrors = {};
     if (!senderName.trim()) nextErrors.senderName = 'Sender name is required';
-    if (!PHONE_REGEX.test(senderMobile)) nextErrors.senderMobile = 'Enter a valid 10-digit mobile number';
+    if (!PHONE_REGEX.test(senderMobile)) nextErrors.senderMobile = 'Enter a valid 10-digit number';
     if (!receiverName.trim()) nextErrors.receiverName = 'Receiver name is required';
-    if (!PHONE_REGEX.test(receiverMobile)) nextErrors.receiverMobile = 'Enter a valid 10-digit mobile number';
+    if (!PHONE_REGEX.test(receiverMobile)) nextErrors.receiverMobile = 'Enter a valid 10-digit number';
     if (!pickup.trim()) nextErrors.pickup = 'Pickup location is required';
     if (!drop.trim()) nextErrors.drop = 'Drop location is required';
     setErrors(nextErrors);
@@ -525,34 +487,28 @@ const SenderReceiverDetails = () => {
         resolve(formatLatLngLabel(position));
         return;
       }
-
       const geocoder = new window.google.maps.Geocoder();
       geocoder.geocode({ location: position }, (results, status) => {
         if (status === 'OK' && results?.[0]?.formatted_address) {
           resolve(results[0].formatted_address);
           return;
         }
-
         resolve(formatLatLngLabel(position));
       });
     });
 
   const useCurrentPickupLocation = () => {
     if (!navigator.geolocation) {
-      setErrors((prev) => ({ ...prev, pickup: 'Current location is not available on this device' }));
+      setErrors((prev) => ({ ...prev, pickup: 'Current location is not available' }));
       return;
     }
 
     setIsLocatingPickup(true);
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        const next = {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        };
+        const next = { lat: position.coords.latitude, lng: position.coords.longitude };
         const coords = latLngToCoordPair(next);
         const address = await resolveAddressFromCoords(next);
-
         setPickupCoords(coords);
         setPickup(address || formatLatLngLabel(next));
         clearError('pickup');
@@ -560,14 +516,32 @@ const SenderReceiverDetails = () => {
       },
       () => {
         setIsLocatingPickup(false);
-        setErrors((prev) => ({ ...prev, pickup: 'Allow location permission or choose pickup on the map' }));
+        setErrors((prev) => ({ ...prev, pickup: 'Location permission denied' }));
       },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
     );
   };
 
+  const applySuggestion = (type, value) => {
+    if (type === 'pickup') {
+      setPickup(value);
+      setPickupCoords(getCoords(value));
+      clearError('pickup');
+      return;
+    }
+
+    setDrop(value);
+    setDropCoords(getCoords(value));
+    clearError('drop');
+  };
+
   const handleProceed = () => {
-    if (!validate()) return;
+    if (!validate()) {
+      if (errors.senderName || errors.senderMobile || errors.receiverName || errors.receiverMobile) {
+        setIsContactSheetOpen(true);
+      }
+      return;
+    }
 
     navigate('/parcel/searching', {
       state: {
@@ -602,13 +576,13 @@ const SenderReceiverDetails = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#FDFDFD] max-w-lg mx-auto flex flex-col font-sans relative">
+    <div className="relative mx-auto flex min-h-screen max-w-lg flex-col overflow-x-hidden bg-[linear-gradient(180deg,#f8fbff_0%,#f7f9fc_100%)] font-sans">
       <MapPickerSheet
         open={activeMapPicker === 'pickup'}
-        title="Choose Pickup Point"
+        title="Set Pickup Location"
         value={pickup}
         initialCoords={pickupCoords}
-        confirmLabel="Confirm Pickup on Map"
+        confirmLabel="Confirm Pickup"
         onClose={() => setActiveMapPicker(null)}
         onConfirm={(coords, address) => {
           setPickupCoords(coords);
@@ -619,10 +593,10 @@ const SenderReceiverDetails = () => {
       />
       <MapPickerSheet
         open={activeMapPicker === 'drop'}
-        title="Choose Delivery Point"
+        title="Set Delivery Location"
         value={drop}
         initialCoords={dropCoords}
-        confirmLabel="Confirm Delivery on Map"
+        confirmLabel="Confirm Drop"
         onClose={() => setActiveMapPicker(null)}
         onConfirm={(coords, address) => {
           setDropCoords(coords);
@@ -631,169 +605,158 @@ const SenderReceiverDetails = () => {
           setActiveMapPicker(null);
         }}
       />
+      <ContactDetailsSheet
+        open={isContactSheetOpen}
+        onClose={() => setIsContactSheetOpen(false)}
+        senderName={senderName}
+        setSenderName={setSenderName}
+        senderMobile={senderMobile}
+        setSenderMobile={setSenderMobile}
+        receiverName={receiverName}
+        setReceiverName={setReceiverName}
+        receiverMobile={receiverMobile}
+        setReceiverMobile={setReceiverMobile}
+        errors={errors}
+        clearError={clearError}
+      />
 
-      <header className="bg-white px-5 py-6 flex items-center gap-6 border-b border-gray-50 shadow-sm sticky top-0 z-20">
-        <button onClick={() => navigate(-1)} className="p-2 -ml-2 active:scale-90 transition-all">
-          <ArrowLeft size={24} className="text-gray-900" strokeWidth={3} />
+      <header className="sticky top-0 z-20 flex items-center px-4 py-4">
+        <button onClick={() => navigate(-1)} className="flex h-10 w-10 items-center justify-center rounded-full text-slate-800 transition-colors hover:bg-slate-100">
+          <ArrowLeft size={24} />
         </button>
-        <div>
-          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">
-            {parcelState.parcelType || 'Parcel'} - {parcelState.weight || 'Under 5kg'} - {parcelState.deliveryScope === 'outstation' ? 'Outstation' : 'In City'}
-          </p>
-          <h1 className="text-[20px] font-extrabold text-gray-900 tracking-tight leading-none">Contacts & Route</h1>
-        </div>
       </header>
 
-      <div className="flex-1 p-5 space-y-8 overflow-y-auto no-scrollbar pb-4">
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 ml-1">
-            <div className="w-8 h-8 rounded-xl bg-orange-50 flex items-center justify-center text-primary">
-              <User size={18} strokeWidth={3} />
+      <main className="flex-1 px-4 pt-1 pb-28">
+        <div className="rounded-[24px] bg-white p-5 shadow-sm border border-slate-100">
+          <div className="flex gap-4">
+            {/* Visual Route Indicator */}
+            <div className="flex flex-col items-center pt-5">
+              <div className="h-2 w-2 rounded-full bg-emerald-500" />
+              <div className="h-14 border-l border-dashed border-slate-200 my-1" />
+              <div className="h-2 w-2 rounded-full bg-rose-500" />
             </div>
-            <h3 className="text-[16px] font-black text-gray-900 tracking-tight leading-none">Sender Details</h3>
-          </div>
-          <div className="bg-white rounded-[32px] p-5 shadow-lg shadow-gray-100 border border-gray-50 space-y-4">
-            <div className="space-y-1">
-              <label className="text-[12px] font-black text-gray-400 ml-1">Sender Name</label>
-              <input
-                type="text"
-                className={`w-full rounded-2xl p-4 text-[15px] font-bold text-gray-900 focus:outline-none focus:ring-2 ring-primary/10 transition-all ${errors.senderName ? 'bg-red-50 ring-2 ring-red-100' : 'bg-gray-50/50'}`}
-                value={senderName}
-                placeholder="Your name"
-                onChange={(e) => {
-                  setSenderName(e.target.value);
-                  clearError('senderName');
-                }}
-              />
-              {errors.senderName && <p className="text-[11px] font-black text-red-500 ml-2 flex items-center gap-1 mt-1"><AlertCircle size={11} strokeWidth={3} /> {errors.senderName}</p>}
-            </div>
-            <PhoneInput label="Sender Mobile" value={senderMobile} onChange={setSenderMobile} error={errors.senderMobile} name="senderMobile" onClearError={clearError} />
-          </div>
-        </div>
 
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 ml-1">
-            <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-              <MapPin size={18} strokeWidth={3} />
-            </div>
-            <h3 className="text-[16px] font-black text-gray-900 tracking-tight leading-none">Pickup & Drop</h3>
-          </div>
-          <div className="bg-white rounded-[32px] p-5 shadow-lg shadow-gray-100 border border-gray-50 space-y-4">
-            <AddressField
-              label="Pickup"
-              value={pickup}
-              onChange={(value) => {
-                setPickup(value);
-                clearError('pickup');
-              }}
-              error={errors.pickup}
-              suggestions={pickupSuggestions}
-              onPickSuggestion={(value) => {
-                setPickup(value);
-                setPickupCoords(getCoords(value));
-                clearError('pickup');
-              }}
-            />
-            <div className="rounded-[24px] border border-gray-100 bg-slate-50/70 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Pickup Pin</p>
-                  <p className="mt-1 text-[12px] font-black text-slate-900">{formatCoordLabel(pickupCoords)}</p>
+            <div className="flex-1 min-w-0 space-y-6">
+              {/* Pickup Section */}
+              <button 
+                type="button" 
+                onClick={() => setActiveMapPicker('pickup')} 
+                className="flex w-full items-center justify-between group text-left min-w-0"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-[13px] font-bold text-slate-900 truncate">
+                      {senderName || 'Sender Details'}
+                    </p>
+                    {senderMobile && (
+                      <span className="shrink-0 text-[11px] font-medium text-slate-400">
+                        {senderMobile}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-[13px] font-medium text-slate-500 truncate">
+                    {pickup || 'Set pickup location'}
+                  </p>
                 </div>
-                <div className="flex shrink-0 flex-col gap-2">
-                  <button
-                    type="button"
-                    onClick={useCurrentPickupLocation}
-                    disabled={isLocatingPickup}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-full bg-slate-900 px-4 py-2 text-[11px] font-black text-white shadow-sm disabled:opacity-70"
-                  >
-                    <Navigation size={13} className={isLocatingPickup ? 'animate-pulse' : ''} strokeWidth={2.6} />
-                    {isLocatingPickup ? 'Locating' : 'Use Current'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveMapPicker('pickup')}
-                    className="rounded-full bg-white px-4 py-2 text-[11px] font-black text-slate-700 shadow-sm ring-1 ring-slate-200"
-                  >
-                    Choose on Map
-                  </button>
+                <ChevronRight size={16} className="text-slate-300 shrink-0 ml-2 transition-transform group-hover:translate-x-0.5" />
+              </button>
+
+              <hr className="border-slate-50" />
+
+              {/* Drop Input Section */}
+              <div className="flex items-center gap-3">
+                <div className={`flex h-12 flex-1 items-center gap-3 rounded-xl border px-3 transition-all ${
+                  errors.drop ? 'border-red-300 bg-red-50/30' : 'border-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500'
+                }`}>
+                  <input
+                    type="text"
+                    value={drop}
+                    onChange={(event) => {
+                      setDrop(event.target.value);
+                      clearError('drop');
+                    }}
+                    placeholder="Where is your Drop ?"
+                    className="flex-1 bg-transparent text-[14px] font-medium text-slate-900 outline-none placeholder:text-slate-400"
+                  />
+                  <Mic size={18} className="text-slate-400" />
                 </div>
-              </div>
-            </div>
-            <AddressField
-              label="Drop"
-              value={drop}
-              onChange={(value) => {
-                setDrop(value);
-                clearError('drop');
-              }}
-              error={errors.drop}
-              suggestions={dropSuggestions}
-              onPickSuggestion={(value) => {
-                setDrop(value);
-                setDropCoords(getCoords(value));
-                clearError('drop');
-              }}
-            />
-            <div className="rounded-[24px] border border-gray-100 bg-slate-50/70 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Delivery Pin</p>
-                  <p className="mt-1 text-[12px] font-black text-slate-900">{formatCoordLabel(dropCoords)}</p>
-                </div>
+
                 <button
                   type="button"
-                  onClick={() => setActiveMapPicker('drop')}
-                  className="rounded-full bg-white px-4 py-2 text-[11px] font-black text-slate-700 shadow-sm ring-1 ring-slate-200"
+                  onClick={() => setIsContactSheetOpen(true)}
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                    receiverName && PHONE_REGEX.test(receiverMobile)
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
+                      : 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100'
+                  }`}
                 >
-                  Choose on Map
+                  <Plus size={20} />
                 </button>
               </div>
+
+              {/* Error messages */}
+              {errors.pickup && <p className="text-[11px] font-medium text-red-500">Pickup: {errors.pickup}</p>}
+              {errors.drop && <p className="text-[11px] font-medium text-red-500">Drop: {errors.drop}</p>}
             </div>
           </div>
         </div>
 
-        <div className="space-y-4 pb-24">
-          <div className="flex items-center gap-3 ml-1">
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-              <User size={18} strokeWidth={3} />
-            </div>
-            <h3 className="text-[16px] font-black text-gray-900 tracking-tight leading-none">Receiver Details</h3>
-          </div>
-          <div className="bg-white rounded-[32px] p-5 shadow-lg shadow-gray-100 border border-gray-50 space-y-4">
-            <div className="space-y-1">
-              <label className="text-[12px] font-black text-gray-400 ml-1">Receiver Name</label>
-              <input
-                type="text"
-                placeholder="Enter receiver's name"
-                className={`w-full rounded-2xl p-4 text-[15px] font-bold text-gray-900 focus:outline-none focus:ring-2 ring-blue-100 transition-all placeholder:text-gray-300 ${errors.receiverName ? 'bg-red-50 ring-2 ring-red-100' : 'bg-gray-50/50'}`}
-                value={receiverName}
-                onChange={(e) => {
-                  setReceiverName(e.target.value);
-                  clearError('receiverName');
-                }}
-              />
-              {errors.receiverName && <p className="text-[11px] font-black text-red-500 ml-2 flex items-center gap-1 mt-1"><AlertCircle size={11} strokeWidth={3} /> {errors.receiverName}</p>}
-            </div>
-            <PhoneInput label="Receiver Mobile" value={receiverMobile} onChange={setReceiverMobile} error={errors.receiverMobile} name="receiverMobile" onClearError={clearError} />
-
-            {parcelState.estimatedFare && (
-              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex justify-between items-center">
-                <span className="text-[12px] font-black text-gray-500 uppercase tracking-widest">Est. Delivery Fare</span>
-                <span className="text-[16px] font-black text-gray-900">
-                  Rs {parcelState.estimatedFare.min}-{parcelState.estimatedFare.max}
-                </span>
-              </div>
-            )}
-          </div>
+        {/* Action Link */}
+        <div className="mt-6 flex justify-center">
+          <button
+            type="button"
+            onClick={() => setActiveMapPicker(pickup ? 'drop' : 'pickup')}
+            className="flex items-center gap-2 text-[13px] font-bold text-blue-600 hover:text-blue-700"
+          >
+            <MapPin size={16} />
+            <span>Select on map</span>
+          </button>
         </div>
-      </div>
 
-      <div className="p-6 bg-white border-t border-gray-50 pb-10 sticky bottom-0 z-30">
-        <Motion.button whileTap={{ scale: 0.98 }} onClick={handleProceed} className="w-full bg-[#1C2833] py-5 rounded-[28px] text-[18px] font-black text-white shadow-xl shadow-gray-200 active:bg-black transition-all flex items-center justify-center gap-2">
-          <span>Find Delivery Agent</span>
-          <ChevronRight size={20} className="opacity-40" />
-        </Motion.button>
+        {/* Suggestions */}
+        {(pickupSuggestions.length > 0 && !pickup) || (dropSuggestions.length > 0 && drop) ? (
+          <div className="mt-6 space-y-3">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest px-1">Quick Suggestions</p>
+            <div className="flex flex-wrap gap-2">
+              {((!pickup ? pickupSuggestions : dropSuggestions) || []).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => applySuggestion(!pickup ? 'pickup' : 'drop', item)}
+                  className="rounded-full border border-slate-100 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600 shadow-sm"
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.12 }} className="mt-8 rounded-[24px] bg-slate-900 px-4 py-4 text-white shadow-xl">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Approx. Delivery Fare</p>
+              <p className="mt-1 text-lg font-black">Rs {parcelState.estimatedFare?.min || 45} - Rs {parcelState.estimatedFare?.max || 80}</p>
+            </div>
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10">
+              <PackageCheck size={22} className="text-emerald-300" />
+            </div>
+          </div>
+        </motion.section>
+      </main>
+
+      <div className="fixed bottom-0 left-0 right-0 z-30 p-4">
+        <div className="mx-auto max-w-lg">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-[#F8FBFF] via-[#F8FBFF]/92 to-transparent" />
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            onClick={handleProceed}
+            className="relative flex h-14 w-full items-center justify-center gap-2 rounded-[18px] bg-slate-900 text-[15px] font-black text-white shadow-[0_16px_30px_rgba(15,23,42,0.18)]"
+          >
+            Find Delivery Agent
+            <ChevronRight size={18} />
+          </motion.button>
+        </div>
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import {
   BarChart3,
   CalendarDays,
   Car,
+  ChevronDown,
   IndianRupee,
   Loader2,
   RefreshCw,
@@ -54,6 +55,19 @@ const formatDate = (value) => {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+  });
+};
+
+const formatFilterDate = (value) => {
+  if (!value) return 'Select date';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Select date';
+
+  return date.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
   });
 };
 
@@ -134,6 +148,47 @@ const BreakdownPanel = ({ title, icon: Icon, rows, emptyText }) => {
         </div>
       )}
     </div>
+  );
+};
+
+const DatePickerField = ({ label, value, onChange }) => {
+  const inputRef = React.useRef(null);
+
+  const openPicker = () => {
+    if (typeof inputRef.current?.showPicker === 'function') {
+      inputRef.current.showPicker();
+      return;
+    }
+
+    inputRef.current?.focus();
+    inputRef.current?.click();
+  };
+
+  return (
+    <label className="space-y-1">
+      <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-widest text-slate-400">
+        <CalendarDays size={13} /> {label}
+      </span>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={openPicker}
+          className="flex h-10 w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-emerald-400"
+        >
+          <span>{formatFilterDate(value)}</span>
+          <ChevronDown size={15} className="text-slate-400" />
+        </button>
+        <input
+          ref={inputRef}
+          type="date"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="pointer-events-none absolute inset-0 opacity-0"
+          tabIndex={-1}
+          aria-hidden="true"
+        />
+      </div>
+    </label>
   );
 };
 
@@ -242,19 +297,9 @@ const AdminEarnings = () => {
 
       <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-7">
-          <label className="space-y-1">
-            <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-widest text-slate-400">
-              <CalendarDays size={13} /> From
-            </span>
-            <input type="date" value={filters.from} onChange={(event) => updateFilter('from', event.target.value)} className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-emerald-400" />
-          </label>
+          <DatePickerField label="From" value={filters.from} onChange={(value) => updateFilter('from', value)} />
 
-          <label className="space-y-1">
-            <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-widest text-slate-400">
-              <CalendarDays size={13} /> To
-            </span>
-            <input type="date" value={filters.to} onChange={(event) => updateFilter('to', event.target.value)} className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-emerald-400" />
-          </label>
+          <DatePickerField label="To" value={filters.to} onChange={(value) => updateFilter('to', value)} />
 
           <label className="space-y-1">
             <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Zone</span>

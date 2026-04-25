@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { ApiError } from '../../../../utils/ApiError.js';
+import { env } from '../../../../config/env.js';
 import { UserAuthSession } from '../models/UserAuthSession.js';
 import { User } from '../models/User.js';
 import { signAccessToken } from './authService.js';
@@ -23,6 +24,26 @@ const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000));
 
 const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
 const getVisibleOtp = (otp) => (process.env.NODE_ENV !== 'production' ? String(otp) : null);
+const getStaticUserOtpConfig = () => ({
+  phone: normalizeUserPhone(env.sms?.staticOtpPhone || ''),
+  otp: String(env.sms?.staticOtpCode || '').trim(),
+});
+const resolveUserOtpForPhone = (phone) => {
+  const normalizedPhone = normalizeUserPhone(phone);
+  const staticOtpConfig = getStaticUserOtpConfig();
+
+  if (staticOtpConfig.phone && staticOtpConfig.otp && normalizedPhone === staticOtpConfig.phone) {
+    return {
+      otp: staticOtpConfig.otp,
+      isStatic: true,
+    };
+  }
+
+  return {
+    otp: generateOtp(),
+    isStatic: false,
+  };
+};
 
 const ensureUserCanLogin = (user) => {
   if (user?.deletedAt || user?.isActive === false || user?.active === false) {
@@ -76,7 +97,7 @@ export const startUserOtp = async ({ phone }) => {
     ensureUserCanLogin(user);
   }
 
-  const otp = generateOtp();
+  const { otp, isStatic } = resolveUserOtpForPhone(normalizedPhone);
   const now = Date.now();
 
   const session = await UserAuthSession.findOneAndUpdate(
@@ -91,11 +112,16 @@ export const startUserOtp = async ({ phone }) => {
     { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
   );
 
-  const smsDispatch = await sendOtpSms({
-    phone: normalizedPhone,
-    otp,
-    purpose: 'user OTP',
-  });
+  const smsDispatch = isStatic
+    ? {
+        mode: 'static',
+        message: 'Static OTP enabled',
+      }
+    : await sendOtpSms({
+        phone: normalizedPhone,
+        otp,
+        purpose: 'user OTP',
+      });
   const debugOtp = getVisibleOtp(otp);
 
   if (debugOtp) {

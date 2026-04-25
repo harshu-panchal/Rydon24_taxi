@@ -628,7 +628,8 @@ const SelectVehicle = () => {
         const nextVehicles = getVehicleTypes(response)
           .filter((type) => {
             const isActive = type.active !== false && Number(type.status ?? 1) !== 0;
-            return isActive && String(type.transport_type || 'taxi').toLowerCase() === 'taxi';
+            const transportType = String(type.transport_type || 'taxi').toLowerCase();
+            return isActive && (transportType === 'taxi' || transportType === 'both');
           })
           .map(normalizeVehicleType);
 

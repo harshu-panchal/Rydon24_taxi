@@ -67,6 +67,33 @@ const normalizeIconType = (value = '') => {
   return exactKey || 'car';
 };
 
+const OBJECT_ID_PATTERN = /^[a-fA-F0-9]{24}$/;
+
+const normalizeTransportType = (value = '') => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'delivery') return 'delivery';
+  if (normalized === 'both' || normalized === 'all') return 'both';
+  return 'taxi';
+};
+
+const normalizeTaxiMode = (value = '') => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'delivery') return 'delivery';
+  if (normalized === 'both' || normalized === 'all') return 'both';
+  return 'taxi';
+};
+
+const sanitizeObjectIdList = (items = []) =>
+  (Array.isArray(items) ? items : [])
+    .map((item) => {
+      if (typeof item === 'string') return item.trim();
+      if (item && typeof item === 'object') {
+        return String(item._id || item.id || '').trim();
+      }
+      return '';
+    })
+    .filter((item, index, array) => OBJECT_ID_PATTERN.test(item) && array.indexOf(item) === index);
+
 const defaultFormData = {
   name: '',
   short_description: '',
@@ -85,6 +112,12 @@ const defaultFormData = {
   supported_other_vehicle_types: [],
   vehicle_preference: [],
 };
+
+const TRANSPORT_TYPE_OPTIONS = [
+  { id: 'taxi', name: 'taxi', display_name: 'Ride' },
+  { id: 'delivery', name: 'delivery', display_name: 'Delivery' },
+  { id: 'both', name: 'both', display_name: 'Both' },
+];
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
 
@@ -183,6 +216,25 @@ const VehicleType = ({ mode: propMode }) => {
   const [errorMessage, setErrorMessage] = useState('');
   const [formData, setFormData] = useState({ ...defaultFormData, transport_type: '' });
   const { transportTypes } = useTaxiTransportTypes();
+  const transportTypeOptions = useMemo(() => {
+    const normalized = new Map();
+
+    [...TRANSPORT_TYPE_OPTIONS, ...(Array.isArray(transportTypes) ? transportTypes : [])].forEach((item) => {
+      const value = normalizeTransportType(item?.name || item?.transport_type || item?.id || '');
+      if (!value) return;
+
+      normalized.set(value, {
+        id: item?.id || item?._id || value,
+        name: value,
+        display_name:
+          value === 'both'
+            ? 'Both'
+            : (item?.display_name || item?.label || value.charAt(0).toUpperCase() + value.slice(1)),
+      });
+    });
+
+    return Array.from(normalized.values());
+  }, [transportTypes]);
 
   useEffect(() => {
     let mounted = true;
@@ -212,8 +264,10 @@ const VehicleType = ({ mode: propMode }) => {
         setPagination(vehiclePayload?.paginator || { total: normalizedVehicles.length, current_page: 1 });
 
         const prefPayload = unwrap(preferenceResponse);
-        const prefResults = Array.isArray(prefPayload?.data)
-          ? prefPayload.data
+        const prefResults = Array.isArray(prefPayload?.results)
+          ? prefPayload.results
+          : Array.isArray(prefPayload?.data)
+            ? prefPayload.data
           : Array.isArray(prefPayload)
             ? prefPayload
             : [];
@@ -315,7 +369,7 @@ const VehicleType = ({ mode: propMode }) => {
         name: formData.name.trim(),
         short_description: formData.short_description.trim(),
         description: formData.description.trim(),
-        transport_type: formData.transport_type,
+        transport_type: normalizeTransportType(formData.transport_type),
         dispatch_type: formData.dispatch_type,
         icon_types: normalizeIconType(formData.icon_types),
         image: formData.image || '',
@@ -323,12 +377,12 @@ const VehicleType = ({ mode: propMode }) => {
         map_icon: formData.map_icon || '',
         capacity: Number(formData.capacity || 0),
         size: formData.size,
-        is_taxi: formData.is_taxi,
+        is_taxi: normalizeTaxiMode(formData.is_taxi || formData.transport_type),
         is_accept_share_ride: Number(formData.is_accept_share_ride || 0),
         status: formData.active ? 1 : 0,
         active: formData.active,
-        supported_other_vehicle_types: formData.supported_other_vehicle_types,
-        vehicle_preference: formData.vehicle_preference,
+        supported_other_vehicle_types: sanitizeObjectIdList(formData.supported_other_vehicle_types),
+        vehicle_preference: sanitizeObjectIdList(formData.vehicle_preference),
       };
 
       if (id) {
@@ -339,7 +393,7 @@ const VehicleType = ({ mode: propMode }) => {
 
       navigate('/admin/pricing/vehicle-type');
     } catch (error) {
-      setErrorMessage(error.message || 'Could not save vehicle type.');
+      setErrorMessage(error?.response?.data?.message || error.message || 'Could not save vehicle type.');
     } finally {
       setIsSaving(false);
     }
@@ -412,7 +466,7 @@ const VehicleType = ({ mode: propMode }) => {
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Delivery Types</p>
-                <p className="text-2xl font-bold text-slate-900">{vehicles.filter((item) => item.transport_type === 'delivery').length}</p>
+                <p className="text-2xl font-bold text-slate-900">{vehicles.filter((item) => ['delivery', 'both'].includes(String(item.transport_type || '').toLowerCase())).length}</p>
               </div>
             </div>
           </div>
@@ -459,7 +513,13 @@ const VehicleType = ({ mode: propMode }) => {
                       </div>
                     </td>
                     <td className="px-6 py-5">
-                      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${vehicle.transport_type === 'delivery' ? 'bg-orange-50 text-orange-600' : 'bg-blue-50 text-blue-600'}`}>
+                      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                        String(vehicle.transport_type || '').toLowerCase() === 'delivery'
+                          ? 'bg-orange-50 text-orange-600'
+                          : String(vehicle.transport_type || '').toLowerCase() === 'both'
+                            ? 'bg-emerald-50 text-emerald-600'
+                            : 'bg-blue-50 text-blue-600'
+                      }`}>
                         {vehicle.transport_type}
                       </span>
                     </td>
@@ -528,10 +588,13 @@ const VehicleType = ({ mode: propMode }) => {
             <label className={labelClass}>Transport Type *</label>
             <select value={formData.transport_type} onChange={(e) => updateForm('transport_type', e.target.value)} className={inputClass}>
                <option value="">Select Transport Type</option>
-               {transportTypes.map(t => (
-                 <option key={t.id || t._id} value={t.name}>{t.display_name}</option>
+               {transportTypeOptions.map((t) => (
+                 <option key={t.id || t._id || t.name} value={t.name}>{t.display_name}</option>
                ))}
             </select>
+            <p className="mt-2 text-xs text-slate-500">
+              Choose `Both` for vehicle types like bikes that can handle ride and parcel flows.
+            </p>
           </div>
 
           <div>

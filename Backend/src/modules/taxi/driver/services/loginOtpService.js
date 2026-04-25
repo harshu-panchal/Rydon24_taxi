@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { ApiError } from '../../../../utils/ApiError.js';
+import { env } from '../../../../config/env.js';
 import { Driver } from '../models/Driver.js';
 import { DriverLoginSession } from '../models/DriverLoginSession.js';
 import { signAccessToken } from './authService.js';
@@ -7,12 +8,35 @@ import { sendOtpSms } from '../../services/smsService.js';
 
 const LOGIN_OTP_TTL_MS = 10 * 60 * 1000;
 
-const normalizePhone = (phone) => String(phone || '').replace(/\D/g, '').trim();
+const normalizePhone = (phone) => {
+  const digits = String(phone || '').replace(/\D/g, '').trim();
+  return digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
+};
 
 const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000));
 
 const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
 const getVisibleOtp = (otp) => (process.env.NODE_ENV !== 'production' ? String(otp) : null);
+const getStaticDriverOtpConfig = () => ({
+  phone: normalizePhone(env.sms?.staticOtpPhone || ''),
+  otp: String(env.sms?.staticOtpCode || '').trim(),
+});
+const resolveDriverLoginOtpForPhone = (phone) => {
+  const normalizedPhone = normalizePhone(phone);
+  const staticOtpConfig = getStaticDriverOtpConfig();
+
+  if (staticOtpConfig.phone && staticOtpConfig.otp && normalizedPhone === staticOtpConfig.phone) {
+    return {
+      otp: staticOtpConfig.otp,
+      isStatic: true,
+    };
+  }
+
+  return {
+    otp: generateOtp(),
+    isStatic: false,
+  };
+};
 
 const getSession = async (phone) => {
   const session = await DriverLoginSession.findOne({ phone: normalizePhone(phone) }).select('+otpHash');
@@ -70,7 +94,7 @@ export const startDriverLoginOtp = async ({ phone }) => {
     throw new ApiError(403, 'Driver account is pending approval');
   }
 
-  const otp = generateOtp();
+  const { otp, isStatic } = resolveDriverLoginOtpForPhone(normalizedPhone);
   const now = Date.now();
 
   const session = await DriverLoginSession.findOneAndUpdate(
@@ -86,11 +110,16 @@ export const startDriverLoginOtp = async ({ phone }) => {
     { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
   );
 
-  const smsDispatch = await sendOtpSms({
-    phone: normalizedPhone,
-    otp,
-    purpose: 'driver login OTP',
-  });
+  const smsDispatch = isStatic
+    ? {
+        mode: 'static',
+        message: 'Static OTP enabled',
+      }
+    : await sendOtpSms({
+        phone: normalizedPhone,
+        otp,
+        purpose: 'driver login OTP',
+      });
   const debugOtp = getVisibleOtp(otp);
 
   if (debugOtp) {
