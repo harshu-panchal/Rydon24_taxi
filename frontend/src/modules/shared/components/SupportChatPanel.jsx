@@ -66,6 +66,44 @@ const normalizeConversation = (conversation) => ({
   updatedAt: conversation.updatedAt || conversation.latestMessage?.createdAt || null,
 });
 
+const getConversationIdentityKey = (conversationKey) =>
+  parseSupportConversationKey(conversationKey)?.canonicalKey || String(conversationKey || '');
+
+const mergeConversationEntry = (existing = {}, incoming = {}) => {
+  const existingUpdatedAt = new Date(existing.updatedAt || 0).getTime();
+  const incomingUpdatedAt = new Date(incoming.updatedAt || 0).getTime();
+  const prefersIncoming = incomingUpdatedAt >= existingUpdatedAt;
+
+  return {
+    ...existing,
+    ...incoming,
+    conversationKey: prefersIncoming
+      ? (incoming.conversationKey || existing.conversationKey)
+      : (existing.conversationKey || incoming.conversationKey),
+    peer: {
+      ...(existing.peer || {}),
+      ...(incoming.peer || {}),
+    },
+    latestMessage: incoming.latestMessage || existing.latestMessage || null,
+    unreadCount: Math.max(existing.unreadCount || 0, incoming.unreadCount || 0),
+    updatedAt: incoming.updatedAt || existing.updatedAt || null,
+  };
+};
+
+const dedupeConversations = (conversationList = []) => {
+  const merged = new Map();
+
+  for (const conversation of conversationList) {
+    const identityKey = getConversationIdentityKey(conversation.conversationKey);
+    const existing = merged.get(identityKey);
+    merged.set(identityKey, mergeConversationEntry(existing, conversation));
+  }
+
+  return Array.from(merged.values()).sort(
+    (left, right) => new Date(right.updatedAt || 0) - new Date(left.updatedAt || 0),
+  );
+};
+
 const SupportChatPanel = ({
   mode = 'participant',
   title = 'Support Chat',
@@ -107,10 +145,17 @@ const SupportChatPanel = ({
   const [isConnected, setIsConnected] = useState(socketService.isConnected());
   const bottomRef = useRef(null);
   const appliedInitialDraftRef = useRef('');
+  const normalizedSelectedConversationKey = useMemo(
+    () => getConversationIdentityKey(selectedConversationKey),
+    [selectedConversationKey],
+  );
 
   const selectedConversation = useMemo(
-    () => conversations.find((item) => item.conversationKey === selectedConversationKey) || null,
-    [conversations, selectedConversationKey],
+    () =>
+      conversations.find(
+        (item) => getConversationIdentityKey(item.conversationKey) === normalizedSelectedConversationKey,
+      ) || null,
+    [conversations, normalizedSelectedConversationKey],
   );
 
   const isMessageForActiveConversation = (message, conversationKey = selectedConversationKey) => {
@@ -172,9 +217,11 @@ const SupportChatPanel = ({
 
   const syncConversationList = (message) => {
     setConversations((current) => {
-      const index = current.findIndex((item) => item.conversationKey === message.conversationKey);
       const latestMessage = normalizeMessage(message);
       const parsedConversation = parseSupportConversationKey(message.conversationKey);
+      const identityKey = getConversationIdentityKey(message.conversationKey);
+      const existingConversation =
+        current.find((item) => getConversationIdentityKey(item.conversationKey) === identityKey) || null;
       const adminSide =
         latestMessage.sender.role === 'admin'
           ? {
@@ -207,29 +254,26 @@ const SupportChatPanel = ({
       const unreadCount =
         message.receiver.role === session.role &&
         message.sender.role !== session.role &&
-        selectedConversationKey !== message.conversationKey
-          ? (current[index]?.unreadCount || 0) + 1
+        normalizedSelectedConversationKey !== identityKey
+          ? (existingConversation?.unreadCount || 0) + 1
           : 0;
 
       const nextConversation = {
-        conversationKey: message.conversationKey,
+        conversationKey: parsedConversation?.canonicalKey || message.conversationKey,
         peer,
         latestMessage,
         unreadCount,
         updatedAt: message.createdAt,
       };
+      const next = current.map((item) =>
+        getConversationIdentityKey(item.conversationKey) === identityKey ? mergeConversationEntry(item, nextConversation) : item,
+      );
 
-      if (index === -1) {
-        return [nextConversation, ...current];
+      if (next.some((item) => getConversationIdentityKey(item.conversationKey) === identityKey)) {
+        return dedupeConversations(next);
       }
 
-      const next = [...current];
-      next[index] = {
-        ...next[index],
-        ...nextConversation,
-        unreadCount,
-      };
-      return next;
+      return dedupeConversations([nextConversation, ...current]);
     });
   };
 
@@ -372,23 +416,11 @@ const SupportChatPanel = ({
         }
 
         setConversations((current) => {
-          const merged = new Map(current.map((item) => [item.conversationKey, item]));
-
-          for (const conversation of nextConversations) {
-            const existing = merged.get(conversation.conversationKey) || {};
-            merged.set(conversation.conversationKey, {
-              ...existing,
-              ...conversation,
-            });
-          }
-
-          return Array.from(merged.values()).sort(
-            (left, right) => new Date(right.updatedAt || 0) - new Date(left.updatedAt || 0),
-          );
+          return dedupeConversations([...current, ...nextConversations]);
         });
 
         if (!selectedConversationKey && nextConversations.length > 0) {
-          setSelectedConversationKey(nextConversations[0].conversationKey);
+          setSelectedConversationKey(getConversationIdentityKey(nextConversations[0].conversationKey));
         }
       } catch (chatError) {
         if (!active) {

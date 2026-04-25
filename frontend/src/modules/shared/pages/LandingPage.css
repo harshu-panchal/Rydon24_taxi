@@ -88,6 +88,12 @@
   font-size: 0.9rem;
 }
 
+.landing-btn-login {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  padding: 0.5rem 1rem;
+}
+
 /* Sub-Header / Tabs */
 .landing-sub-header {
   border-bottom: 1px solid var(--uber-gray-200);
@@ -309,8 +315,17 @@
   .landing-header-left .landing-nav-link {
     display: none;
   }
-  .landing-header-right .landing-nav-link:not(.landing-btn-signup) {
+  .landing-header-right {
+    gap: 0.75rem;
+  }
+  .landing-header-right .landing-nav-link:not(.landing-btn-login) {
     display: none;
+  }
+  .landing-btn-login,
+  .landing-btn-signup {
+    font-size: 0.85rem;
+    padding: 0.5rem 0.9rem;
+    white-space: nowrap;
   }
   .landing-sub-nav {
     display: none;
@@ -337,6 +352,9 @@
   .landing-header {
     padding: 0 1rem;
   }
+  .landing-header-right {
+    gap: 0.5rem;
+  }
   .landing-hero-container {
     padding: 2rem 1rem;
   }
@@ -350,6 +368,11 @@
   .landing-logo-icon {
     width: 3.25rem;
     height: 3.25rem;
+  }
+  .landing-btn-login,
+  .landing-btn-signup {
+    padding: 0.45rem 0.75rem;
+    font-size: 0.8rem;
   }
 }
 

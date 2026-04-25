@@ -349,6 +349,30 @@ const DriverHome = () => {
         currentRequestRef.current = currentRequest;
     }, [currentRequest]);
 
+    useEffect(() => {
+        if (!isOnline || !showRequest || !currentRequest?.rideId) {
+            return undefined;
+        }
+
+        playRideRequestAlertSound();
+
+        const replayAlert = () => {
+            if (document.visibilityState === 'visible' && currentRequestRef.current?.rideId) {
+                playRideRequestAlertSound();
+            }
+        };
+
+        window.addEventListener('focus', replayAlert);
+        window.addEventListener('pageshow', replayAlert);
+        document.addEventListener('visibilitychange', replayAlert);
+
+        return () => {
+            window.removeEventListener('focus', replayAlert);
+            window.removeEventListener('pageshow', replayAlert);
+            document.removeEventListener('visibilitychange', replayAlert);
+        };
+    }, [currentRequest?.rideId, isOnline, showRequest]);
+
     const clearRecoveryBurst = useCallback(() => {
         recoveryTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
         recoveryTimeoutsRef.current = [];
@@ -1092,11 +1116,11 @@ const DriverHome = () => {
             </AnimatePresence>
 
             {/* --- TOP FLOATING UI --- */}
-            <div className="fixed top-0 left-0 right-0 p-5 pt-12 flex items-start justify-between z-40 pointer-events-none max-w-md mx-auto">
+            <div className="fixed top-0 left-0 right-0 p-5 pt-12 flex items-start justify-end z-40 pointer-events-none max-w-md mx-auto">
                 {/* Earnings Pill */}
                 <div 
                     onClick={() => navigate('/taxi/driver/wallet')}
-                    className="bg-black text-white px-6 py-2.5 rounded-full shadow-2xl flex items-center gap-2 active:scale-95 transition-all pointer-events-auto cursor-pointer"
+                    className="absolute left-1/2 -translate-x-1/2 bg-black text-white px-6 py-2.5 rounded-full shadow-2xl flex items-center gap-2 active:scale-95 transition-all pointer-events-auto cursor-pointer"
                 >
                     <span className="text-emerald-400 font-bold text-lg">₹</span>
                     <span className="text-xl font-black tracking-tight">

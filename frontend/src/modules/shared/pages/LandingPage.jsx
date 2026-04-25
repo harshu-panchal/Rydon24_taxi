@@ -43,7 +43,7 @@ function LandingPage() {
         <div className="landing-header-right">
           <a href="#" className="landing-nav-link" onClick={handleRedirect}><Globe size={18} /> EN</a>
           <a href="#" className="landing-nav-link" onClick={handleRedirect}>Help</a>
-          <a href="/login" className="landing-nav-link">Log in</a>
+          <a href="/login" className="landing-nav-link landing-btn-login">Log in</a>
           <a href="/signup" className="landing-btn-signup">Sign up</a>
         </div>
       </header>
