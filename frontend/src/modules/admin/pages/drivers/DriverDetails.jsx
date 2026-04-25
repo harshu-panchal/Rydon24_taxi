@@ -190,6 +190,7 @@ const DriverDetails = () => {
   }, [profile]);
   const chart = profile?.chart || { months: [], earnings: [], trips: { completed: [], cancelled: [] } };
   const profileImage = String(profile?.image || '').trim();
+  const onlineSelfieImage = String(profile?.online_selfie?.imageUrl || '').trim();
 
   const acceptanceRate = requests.length
     ? Math.round((stats.completed_trips / requests.length) * 100)
@@ -297,6 +298,27 @@ const DriverDetails = () => {
               <p>{profile.vehicle?.number}</p>
             </div>
           </div>
+        </div>
+
+        <div className="mt-5 flex flex-wrap items-start gap-4">
+          <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${profile.isOnline ? 'bg-sky-50 text-sky-700' : 'bg-gray-100 text-gray-500'}`}>
+            <span className={`h-2 w-2 rounded-full ${profile.isOnline ? 'bg-sky-500' : 'bg-gray-400'}`} />
+            {profile.isOnline ? 'Driver Online' : 'Driver Offline'}
+          </span>
+
+          {onlineSelfieImage ? (
+            <div className="flex items-center gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/60 px-3 py-2">
+              <img
+                src={onlineSelfieImage}
+                alt={`${profile.name} online selfie`}
+                className="h-14 w-14 rounded-xl object-cover border border-indigo-100 bg-white"
+              />
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Daily online selfie</p>
+                <p className="text-xs font-semibold text-slate-700">{profile?.online_selfie?.forDate || 'Latest check-in'}</p>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
 

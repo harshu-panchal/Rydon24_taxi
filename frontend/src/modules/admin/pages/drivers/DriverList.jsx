@@ -25,7 +25,7 @@ const ACTION_MENU_WIDTH = 176;
 const ACTION_MENU_GAP = 8;
 const ACTION_MENU_MAX_HEIGHT = 260;
 
-const DriverList = () => {
+const DriverList = ({ mode = 'approved' }) => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeMenu, setActiveMenu] = useState(null);
@@ -43,7 +43,7 @@ const DriverList = () => {
     setError('');
     try {
       const responseData = await adminService.getDrivers(nextPage, nextLimit, {
-        approve: true,
+        ...(mode === 'active' ? { isOnline: true } : { approve: true }),
         search: String(nextSearch || '').trim(),
       });
       const driversList = responseData.data?.results || [];
@@ -57,8 +57,11 @@ const DriverList = () => {
           rating: Number(d.rating_count || d.ratingCount || 0) > 0
             ? Number(d.rating || d.average_rating || d.avg_rating || 0)
             : 0,
+          isOnline: Boolean(d.isOnline),
+          onlineSelfieImage: d.online_selfie_image || '',
+          onlineSelfieCapturedAt: d.online_selfie_captured_at || null,
           registeredAt: d.createdAt || null,
-          status: d.approve ? 'Approved' : (d.status || 'Approved'),
+          status: mode === 'active' ? 'Online' : (d.approve ? 'Approved' : (d.status || 'Approved')),
         }));
         setDrivers(approved);
         setPaginator(responseData.data?.paginator || null);
@@ -213,16 +216,18 @@ const DriverList = () => {
         <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
           <span>Drivers</span>
           <ChevronRight size={12} />
-          <span className="text-gray-700">Approved Drivers</span>
+          <span className="text-gray-700">{mode === 'active' ? 'Active Drivers' : 'Approved Drivers'}</span>
         </div>
         <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-semibold text-gray-900">Approved Drivers</h1>
-          <button
-            onClick={() => navigate('/admin/drivers/create')}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-          >
-            <Plus size={15} /> Add Drivers
-          </button>
+          <h1 className="text-xl font-semibold text-gray-900">{mode === 'active' ? 'Active Drivers' : 'Approved Drivers'}</h1>
+          {mode !== 'active' ? (
+            <button
+              onClick={() => navigate('/admin/drivers/create')}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              <Plus size={15} /> Add Drivers
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -279,6 +284,7 @@ const DriverList = () => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Service Location</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Mobile Number</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Transport Type</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Today Selfie</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Document View</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Approved Status</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Rating</th>
@@ -289,7 +295,7 @@ const DriverList = () => {
             <tbody className="divide-y divide-gray-50">
               {isLoading ? (
                 <tr>
-                  <td colSpan="9" className="py-16 text-center">
+                  <td colSpan="10" className="py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <Loader2 className="w-7 h-7 text-indigo-600 animate-spin" />
                       <p className="text-sm text-gray-400">Loading drivers...</p>
@@ -298,7 +304,7 @@ const DriverList = () => {
                 </tr>
               ) : drivers.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="px-6 py-16 text-center text-sm text-gray-400">No drivers found.</td>
+                  <td colSpan="10" className="px-6 py-16 text-center text-sm text-gray-400">No drivers found.</td>
                 </tr>
               ) : (
                 drivers.map((driver) => (
@@ -307,6 +313,22 @@ const DriverList = () => {
                     <td className="px-4 py-4 text-sm text-gray-500">{driver.serviceLocation}</td>
                     <td className="px-4 py-4 text-sm text-gray-500">{driver.phone}</td>
                     <td className="px-4 py-4 text-sm text-gray-500">{driver.transportType}</td>
+                    <td className="px-4 py-4">
+                      {driver.onlineSelfieImage ? (
+                        <button
+                          type="button"
+                          onClick={() => window.open(driver.onlineSelfieImage, '_blank', 'noopener,noreferrer')}
+                          className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-2 py-1.5 hover:bg-slate-50 transition-colors"
+                        >
+                          <img src={driver.onlineSelfieImage} alt={`${driver.name} selfie`} className="h-10 w-10 rounded-lg object-cover" />
+                          <span className="text-[11px] font-semibold text-slate-500 whitespace-nowrap">
+                            {formatDate(driver.onlineSelfieCapturedAt)}
+                          </span>
+                        </button>
+                      ) : (
+                        <span className="text-xs font-medium text-gray-400">No selfie</span>
+                      )}
+                    </td>
                     <td className="px-4 py-4">
                       <button
                         onClick={() => navigate(`/admin/drivers/${driver.id}?tab=Documents`)}

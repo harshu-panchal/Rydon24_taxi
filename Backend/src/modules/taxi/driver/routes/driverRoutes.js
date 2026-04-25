@@ -8,6 +8,7 @@ import {
   createOwnerFleetDriver,
   deleteCurrentDriverAccount,
   deleteDriverEmergencyContact,
+  claimDriverIncentiveReward,
   goOffline,
   goOnline,
   getCurrentDriver,
@@ -15,6 +16,7 @@ import {
   getDriverApprovalStatus,
   getDriverDocumentTemplates,
   getDriverEmergencyContacts,
+  getDriverIncentives,
   getDriverNotifications,
   saveDriverFcmToken,
   getOwnerFleetDrivers,
@@ -107,6 +109,16 @@ driverRouter.get(
   "/wallet",
   authenticate(["driver"]),
   asyncHandler(getMyWallet),
+);
+driverRouter.get(
+  "/incentives",
+  authenticate(["driver"]),
+  asyncHandler(getDriverIncentives),
+);
+driverRouter.post(
+  "/incentives/claim",
+  authenticate(["driver"]),
+  asyncHandler(claimDriverIncentiveReward),
 );
 driverRouter.post(
   "/wallet/top-up",

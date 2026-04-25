@@ -30,6 +30,7 @@ import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import IncomingRideRequest from './IncomingRideRequest';
 import api from '../../../shared/api/axiosInstance';
 import { useSettings } from '../../../shared/context/SettingsContext';
+import { uploadService } from '../../../shared/services/uploadService';
 
 // Vehicle Icons for Map
 import BikeIcon from '@/assets/icons/bike.png';
@@ -274,6 +275,10 @@ const DriverHome = () => {
     const [isHydratingDriver, setIsHydratingDriver] = useState(true);
     const [isTogglingDuty, setIsTogglingDuty] = useState(false);
     const [showOfflineConfirm, setShowOfflineConfirm] = useState(false);
+    const [showOnlineSelfiePrompt, setShowOnlineSelfiePrompt] = useState(false);
+    const [selfieUploading, setSelfieUploading] = useState(false);
+    const [selfieError, setSelfieError] = useState('');
+    const [onlineSelfie, setOnlineSelfie] = useState(null);
     const [vehicleIconType, setVehicleIconType] = useState(
         () => storedDriverInfo?.vehicleIconType || storedDriverInfo?.vehicleType || 'car',
     );
@@ -282,6 +287,7 @@ const DriverHome = () => {
     );
     const [walletSummary, setWalletSummary] = useState({ balance: 0, cashLimit: 500, isBlocked: false });
     const driverCoordsRef = useRef(readStoredDriverCoords());
+    const selfieInputRef = useRef(null);
     const acceptingRideIdRef = useRef('');
     const currentRequestRef = useRef(null);
     const recoveryTimeoutsRef = useRef([]);
@@ -479,6 +485,7 @@ const DriverHome = () => {
         if (driver?.wallet) {
             setWalletSummary(driver.wallet);
         }
+        setOnlineSelfie(driver?.onlineSelfie || null);
 
         const storedDriverInfoSnapshot = readStoredDriverInfo();
         persistStoredDriverInfo({
@@ -573,7 +580,7 @@ const DriverHome = () => {
         }
     }, [updateDriverLocation]);
 
-    const goOnline = useCallback(async () => {
+    const goOnline = useCallback(async (selfieImageUrl = '') => {
         if (isBalanceCritical) {
             setShowLowBalanceModal(true);
             setStatusMessage('Please top up your wallet to go online.');
@@ -608,7 +615,10 @@ const DriverHome = () => {
             }
 
             setIsOnline(true);
-            const response = await api.patch('/drivers/online', { location: coordinates });
+            const response = await api.patch('/drivers/online', {
+                location: coordinates,
+                ...(selfieImageUrl ? { selfieImageUrl } : {}),
+            });
             const driver = response?.data?.data || response?.data || response;
             console.info('[driver-home] online API response', {
                 isOnline: driver?.isOnline,
@@ -617,6 +627,7 @@ const DriverHome = () => {
             });
             setIsOnline(Boolean(driver?.isOnline));
             setVehicleIconUrl((current) => driver?.vehicleIconUrl || current);
+            setOnlineSelfie(driver?.onlineSelfie || null);
             
             // Sync current state with server response
             const finalCoords = (Array.isArray(driver?.location?.coordinates) && driver.location.coordinates.length === 2)
@@ -638,7 +649,11 @@ const DriverHome = () => {
             console.error('[driver-home] goOnline failed', error);
             setIsOnline(false);
             socketService.disconnect();
-            setStatusMessage(error.message || 'Could not go online.');
+            const nextMessage = error?.response?.data?.message || error.message || 'Could not go online.';
+            setStatusMessage(nextMessage);
+            if (String(nextMessage).toLowerCase().includes('selfie is required')) {
+                setShowOnlineSelfiePrompt(true);
+            }
         } finally {
             setIsTogglingDuty(false);
         }
@@ -675,8 +690,58 @@ const DriverHome = () => {
             return;
         }
 
-        goOnline();
-    }, [goOnline, isHydratingDriver, isOnline, isTogglingDuty]);
+        const todayKey = new Date().toISOString().slice(0, 10);
+        const hasTodaySelfie =
+            String(onlineSelfie?.forDate || '') === todayKey &&
+            String(onlineSelfie?.imageUrl || '').trim();
+
+        if (hasTodaySelfie) {
+            goOnline();
+            return;
+        }
+
+        setSelfieError('');
+        setShowOnlineSelfiePrompt(true);
+    }, [goOnline, isHydratingDriver, isOnline, isTogglingDuty, onlineSelfie]);
+
+    const handleSelfieSelected = useCallback(async (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        setSelfieUploading(true);
+        setSelfieError('');
+
+        try {
+            const base64Image = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result || ''));
+                reader.onerror = () => reject(new Error('Failed to read selected selfie'));
+                reader.readAsDataURL(file);
+            });
+
+            const uploadResult = await uploadService.uploadImage(base64Image, 'driver-online-selfies');
+            const selfieUrl = uploadResult?.url || uploadResult?.secureUrl || '';
+
+            if (!selfieUrl) {
+                throw new Error('Selfie upload did not return an image URL');
+            }
+
+            setOnlineSelfie({
+                imageUrl: selfieUrl,
+                capturedAt: new Date().toISOString(),
+                forDate: new Date().toISOString().slice(0, 10),
+            });
+            setShowOnlineSelfiePrompt(false);
+            await goOnline(selfieUrl);
+        } catch (error) {
+            setSelfieError(error?.message || 'Failed to upload selfie');
+        } finally {
+            setSelfieUploading(false);
+            if (selfieInputRef.current) {
+                selfieInputRef.current.value = '';
+            }
+        }
+    }, [goOnline]);
 
     const recoverRealtimeSession = useCallback(async ({ reason = 'resume' } = {}) => {
         if (!isOnline || isHydratingDriver || isTogglingDuty) {
@@ -1108,6 +1173,72 @@ const DriverHome = () => {
                                     className="h-12 rounded-[16px] bg-rose-500 text-[12px] font-black uppercase tracking-[0.14em] text-white shadow-[0_14px_28px_rgba(244,63,94,0.28)]"
                                 >
                                     Go Offline
+                                </button>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {showOnlineSelfiePrompt && (
+                    <>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 z-[72] bg-slate-950/50 backdrop-blur-sm"
+                            onClick={() => !selfieUploading && setShowOnlineSelfiePrompt(false)}
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, y: 24, scale: 0.96 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 24, scale: 0.96 }}
+                            className="absolute left-1/2 top-1/2 z-[73] w-[calc(100%-2.5rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
+                        >
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-500">Daily check-in</p>
+                            <h3 className="mt-2 text-[20px] font-black tracking-tight text-slate-950">Upload today&apos;s selfie</h3>
+                            <p className="mt-2 text-[13px] font-semibold leading-relaxed text-slate-500">
+                                Before going online, submit a fresh selfie for today. This helps verify the driver account like Rapido-style daily check-in.
+                            </p>
+
+                            {onlineSelfie?.imageUrl ? (
+                                <div className="mt-4 overflow-hidden rounded-[20px] border border-slate-200 bg-slate-50">
+                                    <img src={onlineSelfie.imageUrl} alt="Daily selfie preview" className="h-48 w-full object-cover" />
+                                </div>
+                            ) : null}
+
+                            {selfieError ? (
+                                <p className="mt-3 rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-[12px] font-bold text-rose-600">
+                                    {selfieError}
+                                </p>
+                            ) : null}
+
+                            <input
+                                ref={selfieInputRef}
+                                type="file"
+                                accept="image/*"
+                                capture="user"
+                                className="hidden"
+                                onChange={handleSelfieSelected}
+                            />
+
+                            <div className="mt-5 grid grid-cols-2 gap-3">
+                                <button
+                                    type="button"
+                                    disabled={selfieUploading}
+                                    onClick={() => setShowOnlineSelfiePrompt(false)}
+                                    className="h-12 rounded-[16px] border border-slate-200 bg-slate-50 text-[12px] font-black uppercase tracking-[0.14em] text-slate-500 disabled:opacity-60"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={selfieUploading}
+                                    onClick={() => selfieInputRef.current?.click()}
+                                    className="h-12 rounded-[16px] bg-emerald-500 text-[12px] font-black uppercase tracking-[0.14em] text-white shadow-[0_14px_28px_rgba(16,185,129,0.28)] disabled:opacity-60"
+                                >
+                                    {selfieUploading ? 'Uploading...' : 'Take Selfie'}
                                 </button>
                             </div>
                         </motion.div>

@@ -70,6 +70,26 @@ const driverSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    onlineSelfie: {
+      imageUrl: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      capturedAt: {
+        type: Date,
+        default: null,
+      },
+      uploadedAt: {
+        type: Date,
+        default: null,
+      },
+      forDate: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+    },
     isOnRide: {
       type: Boolean,
       default: false,
@@ -260,6 +280,34 @@ const driverSchema = new mongoose.Schema(
     onboarding: {
       type: mongoose.Schema.Types.Mixed,
       default: {},
+    },
+    incentiveTracking: {
+      currentOnlineStartedAt: {
+        type: Date,
+        default: null,
+      },
+      dailyActivity: {
+        type: [
+          {
+            date: { type: String, required: true },
+            activeMinutes: { type: Number, default: 0 },
+          },
+        ],
+        default: [],
+      },
+      claimedRewards: {
+        type: [
+          {
+            rewardType: { type: String, default: '' },
+            rewardKey: { type: String, default: '' },
+            periodKey: { type: String, default: '' },
+            amount: { type: Number, default: 0 },
+            claimedAt: { type: Date, default: Date.now },
+            metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
+          },
+        ],
+        default: [],
+      },
     },
   },
   { 

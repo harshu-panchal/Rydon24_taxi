@@ -139,6 +139,13 @@ export const getDrivers = asyncHandler(async (req, res) => {
       req.query.approve === 1;
   }
 
+  if (req.query.isOnline !== undefined) {
+    query.isOnline =
+      req.query.isOnline === 'true' ||
+      req.query.isOnline === true ||
+      req.query.isOnline === 1;
+  }
+
   if (req.query.search) {
     const regex = new RegExp(
       String(req.query.search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
@@ -155,7 +162,7 @@ export const getDrivers = asyncHandler(async (req, res) => {
   const total = await Driver.countDocuments(query);
   const drivers = await Driver.find(query)
     .select(
-      '_id name phone email owner_id service_location_id city registerFor vehicleType vehicleNumber vehicleColor rating ratingCount approve status createdAt updatedAt',
+      '_id name phone email owner_id service_location_id city registerFor vehicleType vehicleNumber vehicleColor rating ratingCount isOnline onlineSelfie approve status createdAt updatedAt',
     )
     .sort({ createdAt: -1 })
     .skip(start)
@@ -217,6 +224,10 @@ export const getDrivers = asyncHandler(async (req, res) => {
       vehicle_color: driver.vehicleColor || '',
       rating: Number(driver.ratingCount || 0) > 0 ? Number(driver.rating || 0) : 0,
       rating_count: Number(driver.ratingCount || 0),
+      isOnline: Boolean(driver.isOnline),
+      online_selfie_image: driver.onlineSelfie?.imageUrl || '',
+      online_selfie_captured_at: driver.onlineSelfie?.capturedAt || null,
+      online_selfie_for_date: driver.onlineSelfie?.forDate || '',
       approve: Boolean(driver.approve),
       status: driver.status || (driver.approve ? 'approved' : 'pending'),
       active:

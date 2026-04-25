@@ -5,6 +5,7 @@ import {
   Car,
   Home,
   IndianRupee,
+  Trophy,
   User,
   History,
   Users,
@@ -50,6 +51,11 @@ const DriverBottomNav = () => {
           icon: <IndianRupee size={22} />,
           label: "Earnings",
           path: "/taxi/driver/wallet",
+        },
+        {
+          icon: <Trophy size={22} />,
+          label: "Milestone",
+          path: "/taxi/driver/incentives",
         },
         {
           icon: <User size={22} />,

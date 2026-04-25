@@ -194,3 +194,9 @@ export const updateDriverDocument = (documentKey, document) =>
     { document },
     withDriverAuth(),
   );
+
+export const getDriverIncentives = () =>
+  api.get("/drivers/incentives", withDriverAuth());
+
+export const claimDriverIncentiveReward = (payload) =>
+  api.post("/drivers/incentives/claim", payload, withDriverAuth());

@@ -1,48 +1,160 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  ChevronRight, 
-  Share2, 
-  Save, 
-  Loader2,
-  Info,
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ArrowLeft,
+  ChevronRight,
+  Clock3,
   Gift,
-  ArrowLeft
+  Info,
+  Loader2,
+  Plus,
+  Save,
+  Share2,
+  Sparkles,
+  Trash2,
+  Trophy,
 } from 'lucide-react';
-import { adminService } from '../../services/adminService';
-import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import { adminService } from '../../services/adminService';
+
+const labelClass = 'block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider';
+const inputClass = 'w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors';
+
+const defaultMilestone = (index = 1) => ({
+  id: `milestone_${Date.now()}_${index}`,
+  name: '',
+  enabled: true,
+  active_hours_per_day: 8,
+  required_weeks: 4,
+  min_trips_per_week: 40,
+  payout_amount: 500,
+  notes: '',
+});
+
+const defaultRewardFeatures = [
+  {
+    id: 'daily_active_streak',
+    key: 'daily_active_streak',
+    label: 'Daily active streak bonus',
+    enabled: false,
+    reward_amount: 150,
+    target_value: 7,
+    unit: 'days',
+    description: 'Reward drivers for staying active every day for a full streak window.',
+  },
+  {
+    id: 'weekly_trip_quest',
+    key: 'weekly_trip_quest',
+    label: 'Weekly trip quest',
+    enabled: false,
+    reward_amount: 600,
+    target_value: 75,
+    unit: 'trips',
+    description: 'Uber and Ola style weekly quest for drivers who hit a trip slab.',
+  },
+  {
+    id: 'peak_hour_booster',
+    key: 'peak_hour_booster',
+    label: 'Peak hour booster',
+    enabled: false,
+    reward_amount: 250,
+    target_value: 20,
+    unit: 'peak trips',
+    description: 'Extra wallet reward for completing rides during demand-heavy hours.',
+  },
+  {
+    id: 'weekend_warrior',
+    key: 'weekend_warrior',
+    label: 'Weekend warrior',
+    enabled: false,
+    reward_amount: 300,
+    target_value: 2,
+    unit: 'weekends',
+    description: 'Bonus for maintaining availability and completing targets across weekends.',
+  },
+  {
+    id: 'rating_guard',
+    key: 'rating_guard',
+    label: 'Rating guard bonus',
+    enabled: false,
+    reward_amount: 200,
+    target_value: 4.8,
+    unit: 'rating',
+    description: 'Reward high-rated drivers who keep service quality consistently strong.',
+  },
+  {
+    id: 'cancellation_guard',
+    key: 'cancellation_guard',
+    label: 'Low cancellation bonus',
+    enabled: false,
+    reward_amount: 180,
+    target_value: 3,
+    unit: '% cancel rate',
+    description: 'Bonus for drivers who keep cancellation rate under a configured target.',
+  },
+];
+
+const normalizeMilestone = (item, index = 1) => ({
+  ...defaultMilestone(index),
+  ...item,
+  enabled: item?.enabled ?? true,
+  active_hours_per_day: Number(item?.active_hours_per_day ?? 8),
+  required_weeks: Number(item?.required_weeks ?? 4),
+  min_trips_per_week: Number(item?.min_trips_per_week ?? 40),
+  payout_amount: Number(item?.payout_amount ?? 500),
+  notes: item?.notes || '',
+});
+
+const normalizeFeature = (baseFeature, storedFeature = {}) => ({
+  ...baseFeature,
+  ...storedFeature,
+  enabled: storedFeature?.enabled ?? baseFeature.enabled,
+  reward_amount: Number(storedFeature?.reward_amount ?? baseFeature.reward_amount),
+  target_value: Number(storedFeature?.target_value ?? baseFeature.target_value),
+  unit: storedFeature?.unit || baseFeature.unit,
+  description: storedFeature?.description || baseFeature.description,
+});
+
+const normalizeDriverReferralSettings = (data = {}) => {
+  const storedFeatures = Array.isArray(data.reward_features) ? data.reward_features : [];
+
+  return {
+    enabled: data.enabled ?? false,
+    type: data.type || 'instant_referrer',
+    amount: Number(data.amount || 0),
+    ride_count: Number(data.ride_count || 0),
+    milestone_program_enabled: data.milestone_program_enabled ?? false,
+    milestone_programs: Array.isArray(data.milestone_programs) && data.milestone_programs.length > 0
+      ? data.milestone_programs.map(normalizeMilestone)
+      : [defaultMilestone()],
+    reward_features: defaultRewardFeatures.map((feature) =>
+      normalizeFeature(
+        feature,
+        storedFeatures.find((item) => item?.key === feature.key || item?.id === feature.id),
+      ),
+    ),
+  };
+};
+
+const referralTypes = [
+  { value: 'instant_referrer', label: 'Instant for Referrer Driver' },
+  { value: 'instant_referrer_new', label: 'Instant for Referrer Driver and New Driver' },
+  { value: 'conditional_referrer', label: 'Conditional for Referrer Driver' },
+  { value: 'conditional_referrer_new', label: 'Conditional for Referrer Driver and New Driver' },
+];
 
 const DriverReferralSettings = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [settings, setSettings] = useState({
-    enabled: false,
-    type: 'instant_referrer',
-    amount: 0,
-    ride_count: 0,
-  });
-
-  const referralTypes = [
-    { value: 'instant_referrer', label: 'Instant for Referrer Driver' },
-    { value: 'instant_referrer_new', label: 'Instant for Referrer Driver and New Driver' },
-    { value: 'conditional_referrer', label: 'Conditional for Referrer Driver' },
-    { value: 'conditional_referrer_new', label: 'Conditional for Referrer Driver and New Driver' },
-  ];
+  const [settings, setSettings] = useState(() => normalizeDriverReferralSettings());
 
   useEffect(() => {
     const fetchSettings = async () => {
       try {
         const res = await adminService.getReferralSettings('driver');
-        if (res.data) {
-          setSettings({
-            enabled: res.data.enabled ?? false,
-            type: res.data.type || 'instant_referrer',
-            amount: res.data.amount || 0,
-            ride_count: res.data.ride_count || 0,
-          });
-        }
+        setSettings(normalizeDriverReferralSettings(res.data || {}));
       } catch (err) {
         console.error('Fetch error:', err);
         toast.error('Failed to load settings');
@@ -50,16 +162,38 @@ const DriverReferralSettings = () => {
         setLoading(false);
       }
     };
+
     fetchSettings();
   }, []);
 
   const handleUpdate = async () => {
     setSaving(true);
+
     try {
-      const res = await adminService.updateReferralSettings('driver', settings);
+      const payload = {
+        ...settings,
+        amount: Number(settings.amount || 0),
+        ride_count: Number(settings.ride_count || 0),
+        milestone_programs: settings.milestone_programs.map((item, index) => ({
+          ...item,
+          id: item.id || `milestone_${index + 1}`,
+          active_hours_per_day: Number(item.active_hours_per_day || 0),
+          required_weeks: Number(item.required_weeks || 0),
+          min_trips_per_week: Number(item.min_trips_per_week || 0),
+          payout_amount: Number(item.payout_amount || 0),
+        })),
+        reward_features: settings.reward_features.map((item, index) => ({
+          ...item,
+          id: item.id || `feature_${index + 1}`,
+          reward_amount: Number(item.reward_amount || 0),
+          target_value: Number(item.target_value || 0),
+        })),
+      };
+
+      const res = await adminService.updateReferralSettings('driver', payload);
       if (res) {
         setShowSuccess(true);
-        toast.success('Referral settings updated successfully');
+        toast.success('Driver incentive settings updated');
         setTimeout(() => setShowSuccess(false), 3000);
       }
     } catch (err) {
@@ -71,18 +205,61 @@ const DriverReferralSettings = () => {
   };
 
   const handleToggle = async (newVal) => {
+    const previous = settings;
     const updated = { ...settings, enabled: newVal };
     setSettings(updated);
+
     try {
       await adminService.updateReferralSettings('driver', updated);
       setShowSuccess(true);
-      toast.success('Referral settings toggled successfully');
+      toast.success('Driver referral settings toggled');
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (err) {
       toast.error('Failed to toggle settings');
-      setSettings(settings); // revert
+      setSettings(previous);
     }
   };
+
+  const updateMilestone = (index, key, value) => {
+    setSettings((current) => ({
+      ...current,
+      milestone_programs: current.milestone_programs.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [key]: value } : item,
+      ),
+    }));
+  };
+
+  const addMilestone = () => {
+    setSettings((current) => ({
+      ...current,
+      milestone_programs: [...current.milestone_programs, defaultMilestone(current.milestone_programs.length + 1)],
+    }));
+  };
+
+  const removeMilestone = (index) => {
+    setSettings((current) => ({
+      ...current,
+      milestone_programs:
+        current.milestone_programs.length === 1
+          ? [defaultMilestone(1)]
+          : current.milestone_programs.filter((_, itemIndex) => itemIndex !== index),
+    }));
+  };
+
+  const updateRewardFeature = (key, field, value) => {
+    setSettings((current) => ({
+      ...current,
+      reward_features: current.reward_features.map((item) =>
+        item.key === key ? { ...item, [field]: value } : item,
+      ),
+    }));
+  };
+
+  const isConditional = settings.type?.includes('conditional');
+  const enabledFeatureCount = useMemo(
+    () => settings.reward_features.filter((item) => item.enabled).length,
+    [settings.reward_features],
+  );
 
   if (loading) {
     return (
@@ -95,23 +272,17 @@ const DriverReferralSettings = () => {
     );
   }
 
-  const labelClass = "block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider";
-  const inputClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors";
-
-  const isConditional = settings.type?.includes('conditional');
-
   return (
     <div className="min-h-screen bg-gray-50 p-6 lg:p-8">
-      {/* HEADER BLOCK */}
       <div className="mb-6">
         <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
           <span>Driver Referral Settings</span>
           <ChevronRight size={12} />
-          <span className="text-gray-700">Driver Referral Settings</span>
+          <span className="text-gray-700">Driver Incentives & Milestones</span>
         </div>
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-gray-900 uppercase tracking-tight">Driver Referral Settings</h1>
-          <button 
+          <h1 className="text-xl font-semibold text-gray-900 uppercase tracking-tight">Driver Incentives & Milestones</h1>
+          <button
             onClick={() => navigate(-1)}
             className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
           >
@@ -120,10 +291,8 @@ const DriverReferralSettings = () => {
         </div>
       </div>
 
-      <div className="max-w-5xl space-y-6">
-        {/* FORM CARD */}
+      <div className="max-w-6xl space-y-6">
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          {/* Main Toggle Section */}
           <div className="p-6 border-b border-gray-100 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
@@ -131,10 +300,10 @@ const DriverReferralSettings = () => {
               </div>
               <div>
                 <h3 className="text-sm font-bold text-gray-900 uppercase">Driver Referral Earnings Setup</h3>
-                <p className="text-xs text-gray-400 mt-0.5 font-medium">Invite others to use our app with your unique referral code and earn exciting rewards!</p>
+                <p className="text-xs text-gray-400 mt-0.5 font-medium">Configure referral rewards plus long-term milestone programs for drivers.</p>
               </div>
             </div>
-            <button 
+            <button
               onClick={() => handleToggle(!settings.enabled)}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${settings.enabled ? 'bg-indigo-600' : 'bg-gray-200'}`}
             >
@@ -143,75 +312,272 @@ const DriverReferralSettings = () => {
           </div>
 
           <div className="p-8 space-y-8">
-            {/* Referral Type Selection */}
-            <div className="max-w-xl space-y-2">
-              <label className={labelClass}>
-                Driver Referral Type <Info size={14} className="inline ml-1 text-gray-400 cursor-help" />
-              </label>
-              <div className="relative">
-                <select
-                  value={settings.type}
-                  onChange={(e) => setSettings({ ...settings, type: e.target.value })}
-                  className={`${inputClass} appearance-none pr-10`}
-                >
-                  <option value="">Select</option>
-                  {referralTypes.map((type) => (
-                    <option key={type.value} value={type.value}>{type.label}</option>
-                  ))}
-                </select>
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                  <ChevronRight size={16} className="rotate-90" />
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <div className="space-y-5">
+                <div className="max-w-xl space-y-2">
+                  <label className={labelClass}>
+                    Driver Referral Type <Info size={14} className="inline ml-1 text-gray-400" />
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={settings.type}
+                      onChange={(e) => setSettings({ ...settings, type: e.target.value })}
+                      className={`${inputClass} appearance-none pr-10`}
+                    >
+                      <option value="">Select</option>
+                      {referralTypes.map((type) => (
+                        <option key={type.value} value={type.value}>{type.label}</option>
+                      ))}
+                    </select>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                      <ChevronRight size={16} className="rotate-90" />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Referral Info Card Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
-              <div className="bg-white rounded-xl border border-dashed border-gray-200 p-6 flex items-center gap-5 transition-all hover:border-indigo-200">
-                <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 shadow-sm">
-                  <Share2 size={24} />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-gray-900">Driver Share the code To Refer Driver</h4>
-                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">Offer a reward to Drivers for each referral when they share their code.</p>
-                </div>
-              </div>
-
-              <div className="space-y-4">
                 {isConditional && (
                   <div className="bg-gray-50/50 rounded-xl border border-gray-200 p-6 space-y-3">
                     <label className={labelClass}>Required Ride Count</label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        value={settings.ride_count}
-                        onChange={(e) => setSettings({ ...settings, ride_count: e.target.value })}
-                        className={inputClass}
-                        placeholder="5"
-                      />
-                    </div>
-                    <p className="text-[11px] text-gray-400 font-medium">Number of rides required before earning rewards.</p>
+                    <input
+                      type="number"
+                      value={settings.ride_count}
+                      onChange={(e) => setSettings({ ...settings, ride_count: e.target.value })}
+                      className={inputClass}
+                      placeholder="5"
+                    />
+                    <p className="text-[11px] text-gray-400 font-medium">Number of rides required before referral rewards unlock.</p>
                   </div>
                 )}
 
                 <div className="bg-gray-50/50 rounded-xl border border-gray-200 p-6 space-y-3">
                   <label className={labelClass}>Earnings to Each Referral</label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      value={settings.amount}
-                      onChange={(e) => setSettings({ ...settings, amount: e.target.value })}
-                      className={inputClass}
-                      placeholder="100"
-                    />
-                  </div>
-                  <p className="text-[11px] text-gray-400 font-medium">Enter the amount Drivers earn for each referral.</p>
+                  <input
+                    type="number"
+                    value={settings.amount}
+                    onChange={(e) => setSettings({ ...settings, amount: e.target.value })}
+                    className={inputClass}
+                    placeholder="100"
+                  />
+                  <p className="text-[11px] text-gray-400 font-medium">Wallet amount credited for each successful driver referral.</p>
                 </div>
+              </div>
+
+              <div className="rounded-2xl border border-dashed border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-6">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-white text-indigo-600 border border-indigo-100 flex items-center justify-center shadow-sm">
+                    <Share2 size={22} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900">Driver growth stack</h4>
+                    <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                      Mix normal referral payout with Ola/Uber style milestone rewards like active-hour streaks,
+                      weekly quests, peak bonuses, rating protection, and cancellation discipline.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  <div className="rounded-xl bg-white border border-indigo-100 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Milestones</p>
+                    <p className="mt-2 text-2xl font-black text-slate-900">{settings.milestone_programs.length}</p>
+                  </div>
+                  <div className="rounded-xl bg-white border border-indigo-100 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Active features</p>
+                    <p className="mt-2 text-2xl font-black text-slate-900">{enabledFeatureCount}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 overflow-hidden">
+              <div className="px-6 py-5 bg-slate-50 border-b border-gray-200 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                    <Trophy size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-900 uppercase">Driver Milestone Program</h3>
+                    <p className="text-xs text-gray-500">Create milestone payout slabs based on daily active time and sustained weekly performance.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSettings((current) => ({ ...current, milestone_program_enabled: !current.milestone_program_enabled }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${settings.milestone_program_enabled ? 'bg-amber-500' : 'bg-gray-200'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.milestone_program_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-5">
+                {settings.milestone_programs.map((item, index) => (
+                  <div key={item.id} className="rounded-2xl border border-gray-200 p-5 bg-white space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                          <Clock3 size={18} />
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Milestone {index + 1}</p>
+                          <p className="text-sm font-bold text-slate-900">{item.name || 'Untitled milestone'}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => updateMilestone(index, 'enabled', !item.enabled)}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${item.enabled ? 'bg-indigo-600' : 'bg-gray-200'}`}
+                        >
+                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${item.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeMilestone(index)}
+                          className="h-10 w-10 rounded-xl border border-rose-100 bg-rose-50 text-rose-500 flex items-center justify-center hover:bg-rose-100 transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+                      <div className="xl:col-span-2">
+                        <label className={labelClass}>Milestone Name</label>
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={(e) => updateMilestone(index, 'name', e.target.value)}
+                          className={inputClass}
+                          placeholder="30-day active streak"
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Active Hours / Day</label>
+                        <input
+                          type="number"
+                          value={item.active_hours_per_day}
+                          onChange={(e) => updateMilestone(index, 'active_hours_per_day', e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Required Weeks</label>
+                        <input
+                          type="number"
+                          value={item.required_weeks}
+                          onChange={(e) => updateMilestone(index, 'required_weeks', e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Payout Amount</label>
+                        <input
+                          type="number"
+                          value={item.payout_amount}
+                          onChange={(e) => updateMilestone(index, 'payout_amount', e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelClass}>Minimum Trips / Week</label>
+                        <input
+                          type="number"
+                          value={item.min_trips_per_week}
+                          onChange={(e) => updateMilestone(index, 'min_trips_per_week', e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Admin Note</label>
+                        <input
+                          type="text"
+                          value={item.notes}
+                          onChange={(e) => updateMilestone(index, 'notes', e.target.value)}
+                          className={inputClass}
+                          placeholder="Credit after compliance review"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={addMilestone}
+                  className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-xs font-black uppercase tracking-widest text-indigo-700 hover:bg-indigo-100 transition-colors"
+                >
+                  <Plus size={14} />
+                  Add Milestone
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 overflow-hidden">
+              <div className="px-6 py-5 bg-slate-50 border-b border-gray-200 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <Sparkles size={18} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 uppercase">Extra Driver Reward Features</h3>
+                  <p className="text-xs text-gray-500">Popular incentive mechanics inspired by Ola, Uber, and large fleet growth programs.</p>
+                </div>
+              </div>
+
+              <div className="p-6 grid grid-cols-1 xl:grid-cols-2 gap-4">
+                {settings.reward_features.map((feature) => (
+                  <div key={feature.key} className="rounded-2xl border border-gray-200 p-5 bg-white space-y-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900">{feature.label}</h4>
+                        <p className="mt-1 text-xs text-slate-500 leading-relaxed">{feature.description}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => updateRewardFeature(feature.key, 'enabled', !feature.enabled)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${feature.enabled ? 'bg-emerald-500' : 'bg-gray-200'}`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${feature.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelClass}>Reward Amount</label>
+                        <input
+                          type="number"
+                          value={feature.reward_amount}
+                          onChange={(e) => updateRewardFeature(feature.key, 'reward_amount', e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Target Value</label>
+                        <input
+                          type="number"
+                          value={feature.target_value}
+                          onChange={(e) => updateRewardFeature(feature.key, 'target_value', e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className={labelClass}>Unit / Metric</label>
+                      <input
+                        type="text"
+                        value={feature.unit}
+                        onChange={(e) => updateRewardFeature(feature.key, 'unit', e.target.value)}
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
 
-          {/* Action Footer */}
           <div className="p-6 bg-gray-50 border-t border-gray-100 flex flex-col gap-4">
             <button
               onClick={handleUpdate}
@@ -219,7 +585,7 @@ const DriverReferralSettings = () => {
               className="w-fit flex items-center gap-2 px-6 py-2.5 bg-indigo-900 text-white text-xs font-bold uppercase tracking-wider rounded-lg hover:bg-indigo-800 transition-colors shadow-sm disabled:opacity-50"
             >
               {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              Update Referral Settings
+              Update Driver Incentive Settings
             </button>
 
             {showSuccess && (
@@ -227,9 +593,9 @@ const DriverReferralSettings = () => {
                 <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center">
                   <ChevronRight size={12} className="rotate-45" />
                 </div>
-                <span className="text-xs font-bold uppercase tracking-tight">Referral settings updated successfully</span>
+                <span className="text-xs font-bold uppercase tracking-tight">Driver incentive settings updated successfully</span>
                 <button onClick={() => setShowSuccess(false)} className="ml-auto text-emerald-400 hover:text-emerald-600">
-                  <span className="text-lg">×</span>
+                  <span className="text-lg">x</span>
                 </button>
               </div>
             )}
@@ -237,6 +603,7 @@ const DriverReferralSettings = () => {
         </div>
       </div>
     </div>
-  );};
+  );
+};
 
 export default DriverReferralSettings;

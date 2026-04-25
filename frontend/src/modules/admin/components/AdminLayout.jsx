@@ -420,6 +420,7 @@ const AdminLayout = () => {
             subItems: [
               { label: 'Pending Drivers', path: '/admin/drivers/pending' },
               { label: 'Approved Drivers', path: '/admin/drivers' },
+              { label: 'Active Drivers', path: '/admin/drivers/active' },
               { label: 'Subscription', path: '/admin/drivers/subscription' },
               { label: 'Drivers Ratings', path: '/admin/drivers/ratings' },
               {

@@ -878,6 +878,8 @@ const DRIVER_LIST_SELECT = [
   'vehicleColor',
   'rating',
   'ratingCount',
+  'isOnline',
+  'onlineSelfie',
   'approve',
   'status',
   'createdAt',
@@ -909,6 +911,10 @@ const serializeDriverListItem = (driver) => ({
       ? Number(driver.rating || 0)
       : 0,
   rating_count: Number(driver.ratingCount || 0),
+  isOnline: Boolean(driver.isOnline),
+  online_selfie_image: driver.onlineSelfie?.imageUrl || '',
+  online_selfie_captured_at: driver.onlineSelfie?.capturedAt || null,
+  online_selfie_for_date: driver.onlineSelfie?.forDate || '',
   approve: Boolean(driver.approve),
   status: driver.status || (driver.approve ? 'approved' : 'pending'),
   active: driver.approve !== false && String(driver.status || '').toLowerCase() !== 'inactive',
@@ -2110,7 +2116,7 @@ export const adjustUserWallet = async (id, payload = {}) => {
   return { balance: Number(nextBalance.toFixed(2)) };
 };
 
-export const listDrivers = async ({ page = 1, limit = 50, status, search, approve }) => {
+export const listDrivers = async ({ page = 1, limit = 50, status, search, approve, isOnline }) => {
   const safePage = Number(page) || 1;
   const safeLimit = Number(limit) || 50;
   const start = (safePage - 1) * safeLimit;
@@ -2123,6 +2129,10 @@ export const listDrivers = async ({ page = 1, limit = 50, status, search, approv
   
   if (approve !== undefined) {
     query.approve = approve === 'true' || approve === true || approve === 1;
+  }
+
+  if (isOnline !== undefined) {
+    query.isOnline = isOnline === 'true' || isOnline === true || isOnline === 1;
   }
 
   if (search) {
@@ -2920,6 +2930,7 @@ export const getDriverProfile = async (id) => {
       number: driver.vehicleNumber || '',
     },
     image: driver.profile_image || driver.avatar || '',
+    online_selfie: driver.onlineSelfie || {},
     vehicle_image: driver.vehicleImage || 'https://img.freepik.com/free-vector/yellow-passenger-transport-taxi-car_1017-4886.jpg',
     stats: {
       total_trips: rides.length,
@@ -2978,6 +2989,34 @@ export const getReferralSettings = async (type) => {
   return type ? referral[type] : referral;
 };
 
+const sanitizeReferralMilestones = (items = []) =>
+  (Array.isArray(items) ? items : [])
+    .map((item, index) => ({
+      id: String(item?.id || `milestone_${index + 1}`).trim(),
+      name: String(item?.name || `Milestone ${index + 1}`).trim(),
+      enabled: Boolean(item?.enabled ?? true),
+      active_hours_per_day: Math.max(0, Number(item?.active_hours_per_day ?? 0) || 0),
+      required_weeks: Math.max(0, Number(item?.required_weeks ?? 0) || 0),
+      min_trips_per_week: Math.max(0, Number(item?.min_trips_per_week ?? 0) || 0),
+      payout_amount: Math.max(0, Number(item?.payout_amount ?? 0) || 0),
+      notes: String(item?.notes || '').trim(),
+    }))
+    .filter((item) => item.name);
+
+const sanitizeReferralRewardFeatures = (items = []) =>
+  (Array.isArray(items) ? items : [])
+    .map((item, index) => ({
+      id: String(item?.id || `feature_${index + 1}`).trim(),
+      key: String(item?.key || `feature_${index + 1}`).trim(),
+      label: String(item?.label || `Feature ${index + 1}`).trim(),
+      enabled: Boolean(item?.enabled ?? false),
+      reward_amount: Math.max(0, Number(item?.reward_amount ?? 0) || 0),
+      target_value: Math.max(0, Number(item?.target_value ?? 0) || 0),
+      unit: String(item?.unit || '').trim(),
+      description: String(item?.description || '').trim(),
+    }))
+    .filter((item) => item.label);
+
 export const updateReferralSettings = async (type, payload) => {
   const updateKey = `referral.${type}`;
   
@@ -2987,6 +3026,16 @@ export const updateReferralSettings = async (type, payload) => {
     enabled: Boolean(payload.enabled),
     amount: Number(payload.amount || 0),
   };
+
+  if (payload.ride_count !== undefined) {
+    updateData.ride_count = Math.max(0, Number(payload.ride_count || 0) || 0);
+  }
+
+  if (type === 'driver') {
+    updateData.milestone_program_enabled = Boolean(payload.milestone_program_enabled);
+    updateData.milestone_programs = sanitizeReferralMilestones(payload.milestone_programs);
+    updateData.reward_features = sanitizeReferralRewardFeatures(payload.reward_features);
+  }
 
   const setting = await AdminBusinessSetting.findOneAndUpdate(
     { scope: 'default' },

@@ -9,6 +9,7 @@ import { Ride } from "../../user/models/Ride.js";
 import { Owner } from "../../admin/models/Owner.js";
 import { ServiceLocation } from "../../admin/models/ServiceLocation.js";
 import { Vehicle } from "../../admin/models/Vehicle.js";
+import { AdminBusinessSetting } from "../../admin/models/AdminBusinessSetting.js";
 import { Notification } from "../../admin/promotions/models/Notification.js";
 import { FleetVehicle } from "../../admin/models/FleetVehicle.js";
 import {
@@ -21,6 +22,7 @@ import { notifyLateAvailableDriver } from "../../services/dispatchService.js";
 import { findZoneByPickup } from "../services/locationService.js";
 import { listDriverServiceLocations } from "../services/serviceLocationService.js";
 import {
+  applyDriverWalletAdjustment,
   serializeDriverWallet,
   topUpDriverWallet,
 } from "../services/walletService.js";
@@ -61,6 +63,321 @@ const EMERGENCY_CONTACT_NAME_REGEX = /^[A-Za-z]+(?:[ .'-][A-Za-z]+)*$/;
 const DRIVER_NAME_REGEX = /^[A-Za-z]+(?:[ .'-][A-Za-z]+)*$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RAZORPAY_QR_MAX_AMOUNT = 500000;
+const IST_OFFSET_MS = 330 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const toIstDayKey = (value = new Date()) =>
+  new Date(new Date(value).getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
+
+const getIstDayStart = (value = new Date()) => {
+  const timestamp = new Date(value).getTime();
+  const shifted = timestamp + IST_OFFSET_MS;
+  const dayStartShifted = Math.floor(shifted / DAY_MS) * DAY_MS;
+  return new Date(dayStartShifted - IST_OFFSET_MS);
+};
+
+const getIstWeekKey = (value = new Date()) => {
+  const dayStart = getIstDayStart(value);
+  const shifted = dayStart.getTime() + IST_OFFSET_MS;
+  const shiftedDate = new Date(shifted);
+  const day = shiftedDate.getUTCDay();
+  const mondayDistance = day === 0 ? 6 : day - 1;
+  const weekStart = new Date(dayStart.getTime() - mondayDistance * DAY_MS);
+  return toIstDayKey(weekStart);
+};
+
+const getIstMonthKey = (value = new Date()) => {
+  const shifted = new Date(new Date(value).getTime() + IST_OFFSET_MS);
+  const year = shifted.getUTCFullYear();
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+};
+
+const pruneDailyActivity = (items = []) =>
+  (Array.isArray(items) ? items : [])
+    .filter((item) => item?.date)
+    .sort((left, right) => String(left.date).localeCompare(String(right.date)))
+    .slice(-120);
+
+const pruneClaimedRewards = (items = []) =>
+  (Array.isArray(items) ? items : [])
+    .filter((item) => item?.rewardType && item?.rewardKey)
+    .sort((left, right) => new Date(left.claimedAt || 0) - new Date(right.claimedAt || 0))
+    .slice(-200);
+
+const appendDailyActivityMinutes = (dailyActivity = [], dateKey, minutes) => {
+  const safeMinutes = Math.max(0, Number(minutes || 0));
+  if (!dateKey || safeMinutes <= 0) {
+    return pruneDailyActivity(dailyActivity);
+  }
+
+  const next = [...(Array.isArray(dailyActivity) ? dailyActivity : [])];
+  const index = next.findIndex((item) => item?.date === dateKey);
+
+  if (index >= 0) {
+    next[index] = {
+      ...next[index],
+      activeMinutes: Math.round((Number(next[index]?.activeMinutes || 0) + safeMinutes) * 100) / 100,
+    };
+  } else {
+    next.push({
+      date: dateKey,
+      activeMinutes: Math.round(safeMinutes * 100) / 100,
+    });
+  }
+
+  return pruneDailyActivity(next);
+};
+
+const mergeOnlineSessionIntoTracking = (tracking = {}, sessionStart, sessionEnd = new Date()) => {
+  const start = sessionStart ? new Date(sessionStart) : null;
+  const end = sessionEnd ? new Date(sessionEnd) : null;
+
+  if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+    return {
+      ...tracking,
+      dailyActivity: pruneDailyActivity(tracking?.dailyActivity),
+    };
+  }
+
+  let cursor = new Date(start);
+  let nextDailyActivity = Array.isArray(tracking?.dailyActivity) ? [...tracking.dailyActivity] : [];
+
+  while (cursor < end) {
+    const nextDayStart = new Date(getIstDayStart(cursor).getTime() + DAY_MS);
+    const segmentEnd = nextDayStart < end ? nextDayStart : end;
+    const minutes = (segmentEnd.getTime() - cursor.getTime()) / 60000;
+    nextDailyActivity = appendDailyActivityMinutes(nextDailyActivity, toIstDayKey(cursor), minutes);
+    cursor = segmentEnd;
+  }
+
+  return {
+    ...tracking,
+    dailyActivity: nextDailyActivity,
+  };
+};
+
+const collectWeekWindows = (count = 1, fromDate = new Date()) => {
+  const total = Math.max(1, Number(count || 1));
+  const windows = [];
+  const currentDayStart = getIstDayStart(fromDate);
+  const shifted = currentDayStart.getTime() + IST_OFFSET_MS;
+  const shiftedDate = new Date(shifted);
+  const day = shiftedDate.getUTCDay();
+  const mondayDistance = day === 0 ? 6 : day - 1;
+  const currentWeekStart = new Date(currentDayStart.getTime() - mondayDistance * DAY_MS);
+
+  for (let index = 0; index < total; index += 1) {
+    const start = new Date(currentWeekStart.getTime() - index * 7 * DAY_MS);
+    const end = new Date(start.getTime() + 7 * DAY_MS);
+    windows.unshift({
+      key: toIstDayKey(start),
+      start,
+      end,
+    });
+  }
+
+  return windows;
+};
+
+const countCompletedRidesInRange = (rides = [], start, end) =>
+  rides.filter((ride) => {
+    const status = String(ride?.status || "").toLowerCase();
+    const liveStatus = String(ride?.liveStatus || "").toLowerCase();
+    if (!["completed", "delivered"].includes(status) && !["completed", "delivered"].includes(liveStatus)) {
+      return false;
+    }
+
+    const rideDate = new Date(ride?.completedAt || ride?.updatedAt || ride?.createdAt || 0);
+    return rideDate >= start && rideDate < end;
+  }).length;
+
+const countPeakHourTripsInRange = (rides = [], start, end) =>
+  rides.filter((ride) => {
+    const status = String(ride?.status || "").toLowerCase();
+    const liveStatus = String(ride?.liveStatus || "").toLowerCase();
+    if (!["completed", "delivered"].includes(status) && !["completed", "delivered"].includes(liveStatus)) {
+      return false;
+    }
+    const rideDate = new Date(ride?.completedAt || ride?.updatedAt || ride?.createdAt || 0);
+    if (!(rideDate >= start && rideDate < end)) {
+      return false;
+    }
+    const hour = new Date(rideDate.getTime() + IST_OFFSET_MS).getUTCHours();
+    return (hour >= 7 && hour < 11) || (hour >= 17 && hour < 21);
+  }).length;
+
+const getCurrentActiveStreak = (dailyActivity = [], minimumMinutes = 1) => {
+  const activityMap = new Map((Array.isArray(dailyActivity) ? dailyActivity : []).map((item) => [item.date, Number(item.activeMinutes || 0)]));
+  let streak = 0;
+  let cursor = getIstDayStart(new Date());
+
+  while (true) {
+    const key = toIstDayKey(cursor);
+    const minutes = Number(activityMap.get(key) || 0);
+    if (minutes < minimumMinutes) {
+      break;
+    }
+    streak += 1;
+    cursor = new Date(cursor.getTime() - DAY_MS);
+  }
+
+  return streak;
+};
+
+const hasClaimedReward = (claimedRewards = [], rewardType, rewardKey, periodKey) =>
+  (Array.isArray(claimedRewards) ? claimedRewards : []).some((item) =>
+    item?.rewardType === rewardType &&
+    item?.rewardKey === rewardKey &&
+    item?.periodKey === periodKey,
+  );
+
+const buildDriverIncentiveSnapshot = ({ driver, settings, rides }) => {
+  const tracking = driver?.incentiveTracking || {};
+  const dailyActivity = Array.isArray(tracking.dailyActivity) ? tracking.dailyActivity : [];
+  const claimedRewards = Array.isArray(tracking.claimedRewards) ? tracking.claimedRewards : [];
+  const milestonePrograms = Array.isArray(settings?.milestone_programs) ? settings.milestone_programs : [];
+  const rewardFeatures = Array.isArray(settings?.reward_features) ? settings.reward_features : [];
+  const dailyActivityMap = new Map(dailyActivity.map((item) => [item.date, Number(item.activeMinutes || 0)]));
+
+  const milestones = milestonePrograms.map((item, index) => {
+    const requiredWeeks = Math.max(1, Number(item.required_weeks || 1));
+    const requiredHours = Math.max(0, Number(item.active_hours_per_day || 0));
+    const minTripsPerWeek = Math.max(0, Number(item.min_trips_per_week || 0));
+    const weekWindows = collectWeekWindows(requiredWeeks, new Date());
+    const qualifyingWeeks = weekWindows.filter((week) => {
+      const tripCount = countCompletedRidesInRange(rides, week.start, week.end);
+      return tripCount >= minTripsPerWeek;
+    }).length;
+
+    const targetDays = requiredWeeks * 7;
+    let qualifyingDays = 0;
+    for (let offset = 0; offset < targetDays; offset += 1) {
+      const day = new Date(getIstDayStart(new Date()).getTime() - offset * DAY_MS);
+      const dayKey = toIstDayKey(day);
+      if ((Number(dailyActivityMap.get(dayKey) || 0) / 60) >= requiredHours) {
+        qualifyingDays += 1;
+      }
+    }
+
+    const periodKey = `milestone:${item.id || index}`;
+    const eligible = Boolean(item.enabled) && qualifyingWeeks >= requiredWeeks && qualifyingDays >= targetDays;
+
+    return {
+      ...item,
+      periodKey,
+      progress: {
+        qualifyingWeeks,
+        targetWeeks: requiredWeeks,
+        qualifyingDays,
+        targetDays,
+      },
+      isEligible: eligible,
+      isClaimed: hasClaimedReward(claimedRewards, "milestone", item.id || String(index), periodKey),
+    };
+  });
+
+  const currentWeekWindow = collectWeekWindows(1, new Date())[0];
+  const currentWeekTrips = currentWeekWindow ? countCompletedRidesInRange(rides, currentWeekWindow.start, currentWeekWindow.end) : 0;
+  const currentPeakTrips = currentWeekWindow ? countPeakHourTripsInRange(rides, currentWeekWindow.start, currentWeekWindow.end) : 0;
+  const currentStreak = getCurrentActiveStreak(dailyActivity, 1);
+  const weekendCount = collectWeekWindows(4, new Date()).reduce((total, week) => {
+    const saturday = new Date(week.start.getTime() + 5 * DAY_MS);
+    const sunday = new Date(week.start.getTime() + 6 * DAY_MS);
+    const weekendTrips = countCompletedRidesInRange(rides, saturday, new Date(sunday.getTime() + DAY_MS));
+    return total + (weekendTrips > 0 ? 1 : 0);
+  }, 0);
+  const currentMonthKey = getIstMonthKey(new Date());
+  const monthStart = new Date(`${currentMonthKey}-01T00:00:00.000Z`);
+  const monthCompleted = rides.filter((ride) => {
+    const status = String(ride?.status || "").toLowerCase();
+    const liveStatus = String(ride?.liveStatus || "").toLowerCase();
+    if (!["completed", "delivered"].includes(status) && !["completed", "delivered"].includes(liveStatus)) {
+      return false;
+    }
+    const rideDate = new Date(ride?.completedAt || ride?.updatedAt || ride?.createdAt || 0);
+    return getIstMonthKey(rideDate) === currentMonthKey;
+  }).length;
+  const monthCancelled = rides.filter((ride) => {
+    const status = String(ride?.status || "").toLowerCase();
+    return status === "cancelled" && getIstMonthKey(new Date(ride?.updatedAt || ride?.createdAt || 0)) === currentMonthKey;
+  }).length;
+  const cancellationRate = monthCompleted + monthCancelled > 0
+    ? Number(((monthCancelled / (monthCompleted + monthCancelled)) * 100).toFixed(2))
+    : 0;
+
+  const features = rewardFeatures.map((item, index) => {
+    const key = item.key || item.id || `feature_${index + 1}`;
+    let currentValue = 0;
+    let periodKey = key;
+
+    switch (key) {
+      case "daily_active_streak":
+        currentValue = currentStreak;
+        periodKey = `${key}:${getIstWeekKey(new Date())}`;
+        break;
+      case "weekly_trip_quest":
+        currentValue = currentWeekTrips;
+        periodKey = `${key}:${getIstWeekKey(new Date())}`;
+        break;
+      case "peak_hour_booster":
+        currentValue = currentPeakTrips;
+        periodKey = `${key}:${getIstWeekKey(new Date())}`;
+        break;
+      case "weekend_warrior":
+        currentValue = weekendCount;
+        periodKey = `${key}:${currentMonthKey}`;
+        break;
+      case "rating_guard":
+        currentValue = Number(driver?.rating || 0);
+        periodKey = `${key}:${currentMonthKey}`;
+        break;
+      case "cancellation_guard":
+        currentValue = cancellationRate;
+        periodKey = `${key}:${currentMonthKey}`;
+        break;
+      default:
+        currentValue = Number(item.target_value || 0);
+        periodKey = `${key}:${currentMonthKey}`;
+        break;
+    }
+
+    const target = Number(item.target_value || 0);
+    const isEligible = key === "cancellation_guard"
+      ? currentValue <= target
+      : currentValue >= target;
+
+    return {
+      ...item,
+      key,
+      periodKey,
+      currentValue,
+      targetValue: target,
+      isEligible: Boolean(item.enabled) && isEligible,
+      isClaimed: hasClaimedReward(claimedRewards, "feature", key, periodKey),
+    };
+  });
+
+  return {
+    settings: {
+      enabled: Boolean(settings?.enabled),
+      milestone_program_enabled: Boolean(settings?.milestone_program_enabled),
+      type: settings?.type || "instant_referrer",
+    },
+    summary: {
+      streakDays: currentStreak,
+      currentWeekTrips,
+      currentPeakTrips,
+      weekendCount,
+      monthCancellationRate: cancellationRate,
+      totalClaimedRewards: claimedRewards.length,
+    },
+    milestones,
+    features,
+    claimedRewards,
+    walletBalance: Number(driver?.wallet?.balance || 0),
+  };
+};
 
 const normalizePaymentAmount = (value) => {
   const amount = Number(value);
@@ -487,7 +804,7 @@ export const loginDriver = async (req, res) => {
 };
 
 export const goOnline = async (req, res) => {
-  const { location } = req.body;
+  const { location, selfieImageUrl } = req.body;
 
   const coordinates = normalizePoint(location, "location");
   const zone = await findZoneByPickup(coordinates);
@@ -497,7 +814,31 @@ export const goOnline = async (req, res) => {
     throw new ApiError(404, "Driver not found");
   }
 
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const hasTodaySelfie =
+    String(existingDriver.onlineSelfie?.forDate || "") === todayKey &&
+    String(existingDriver.onlineSelfie?.imageUrl || "").trim();
+
+  if (!hasTodaySelfie && !String(selfieImageUrl || "").trim()) {
+    throw new ApiError(400, "A selfie is required before going online today");
+  }
+
   await clearDriverActiveRideIfStale(existingDriver);
+  const trackingBeforeOnline = mergeOnlineSessionIntoTracking(
+    existingDriver.incentiveTracking || {},
+    existingDriver.incentiveTracking?.currentOnlineStartedAt,
+    new Date(),
+  );
+
+  const nextOnlineSelfie =
+    hasTodaySelfie && !String(selfieImageUrl || "").trim()
+      ? existingDriver.onlineSelfie
+      : {
+          imageUrl: String(selfieImageUrl || "").trim(),
+          capturedAt: new Date(),
+          uploadedAt: new Date(),
+          forDate: todayKey,
+        };
 
   const driver = await Driver.findByIdAndUpdate(
     req.auth.sub,
@@ -505,6 +846,12 @@ export const goOnline = async (req, res) => {
       isOnline: true,
       zoneId: zone?._id || null,
       location: toPoint(coordinates, "location"),
+      onlineSelfie: nextOnlineSelfie,
+      incentiveTracking: {
+        ...trackingBeforeOnline,
+        currentOnlineStartedAt: new Date(),
+        claimedRewards: pruneClaimedRewards(trackingBeforeOnline?.claimedRewards),
+      },
     },
     { returnDocument: 'after' },
   );
@@ -520,6 +867,7 @@ export const goOnline = async (req, res) => {
     data: {
       ...driver.toObject(),
       vehicleIconUrl,
+      onlineSelfie: driver.onlineSelfie || {},
     },
   });
 
@@ -571,6 +919,7 @@ export const getCurrentDriver = async (req, res) => {
       deletionRequest: driver.deletionRequest || { status: "none" },
       isOnline: driver.isOnline,
       isOnRide: driver.isOnRide,
+      onlineSelfie: driver.onlineSelfie || {},
       location: driver.location,
       zoneId: driver.zoneId,
       documents: driver.documents || {},
@@ -1854,11 +2203,28 @@ export const getOnboardingSession = async (req, res) => {
 };
 
 export const goOffline = async (req, res) => {
+  const existingDriver = await Driver.findById(req.auth.sub);
+
+  if (!existingDriver) {
+    throw new ApiError(404, "Driver not found");
+  }
+
+  const finalizedTracking = mergeOnlineSessionIntoTracking(
+    existingDriver.incentiveTracking || {},
+    existingDriver.incentiveTracking?.currentOnlineStartedAt,
+    new Date(),
+  );
+
   const driver = await Driver.findByIdAndUpdate(
     req.auth.sub,
     {
       isOnline: false,
       socketId: null,
+      incentiveTracking: {
+        ...finalizedTracking,
+        currentOnlineStartedAt: null,
+        claimedRewards: pruneClaimedRewards(finalizedTracking?.claimedRewards),
+      },
     },
     { returnDocument: 'after' },
   );
@@ -1870,5 +2236,144 @@ export const goOffline = async (req, res) => {
   res.json({
     success: true,
     data: driver,
+  });
+};
+
+export const getDriverIncentives = async (req, res) => {
+  const driver = await Driver.findById(req.auth.sub).lean();
+
+  if (!driver) {
+    throw new ApiError(404, "Driver not found");
+  }
+
+  const liveDriver = {
+    ...driver,
+    incentiveTracking: {
+      ...(driver.incentiveTracking || {}),
+      ...mergeOnlineSessionIntoTracking(
+        driver.incentiveTracking || {},
+        driver.incentiveTracking?.currentOnlineStartedAt,
+        new Date(),
+      ),
+    },
+  };
+
+  const settingsDoc = await AdminBusinessSetting.findOne({ scope: "default" }).lean();
+  const driverSettings = settingsDoc?.referral?.driver || {};
+  const rides = await Ride.find({ driverId: driver._id }).select("status liveStatus createdAt updatedAt completedAt").lean();
+
+  const snapshot = buildDriverIncentiveSnapshot({
+    driver: liveDriver,
+    settings: driverSettings,
+    rides,
+  });
+
+  res.json({
+    success: true,
+    data: snapshot,
+  });
+};
+
+export const claimDriverIncentiveReward = async (req, res) => {
+  const { rewardType, rewardKey } = req.body || {};
+  const normalizedRewardType = String(rewardType || "").trim().toLowerCase();
+  const normalizedRewardKey = String(rewardKey || "").trim();
+
+  if (!["milestone", "feature"].includes(normalizedRewardType) || !normalizedRewardKey) {
+    throw new ApiError(400, "Valid reward type and reward key are required");
+  }
+
+  const driver = await Driver.findById(req.auth.sub);
+
+  if (!driver) {
+    throw new ApiError(404, "Driver not found");
+  }
+
+  const settingsDoc = await AdminBusinessSetting.findOne({ scope: "default" }).lean();
+  const driverSettings = settingsDoc?.referral?.driver || {};
+  const rides = await Ride.find({ driverId: driver._id }).select("status liveStatus createdAt updatedAt completedAt").lean();
+  const liveDriver = {
+    ...driver.toObject(),
+    incentiveTracking: {
+      ...(driver.incentiveTracking || {}),
+      ...mergeOnlineSessionIntoTracking(
+        driver.incentiveTracking || {},
+        driver.incentiveTracking?.currentOnlineStartedAt,
+        new Date(),
+      ),
+    },
+  };
+  const snapshot = buildDriverIncentiveSnapshot({
+    driver: liveDriver,
+    settings: driverSettings,
+    rides,
+  });
+
+  const targetReward =
+    normalizedRewardType === "milestone"
+      ? snapshot.milestones.find((item) => String(item.id) === normalizedRewardKey)
+      : snapshot.features.find((item) => String(item.key) === normalizedRewardKey);
+
+  if (!targetReward) {
+    throw new ApiError(404, "Reward not found");
+  }
+
+  if (!targetReward.isEligible) {
+    throw new ApiError(400, "Reward is not eligible yet");
+  }
+
+  if (targetReward.isClaimed) {
+    throw new ApiError(400, "Reward already claimed");
+  }
+
+  const claimedRewards = pruneClaimedRewards([
+    ...(Array.isArray(driver.incentiveTracking?.claimedRewards) ? driver.incentiveTracking.claimedRewards : []),
+    {
+      rewardType: normalizedRewardType,
+      rewardKey: normalizedRewardType === "milestone" ? String(targetReward.id) : String(targetReward.key),
+      periodKey: targetReward.periodKey,
+      amount: Number(targetReward.payout_amount ?? targetReward.reward_amount ?? 0),
+      claimedAt: new Date(),
+      metadata: {
+        label: targetReward.name || targetReward.label || "",
+        targetValue: targetReward.targetValue ?? targetReward.progress?.targetWeeks ?? 0,
+      },
+    },
+  ]);
+
+  driver.incentiveTracking = {
+    ...(liveDriver.incentiveTracking || {}),
+    dailyActivity: pruneDailyActivity(liveDriver.incentiveTracking?.dailyActivity),
+    claimedRewards,
+  };
+  await driver.save();
+
+  const rewardAmount = Number(targetReward.payout_amount ?? targetReward.reward_amount ?? 0);
+
+  const walletResult = await applyDriverWalletAdjustment({
+    driverId: driver._id,
+    amount: rewardAmount,
+    type: "adjustment",
+    description: `Incentive reward credited for ${targetReward.name || targetReward.label || "milestone"}`,
+    metadata: {
+      category: "driver_incentive",
+      rewardType: normalizedRewardType,
+      rewardKey: normalizedRewardType === "milestone" ? String(targetReward.id) : String(targetReward.key),
+      periodKey: targetReward.periodKey,
+    },
+  });
+
+  res.json({
+    success: true,
+    data: {
+      wallet: walletResult.wallet,
+      transaction: walletResult.transaction,
+      claimedReward: {
+        rewardType: normalizedRewardType,
+        rewardKey: normalizedRewardKey,
+        amount: rewardAmount,
+        periodKey: targetReward.periodKey,
+      },
+    },
   });
 };
