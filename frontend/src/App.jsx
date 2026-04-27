@@ -936,6 +936,10 @@ function App() {
                   element={<AdminPromoCodes />}
                 />
                 <Route
+                  path="promotions/promo-codes/edit/:id"
+                  element={<AdminPromoCodes />}
+                />
+                <Route
                   path="promotions/send-notification"
                   element={<AdminSendNotification />}
                 />

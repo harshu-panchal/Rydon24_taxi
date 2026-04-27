@@ -16,9 +16,10 @@ import {
   Calendar,
   ShieldCheck,
   Hash,
+  Pencil,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 const BASE = globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin/promos';
 const LIST_PATH = '/admin/promotions/promo-codes';
@@ -51,16 +52,18 @@ const createInitialFilters = () => ({
   active: '',
 });
 
-const HeaderBlock = ({ isCreateRoute, onBack }) => (
-  <div className="mb-6">
-    <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
-      <span>Promotions</span>
-      <ChevronRight size={12} />
-      <span className="text-gray-700">{isCreateRoute ? 'Create Promo Code' : 'Promo Code'}</span>
-    </div>
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <h1 className="text-xl font-semibold text-gray-900">{isCreateRoute ? 'Create Promo Code' : 'Promo Code'}</h1>
-      {isCreateRoute ? (
+const HeaderBlock = ({ isCreateRoute, isEditRoute, onBack }) => {
+  const title = isEditRoute ? 'Edit Promo Code' : isCreateRoute ? 'Create Promo Code' : 'Promo Code';
+  return (
+    <div className="mb-6">
+      <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
+        <span>Promotions</span>
+        <ChevronRight size={12} />
+        <span className="text-gray-700">{title}</span>
+      </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-xl font-semibold text-gray-900">{title}</h1>
+        {isCreateRoute || isEditRoute ? (
         <button
           type="button"
           onClick={onBack}
@@ -69,9 +72,10 @@ const HeaderBlock = ({ isCreateRoute, onBack }) => (
           <ArrowLeft size={16} /> Back
         </button>
       ) : null}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const SectionCard = ({ icon: Icon, title, description, children }) => (
   <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -96,10 +100,39 @@ const FieldLabel = ({ icon: Icon, children, required = false }) => (
   </label>
 );
 
+const formatDate = (dateString) => {
+  if (!dateString) return '-';
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString;
+    return date.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+  } catch (err) {
+    return dateString;
+  }
+};
+
+const getStatusInfo = (promo) => {
+  if (!promo.active) return { label: 'Disabled', color: 'bg-rose-50 text-rose-700' };
+  const now = new Date();
+  const from = new Date(promo.from);
+  const to = new Date(promo.to);
+
+  if (now < from) return { label: 'Scheduled', color: 'bg-indigo-50 text-indigo-700' };
+  if (now > to) return { label: 'Expired', color: 'bg-amber-50 text-amber-700' };
+  return { label: 'Active', color: 'bg-emerald-50 text-emerald-700' };
+};
+
 const PromoCodes = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const isCreateRoute = location.pathname === CREATE_PATH;
+  const { id } = useParams();
+  const isCreateRoute = location.pathname.includes('/create');
+  const isEditRoute = location.pathname.includes('/edit/');
+  const isFormView = isCreateRoute || isEditRoute;
 
   const [promos, setPromos] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -158,10 +191,29 @@ const PromoCodes = () => {
   }, [fetchData]);
 
   useEffect(() => {
-    if (!isCreateRoute) {
+    if (isEditRoute && id && promos.length > 0) {
+      const promo = promos.find((p) => String(p._id) === String(id));
+      if (promo) {
+        setFormData({
+          service_location_id: promo.service_location_id || '',
+          transport_type: promo.transport_type || '',
+          user_specific: promo.user_specific === true,
+          user_id: promo.user_id || '',
+          code: promo.code || '',
+          minimum_trip_amount: promo.minimum_trip_amount || '',
+          maximum_discount_amount: promo.maximum_discount_amount || '',
+          cumulative_max_discount_amount: promo.cumulative_max_discount_amount || '',
+          discount_percentage: promo.discount_percentage || '',
+          from: promo.from ? new Date(promo.from).toISOString().split('T')[0] : '',
+          to: promo.to ? new Date(promo.to).toISOString().split('T')[0] : '',
+          uses_per_user: promo.uses_per_user || '1',
+          active: promo.active !== false,
+        });
+      }
+    } else if (!isFormView) {
       setFormData(createInitialFormData());
     }
-  }, [isCreateRoute]);
+  }, [isEditRoute, isFormView, id, promos]);
 
   const handleFieldChange = (key, value) => {
     setFormData((current) => ({ ...current, [key]: value }));
@@ -185,6 +237,12 @@ const PromoCodes = () => {
 
   const handleSave = async (e) => {
     e.preventDefault();
+
+    if (new Date(formData.to) < new Date(formData.from)) {
+      alert('To Date cannot be earlier than From Date');
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -193,8 +251,11 @@ const PromoCodes = () => {
         user_id: formData.user_specific ? formData.user_id : '',
       };
 
-      const res = await fetch(BASE, {
-        method: 'POST',
+      const url = isEditRoute ? `${BASE}/${id}` : BASE;
+      const method = isEditRoute ? 'PATCH' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -208,7 +269,7 @@ const PromoCodes = () => {
         await fetchData();
         navigate(LIST_PATH);
       } else {
-        alert(data.message || 'Failed to create promo');
+        alert(data.message || `Failed to ${isEditRoute ? 'update' : 'create'} promo`);
       }
     } catch (error) {
       console.error(error);
@@ -225,19 +286,47 @@ const PromoCodes = () => {
     const matchesTransport =
       !filters.transport_type ||
       String(promo.transport_type || '').toLowerCase() === String(filters.transport_type).toLowerCase();
+    
+    const statusInfo = getStatusInfo(promo);
     const matchesStatus =
       filters.active === '' ||
-      String(Boolean(promo.active)) === String(filters.active === 'true');
+      (filters.active === 'true' ? statusInfo.label === 'Active' : 
+       filters.active === 'false' ? statusInfo.label === 'Disabled' :
+       filters.active === 'expired' ? statusInfo.label === 'Expired' :
+       filters.active === 'scheduled' ? statusInfo.label === 'Scheduled' : true);
 
     return matchesLocation && matchesTransport && matchesStatus;
   });
 
+  const handleDelete = async (promoId) => {
+    if (!window.confirm('Are you sure you want to delete this promo code?')) return;
+    try {
+      const res = await fetch(`${BASE}/${promoId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchData();
+      } else {
+        alert(data.message || 'Failed to delete');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Network Error');
+    }
+  };
+
   return (
     <div className="min-h-full bg-gray-50 text-gray-900">
-      <HeaderBlock isCreateRoute={isCreateRoute} onBack={() => navigate(LIST_PATH)} />
+      <HeaderBlock
+        isCreateRoute={isCreateRoute}
+        isEditRoute={isEditRoute}
+        onBack={() => navigate(LIST_PATH)}
+      />
 
       <AnimatePresence mode="wait">
-        {!isCreateRoute ? (
+        {!isFormView ? (
           <Motion.div
             key="list"
             initial={{ opacity: 0, y: 10 }}
@@ -312,6 +401,8 @@ const PromoCodes = () => {
                       <option value="">All statuses</option>
                       <option value="true">Active</option>
                       <option value="false">Disabled</option>
+                      <option value="expired">Expired</option>
+                      <option value="scheduled">Scheduled</option>
                     </select>
                   </div>
 
@@ -368,21 +459,30 @@ const PromoCodes = () => {
                           <td className="px-6 py-4 text-sm text-gray-700 capitalize">{promo.transport_type}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">{promo.service_location_name || '-'}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">
-                            {promo.from} to {promo.to}
+                            {formatDate(promo.from)} to {formatDate(promo.to)}
                           </td>
                           <td className="px-6 py-4">
-                            <span
-                              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                                promo.active ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-                              }`}
-                            >
-                              {promo.active ? 'Active' : 'Disabled'}
-                            </span>
+                            {(() => {
+                              const status = getStatusInfo(promo);
+                              return (
+                                <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${status.color}`}>
+                                  {status.label}
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 type="button"
+                                onClick={() => navigate(`/admin/promotions/promo-codes/edit/${promo._id}`)}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                              >
+                                <Pencil size={16} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(promo._id)}
                                 className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-rose-600 transition-colors"
                               >
                                 <Trash2 size={16} />
@@ -409,8 +509,8 @@ const PromoCodes = () => {
             <div className="space-y-6">
               <SectionCard
                 icon={Ticket}
-                title="Promo Configuration"
-                description="Create and target a redemption incentive without changing backend fields."
+                title={isEditRoute ? 'Edit Promo Configuration' : 'Promo Configuration'}
+                description={isEditRoute ? 'Update the details and date range for this promo code.' : 'Create and target a redemption incentive without changing backend fields.'}
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
@@ -615,7 +715,7 @@ const PromoCodes = () => {
                   className="w-full py-3 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
                 >
                   {submitting ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
-                  Save Promo Code
+                  {isEditRoute ? 'Update Promo Code' : 'Save Promo Code'}
                 </button>
                 <button
                   type="button"

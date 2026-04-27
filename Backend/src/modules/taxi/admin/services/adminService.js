@@ -52,6 +52,7 @@ import {
   emitToDriver,
   notifyUserAccountDeleted,
 } from '../../services/dispatchService.js';
+import { sendEmail } from '../../services/mailService.js';
 
 const PUBLIC_VEHICLE_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
 let publicVehicleCatalogCache = {
@@ -1535,6 +1536,74 @@ export const loginAdmin = async ({ email, password }) => {
       role: admin.role,
     },
   };
+};
+
+export const forgotPassword = async (email) => {
+  const admin = await Admin.findOne({ email: email?.trim().toLowerCase() });
+  if (!admin) {
+    throw new ApiError(404, 'Admin with this email not found');
+  }
+
+  // Generate 6-digit OTP
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+  admin.resetPasswordOtp = otp;
+  admin.resetPasswordExpires = otpExpires;
+  await admin.save();
+
+  // Send real email
+  await sendEmail({
+    to: email,
+    subject: `Password Reset OTP for ${process.env.APP_NAME || 'RYDON24'}`,
+    text: `Your OTP for password reset is: ${otp}. It will expire in 10 minutes.`,
+    html: `
+      <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px; max-width: 500px;">
+        <h2 style="color: #f97316;">Password Reset</h2>
+        <p>Hello,</p>
+        <p>You requested a password reset for your admin account. Use the following OTP to continue:</p>
+        <div style="font-size: 32px; font-weight: bold; padding: 10px; background: #fff7ed; color: #f97316; text-align: center; border-radius: 8px; margin: 20px 0;">
+          ${otp}
+        </div>
+        <p>This OTP is valid for 10 minutes. If you did not request this, please ignore this email.</p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="font-size: 12px; color: #666;">Regards,<br>Team ${process.env.APP_NAME || 'RYDON24'}</p>
+      </div>
+    `,
+  });
+
+  console.log(`[ADMIN FORGOT PASSWORD] OTP for ${email}: ${otp}`);
+
+  return { message: 'OTP sent to your email' };
+};
+
+export const verifyResetOtp = async ({ email, otp }) => {
+  const admin = await Admin.findOne({ 
+    email: email?.trim().toLowerCase() 
+  }).select('+resetPasswordOtp +resetPasswordExpires');
+
+  if (!admin || admin.resetPasswordOtp !== otp || new Date() > admin.resetPasswordExpires) {
+    throw new ApiError(400, 'Invalid or expired OTP');
+  }
+
+  return { success: true, message: 'OTP verified successfully' };
+};
+
+export const resetPassword = async ({ email, otp, password }) => {
+  const admin = await Admin.findOne({ 
+    email: email?.trim().toLowerCase() 
+  }).select('+resetPasswordOtp +resetPasswordExpires');
+
+  if (!admin || admin.resetPasswordOtp !== otp || new Date() > admin.resetPasswordExpires) {
+    throw new ApiError(400, 'Invalid or expired OTP');
+  }
+
+  admin.password = await hashPassword(password);
+  admin.resetPasswordOtp = undefined;
+  admin.resetPasswordExpires = undefined;
+  await admin.save();
+
+  return { success: true, message: 'Password reset successful' };
 };
 
 export const listUsers = async ({ page = 1, limit = 50, search = '' }) => {
