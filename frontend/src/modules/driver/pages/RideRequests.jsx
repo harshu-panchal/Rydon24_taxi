@@ -102,6 +102,30 @@ const getDriverEarnings = (ride) => {
   return fare;
 };
 
+const normalizePaymentLabel = (ride = {}) => {
+  const rawValue = ride?.paymentMethod
+    || ride?.payment_method
+    || ride?.paymentType
+    || ride?.payment_type
+    || ride?.driverPaymentCollection?.providerMode
+    || '';
+  const normalized = String(rawValue || '').trim().toLowerCase();
+
+  if (!normalized) {
+    return 'CASH';
+  }
+
+  if (normalized.includes('online') || normalized.includes('upi') || normalized.includes('card') || normalized.includes('qr')) {
+    return 'ONLINE';
+  }
+
+  if (normalized === 'cash') {
+    return 'CASH';
+  }
+
+  return normalized.toUpperCase();
+};
+
 const normalizeRide = (ride) => {
   const type = String(ride?.serviceType || ride?.type || 'ride').toLowerCase() === 'parcel' ? 'parcel' : 'ride';
   const status = formatStatus(ride?.status || ride?.liveStatus);
@@ -122,7 +146,7 @@ const normalizeRide = (ride) => {
     pickup: buildLocationLabel(ride?.pickupAddress, ride?.pickupLocation, 'Pickup'),
     drop: buildLocationLabel(ride?.dropAddress, ride?.dropLocation, 'Drop'),
     status,
-    paymentMethod: String(ride?.paymentMethod || 'cash').toUpperCase(),
+    paymentMethod: normalizePaymentLabel(ride),
     distanceKm: Number(ride?.estimatedDistanceMeters || 0) / 1000,
   };
 };

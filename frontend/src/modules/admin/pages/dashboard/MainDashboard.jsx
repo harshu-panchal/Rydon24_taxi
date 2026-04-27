@@ -329,7 +329,6 @@ const MainDashboard = () => {
         <TopStatCard
           label="Drivers Registered"
           value={dashboard?.totalDrivers?.total || 0}
-          trend={100}
           icon={UserPlus}
           accentClass="border-emerald-100 bg-emerald-50"
           iconClass="text-emerald-500"
@@ -340,7 +339,6 @@ const MainDashboard = () => {
         <TopStatCard
           label="Approved Drivers"
           value={dashboard?.totalDrivers?.approved || 0}
-          trend={100}
           icon={ShieldCheck}
           accentClass="border-blue-100 bg-blue-50"
           iconClass="text-blue-500"
@@ -351,7 +349,6 @@ const MainDashboard = () => {
         <TopStatCard
           label="Waiting Approval"
           value={dashboard?.totalDrivers?.declined || 0}
-          trend={0}
           icon={Clock}
           accentClass="border-amber-100 bg-amber-50"
           iconClass="text-amber-500"
@@ -362,7 +359,6 @@ const MainDashboard = () => {
         <TopStatCard
           label="Users Registered"
           value={dashboard?.totalUsers || 0}
-          trend={100}
           icon={Users}
           accentClass="border-indigo-100 bg-indigo-50"
           iconClass="text-indigo-500"

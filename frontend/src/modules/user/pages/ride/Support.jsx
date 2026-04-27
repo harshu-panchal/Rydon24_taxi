@@ -1,7 +1,7 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, MessageCircle, Phone, HelpCircle, AlertCircle, XCircle, ShieldCheck, ChevronRight } from 'lucide-react';
+import { ArrowLeft, MessageCircle, Phone, HelpCircle, AlertCircle, XCircle, ShieldCheck, ChevronRight, Siren } from 'lucide-react';
 import BottomNavbar from '../../components/BottomNavbar';
 
 const Support = () => {
@@ -51,7 +51,7 @@ const Support = () => {
       </header>
 
       <div className="relative z-10 px-5 pt-4 flex-1 space-y-5">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <motion.button
             type="button"
             whileTap={{ scale: 0.98 }}
@@ -84,6 +84,24 @@ const Support = () => {
               <div className="min-w-0">
                 <div className="text-[13px] font-black text-slate-900 leading-tight">Call support</div>
                 <div className="mt-0.5 text-[11px] font-bold text-slate-500 truncate">Talk to us</div>
+              </div>
+            </div>
+          </motion.button>
+
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.98 }}
+            onClick={() => navigate(`${routePrefix}/safety/sos`)}
+            className="relative overflow-hidden rounded-2xl border border-white/80 bg-white/80 p-4 text-left shadow-[0_14px_34px_rgba(15,23,42,0.07)]"
+          >
+            <div className="absolute inset-0 bg-[radial-gradient(140px_100px_at_20%_25%,rgba(239,68,68,0.18),transparent_60%)]" aria-hidden="true" />
+            <div className="relative z-10 flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl border border-white/80 bg-white/70 shadow-sm flex items-center justify-center text-rose-600">
+                <Siren size={20} strokeWidth={2.6} />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[13px] font-black text-slate-900 leading-tight">Emergency SOS</div>
+                <div className="mt-0.5 text-[11px] font-bold text-slate-500 truncate">Get safety help fast</div>
               </div>
             </div>
           </motion.button>

@@ -130,6 +130,23 @@ const normalizeVehicleKeys = (vehicles = []) => {
   return [...new Set(keys.map(normalizeVehicleKey).filter(Boolean))];
 };
 
+export const normalizeAllowedRidePaymentMethods = (paymentTypes = []) => {
+  const rawItems = Array.isArray(paymentTypes)
+    ? paymentTypes
+    : typeof paymentTypes === 'string'
+      ? paymentTypes.split(',')
+      : [];
+
+  const normalized = rawItems
+    .map((item) => String(item || '').trim().toLowerCase())
+    .filter(Boolean)
+    .map((item) => (item === 'cash' ? 'cash' : item === 'online' || item === 'wallet' ? 'online' : null))
+    .filter(Boolean);
+
+  const unique = [...new Set(normalized)];
+  return unique.length ? unique : ['cash', 'online'];
+};
+
 const resolveSetPriceForRide = async ({ serviceLocationId = null, transportType = 'taxi', vehicleTypeId = null }) => {
   if (!vehicleTypeId) {
     return null;
@@ -173,6 +190,15 @@ const resolveSetPriceForRide = async ({ serviceLocationId = null, transportType 
   }
 
   return null;
+};
+
+export const getAllowedRidePaymentMethodsForPricing = async ({ serviceLocationId = null, transportType = 'taxi', vehicleTypeId = null }) => {
+  const pricingRule = await resolveSetPriceForRide({ serviceLocationId, transportType, vehicleTypeId });
+
+  return {
+    pricingRule,
+    allowedPaymentMethods: normalizeAllowedRidePaymentMethods(pricingRule?.payment_type),
+  };
 };
 
 const buildDriverVehicleAcceptFilter = async (ride) => {
@@ -288,15 +314,23 @@ export const createRideRecord = async ({
     service_location_id && mongoose.Types.ObjectId.isValid(service_location_id)
       ? new mongoose.Types.ObjectId(service_location_id)
       : null;
-  const pricingRule = await resolveSetPriceForRide({
+  const { pricingRule, allowedPaymentMethods } = await getAllowedRidePaymentMethodsForPricing({
     serviceLocationId: resolvedServiceLocationId,
     transportType: normalizedTransportType,
     vehicleTypeId: primaryVehicleTypeId,
   });
+  const normalizedPaymentMethod = normalizeRidePaymentMethod(paymentMethod);
+  const effectivePaymentMethod = allowedPaymentMethods.includes(normalizedPaymentMethod)
+    ? normalizedPaymentMethod
+    : (allowedPaymentMethods[0] || 'cash');
   const pricingSnapshot = {
     setPriceId: pricingRule?._id || null,
     admin_commission_type_from_driver: Number(pricingRule?.admin_commission_type_from_driver ?? 1),
     admin_commission_from_driver: Number(pricingRule?.admin_commission_from_driver ?? 0),
+    waiting_charge: Number(pricingRule?.waiting_charge ?? 0),
+    free_waiting_before: Number(pricingRule?.free_waiting_before ?? 0),
+    free_waiting_after: Number(pricingRule?.free_waiting_after ?? 0),
+    allowed_payment_methods: allowedPaymentMethods,
     resolvedAt: pricingRule ? new Date() : null,
   };
 
@@ -317,7 +351,7 @@ export const createRideRecord = async ({
       fare: safeFare,
       estimatedDistanceMeters: safeEstimatedDistanceMeters,
       estimatedDurationMinutes: safeEstimatedDurationMinutes,
-      paymentMethod: normalizeRidePaymentMethod(paymentMethod),
+      paymentMethod: effectivePaymentMethod,
       otp: generateRideOtp(),
       service_location_id: resolvedServiceLocationId,
       transport_type: normalizedTransportType,
@@ -359,7 +393,7 @@ export const createRideRecord = async ({
             fare: safeFare,
             estimatedDistanceMeters: safeEstimatedDistanceMeters,
             estimatedDurationMinutes: safeEstimatedDurationMinutes,
-            paymentMethod: normalizeRidePaymentMethod(paymentMethod),
+            paymentMethod: effectivePaymentMethod,
             otp: generateRideOtp(),
             service_location_id: resolvedServiceLocationId,
             transport_type: normalizedTransportType,
@@ -451,6 +485,18 @@ export const serializeRideRealtime = (ride) => ({
   commissionAmount: ride.commissionAmount,
   driverEarnings: ride.driverEarnings,
   promo: ride.promo?.code ? ride.promo : null,
+  pricingSnapshot: ride.pricingSnapshot
+    ? {
+        setPriceId: ride.pricingSnapshot.setPriceId || null,
+        admin_commission_type_from_driver: Number(ride.pricingSnapshot.admin_commission_type_from_driver ?? 1),
+        admin_commission_from_driver: Number(ride.pricingSnapshot.admin_commission_from_driver ?? 0),
+        waiting_charge: Number(ride.pricingSnapshot.waiting_charge ?? 0),
+        free_waiting_before: Number(ride.pricingSnapshot.free_waiting_before ?? 0),
+        free_waiting_after: Number(ride.pricingSnapshot.free_waiting_after ?? 0),
+        allowed_payment_methods: normalizeAllowedRidePaymentMethods(ride.pricingSnapshot.allowed_payment_methods),
+        resolvedAt: ride.pricingSnapshot.resolvedAt || null,
+      }
+    : null,
   vehicleIconType: ride.vehicleIconType || '',
   vehicleIconUrl: ride.vehicleIconUrl || '',
   pickupLocation: ride.pickupLocation,
@@ -458,6 +504,7 @@ export const serializeRideRealtime = (ride) => ({
   dropLocation: ride.dropLocation,
   dropAddress: ride.dropAddress || '',
   acceptedAt: ride.acceptedAt,
+  arrivedAt: ride.arrivedAt,
   startedAt: ride.startedAt,
   completedAt: ride.completedAt,
   feedback: ride.feedback || null,
@@ -551,6 +598,7 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
       'otp',
       'parcel',
       'intercity',
+      'pricingSnapshot',
       'commissionAmount',
       'driverEarnings',
       'vehicleIconType',
@@ -560,6 +608,7 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
       'dropLocation',
       'dropAddress',
       'acceptedAt',
+      'arrivedAt',
       'startedAt',
       'completedAt',
       'feedback',
@@ -598,6 +647,7 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
     otp: ride.otp || '',
     parcel: ride.deliveryId?.parcel || ride.parcel || null,
     intercity: ride.intercity || null,
+    pricingSnapshot: ride.pricingSnapshot || null,
     commissionAmount: ride.commissionAmount,
     driverEarnings: ride.driverEarnings,
     vehicleIconType: ride.vehicleIconType,
@@ -608,6 +658,7 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
     dropLocation: ride.dropLocation,
     dropAddress: ride.dropAddress || '',
     acceptedAt: ride.acceptedAt,
+    arrivedAt: ride.arrivedAt,
     startedAt: ride.startedAt,
     completedAt: ride.completedAt,
     feedback: ride.feedback || null,
@@ -628,54 +679,68 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
 };
 
 export const acceptRideAssignment = async ({ rideId, driverId }) => {
-  const session = await mongoose.startSession();
+  let lastError = null;
 
-  try {
-    session.startTransaction();
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const session = await mongoose.startSession();
 
-    const ride = await Ride.findOne({
-      _id: rideId,
-      status: RIDE_STATUS.SEARCHING,
-      driverId: null,
-    }).session(session);
+    try {
+      session.startTransaction();
 
-    if (!ride) {
-      throw new ApiError(409, 'Ride is no longer available for acceptance');
+      const ride = await Ride.findOne({
+        _id: rideId,
+        status: RIDE_STATUS.SEARCHING,
+        driverId: null,
+      }).session(session);
+
+      if (!ride) {
+        throw new ApiError(409, 'Ride is no longer available for acceptance');
+      }
+
+      const driverVehicleFilter = await buildDriverVehicleAcceptFilter(ride);
+      const driver = await Driver.findOne({
+        _id: driverId,
+        isOnline: true,
+        isOnRide: false,
+        'wallet.isBlocked': { $ne: true },
+        ...driverVehicleFilter,
+      }).session(session);
+
+      if (!driver) {
+        throw new ApiError(409, 'Driver is unavailable to accept this ride');
+      }
+
+      await ensureDriverWalletCanAcceptRide(driver, { session });
+
+      ride.driverId = driver._id;
+      ride.status = RIDE_STATUS.ACCEPTED;
+      ride.liveStatus = RIDE_LIVE_STATUS.ACCEPTED;
+      ride.acceptedAt = new Date();
+      driver.isOnRide = true;
+
+      await ride.save({ session });
+      await driver.save({ session });
+      await session.commitTransaction();
+      await syncDeliveryWithRide(ride);
+
+      return ride;
+    } catch (error) {
+      lastError = error;
+      await session.abortTransaction();
+
+      const isTransient =
+        typeof error?.hasErrorLabel === 'function' &&
+        (error.hasErrorLabel('TransientTransactionError') || error.hasErrorLabel('UnknownTransactionCommitResult'));
+
+      if (!isTransient || attempt === 2) {
+        throw error;
+      }
+    } finally {
+      session.endSession();
     }
-
-    const driverVehicleFilter = await buildDriverVehicleAcceptFilter(ride);
-    const driver = await Driver.findOne({
-      _id: driverId,
-      isOnline: true,
-      isOnRide: false,
-      'wallet.isBlocked': { $ne: true },
-      ...driverVehicleFilter,
-    }).session(session);
-
-    if (!driver) {
-      throw new ApiError(409, 'Driver is unavailable to accept this ride');
-    }
-
-    await ensureDriverWalletCanAcceptRide(driver, { session });
-
-    ride.driverId = driver._id;
-    ride.status = RIDE_STATUS.ACCEPTED;
-    ride.liveStatus = RIDE_LIVE_STATUS.ACCEPTED;
-    ride.acceptedAt = new Date();
-    driver.isOnRide = true;
-
-    await ride.save({ session });
-    await driver.save({ session });
-    await session.commitTransaction();
-    await syncDeliveryWithRide(ride);
-
-    return ride;
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
   }
+
+  throw lastError || new ApiError(500, 'Failed to accept ride');
 };
 
 const rideStatusConfig = {
@@ -697,7 +762,7 @@ const rideStatusConfig = {
   },
 };
 
-export const updateRideLifecycle = async ({ rideId, driverId, nextStatus }) => {
+export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymentMethod }) => {
   const config = rideStatusConfig[nextStatus];
 
   if (!config) {
@@ -717,8 +782,20 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus }) => {
   ride.liveStatus = nextStatus;
   ride.status = config.persistedStatus;
 
+  if (nextStatus === RIDE_LIVE_STATUS.ACCEPTED) {
+    ride.arrivedAt = null;
+  }
+
+  if (nextStatus === RIDE_LIVE_STATUS.ARRIVING && !ride.arrivedAt) {
+    ride.arrivedAt = new Date();
+  }
+
   if (nextStatus === RIDE_LIVE_STATUS.STARTED && !ride.startedAt) {
     ride.startedAt = new Date();
+  }
+
+  if (paymentMethod !== undefined && paymentMethod !== null && String(paymentMethod).trim()) {
+    ride.paymentMethod = normalizeRidePaymentMethod(paymentMethod);
   }
 
   if (nextStatus === RIDE_LIVE_STATUS.COMPLETED) {

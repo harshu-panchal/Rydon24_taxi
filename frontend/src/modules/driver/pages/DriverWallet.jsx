@@ -90,6 +90,14 @@ const normalizeWalletResponse = (payload) => {
     };
 };
 
+const WALLET_FILTERS = [
+    { id: 'all', label: 'All' },
+    { id: 'ride_earning', label: 'Online rides' },
+    { id: 'commission_deduction', label: 'Cash commission' },
+    { id: 'top_up', label: 'Top-ups' },
+    { id: 'adjustment', label: 'Adjustments' },
+];
+
 const StatPill = ({ label, value, tone = 'dark' }) => {
     const toneClass = tone === 'good' ? 'text-emerald-700 bg-emerald-50' : tone === 'warn' ? 'text-amber-700 bg-amber-50' : 'text-slate-700 bg-slate-100';
 
@@ -115,6 +123,7 @@ const DriverWallet = () => {
     const [topUpAmount, setTopUpAmount] = useState('500');
     const [processingTopUp, setProcessingTopUp] = useState(false);
     const [topUpSuccess, setTopUpSuccess] = useState(false);
+    const [activeFilter, setActiveFilter] = useState('all');
 
     const loadWallet = useCallback(async ({ quiet = false } = {}) => {
         if (!quiet) setRefreshing(true);
@@ -179,7 +188,29 @@ const DriverWallet = () => {
         return [base, base * 2, base * 5].map((amount) => String(Math.round(amount)));
     }, [rules.minimumTopUp]);
 
-    const recentTransactions = useMemo(() => transactions.slice(0, 20), [transactions]);
+    const walletSummary = useMemo(() => {
+        const onlineRideEarnings = transactions
+            .filter((tx) => tx.type === 'ride_earning')
+            .reduce((sum, tx) => sum + Math.max(Number(tx.amount || 0), 0), 0);
+        const cashRideCommission = transactions
+            .filter((tx) => tx.type === 'commission_deduction')
+            .reduce((sum, tx) => sum + Math.abs(Number(tx.amount || 0)), 0);
+
+        return {
+            onlineRideEarnings,
+            cashRideCommission,
+        };
+    }, [transactions]);
+
+    const filteredTransactions = useMemo(() => {
+        if (activeFilter === 'all') {
+            return transactions;
+        }
+
+        return transactions.filter((tx) => tx.type === activeFilter);
+    }, [activeFilter, transactions]);
+
+    const recentTransactions = useMemo(() => filteredTransactions.slice(0, 20), [filteredTransactions]);
 
     const loadRazorpayScript = useCallback(() =>
         new Promise((resolve) => {
@@ -397,6 +428,10 @@ const DriverWallet = () => {
 
                         <section className="grid grid-cols-1 gap-3">
                             <StatPill label="Top-up minimum" value={money(rules.minimumTopUp)} tone="dark" />
+                            <div className="grid grid-cols-2 gap-3">
+                                <StatPill label="Online earnings" value={money(walletSummary.onlineRideEarnings)} tone="good" />
+                                <StatPill label="Cash commission" value={money(walletSummary.cashRideCommission)} tone="warn" />
+                            </div>
                         </section>
 
                         <section className="space-y-3">
@@ -405,11 +440,28 @@ const DriverWallet = () => {
                                 <p className="text-xs font-bold text-slate-500">{recentTransactions.length} shown</p>
                             </div>
 
+                            <div className="flex gap-2 overflow-x-auto pb-1">
+                                {WALLET_FILTERS.map((filter) => (
+                                    <button
+                                        key={filter.id}
+                                        type="button"
+                                        onClick={() => setActiveFilter(filter.id)}
+                                        className={`shrink-0 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] transition-all ${
+                                            activeFilter === filter.id
+                                                ? 'bg-slate-900 text-white'
+                                                : 'bg-white text-slate-500 shadow-sm'
+                                        }`}
+                                    >
+                                        {filter.label}
+                                    </button>
+                                ))}
+                            </div>
+
                             {recentTransactions.length === 0 ? (
                                 <div className="rounded-[1.7rem] bg-white p-8 text-center shadow-sm">
                                     <Clock3 className="mx-auto text-slate-300" size={30} />
                                     <p className="mt-3 text-sm font-black text-slate-700">No transactions yet</p>
-                                    <p className="mt-1 text-xs font-bold text-slate-400">Ride earnings and cash commissions will appear here.</p>
+                                    <p className="mt-1 text-xs font-bold text-slate-400">No entries match the selected earnings filter.</p>
                                 </div>
                             ) : (
                                 recentTransactions.map((tx, index) => {

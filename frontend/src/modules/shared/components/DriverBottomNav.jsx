@@ -65,7 +65,8 @@ const DriverBottomNav = () => {
       ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-100 flex items-center justify-around z-50 h-[72px] px-6 pb-2 shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-100 bg-white/95 px-3 pb-[max(env(safe-area-inset-bottom),8px)] pt-2 backdrop-blur-md shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
+      <div className="mx-auto flex h-[68px] w-full max-w-lg items-center justify-between gap-1">
       {navItems.map((item) => {
         const isActive =
           location.pathname === item.path ||
@@ -75,7 +76,7 @@ const DriverBottomNav = () => {
           <NavLink
             key={item.path}
             to={item.path}
-            className={`flex flex-col items-center justify-center gap-1 transition-all duration-300 relative ${
+            className={`relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 text-center transition-all duration-300 ${
               isActive
                 ? "text-black translate-y-[-2px]"
                 : "text-black/60 font-bold opacity-80"
@@ -88,7 +89,7 @@ const DriverBottomNav = () => {
               })}
             </div>
             <span
-              className={`text-[10px] uppercase tracking-[0.08em] transition-all duration-300 ${
+              className={`max-w-full truncate text-[9px] uppercase tracking-[0.06em] transition-all duration-300 ${
                 isActive
                   ? "opacity-100 scale-100 font-black"
                   : "opacity-80 scale-95 font-bold"
@@ -101,6 +102,7 @@ const DriverBottomNav = () => {
           </NavLink>
         );
       })}
+      </div>
     </nav>
   );
 };

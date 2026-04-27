@@ -38,6 +38,35 @@ import { useTaxiTransportTypes } from '../../../../shared/hooks/useTaxiTransport
 
 const inputClass = "w-full border border-gray-200 rounded-md px-4 py-3 text-sm text-gray-800 bg-white focus:border-indigo-500 transition-all outline-none";
 const labelClass = "block text-[13px] font-semibold text-gray-700 mb-2.5";
+const paymentTypeOptions = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'online', label: 'Online' },
+  { value: 'wallet', label: 'Wallet' },
+];
+
+const normalizePaymentTypes = (value) => {
+  const items = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(',')
+      : [];
+
+  const normalized = items
+    .map((item) => String(item || '').trim().toLowerCase())
+    .filter(Boolean);
+
+  return Array.from(new Set(normalized)).filter((item) => paymentTypeOptions.some((option) => option.value === item));
+};
+
+const togglePaymentType = (currentValue, targetValue) => {
+  const currentItems = normalizePaymentTypes(currentValue);
+
+  if (currentItems.includes(targetValue)) {
+    return currentItems.filter((item) => item !== targetValue);
+  }
+
+  return [...currentItems, targetValue];
+};
 
 const StatusToggle = ({ active, onToggle }) => (
   <button
@@ -132,7 +161,7 @@ const SetPrices = ({ mode }) => {
           admin_commission_for_owner: pData.admin_commission_for_owner ?? 0,
           admin_commission_type_for_owner: String(pData.admin_commission_type_for_owner ?? 1),
           order_number: pData.order_number ?? pData.eta_sequence ?? '',
-          payment_type: Array.isArray(pData.payment_type) ? pData.payment_type : (pData.payment_type ? [pData.payment_type] : ['cash']),
+          payment_type: normalizePaymentTypes(pData.payment_type).length ? normalizePaymentTypes(pData.payment_type) : ['cash'],
           user_cancellation_fee_type: pData.user_cancellation_fee_type || 'percentage',
           driver_cancellation_fee_type: pData.driver_cancellation_fee_type || 'percentage',
         });
@@ -187,7 +216,7 @@ const SetPrices = ({ mode }) => {
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
-          payment_type: Array.isArray(formData.payment_type) ? formData.payment_type.join(',') : formData.payment_type
+          payment_type: normalizePaymentTypes(formData.payment_type).length ? normalizePaymentTypes(formData.payment_type) : ['cash']
         })
       });
       const data = await res.json();
@@ -380,14 +409,67 @@ const SetPrices = ({ mode }) => {
                      </div>
                      <div>
                         <label className={labelClass}>Payment Type <span className="text-rose-500">*</span></label>
-                        <div className="relative">
-                           <select required className={inputClass + " appearance-none cursor-pointer"} value={Array.isArray(formData.payment_type) ? (formData.payment_type[0] || 'cash') : (formData.payment_type || 'cash')} onChange={e => setFormData(p=>({...p, payment_type: [e.target.value]}))}>
-                              <option value="">Select Payment Type</option>
-                              <option value="cash">Cash</option>
-                              <option value="online">Online</option>
-                              <option value="wallet">Wallet</option>
-                           </select>
-                           <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        <div className="space-y-3">
+                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              {paymentTypeOptions.map((option) => {
+                                const isSelected = normalizePaymentTypes(formData.payment_type).includes(option.value);
+
+                                return (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => setFormData((previous) => ({
+                                      ...previous,
+                                      payment_type: togglePaymentType(previous.payment_type, option.value),
+                                    }))}
+                                    className={`rounded-xl border px-4 py-3 text-left transition-all ${
+                                      isSelected
+                                        ? 'border-emerald-300 bg-emerald-50 shadow-sm'
+                                        : 'border-gray-200 bg-white hover:border-indigo-300'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <div
+                                        className={`flex h-5 w-5 items-center justify-center rounded border text-[11px] font-black ${
+                                          isSelected
+                                            ? 'border-emerald-500 bg-emerald-500 text-white'
+                                            : 'border-slate-300 bg-white text-transparent'
+                                        }`}
+                                      >
+                                        ✓
+                                      </div>
+                                      <div>
+                                        <p className="text-[13px] font-bold text-slate-800">{option.label}</p>
+                                        <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-400">
+                                          {option.value}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                           </div>
+                           <input
+                             type="hidden"
+                             required
+                             value={normalizePaymentTypes(formData.payment_type).join(',')}
+                             onChange={() => {}}
+                           />
+                           <p className="text-[11px] font-medium text-slate-400">Tap as many payment types as you want to allow for this pricing rule.</p>
+                           <div className="flex flex-wrap gap-2">
+                              {normalizePaymentTypes(formData.payment_type).length ? (
+                                normalizePaymentTypes(formData.payment_type).map((type) => (
+                                  <span
+                                    key={type}
+                                    className="rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-[11px] font-black uppercase tracking-[0.08em] text-emerald-700"
+                                  >
+                                    {paymentTypeOptions.find((option) => option.value === type)?.label || type}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-[11px] font-medium text-rose-500">Select at least one payment type.</span>
+                              )}
+                           </div>
                         </div>
                      </div>
                      <div>

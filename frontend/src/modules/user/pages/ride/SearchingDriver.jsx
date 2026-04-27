@@ -467,6 +467,8 @@ const SearchingDriver = () => {
           vehicleIconType: routeState.vehicleIconType || routeState.vehicle?.iconType,
           vehicleIconUrl: routeState.vehicleIconUrl || routeState.vehicle?.vehicleIconUrl || routeState.vehicle?.icon || '',
           paymentMethod: routeState.paymentMethod || 'Cash',
+          service_location_id: routeState.service_location_id || routeState.serviceLocationId || '',
+          transport_type: routeState.transport_type || routeState.transportType || routeState.vehicle?.transportType || 'taxi',
         }, rideRequestConfig);
 
         if (disposed) {

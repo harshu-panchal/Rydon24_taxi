@@ -950,7 +950,7 @@ const DriverHome = () => {
                                 acceptedAt: payload.acceptedAt,
                             },
                         },
-                        currentDriverCoords: driverCoordsRef.current || null,
+                        currentDriverCoords: driverCoordsRef.current || readStoredDriverCoords() || null,
                     },
                 });
             };

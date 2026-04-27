@@ -285,9 +285,16 @@ const Airport = ({ mode: initialMode = "list" }) => {
                   <button
                     type="button"
                     onClick={() => setIsFilterOpen((current) => !current)}
-                    className={`p-2 rounded-lg transition-all ${isFilterOpen ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
+                    aria-expanded={isFilterOpen}
+                    aria-label={isFilterOpen ? 'Hide filters' : 'Show filters'}
+                    className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-all ${
+                      isFilterOpen
+                        ? 'border-indigo-200 bg-indigo-50 text-indigo-600'
+                        : 'border-gray-200 bg-white text-gray-500 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600'
+                    }`}
                   >
                     <Filter size={18} />
+                    <span>{isFilterOpen ? 'Hide Filters' : 'Filters'}</span>
                   </button>
                 </div>
               </div>

@@ -107,6 +107,13 @@ const RideDetail = () => {
       rating: driver.rating || '4.9',
       plate: driver.vehicleNumber || 'Assigned',
       vehicle: driver.vehicleType || ride?.vehicleIconType || 'Taxi',
+      paymentMethod: String(
+        ride?.paymentMethod ||
+        ride?.payment_method ||
+        ride?.paymentType ||
+        ride?.payment_type ||
+        'cash',
+      ).trim().toLowerCase() === 'cash' ? 'Cash' : 'Online',
       rideCode,
       shortRideCode: rideCode.length > 14 ? `${rideCode.slice(0, 6)}...${rideCode.slice(-4)}` : rideCode,
     };
@@ -219,7 +226,7 @@ const RideDetail = () => {
             </div>
             <div>
               <h3 className="text-[15px] font-black text-gray-900">{details.vehicle} Ride</h3>
-              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Payment by Cash</p>
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Payment by {details.paymentMethod}</p>
             </div>
           </div>
 
@@ -269,7 +276,14 @@ const RideDetail = () => {
       <div className="p-6 border-t border-gray-50 flex gap-4 bg-white pb-10">
         <button
           type="button"
-          onClick={() => navigate(`${routePrefix}/ride/select-location`)}
+          onClick={() => navigate(`${routePrefix}/ride/select-location`, {
+            state: {
+              pickup: details.pickup,
+              drop: details.drop,
+              pickupCoords: ride?.pickupLocation?.coordinates || ride?.pickup?.coordinates || null,
+              dropCoords: ride?.dropLocation?.coordinates || ride?.drop?.coordinates || null,
+            },
+          })}
           className="flex-[2] bg-[#1C2833] text-white py-5 rounded-[24px] text-[14px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all"
         >
           <Repeat size={18} />

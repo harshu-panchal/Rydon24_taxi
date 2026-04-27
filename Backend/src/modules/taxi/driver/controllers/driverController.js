@@ -1240,6 +1240,19 @@ export const updateCurrentDriverDocument = async (req, res) => {
     throw new ApiError(404, "Driver not found");
   }
 
+  const existingDocument = driver.documents?.[documentKey] || {};
+  const existingStatus = String(
+    existingDocument.status ||
+    existingDocument.verificationStatus ||
+    existingDocument.approvalStatus ||
+    existingDocument.reviewStatus ||
+    "",
+  ).trim().toLowerCase();
+
+  if (["verified", "approved"].includes(existingStatus)) {
+    throw new ApiError(409, "Verified documents cannot be re-uploaded");
+  }
+
   const updatedDocument = {
     ...(typeof document === "object" ? document : {}),
     key: documentKey,

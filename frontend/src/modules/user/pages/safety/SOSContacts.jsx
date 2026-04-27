@@ -11,6 +11,12 @@ const MOCK_CONTACTS = [
   { id: '2', name: 'Priya Sharma', phone: '9123456789' },
 ];
 
+const EMERGENCY_SERVICES = [
+  { id: 'police', label: 'Police', phone: '100', accent: 'bg-blue-50 border-blue-100 text-blue-600' },
+  { id: 'ambulance', label: 'Ambulance', phone: '108', accent: 'bg-emerald-50 border-emerald-100 text-emerald-600' },
+  { id: 'fire', label: 'Fire Brigade', phone: '101', accent: 'bg-orange-50 border-orange-100 text-orange-600' },
+];
+
 const SOSContacts = () => {
   const navigate = useNavigate();
   const [contacts, setContacts]         = useState(MOCK_CONTACTS);
@@ -111,6 +117,36 @@ const SOSContacts = () => {
             )}
           </motion.button>
         </motion.div>
+
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">Emergency Services</p>
+            <span className="text-[10px] font-bold text-slate-400">Quick call</span>
+          </div>
+          <div className="grid grid-cols-1 gap-2.5">
+            {EMERGENCY_SERVICES.map((service) => (
+              <motion.button
+                key={service.id}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => window.open(`tel:${service.phone}`, '_self')}
+                className="rounded-[18px] border border-white/80 bg-white/90 px-4 py-3.5 shadow-[0_4px_14px_rgba(15,23,42,0.05)]"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border ${service.accent}`}>
+                    <Phone size={15} strokeWidth={2.5} />
+                  </div>
+                  <div className="min-w-0 flex-1 text-left">
+                    <p className="text-[14px] font-black text-slate-900 leading-tight">{service.label}</p>
+                    <p className="text-[11px] font-bold text-slate-400 mt-0.5">Call {service.phone}</p>
+                  </div>
+                  <div className="rounded-full bg-slate-900 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-white">
+                    {service.phone}
+                  </div>
+                </div>
+              </motion.button>
+            ))}
+          </div>
+        </div>
 
         {/* Contacts list */}
         <div>

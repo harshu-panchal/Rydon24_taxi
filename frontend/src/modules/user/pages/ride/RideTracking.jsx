@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Phone, MessageCircle, AlertTriangle, Shield, Star, ChevronLeft, Share2 } from 'lucide-react';
+import { Phone, MessageCircle, AlertTriangle, Shield, Star, ChevronLeft, Share2, Clock3 } from 'lucide-react';
 import { GoogleMap, MarkerF, OverlayView, OverlayViewF, PolylineF } from '@react-google-maps/api';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../../admin/utils/googleMaps';
 import { socketService } from '../../../../shared/api/socket';
@@ -143,6 +143,24 @@ const resolveAssetUrl = (value = '') => {
 
   return `${BACKEND_ORIGIN}/${raw.replace(/^\/+/, '')}`;
 };
+
+const buildRideShareText = ({ appName, driverName, vehicleNumber, pickupLabel, dropLabel }) =>
+  `I'm riding with ${appName}!\nDriver: ${driverName} (${vehicleNumber || 'Assigned'})\nFrom: ${pickupLabel}\nTo: ${dropLabel}`;
+
+const buildShareLinks = (text) => ({
+  whatsapp: `https://wa.me/?text=${encodeURIComponent(text)}`,
+  sms: `sms:?&body=${encodeURIComponent(text)}`,
+});
+
+const formatTimerClock = (totalSeconds) => {
+  const safeSeconds = Math.max(0, Number(totalSeconds) || 0);
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+};
+
+const formatWholeMinutes = (value) => `${Math.max(0, Math.floor(Number(value) || 0))} min`;
+
 const mergeDriverSnapshot = (baseDriver = {}, incomingDriver = {}) => {
   const safeBaseDriver = isPlainObject(baseDriver) ? baseDriver : {};
   const safeIncomingDriver = isPlainObject(incomingDriver) ? incomingDriver : {};
@@ -249,6 +267,7 @@ const RideTracking = () => {
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [shareToast, setShareToast] = useState(false);
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
   const [rideRealtime, setRideRealtime] = useState(null);
   const [routePath, setRoutePath] = useState([]);
   const [routeError, setRouteError] = useState('');
@@ -257,6 +276,8 @@ const RideTracking = () => {
   const [driverImageBroken, setDriverImageBroken] = useState(false);
   const [vehicleImageFallback, setVehicleImageFallback] = useState('');
   const [vehicleImageBroken, setVehicleImageBroken] = useState(false);
+  const [arrivalClockFallbackAt, setArrivalClockFallbackAt] = useState('');
+  const [waitingNow, setWaitingNow] = useState(Date.now());
   const { settings } = useSettings();
   const appName = settings.general?.app_name || 'App';
   const navigate = useNavigate();
@@ -267,9 +288,10 @@ const RideTracking = () => {
   const routeHome = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '/';
   const routeComplete = location.pathname.startsWith('/taxi/user') ? '/taxi/user/ride/complete' : '/ride/complete';
   const routeChat = location.pathname.startsWith('/taxi/user') ? '/taxi/user/ride/chat' : '/ride/chat';
+  const routeSupport = location.pathname.startsWith('/taxi/user') ? '/taxi/user/support' : '/support';
+  const routeSos = location.pathname.startsWith('/taxi/user') ? '/taxi/user/safety/sos' : '/safety/sos';
 
   const rideId = state.rideId || '';
-  const otp = String(rideRealtime?.otp || state.otp || state.ride_otp || '');
   const fare = rideRealtime?.fare || state.fare || 22;
   const paymentMethod = rideRealtime?.paymentMethod || state.paymentMethod || 'Cash';
   const fallbackDriver = useMemo(
@@ -291,6 +313,9 @@ const RideTracking = () => {
     [pickupPosition, rideRealtime?.driverLocation?.coordinates],
   );
   const tripStatus = String(rideRealtime?.status || state.liveStatus || state.status || 'accepted').toLowerCase();
+  const otp = tripStatus === 'started' || tripStatus === 'ongoing'
+    ? ''
+    : String(rideRealtime?.otp || state.otp || state.ride_otp || '');
   const serviceType = String(state.serviceType || state.type || 'ride').toLowerCase();
   const activeDestination = useMemo(
     () => (tripStatus === 'started' ? dropPosition : pickupPosition),
@@ -313,6 +338,16 @@ const RideTracking = () => {
     }),
     [driver, fare, paymentMethod, rideRealtime, serviceType, state],
   );
+  const waitingPricing = rideRealtime?.pricingSnapshot || state.pricingSnapshot || {};
+  const waitingChargePerMinute = Math.max(0, Number(waitingPricing?.waiting_charge ?? 0));
+  const freeWaitingBeforeMinutes = Math.max(0, Number(waitingPricing?.free_waiting_before ?? 0));
+  const waitingStartedAt = rideRealtime?.arrivedAt || state.arrivedAt || arrivalClockFallbackAt || '';
+  const waitingElapsedSeconds = waitingStartedAt
+    ? Math.max(0, Math.floor((waitingNow - new Date(waitingStartedAt).getTime()) / 1000))
+    : 0;
+  const freeWaitingRemainingSeconds = Math.max(0, freeWaitingBeforeMinutes * 60 - waitingElapsedSeconds);
+  const waitingChargeableMinutes = Math.max(0, Math.ceil(waitingElapsedSeconds / 60) - freeWaitingBeforeMinutes);
+  const isWaitingForOtp = Boolean(waitingStartedAt) && !['started', 'ongoing', 'completed', 'cancelled', 'delivered'].includes(tripStatus);
   const vehicleIcon = getTrackingVehicleIcon(trackingSnapshot, driver);
   const displayDriverHeading = useMemo(() => {
     if (Number.isFinite(Number(rideRealtime?.driverLocation?.heading))) {
@@ -335,7 +370,9 @@ const RideTracking = () => {
   const driverImage = driverImageBroken ? '' : (nextDriverImage || driverImageFallback);
   const vehicleImage = vehicleImageBroken ? '' : (nextVehicleImage || vehicleImageFallback);
   const hasVehiclePhoto = isLikelyVehiclePhoto(vehicleImage) && !vehicleImageBroken;
-  const driverSubtitle = tripStatus === 'started'
+  const driverSubtitle = isWaitingForOtp
+    ? (serviceType === 'parcel' ? 'Agent has arrived' : 'Captain has arrived')
+    : tripStatus === 'started'
     ? (serviceType === 'parcel' ? 'Parcel picked up' : 'Trip started')
     : serviceType === 'parcel'
       ? 'Delivery agent is on the way'
@@ -393,6 +430,35 @@ const RideTracking = () => {
       setVehicleImageBroken(false);
     }
   }, [nextVehicleImage]);
+
+  useEffect(() => {
+    if (rideRealtime?.arrivedAt || state.arrivedAt) {
+      setArrivalClockFallbackAt('');
+      return;
+    }
+
+    if (tripStatus === 'arriving') {
+      setArrivalClockFallbackAt((current) => current || new Date().toISOString());
+      return;
+    }
+
+    if (['started', 'ongoing', 'completed', 'cancelled', 'delivered'].includes(tripStatus)) {
+      setArrivalClockFallbackAt('');
+    }
+  }, [rideRealtime?.arrivedAt, state.arrivedAt, tripStatus]);
+
+  useEffect(() => {
+    if (!isWaitingForOtp) {
+      return undefined;
+    }
+
+    setWaitingNow(Date.now());
+    const intervalId = window.setInterval(() => {
+      setWaitingNow(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, [isWaitingForOtp]);
 
   const exitTracking = useMemo(
     () => () => {
@@ -506,6 +572,8 @@ const RideTracking = () => {
               vehicleIconType: payload?.vehicleIconType || latestStateRef.current.vehicleIconType || '',
               vehicleIconUrl: payload?.vehicleIconUrl || latestStateRef.current.vehicleIconUrl || '',
               otp: payload?.otp || latestStateRef.current.otp || latestStateRef.current.ride_otp || '',
+              arrivedAt: payload?.arrivedAt || latestStateRef.current.arrivedAt || '',
+              pricingSnapshot: payload?.pricingSnapshot || latestStateRef.current.pricingSnapshot || null,
               completedAt: payload?.completedAt || null,
               feedback: payload?.feedback || null,
               driver: mergedDriver,
@@ -540,6 +608,8 @@ const RideTracking = () => {
           vehicleIconType: payload?.vehicleIconType || latestStateRef.current.vehicleIconType || '',
           vehicleIconUrl: payload?.vehicleIconUrl || latestStateRef.current.vehicleIconUrl || '',
           otp: payload?.otp || latestStateRef.current.otp || latestStateRef.current.ride_otp || '',
+          arrivedAt: payload?.arrivedAt || latestStateRef.current.arrivedAt || '',
+          pricingSnapshot: payload?.pricingSnapshot || latestStateRef.current.pricingSnapshot || null,
           completedAt: payload?.completedAt || null,
           feedback: payload?.feedback || null,
           driver: mergedDriver,
@@ -551,6 +621,8 @@ const RideTracking = () => {
           driver: mergedDriver,
           status: payload?.status || latestStateRef.current.status || 'accepted',
           liveStatus: payload?.liveStatus || payload?.status || latestStateRef.current.liveStatus || latestStateRef.current.status || 'accepted',
+          arrivedAt: payload?.arrivedAt || latestStateRef.current.arrivedAt || '',
+          pricingSnapshot: payload?.pricingSnapshot || latestStateRef.current.pricingSnapshot || null,
         });
       } catch {
         await validateActiveRide().catch(() => {});
@@ -629,6 +701,8 @@ const RideTracking = () => {
         vehicleIconType: payload.vehicleIconType || prev?.vehicleIconType || latestState.vehicleIconType || '',
         vehicleIconUrl: payload.vehicleIconUrl || prev?.vehicleIconUrl || latestState.vehicleIconUrl || '',
         otp: payload.otp || prev?.otp || latestState.otp || latestState.ride_otp || '',
+        arrivedAt: payload.arrivedAt || prev?.arrivedAt || latestState.arrivedAt || '',
+        pricingSnapshot: payload.pricingSnapshot || prev?.pricingSnapshot || latestState.pricingSnapshot || null,
         completedAt: payload.completedAt || null,
         feedback: payload.feedback || null,
         driver: mergeDriverSnapshot(prev?.driver || latestFallbackDriver, payload.driver || {}),
@@ -676,12 +750,16 @@ const RideTracking = () => {
           rideId,
           driver: latestDriverRef.current,
           status: nextStatus,
+          arrivedAt: payload.arrivedAt || latestState.arrivedAt || '',
+          pricingSnapshot: payload.pricingSnapshot || latestState.pricingSnapshot || null,
         });
       }
 
       setRideRealtime((prev) => ({
         ...(prev || {}),
         status: nextStatus,
+        arrivedAt: payload.arrivedAt || prev?.arrivedAt || '',
+        pricingSnapshot: payload.pricingSnapshot || prev?.pricingSnapshot || null,
         completedAt: payload.completedAt || prev?.completedAt || null,
       }));
     };
@@ -780,26 +858,41 @@ const RideTracking = () => {
   }, [activeDestination, driverPosition, map, routePath, tripStatus]);
 
   const handleShare = async () => {
-    const text = `I'm riding with ${appName}!\nDriver: ${driver.name} (${driver.plate || driver.vehicleNumber || 'Assigned'})\nFrom: ${pickupLabel}\nTo: ${dropLabel}`;
-    const copyToClipboard = () => {
-      navigator.clipboard?.writeText(text).then(() => {
-        setShareToast(true);
-        setTimeout(() => setShareToast(false), 2500);
-      });
-    };
+    const text = buildRideShareText({
+      appName,
+      driverName: driver.name,
+      vehicleNumber: driver.plate || driver.vehicleNumber,
+      pickupLabel,
+      dropLabel,
+    });
 
     if (navigator.share) {
       try {
         await navigator.share({ title: `Track My Ride - ${appName}`, text });
+        setShareSheetOpen(false);
         return;
       } catch (_error) {
-        return;
+        // Fall through to the explicit share options below.
       }
     }
 
-    if (navigator.clipboard?.writeText) {
-      copyToClipboard();
-    }
+    setShareSheetOpen(true);
+  };
+
+  const handleCopyShareText = () => {
+    const text = buildRideShareText({
+      appName,
+      driverName: driver.name,
+      vehicleNumber: driver.plate || driver.vehicleNumber,
+      pickupLabel,
+      dropLabel,
+    });
+
+    navigator.clipboard?.writeText(text).then(() => {
+      setShareToast(true);
+      setShareSheetOpen(false);
+      setTimeout(() => setShareToast(false), 2500);
+    });
   };
 
   const handleCallDriver = () => {
@@ -849,6 +942,87 @@ const RideTracking = () => {
             className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] bg-slate-900 text-white px-5 py-3 rounded-[14px] text-[12px] font-black shadow-xl whitespace-nowrap"
           >
             Ride details copied!
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {shareSheetOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[210] flex items-end justify-center bg-slate-950/45 px-4 pb-5 pt-12"
+            onClick={() => setShareSheetOpen(false)}
+          >
+            <motion.div
+              initial={{ y: 48, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 48, opacity: 0 }}
+              onClick={(event) => event.stopPropagation()}
+              className="w-full max-w-md rounded-[28px] bg-white p-5 shadow-2xl"
+            >
+              <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Share Ride</p>
+              <h3 className="mt-2 text-[20px] font-black tracking-tight text-slate-900">Send trip details</h3>
+              <p className="mt-1 text-[12px] font-bold text-slate-500">Choose how you want to share this ongoing ride.</p>
+
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                {navigator.share ? (
+                  <button
+                    type="button"
+                    onClick={handleShare}
+                    className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4 text-left"
+                  >
+                    <p className="text-[13px] font-black text-slate-900">System share</p>
+                    <p className="mt-1 text-[11px] font-bold text-slate-500">Open phone share apps</p>
+                  </button>
+                ) : null}
+                <a
+                  href={buildShareLinks(buildRideShareText({
+                    appName,
+                    driverName: driver.name,
+                    vehicleNumber: driver.plate || driver.vehicleNumber,
+                    pickupLabel,
+                    dropLabel,
+                  })).whatsapp}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4 text-left"
+                >
+                  <p className="text-[13px] font-black text-slate-900">WhatsApp</p>
+                  <p className="mt-1 text-[11px] font-bold text-slate-500">Share in chat</p>
+                </a>
+                <a
+                  href={buildShareLinks(buildRideShareText({
+                    appName,
+                    driverName: driver.name,
+                    vehicleNumber: driver.plate || driver.vehicleNumber,
+                    pickupLabel,
+                    dropLabel,
+                  })).sms}
+                  className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4 text-left"
+                >
+                  <p className="text-[13px] font-black text-slate-900">SMS</p>
+                  <p className="mt-1 text-[11px] font-bold text-slate-500">Open messages</p>
+                </a>
+                <button
+                  type="button"
+                  onClick={handleCopyShareText}
+                  className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4 text-left"
+                >
+                  <p className="text-[13px] font-black text-slate-900">Copy details</p>
+                  <p className="mt-1 text-[11px] font-bold text-slate-500">Copy to clipboard</p>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShareSheetOpen(false)}
+                className="mt-4 h-12 w-full rounded-[18px] bg-slate-900 text-[12px] font-black uppercase tracking-[0.16em] text-white"
+              >
+                Close
+              </button>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -925,7 +1099,7 @@ const RideTracking = () => {
 
       <motion.button
         whileTap={{ scale: 0.9 }}
-        onClick={() => navigate('/taxi/user')}
+        onClick={() => navigate(routeHome)}
         className="absolute top-8 left-4 z-10 w-10 h-10 bg-white/90 backdrop-blur-md rounded-[12px] shadow-[0_4px_14px_rgba(15,23,42,0.10)] border border-white/80 flex items-center justify-center"
       >
         <ChevronLeft size={18} className="text-slate-900" strokeWidth={2.5} />
@@ -937,7 +1111,7 @@ const RideTracking = () => {
 
       <motion.button
         whileTap={{ scale: 0.95 }}
-        onClick={() => navigate('/support')}
+        onClick={() => navigate(routeSos)}
         className="absolute top-24 right-4 z-10 bg-white/90 backdrop-blur-md px-3.5 py-2 rounded-full border border-white/80 shadow-[0_4px_14px_rgba(15,23,42,0.08)] flex items-center gap-1.5"
       >
         <Shield size={13} className="text-blue-500" strokeWidth={2.5} />
@@ -1009,6 +1183,39 @@ const RideTracking = () => {
             )}
           </div>
 
+          {isWaitingForOtp && (
+            <div className="rounded-[24px] border border-amber-100 bg-amber-50/70 px-4 py-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-amber-500 shadow-sm">
+                    <Clock3 size={18} strokeWidth={2.5} />
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-[0.22em] text-amber-600">Waiting Clock</p>
+                    <p className="mt-1 text-[22px] font-black tracking-tight text-slate-900">{formatTimerClock(waitingElapsedSeconds)}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Free Left</p>
+                  <p className="mt-1 text-[13px] font-black text-slate-900">{formatTimerClock(freeWaitingRemainingSeconds)}</p>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-white px-3 py-3 shadow-sm">
+                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Free Before Ride</p>
+                  <p className="mt-1 text-[13px] font-black text-slate-900">{formatWholeMinutes(freeWaitingBeforeMinutes)}</p>
+                </div>
+                <div className="rounded-2xl bg-white px-3 py-3 shadow-sm">
+                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Waiting Charge</p>
+                  <p className="mt-1 text-[13px] font-black text-slate-900">
+                    Rs {waitingChargePerMinute}/min
+                    {waitingChargeableMinutes > 0 ? ` • ${waitingChargeableMinutes} billable` : ''}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Detailed Vehicle Status Card - High Fidelity */}
           <div className="flex items-center gap-3 rounded-[22px] bg-slate-50/40 border border-slate-50/80 px-3 py-3 shadow-[0_2px_12px_rgba(15,23,42,0.02)]">
             <div className="w-12 h-12 shrink-0 flex items-center justify-center rounded-[16px] bg-white shadow-sm border border-slate-100/50 overflow-hidden p-2">
@@ -1036,7 +1243,7 @@ const RideTracking = () => {
               { id: 'call', icon: Phone, label: 'CALL', action: handleCallDriver },
               { id: 'chat', icon: MessageCircle, label: 'CHAT', action: openRideChat },
               { id: 'share', icon: Share2, label: 'SHARE', action: handleShare },
-              { id: 'help', icon: AlertTriangle, label: 'HELP', action: () => navigate('/support') }
+              { id: 'help', icon: AlertTriangle, label: 'HELP', action: () => navigate(routeSupport) }
             ].map((btn) => (
               <motion.button
                 key={btn.id}

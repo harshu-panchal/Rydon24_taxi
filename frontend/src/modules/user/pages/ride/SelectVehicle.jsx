@@ -220,12 +220,30 @@ const VehicleMapPreview = ({ center, dropPosition, drivers, selectedVehicle, isL
 };
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
+const PAYMENT_OPTIONS = [
+  { id: 'cash', stateValue: 'Cash', label: 'Cash', sub: 'Pay after ride', Icon: Banknote, bg: 'bg-green-50', color: 'text-green-600' },
+  { id: 'online', stateValue: 'Online Payment', label: 'Online Payment', sub: 'UPI, Cards or Wallets', Icon: CreditCard, bg: 'bg-blue-50', color: 'text-blue-600' },
+];
 const DEFAULT_AVAILABILITY = {
   drivers: [],
   totalDrivers: 0,
   closestDriverDistanceMeters: null,
   closestDriverEtaMinutes: null,
+  allowedPaymentMethods: ['cash', 'online'],
 };
+
+const normalizeAllowedPaymentMethods = (value) => {
+  const items = Array.isArray(value) ? value : [];
+  const normalized = items
+    .map((item) => String(item || '').trim().toLowerCase())
+    .map((item) => (item === 'cash' ? 'cash' : item === 'online' ? 'online' : null))
+    .filter(Boolean);
+
+  return [...new Set(normalized)].length ? [...new Set(normalized)] : ['cash', 'online'];
+};
+
+const toPaymentStateValue = (methodId) => PAYMENT_OPTIONS.find((option) => option.id === methodId)?.stateValue || 'Cash';
+const normalizeSelectedPaymentState = (value) => String(value || '').trim().toLowerCase() === 'cash' ? 'cash' : 'online';
 
 const getVehicleTypes = (response) => {
   const data = unwrap(response);
@@ -816,7 +834,26 @@ const SelectVehicle = () => {
 
   const selectedVehicle = useMemo(() => pricedVehicles.find((v) => v.id === selected), [pricedVehicles, selected]);
   const selectedAvailability = selectedVehicle ? (availabilityByVehicleId[selectedVehicle.id] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
+  const allowedPaymentMethods = useMemo(
+    () => normalizeAllowedPaymentMethods(selectedAvailability?.allowedPaymentMethods),
+    [selectedAvailability?.allowedPaymentMethods],
+  );
+  const paymentOptions = useMemo(
+    () => PAYMENT_OPTIONS.filter((option) => allowedPaymentMethods.includes(option.id)),
+    [allowedPaymentMethods],
+  );
   const onlineDrivers = selectedAvailability.drivers || [];
+
+  useEffect(() => {
+    if (!paymentOptions.length) {
+      return;
+    }
+
+    const normalizedCurrent = normalizeSelectedPaymentState(paymentMethod);
+    if (!paymentOptions.some((option) => option.id === normalizedCurrent)) {
+      setPaymentMethod(paymentOptions[0].stateValue);
+    }
+  }, [paymentMethod, paymentOptions]);
 
   useEffect(() => {
     const timer = setTimeout(handleScroll, 200);
@@ -859,6 +896,8 @@ const SelectVehicle = () => {
                   vehicleIconType: vehicle.iconType,
                   lng: pickupCoords[0],
                   lat: pickupCoords[1],
+                  service_location_id: routeState.service_location_id || routeState.serviceLocationId || '',
+                  transport_type: vehicle.transportType || routeState.transport_type || routeState.transportType || 'taxi',
                 },
               });
 
@@ -900,6 +939,8 @@ const SelectVehicle = () => {
         pickupCoords,
         dropCoords,
         stops,
+        service_location_id: routeState.service_location_id || routeState.serviceLocationId || '',
+        transport_type: selectedVehicle.transportType || routeState.transport_type || routeState.transportType || 'taxi',
         vehicle: selectedVehicle,
         vehicleTypeId: selectedVehicle.vehicleTypeId,
         vehicleIconType: selectedVehicle.iconType,
@@ -908,6 +949,7 @@ const SelectVehicle = () => {
         fare: selectedVehicle.price,
         estimatedDistanceMeters: tripMetrics.distanceMeters,
         estimatedDurationMinutes: tripMetrics.durationMinutes,
+        allowedPaymentMethods,
         searchNonce: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       },
     });
@@ -1197,19 +1239,16 @@ const SelectVehicle = () => {
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Payment</p>
               <h3 className="text-[18px] font-bold text-slate-900 mb-5">Select Method</h3>
               <div className="space-y-2.5">
-                {[
-                  { id: 'Cash', label: 'Cash', sub: 'Pay after ride', Icon: Banknote, bg: 'bg-green-50', color: 'text-green-600' },
-                  { id: 'Online Payment', label: 'Online Payment', sub: 'UPI, Cards or Wallets', Icon: CreditCard, bg: 'bg-blue-50', color: 'text-blue-600' },
-                ].map(({ id, label, sub, Icon, bg, color }) => (
+                {paymentOptions.map(({ id, stateValue, label, sub, Icon, bg, color }) => (
                   <motion.button
-                    key={id}
+                    key={stateValue}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => {
-                      setPaymentMethod(id);
+                      setPaymentMethod(stateValue);
                       setShowPaymentModal(false);
                     }}
                     className={`w-full flex items-center gap-3.5 p-4 rounded-[18px] border-2 transition-all ${
-                      paymentMethod === id ? 'border-orange-200 bg-orange-50/40' : 'border-slate-100 bg-slate-50/50'
+                      paymentMethod === stateValue ? 'border-orange-200 bg-orange-50/40' : 'border-slate-100 bg-slate-50/50'
                     }`}
                   >
                     <div className={`w-10 h-10 rounded-[12px] ${bg} flex items-center justify-center shrink-0`}>
@@ -1219,7 +1258,7 @@ const SelectVehicle = () => {
                       <p className="text-[14px] font-bold text-slate-900">{label}</p>
                       <p className="text-[11px] font-bold text-slate-400">{sub}</p>
                     </div>
-                    {paymentMethod === id && (
+                    {paymentMethod === stateValue && (
                       <div className="w-5 h-5 rounded-full bg-orange-500 flex items-center justify-center shrink-0">
                         <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
                           <path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />

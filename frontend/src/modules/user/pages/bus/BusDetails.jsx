@@ -35,6 +35,8 @@ const BusDetails = () => {
   const [error, setError] = useState('');
   const [isPaying, setIsPaying] = useState(false);
 
+  const unwrapPayload = (response) => response?.data?.data || response?.data || response || {};
+
   if (!bus || !selectedSeats?.length) {
     navigate(`${routePrefix}/bus`, { replace: true });
     return null;
@@ -65,7 +67,7 @@ const BusDetails = () => {
         seatIds: selectedSeats.map((seat) => seat.id),
         passenger,
       });
-      const order = orderResponse?.data || {};
+      const order = unwrapPayload(orderResponse);
 
       if (!order.keyId || !order.orderId) {
         throw new Error('Unable to start bus payment');
@@ -94,7 +96,7 @@ const BusDetails = () => {
         handler: async (response) => {
           try {
             const verifyResponse = await userBusService.verifyBookingPayment(response);
-            const booking = verifyResponse?.data;
+            const booking = unwrapPayload(verifyResponse);
             navigate(`${routePrefix}/bus/confirm`, {
               replace: true,
               state: {

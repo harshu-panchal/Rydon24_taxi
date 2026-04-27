@@ -19,6 +19,15 @@ const formatDate = (value) => {
   }
 };
 
+const getDocumentReviewStatus = (document = {}) =>
+  String(
+    document?.status ||
+    document?.verificationStatus ||
+    document?.approvalStatus ||
+    document?.reviewStatus ||
+    '',
+  ).trim().toLowerCase();
+
 const DriverDocuments = () => {
   const navigate = useNavigate();
   const [isSyncing, setIsSyncing] = useState(false);
@@ -108,6 +117,7 @@ const DriverDocuments = () => {
         id: field.key,
         name: field.label,
         templateName: field.templateName,
+        reviewStatus: getDocumentReviewStatus(doc),
         status: hasDoc ? 'Uploaded' : 'Missing',
         date: hasDoc ? formatDate(uploadedAt) : 'Not uploaded',
         previewUrl,
@@ -219,12 +229,16 @@ const DriverDocuments = () => {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className={`text-[8px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border shadow-sm ${doc.status === 'Uploaded' ? 'bg-emerald-50 text-emerald-500 border-emerald-500/10' : 'bg-rose-50 text-rose-500 border-rose-500/10 animate-pulse'}`}>
-                      {doc.status}
+                      {doc.reviewStatus === 'verified' || doc.reviewStatus === 'approved' ? 'Verified' : doc.status}
                     </span>
                     <label
                       onClick={(event) => event.stopPropagation()}
-                      className="h-8 w-8 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center cursor-pointer active:scale-95 transition-all"
-                      title="Change document image"
+                      className={`h-8 w-8 rounded-xl flex items-center justify-center transition-all ${
+                        doc.reviewStatus === 'verified' || doc.reviewStatus === 'approved'
+                          ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                          : 'bg-blue-50 text-blue-500 cursor-pointer active:scale-95'
+                      }`}
+                      title={doc.reviewStatus === 'verified' || doc.reviewStatus === 'approved' ? 'Verified documents cannot be changed' : 'Change document image'}
                     >
                       {imageUploading && uploadingDocumentKey === doc.id ? (
                         <Loader2 size={15} className="animate-spin" />
@@ -235,8 +249,11 @@ const DriverDocuments = () => {
                         type="file"
                         accept="image/*"
                         className="hidden"
-                        disabled={imageUploading}
+                        disabled={imageUploading || doc.reviewStatus === 'verified' || doc.reviewStatus === 'approved'}
                         onChange={(event) => {
+                          if (doc.reviewStatus === 'verified' || doc.reviewStatus === 'approved') {
+                            return;
+                          }
                           uploadingDocumentKeyRef.current = doc.id;
                           setUploadingDocumentKey(doc.id);
                           onDocumentImageChange(event);

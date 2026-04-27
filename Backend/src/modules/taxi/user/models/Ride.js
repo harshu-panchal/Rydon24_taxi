@@ -256,6 +256,25 @@ const rideSchema = new mongoose.Schema(
         type: Number,
         default: 0,
       },
+      waiting_charge: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      free_waiting_before: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      free_waiting_after: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      allowed_payment_methods: {
+        type: [String],
+        default: ['cash', 'online'],
+      },
       resolvedAt: {
         type: Date,
         default: null,
@@ -394,6 +413,10 @@ const rideSchema = new mongoose.Schema(
       default: [],
     },
     acceptedAt: {
+      type: Date,
+      default: null,
+    },
+    arrivedAt: {
       type: Date,
       default: null,
     },

@@ -6,6 +6,7 @@ import { RIDE_LIVE_STATUS } from '../../constants/index.js';
 import {
   createRideRecord,
   ensureRideParticipantAccess,
+  getAllowedRidePaymentMethodsForPricing,
   getActiveRideForIdentity,
   getRideDetails,
   getRideRoom,
@@ -145,14 +146,15 @@ export const updateRideStatus = async (req, res) => {
 
   const nextStatus = String(req.body.status || '').trim().toLowerCase();
 
-  if (![RIDE_LIVE_STATUS.ARRIVING, RIDE_LIVE_STATUS.STARTED, RIDE_LIVE_STATUS.COMPLETED].includes(nextStatus)) {
-    throw new ApiError(400, 'status must be arriving, started, or completed');
+  if (![RIDE_LIVE_STATUS.ACCEPTED, RIDE_LIVE_STATUS.ARRIVING, RIDE_LIVE_STATUS.STARTED, RIDE_LIVE_STATUS.COMPLETED].includes(nextStatus)) {
+    throw new ApiError(400, 'status must be accepted, arriving, started, or completed');
   }
 
   const ride = await updateRideLifecycle({
     rideId: req.params.rideId,
     driverId: req.auth.sub,
     nextStatus,
+    paymentMethod: req.body.paymentMethod,
   });
 
   res.json({
@@ -212,7 +214,7 @@ export const cancelRide = async (req, res) => {
 };
 
 export const listAvailableDrivers = async (req, res) => {
-  const { vehicleTypeId, lat, lng, maxDistance, limit = 30 } = req.query;
+  const { vehicleTypeId, lat, lng, maxDistance, limit = 30, service_location_id, transport_type } = req.query;
   const latitude = Number(lat);
   const longitude = Number(lng);
   const distance = Number(maxDistance);
@@ -274,6 +276,13 @@ export const listAvailableDrivers = async (req, res) => {
   });
 
   const closestDriver = enrichedDrivers[0] || null;
+  const { allowedPaymentMethods } = await getAllowedRidePaymentMethodsForPricing({
+    serviceLocationId: service_location_id && mongoose.Types.ObjectId.isValid(service_location_id)
+      ? new mongoose.Types.ObjectId(service_location_id)
+      : null,
+    transportType: transport_type || 'taxi',
+    vehicleTypeId,
+  });
 
   res.json({
     success: true,
@@ -281,6 +290,7 @@ export const listAvailableDrivers = async (req, res) => {
       totalDrivers: enrichedDrivers.length,
       closestDriverDistanceMeters: closestDriver?.distanceMeters ?? null,
       closestDriverEtaMinutes: closestDriver?.etaMinutes ?? null,
+      allowedPaymentMethods,
       drivers: enrichedDrivers,
     },
   });
