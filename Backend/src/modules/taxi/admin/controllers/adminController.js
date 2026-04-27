@@ -51,6 +51,15 @@ export const getAdminStatus = asyncHandler(async (_req, res) =>
 export const loginAdmin = asyncHandler(async (req, res) =>
   ok(res, await adminService.loginAdmin(req.body)),
 );
+export const forgotPassword = asyncHandler(async (req, res) =>
+  ok(res, await adminService.forgotPassword(req.body.email)),
+);
+export const verifyResetOtp = asyncHandler(async (req, res) =>
+  ok(res, await adminService.verifyResetOtp(req.body)),
+);
+export const resetPassword = asyncHandler(async (req, res) =>
+  ok(res, await adminService.resetPassword(req.body)),
+);
 
 export const getUsers = asyncHandler(async (req, res) =>
   ok(res, await adminService.listUsers(req.query)),
