@@ -501,6 +501,7 @@ const RideTracking = () => {
   useEffect(() => {
     hasCompletedRedirectRef.current = false;
   }, [rideId]);
+
   useEffect(() => {
     let active = true;
 
@@ -510,36 +511,6 @@ const RideTracking = () => {
         active = false;
       };
     }
-
-    const validateActiveRide = async () => {
-      try {
-        const activePayload = unwrapApiPayload(await api.get(activeRideEndpoint));
-        const activeRideId = String(activePayload?.rideId || '');
-        const activeStatus = String(activePayload?.liveStatus || activePayload?.status || '').toLowerCase();
-
-        if (TERMINAL_STATUSES.has(activeStatus)) {
-          if (active) {
-            if (COMPLETED_TRACKING_STATUSES.has(activeStatus)) {
-              completeTracking(activeStatus);
-            } else {
-              exitTracking();
-            }
-          }
-          return false;
-        }
-
-        if (!activeRideId || activeRideId !== String(rideId)) {
-          // If the ride is no longer active but wasn't completed/cancelled in this session,
-          // we hydrate the state one more time to check its final status.
-          return false;
-        }
-
-        return true;
-      } catch (err) {
-        console.error('Active ride validation failed:', err);
-        return false;
-      }
-    };
 
     const hydrateRideState = async () => {
       try {
@@ -625,7 +596,37 @@ const RideTracking = () => {
           pricingSnapshot: payload?.pricingSnapshot || latestStateRef.current.pricingSnapshot || null,
         });
       } catch {
-        await validateActiveRide().catch(() => {});
+        // Let the active-ride validator decide whether the ride ended or the fetch was transient.
+      }
+    };
+
+    const validateActiveRide = async () => {
+      try {
+        const activePayload = unwrapApiPayload(await api.get(activeRideEndpoint));
+        const activeRideId = String(activePayload?.rideId || '');
+        const activeStatus = String(activePayload?.liveStatus || activePayload?.status || '').toLowerCase();
+
+        if (TERMINAL_STATUSES.has(activeStatus)) {
+          if (active) {
+            if (COMPLETED_TRACKING_STATUSES.has(activeStatus)) {
+              completeTracking(activeStatus);
+            } else {
+              exitTracking();
+            }
+          }
+          return false;
+        }
+
+        if (!activeRideId || activeRideId !== String(rideId)) {
+          await hydrateRideState().catch(() => {});
+          return false;
+        }
+
+        return true;
+      } catch (err) {
+        console.error('Active ride validation failed:', err);
+        await hydrateRideState().catch(() => {});
+        return false;
       }
     };
 
@@ -677,6 +678,8 @@ const RideTracking = () => {
         return;
       }
 
+      const nextStatus = String(payload.liveStatus || payload.status || 'accepted').toLowerCase();
+
       const latestState = latestStateRef.current;
       const latestFallbackDriver = latestFallbackDriverRef.current;
 
@@ -707,6 +710,15 @@ const RideTracking = () => {
         feedback: payload.feedback || null,
         driver: mergeDriverSnapshot(prev?.driver || latestFallbackDriver, payload.driver || {}),
       }));
+
+      if (COMPLETED_TRACKING_STATUSES.has(nextStatus)) {
+        latestCompleteTrackingRef.current(nextStatus);
+        return;
+      }
+
+      if (nextStatus === 'cancelled') {
+        clearCurrentRide();
+      }
     };
 
     const onLocationUpdated = (payload) => {

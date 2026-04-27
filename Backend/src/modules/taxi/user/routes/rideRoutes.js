@@ -3,6 +3,7 @@ import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { authenticate, authenticateOrResolveUser } from '../../middlewares/authMiddleware.js';
 import {
   cancelRide,
+  createRazorpayRideTipOrder,
   createRide,
   getRideAppTipSettings,
   getMyActiveRide,
@@ -11,6 +12,7 @@ import {
   listAvailableDrivers,
   submitRideReview,
   updateRideStatus,
+  verifyRazorpayRideTip,
 } from '../controllers/rideController.js';
 
 export const rideRouter = Router();
@@ -23,4 +25,6 @@ rideRouter.get('/active/me', authenticateOrResolveUser(['user', 'driver']), asyn
 rideRouter.patch('/:rideId/cancel', authenticate(['user']), asyncHandler(cancelRide));
 rideRouter.get('/:rideId', authenticateOrResolveUser(['user', 'driver']), asyncHandler(getRideById));
 rideRouter.patch('/:rideId/status', authenticate(['driver']), asyncHandler(updateRideStatus));
+rideRouter.post('/:rideId/tip/razorpay/order', authenticate(['user']), asyncHandler(createRazorpayRideTipOrder));
+rideRouter.post('/:rideId/tip/razorpay/verify', authenticate(['user']), asyncHandler(verifyRazorpayRideTip));
 rideRouter.patch('/:rideId/feedback', authenticate(['user']), asyncHandler(submitRideReview));

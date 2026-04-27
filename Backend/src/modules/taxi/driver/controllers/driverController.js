@@ -5,6 +5,7 @@ import { normalizePoint, toPoint } from "../../../../utils/geo.js";
 import { Driver } from "../models/Driver.js";
 import { DriverLoginSession } from "../models/DriverLoginSession.js";
 import { WalletTransaction } from "../models/WalletTransaction.js";
+import { WithdrawalRequest } from "../../admin/models/WithdrawalRequest.js";
 import { Ride } from "../../user/models/Ride.js";
 import { Owner } from "../../admin/models/Owner.js";
 import { ServiceLocation } from "../../admin/models/ServiceLocation.js";
@@ -1326,6 +1327,10 @@ export const getMyWallet = async (req, res) => {
     .sort({ createdAt: -1 })
     .limit(50)
     .lean();
+  const withdrawalRequests = await WithdrawalRequest.find({ driver_id: req.auth.sub })
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .lean();
   const walletSettings = await getWalletSettings();
 
   res.json({
@@ -1333,8 +1338,71 @@ export const getMyWallet = async (req, res) => {
     data: {
       wallet: await serializeDriverWallet(driver),
       transactions,
+      withdrawalRequests,
       settings: walletSettings,
     },
+  });
+};
+
+export const createDriverWithdrawalRequest = async (req, res) => {
+  const driver = await Driver.findById(req.auth.sub);
+
+  if (!driver) {
+    throw new ApiError(404, "Driver not found");
+  }
+
+  const wallet = await serializeDriverWallet(driver);
+  const walletSettings = await getWalletSettings();
+  const isTransferEnabled = ['1', 'true', 'yes', 'on'].includes(
+    String(walletSettings.enable_wallet_transfer_driver ?? '1').trim().toLowerCase(),
+  );
+  const minimumTransferAmount = Number(wallet.minimumTransferAmount ?? walletSettings.minimum_wallet_amount_for_transfer ?? 0);
+  const amount = Number(req.body?.amount);
+  const paymentMethod = String(req.body?.payment_method || req.body?.paymentMethod || 'bank_transfer').trim().toLowerCase() || 'bank_transfer';
+
+  if (!isTransferEnabled) {
+    throw new ApiError(403, "Withdrawals are disabled by admin");
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new ApiError(400, "amount must be greater than zero");
+  }
+
+  if (minimumTransferAmount > 0 && amount < minimumTransferAmount) {
+    throw new ApiError(400, `amount must be at least ${minimumTransferAmount}`);
+  }
+
+  if (amount > Number(wallet.balance || 0)) {
+    throw new ApiError(400, "Withdrawal amount cannot exceed current balance");
+  }
+
+  const pendingRequest = await WithdrawalRequest.findOne({
+    driver_id: req.auth.sub,
+    amount,
+    status: 'pending',
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  if (pendingRequest && (Date.now() - new Date(pendingRequest.createdAt).getTime()) < 60 * 1000) {
+    throw new ApiError(409, "A similar withdrawal request was just submitted");
+  }
+
+  const created = await WithdrawalRequest.create({
+    transactionId: `wdr_${Date.now().toString(36)}`,
+    driver_id: req.auth.sub,
+    amount: Math.round(amount * 100) / 100,
+    payment_method: paymentMethod,
+    status: 'pending',
+  });
+
+  res.status(201).json({
+    success: true,
+    data: {
+      request: created,
+      wallet,
+    },
+    message: "Withdrawal request sent to admin",
   });
 };
 

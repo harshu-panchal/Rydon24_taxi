@@ -446,6 +446,20 @@ const rideSchema = new mongoose.Schema(
         default: 0,
         min: 0,
       },
+      tipPaymentId: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      tipOrderId: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      tipPaidAt: {
+        type: Date,
+        default: null,
+      },
       submittedAt: {
         type: Date,
         default: null,

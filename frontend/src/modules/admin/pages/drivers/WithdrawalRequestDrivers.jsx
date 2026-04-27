@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronRight, Eye, FileSearch, MoreHorizontal, Search } from 'lucide-react';
+import { ChevronRight, Eye, FileSearch, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const BASE = () => `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/wallet/drivers/withdrawals`;
@@ -16,12 +16,15 @@ const WithdrawalRequestDrivers = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [page, setPage] = useState(1);
-  const [activeMenuId, setActiveMenuId] = useState(null);
   const [rows, setRows] = useState([]);
   const [paginator, setPaginator] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchRows = async ({ nextPage = page, nextLimit = itemsPerPage, nextSearch = searchTerm } = {}) => {
+  const fetchRows = async ({
+    nextPage = page,
+    nextLimit = itemsPerPage,
+    nextSearch = searchTerm,
+  } = {}) => {
     setLoading(true);
     try {
       const token = localStorage.getItem('adminToken');
@@ -62,13 +65,6 @@ const WithdrawalRequestDrivers = () => {
     fetchRows({ nextPage: page, nextLimit: itemsPerPage, nextSearch: searchTerm });
   }, [page]);
 
-  useEffect(() => {
-    if (!activeMenuId) return undefined;
-    const handle = () => setActiveMenuId(null);
-    window.addEventListener('click', handle);
-    return () => window.removeEventListener('click', handle);
-  }, [activeMenuId]);
-
   const totalPages = useMemo(() => Math.max(1, Number(paginator?.last_page || 1)), [paginator]);
   const safePage = useMemo(() => Math.min(Math.max(1, page), totalPages), [page, totalPages]);
   const totalEntries = useMemo(() => Number(paginator?.total || 0), [paginator]);
@@ -96,12 +92,12 @@ const WithdrawalRequestDrivers = () => {
             <span>Show</span>
             <select
               value={itemsPerPage}
-              onChange={(e) => setItemsPerPage(Number(e.target.value) || 10)}
+              onChange={(event) => setItemsPerPage(Number(event.target.value) || 10)}
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors"
             >
-              {[10, 25, 50, 100].map((n) => (
-                <option key={n} value={n}>
-                  {n}
+              {[10, 25, 50, 100].map((count) => (
+                <option key={count} value={count}>
+                  {count}
                 </option>
               ))}
             </select>
@@ -113,7 +109,7 @@ const WithdrawalRequestDrivers = () => {
             <input
               type="text"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(event) => setSearchTerm(event.target.value)}
               placeholder="Search..."
               className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors"
             />
@@ -151,48 +147,38 @@ const WithdrawalRequestDrivers = () => {
               ) : (
                 rows.map((item) => (
                   <tr key={item.driver_id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 text-sm text-gray-600">{formatDateTime(item.last_request_at)}</td>
-                    <td className="px-6 py-4 text-sm text-gray-800">{item.driver?.name || 'Unknown'}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{item.driver?.mobile || '-'}</td>
-                    <td className="px-6 py-4 text-sm text-gray-800">₹ {Number(item.pending_amount || 0).toFixed(2)}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {formatDateTime(item.last_request_at)}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-800">
+                      {item.driver?.name || 'Unknown'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {item.driver?.mobile || '-'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-800">
+                      Rs {Number(item.pending_amount || 0).toFixed(2)}
+                    </td>
                     <td className="px-6 py-4 text-sm">
                       <span className="inline-flex rounded-full px-3 py-1 text-xs font-semibold bg-amber-50 text-amber-700">
                         Requested
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="relative inline-flex items-center justify-end">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveMenuId((current) => (current === item.driver_id ? null : item.driver_id));
-                          }}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-800 transition-colors"
-                          title="Actions"
-                        >
-                          <MoreHorizontal size={16} />
-                        </button>
-
-                        {activeMenuId === item.driver_id ? (
-                          <div
-                            className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setActiveMenuId(null);
-                                navigate(`/admin/drivers/wallet/withdrawals/${item.driver_id}`);
-                              }}
-                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
-                            >
-                              <Eye size={16} className="text-indigo-600" />
-                              View in details
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate(
+                            `/admin/drivers/wallet/withdrawals/${item.driver_id}${
+                              item.latest_request_id ? `?requestId=${item.latest_request_id}` : ''
+                            }`,
+                          )
+                        }
+                        className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                      >
+                        <Eye size={16} />
+                        View details
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -208,7 +194,7 @@ const WithdrawalRequestDrivers = () => {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
               disabled={safePage <= 1}
               className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
@@ -217,7 +203,7 @@ const WithdrawalRequestDrivers = () => {
             <span className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm">{safePage}</span>
             <button
               type="button"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
               disabled={safePage >= totalPages}
               className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
@@ -231,4 +217,3 @@ const WithdrawalRequestDrivers = () => {
 };
 
 export default WithdrawalRequestDrivers;
-

@@ -42,8 +42,16 @@ import { WithdrawalRequest } from '../models/WithdrawalRequest.js';
 import { SupportTicket } from '../../support/models/SupportTicket.js';
 import TaxiTransportType from '../models/TaxiTransportType.js';
 import { comparePassword, hashPassword } from '../../driver/services/authService.js';
+import {
+  applyDriverWalletAdjustment,
+  serializeDriverWallet,
+} from '../../driver/services/walletService.js';
 import { RIDE_LIVE_STATUS, RIDE_STATUS, VEHICLE_TYPES } from '../../constants/index.js';
-import { cancelRideByAdmin, notifyUserAccountDeleted } from '../../services/dispatchService.js';
+import {
+  cancelRideByAdmin,
+  emitToDriver,
+  notifyUserAccountDeleted,
+} from '../../services/dispatchService.js';
 
 const PUBLIC_VEHICLE_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
 let publicVehicleCatalogCache = {
@@ -2390,13 +2398,31 @@ export const listDriverWithdrawalSummaries = async ({ page = 1, limit = 50, sear
   const total = Number(countRows?.[0]?.total || 0);
   const driverIds = groups.map((g) => g._id).filter(Boolean);
   const drivers = await Driver.find({ _id: { $in: driverIds } }).lean();
+  const latestRequests = driverIds.length
+    ? await WithdrawalRequest.find({
+        driver_id: { $in: driverIds },
+        status: 'pending',
+      })
+        .sort({ createdAt: -1 })
+        .lean()
+    : [];
   const byId = new Map(drivers.map((d) => [String(d._id), d]));
+  const latestRequestByDriverId = new Map();
+
+  latestRequests.forEach((request) => {
+    const key = String(request.driver_id || '');
+    if (key && !latestRequestByDriverId.has(key)) {
+      latestRequestByDriverId.set(key, request);
+    }
+  });
 
   return {
     results: groups.map((row) => {
       const driver = byId.get(String(row._id));
+      const latestRequest = latestRequestByDriverId.get(String(row._id));
       return {
         driver_id: row._id,
+        latest_request_id: latestRequest?._id || null,
         last_request_at: row.last_request_at,
         pending_count: Number(row.pending_count || 0),
         pending_amount: Number(row.pending_amount || 0),
@@ -2440,6 +2466,11 @@ export const listDriverWithdrawals = async ({ driverId, page = 1, limit = 50 }) 
       name: driver.name || '',
       mobile: driver.phone || '',
       email: driver.email || '',
+      city: driver.city || '',
+      vehicle_number: driver.vehicleNumber || '',
+      vehicle_type: driver.vehicleType || '',
+      register_for: driver.registerFor || '',
+      wallet: await serializeDriverWallet(driver),
     },
     results: items.map((item) => ({
       _id: item._id,
@@ -2454,6 +2485,120 @@ export const listDriverWithdrawals = async ({ driverId, page = 1, limit = 50 }) 
       per_page: safeLimit,
       total,
       last_page: Math.max(1, Math.ceil(total / safeLimit)),
+    },
+  };
+};
+
+export const getDriverWithdrawalContextByRequestId = async ({ requestId, page = 1, limit = 50 }) => {
+  const request = await WithdrawalRequest.findById(requestId).lean();
+
+  if (!request || !request.driver_id) {
+    throw new ApiError(404, 'Withdrawal request not found');
+  }
+
+  return listDriverWithdrawals({
+    driverId: request.driver_id,
+    page,
+    limit,
+  });
+};
+
+export const approveDriverWithdrawalRequest = async (requestId, adminId = null) => {
+  const session = await mongoose.startSession();
+
+  try {
+    session.startTransaction();
+
+    const request = await WithdrawalRequest.findById(requestId).session(session);
+    if (!request || !request.driver_id) {
+      throw new ApiError(404, 'Withdrawal request not found');
+    }
+
+    if (request.status !== 'pending') {
+      throw new ApiError(400, 'Only pending withdrawal requests can be approved');
+    }
+
+    const driver = await Driver.findById(request.driver_id).session(session);
+    if (!driver) {
+      throw new ApiError(404, 'Driver not found');
+    }
+
+    const requestAmount = Math.round(Number(request.amount || 0) * 100) / 100;
+    const currentBalance = Math.round(Number(driver.wallet?.balance || 0) * 100) / 100;
+
+    if (!Number.isFinite(requestAmount) || requestAmount <= 0) {
+      throw new ApiError(400, 'Withdrawal request amount is invalid');
+    }
+
+    if (currentBalance < requestAmount) {
+      throw new ApiError(400, 'Driver wallet balance is not enough for this withdrawal');
+    }
+
+    const walletResult = await applyDriverWalletAdjustment({
+      driverId: driver._id,
+      amount: -requestAmount,
+      type: 'adjustment',
+      description: 'Driver withdrawal approved by admin',
+      metadata: {
+        withdrawalRequestId: String(request._id),
+        approvedBy: adminId ? String(adminId) : null,
+        paymentMethod: request.payment_method || 'bank_transfer',
+      },
+      session,
+    });
+
+    request.status = 'completed';
+    await request.save({ session });
+
+    await session.commitTransaction();
+
+    emitToDriver(driver._id, 'driver:wallet:updated', {
+      wallet: walletResult.wallet,
+      transaction: walletResult.transaction,
+    });
+
+    return {
+      request: {
+        _id: request._id,
+        driver_id: request.driver_id,
+        amount: requestAmount,
+        payment_method: request.payment_method || '',
+        status: request.status,
+        createdAt: request.createdAt,
+        updatedAt: request.updatedAt,
+      },
+      wallet: walletResult.wallet,
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
+};
+
+export const rejectDriverWithdrawalRequest = async (requestId) => {
+  const request = await WithdrawalRequest.findById(requestId);
+  if (!request || !request.driver_id) {
+    throw new ApiError(404, 'Withdrawal request not found');
+  }
+
+  if (request.status !== 'pending') {
+    throw new ApiError(400, 'Only pending withdrawal requests can be rejected');
+  }
+
+  request.status = 'cancelled';
+  await request.save();
+
+  return {
+    request: {
+      _id: request._id,
+      driver_id: request.driver_id,
+      amount: Number(request.amount || 0),
+      payment_method: request.payment_method || '',
+      status: request.status,
+      createdAt: request.createdAt,
+      updatedAt: request.updatedAt,
     },
   };
 };

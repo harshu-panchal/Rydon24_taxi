@@ -65,6 +65,12 @@ export const adminService = {
 
   adjustDriverWallet: (id, data) => api.post(`/admin/wallet/drivers/${id}/adjust`, data),
   getDriverWalletHistory: (id) => api.get(`/admin/wallet/drivers/${id}/history`),
+  getDriverWithdrawalSummaries: (params = {}) => api.get('/admin/wallet/drivers/withdrawals', { params }),
+  getDriverWithdrawals: (driverId, params = {}) => api.get(`/admin/wallet/drivers/${driverId}/withdrawals`, { params }),
+  getDriverWithdrawalContextByRequestId: (requestId, params = {}) =>
+    api.get(`/admin/wallet/drivers/withdrawals/request/${requestId}`, { params }),
+  approveDriverWithdrawalRequest: (requestId) => api.patch(`/admin/wallet/drivers/withdrawals/${requestId}/approve`),
+  rejectDriverWithdrawalRequest: (requestId) => api.patch(`/admin/wallet/drivers/withdrawals/${requestId}/reject`),
 
   adjustOwnerWallet: (id, data) => api.post(`/admin/wallet/owners/${id}/adjust`, data),
   getOwnerWalletHistory: (id) => api.get(`/admin/wallet/owners/${id}/history`),

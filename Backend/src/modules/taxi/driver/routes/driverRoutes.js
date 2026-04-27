@@ -5,6 +5,7 @@ import {
   addDriverEmergencyContact,
   completeOnboarding,
   createDriverPaymentQr,
+  createDriverWithdrawalRequest,
   createOwnerFleetDriver,
   deleteCurrentDriverAccount,
   deleteDriverEmergencyContact,
@@ -134,6 +135,11 @@ driverRouter.post(
   "/wallet/top-up/razorpay/verify",
   authenticate(["driver"]),
   asyncHandler(verifyDriverWalletTopup),
+);
+driverRouter.post(
+  "/wallet/withdrawals",
+  authenticate(["driver"]),
+  asyncHandler(createDriverWithdrawalRequest),
 );
 
 driverRouter.post(

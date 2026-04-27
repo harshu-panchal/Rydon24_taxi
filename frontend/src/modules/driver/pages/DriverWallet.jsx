@@ -52,6 +52,29 @@ const transactionLabel = (type = '') => {
     return labels[type] || String(type || 'Wallet transaction').replace(/_/g, ' ');
 };
 
+const withdrawalStatusMeta = (status = '') => {
+    const normalized = String(status || '').toLowerCase();
+
+    if (normalized === 'completed' || normalized === 'approved') {
+        return {
+            label: 'Approved',
+            className: 'bg-emerald-100 text-emerald-700',
+        };
+    }
+
+    if (normalized === 'cancelled' || normalized === 'rejected') {
+        return {
+            label: 'Rejected',
+            className: 'bg-rose-100 text-rose-700',
+        };
+    }
+
+    return {
+        label: 'Pending',
+        className: 'bg-amber-100 text-amber-700',
+    };
+};
+
 const transactionHint = (tx = {}) => {
     const payment = tx.metadata?.paymentMethod;
     const commission = tx.metadata?.commissionAmount;
@@ -86,6 +109,7 @@ const normalizeWalletResponse = (payload) => {
     return {
         wallet: data.wallet || emptyWallet,
         transactions: Array.isArray(data.transactions) ? data.transactions : [],
+        withdrawalRequests: Array.isArray(data.withdrawalRequests) ? data.withdrawalRequests : [],
         settings: data.settings || {},
     };
 };
@@ -115,6 +139,7 @@ const DriverWallet = () => {
     const appName = appSettings.general?.app_name || 'App';
     const [wallet, setWallet] = useState(emptyWallet);
     const [transactions, setTransactions] = useState([]);
+    const [withdrawalRequests, setWithdrawalRequests] = useState([]);
     const [settings, setSettings] = useState({});
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -124,6 +149,10 @@ const DriverWallet = () => {
     const [processingTopUp, setProcessingTopUp] = useState(false);
     const [topUpSuccess, setTopUpSuccess] = useState(false);
     const [activeFilter, setActiveFilter] = useState('all');
+    const [showWithdraw, setShowWithdraw] = useState(false);
+    const [withdrawAmount, setWithdrawAmount] = useState('');
+    const [processingWithdraw, setProcessingWithdraw] = useState(false);
+    const [withdrawSuccess, setWithdrawSuccess] = useState(false);
 
     const loadWallet = useCallback(async ({ quiet = false } = {}) => {
         if (!quiet) setRefreshing(true);
@@ -134,6 +163,7 @@ const DriverWallet = () => {
             const next = normalizeWalletResponse(response);
             setWallet(next.wallet);
             setTransactions(next.transactions);
+            setWithdrawalRequests(next.withdrawalRequests);
             setSettings(next.settings);
         } catch (requestError) {
             setError(requestError?.response?.data?.message || requestError?.message || 'Could not load wallet.');
@@ -171,14 +201,18 @@ const DriverWallet = () => {
         );
         const availableForOrders = toNumber(wallet.availableForOrders, toNumber(wallet.balance) - minimumBalance);
         const minimumTopUp = toNumber(wallet.minimumTopUpAmount, toNumber(settings.minimum_amount_added_to_wallet, 0));
+        const minimumTransferAmount = toNumber(wallet.minimumTransferAmount, toNumber(settings.minimum_wallet_amount_for_transfer, 0));
         const walletEnabled = wallet.isWalletEnabled ?? isEnabled(settings.show_wallet_feature_for_driver, true);
+        const transferEnabled = wallet.isTransferEnabled ?? isEnabled(settings.enable_wallet_transfer_driver, true);
         const canReceiveOrders = walletEnabled && !wallet.isBlocked && availableForOrders >= 0;
 
         return {
             minimumBalance,
             availableForOrders,
             minimumTopUp,
+            minimumTransferAmount,
             walletEnabled,
+            transferEnabled,
             canReceiveOrders,
         };
     }, [settings, wallet]);
@@ -211,6 +245,10 @@ const DriverWallet = () => {
     }, [activeFilter, transactions]);
 
     const recentTransactions = useMemo(() => filteredTransactions.slice(0, 20), [filteredTransactions]);
+    const recentWithdrawalRequests = useMemo(
+        () => withdrawalRequests.slice(0, 5),
+        [withdrawalRequests],
+    );
 
     const loadRazorpayScript = useCallback(() =>
         new Promise((resolve) => {
@@ -327,6 +365,59 @@ const DriverWallet = () => {
         }
     };
 
+    const handleWithdrawRequest = async () => {
+        const amount = Number(withdrawAmount);
+
+        if (!rules.transferEnabled) {
+            setError('Withdrawals are disabled by admin.');
+            return;
+        }
+
+        if (!Number.isFinite(amount) || amount <= 0) {
+            setError('Enter a valid withdrawal amount.');
+            return;
+        }
+
+        if (rules.minimumTransferAmount > 0 && amount < rules.minimumTransferAmount) {
+            setError(`Minimum withdrawal amount is Rs ${rules.minimumTransferAmount}.`);
+            return;
+        }
+
+        if (amount > Number(wallet.balance || 0)) {
+            setError('Withdrawal amount cannot exceed current balance.');
+            return;
+        }
+
+        setProcessingWithdraw(true);
+        setError('');
+
+        try {
+            const response = await api.post('/drivers/wallet/withdrawals', {
+                amount,
+                payment_method: 'bank_transfer',
+            });
+            const payload = response?.data || response || {};
+
+            if (payload?.request) {
+                setWithdrawalRequests((previous) => [
+                    payload.request,
+                    ...previous.filter((item) => item._id !== payload.request._id),
+                ].slice(0, 10));
+            }
+
+            setWithdrawSuccess(true);
+            setTimeout(() => {
+                setWithdrawSuccess(false);
+                setShowWithdraw(false);
+                setWithdrawAmount('');
+            }, 1800);
+        } catch (requestError) {
+            setError(requestError?.response?.data?.message || requestError?.message || 'Could not send withdrawal request.');
+        } finally {
+            setProcessingWithdraw(false);
+        }
+    };
+
 
     const statusCopy = rules.walletEnabled
         ? rules.canReceiveOrders
@@ -399,15 +490,50 @@ const DriverWallet = () => {
                         )}
 
                         <section>
-                            <button
-                                type="button"
-                                onClick={() => setShowTopUp(true)}
-                                disabled={!rules.walletEnabled}
-                                className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-[#009b72] text-sm font-black uppercase tracking-[0.08em] text-white shadow-sm disabled:bg-slate-200 disabled:text-slate-400"
-                            >
-                                Top up <ArrowUpRight size={17} />
-                            </button>
+                            <div className="grid grid-cols-2 gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowTopUp(true)}
+                                    disabled={!rules.walletEnabled}
+                                    className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-[#009b72] text-sm font-black uppercase tracking-[0.08em] text-white shadow-sm disabled:bg-slate-200 disabled:text-slate-400"
+                                >
+                                    Top up <ArrowUpRight size={17} />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowWithdraw(true)}
+                                    disabled={!rules.transferEnabled || Number(wallet.balance || 0) <= 0}
+                                    className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 text-sm font-black uppercase tracking-[0.08em] text-white shadow-sm disabled:bg-slate-200 disabled:text-slate-400"
+                                >
+                                    Withdraw <ArrowDownLeft size={17} />
+                                </button>
+                            </div>
                         </section>
+
+                        {recentWithdrawalRequests.length > 0 && (
+                            <section className="rounded-[1.7rem] bg-white p-4 shadow-sm">
+                                <div className="mb-3 flex items-center justify-between">
+                                    <h3 className="text-sm font-black text-slate-950">Withdrawal requests</h3>
+                                    <p className="text-xs font-bold text-slate-500">{recentWithdrawalRequests.length} recent</p>
+                                </div>
+                                <div className="space-y-2">
+                                    {recentWithdrawalRequests.map((request) => {
+                                        const statusMeta = withdrawalStatusMeta(request.status);
+
+                                        return (
+                                        <div key={request._id || request.transactionId} className="flex items-center justify-between rounded-2xl bg-slate-50 p-3">
+                                            <div>
+                                                <p className="text-sm font-black text-slate-900">{money(request.amount)}</p>
+                                                <p className="mt-0.5 text-[11px] font-bold text-slate-500">{formatDate(request.createdAt)}</p>
+                                            </div>
+                                            <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${statusMeta.className}`}>
+                                                {statusMeta.label}
+                                            </span>
+                                        </div>
+                                    )})}
+                                </div>
+                            </section>
+                        )}
 
                         <section className="rounded-[1.7rem] bg-white p-4 shadow-sm">
                             <div className="mb-3 flex items-center gap-2">
@@ -559,6 +685,67 @@ const DriverWallet = () => {
                                         className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#101521] text-sm font-black uppercase tracking-widest text-white disabled:bg-slate-200 disabled:text-slate-400"
                                     >
                                         {processingTopUp ? <RefreshCw className="animate-spin" size={18} /> : 'Add money'}
+                                    </button>
+                                </div>
+                            )}
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {showWithdraw && (
+                    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/55 px-3 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ y: '100%' }}
+                            animate={{ y: 0 }}
+                            exit={{ y: '100%' }}
+                            className="w-full max-w-md rounded-t-[2rem] bg-white p-5 pb-8 shadow-2xl"
+                        >
+                            <div className="mb-5 flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-950">Withdraw to admin request</h3>
+                                    <p className="text-sm font-bold text-slate-500">Minimum amount: {money(rules.minimumTransferAmount)}</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowWithdraw(false)}
+                                    className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-600"
+                                    aria-label="Close withdrawal"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            {withdrawSuccess ? (
+                                <div className="grid place-items-center py-10 text-center">
+                                    <div className="grid h-20 w-20 place-items-center rounded-full bg-emerald-50 text-emerald-700">
+                                        <CheckCircle2 size={38} strokeWidth={3} />
+                                    </div>
+                                    <p className="mt-4 text-lg font-black">Request sent</p>
+                                    <p className="mt-1 text-sm font-bold text-slate-500">Admin will review your withdrawal request.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="rounded-3xl bg-slate-50 p-5 text-center">
+                                        <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Withdrawal amount</p>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            value={withdrawAmount}
+                                            onChange={(event) => setWithdrawAmount(event.target.value)}
+                                            className="mt-2 w-full bg-transparent text-center text-4xl font-black text-slate-950 outline-none"
+                                            placeholder="0"
+                                        />
+                                        <p className="mt-2 text-xs font-bold text-slate-500">Available balance: {money(wallet.balance)}</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleWithdrawRequest}
+                                        disabled={processingWithdraw || !rules.transferEnabled}
+                                        className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 text-sm font-black uppercase tracking-widest text-white disabled:bg-slate-200 disabled:text-slate-400"
+                                    >
+                                        {processingWithdraw ? <RefreshCw className="animate-spin" size={18} /> : 'Send request'}
                                     </button>
                                 </div>
                             )}

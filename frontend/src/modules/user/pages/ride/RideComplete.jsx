@@ -35,6 +35,21 @@ const getVehicleIcon = (serviceType = 'ride', driver = {}) => {
   return carIcon;
 };
 
+const loadRazorpayScript = () =>
+  new Promise((resolve) => {
+    if (window.Razorpay) {
+      resolve(true);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+
 const RideComplete = () => {
   const { settings } = useSettings();
   const appName = settings.general?.app_name || 'App';
@@ -95,6 +110,7 @@ const RideComplete = () => {
   }, [minimumTipAmount, tipsEnabled]);
   const rideDate = new Date(state.completedAt || Date.now()).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   const rideTime = new Date(state.completedAt || Date.now()).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const tipOnlyTotal = Number(selectedTip || 0);
 
   useEffect(() => {
     // We keep the ride state for the review screen to allow refreshes
@@ -217,11 +233,78 @@ const RideComplete = () => {
     try {
       setIsSubmitting(true);
       setError('');
-      const response = await api.patch(`/rides/${rideId}/feedback`, {
-        rating,
-        comment,
-        tipAmount: selectedTip || 0,
-      });
+
+      let response;
+
+      if (Number(selectedTip || 0) > 0) {
+        const scriptLoaded = await loadRazorpayScript();
+        if (!scriptLoaded) {
+          throw new Error('Razorpay SDK failed to load');
+        }
+
+        const orderResponse = await api.post(`/rides/${rideId}/tip/razorpay/order`, {
+          tipAmount: selectedTip || 0,
+        });
+        const order = orderResponse?.data || orderResponse || {};
+
+        if (!order.keyId || !order.orderId) {
+          throw new Error('Unable to start tip payment');
+        }
+
+        let userInfo = {};
+        try {
+          userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+        } catch {
+          userInfo = {};
+        }
+
+        response = await new Promise((resolve, reject) => {
+          const rzp = new window.Razorpay({
+            key: order.keyId,
+            amount: order.amount,
+            currency: order.currency || 'INR',
+            name: appName,
+            description: `Tip for ${driver.name || 'driver'}`,
+            order_id: order.orderId,
+            prefill: {
+              name: userInfo?.name || '',
+              email: userInfo?.email || '',
+              contact: userInfo?.phone ? `+91${userInfo.phone}` : '',
+            },
+            modal: {
+              ondismiss: () => reject(new Error('Tip payment was cancelled')),
+            },
+            handler: async (paymentResponse) => {
+              try {
+                const verifyResponse = await api.post(`/rides/${rideId}/tip/razorpay/verify`, {
+                  ...paymentResponse,
+                  rating,
+                  comment,
+                  tipAmount: selectedTip || 0,
+                });
+                resolve(verifyResponse);
+              } catch (verifyError) {
+                reject(new Error(verifyError?.message || 'Tip payment verification failed'));
+              }
+            },
+            theme: {
+              color: '#0f172a',
+            },
+          });
+
+          rzp.on('payment.failed', (event) => {
+            reject(new Error(event?.error?.description || event?.error?.reason || 'Tip payment failed'));
+          });
+
+          rzp.open();
+        });
+      } else {
+        response = await api.patch(`/rides/${rideId}/feedback`, {
+          rating,
+          comment,
+          tipAmount: 0,
+        });
+      }
 
       const payload = response?.data?.data || response?.data || response;
       if (payload?.feedback) {
@@ -476,7 +559,11 @@ const RideComplete = () => {
             disabled={isSubmitting || isSubmitted}
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-[16px] bg-slate-900 py-3.5 text-[14px] font-black text-white shadow-[0_12px_24px_rgba(15,23,42,0.18)] disabled:opacity-60"
           >
-            {isSubmitting ? 'Saving your feedback...' : isSubmitted ? 'Feedback already saved' : 'Submit rating'}
+            {isSubmitting
+              ? (tipOnlyTotal > 0 ? `Opening Razorpay for Rs ${tipOnlyTotal.toFixed(2)}...` : 'Saving your feedback...')
+              : isSubmitted
+                ? 'Feedback already saved'
+                : (tipOnlyTotal > 0 ? `Pay tip of Rs ${tipOnlyTotal.toFixed(2)} & submit` : 'Submit rating')}
             <ChevronRight size={16} />
           </button>
 

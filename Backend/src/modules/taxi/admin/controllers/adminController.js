@@ -288,6 +288,25 @@ export const getDriverWithdrawals = asyncHandler(async (req, res) =>
   ),
 );
 
+export const getDriverWithdrawalContextByRequestId = asyncHandler(async (req, res) =>
+  ok(
+    res,
+    await adminService.getDriverWithdrawalContextByRequestId({
+      requestId: req.params.requestId,
+      page: req.query.page,
+      limit: req.query.limit,
+    }),
+  ),
+);
+
+export const approveDriverWithdrawalRequest = asyncHandler(async (req, res) =>
+  ok(res, await adminService.approveDriverWithdrawalRequest(req.params.requestId, req.auth?.sub)),
+);
+
+export const rejectDriverWithdrawalRequest = asyncHandler(async (req, res) =>
+  ok(res, await adminService.rejectDriverWithdrawalRequest(req.params.requestId)),
+);
+
 
 export const getDeletedDrivers = asyncHandler(async (req, res) =>
   ok(res, await adminService.listDeletedDrivers(req.query)),
