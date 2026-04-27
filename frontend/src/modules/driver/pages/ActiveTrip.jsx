@@ -945,6 +945,28 @@ const ActiveTrip = () => {
         navigate('/taxi/driver/home');
     };
 
+    const completeRideForUserSync = async (paymentMode = '') => {
+        if (!rideId) {
+            return;
+        }
+
+        try {
+            const driverToken = getLocalDriverToken();
+            await api.patch(
+                `/rides/${rideId}/status`,
+                {
+                    status: 'completed',
+                    paymentMethod: paymentMode || undefined,
+                },
+                withDriverAuthorization(driverToken),
+            );
+        } catch {
+            // The socket publish below remains as a realtime fallback for the rider side.
+        }
+
+        publishRideStatus('completed', paymentMode);
+    };
+
     useEffect(() => {
         if (!waitingStartedAt || phase !== 'otp_verification') {
             return undefined;
@@ -1809,8 +1831,10 @@ const ActiveTrip = () => {
                             </div>
                             <motion.button
                                 whileTap={{ scale: 0.96 }}
-                                onClick={() => {
-                                    setPhase('payment_confirm');
+                                onClick={async () => {
+                                    const paymentMode = selectedPaymentMode || effectiveState?.paymentMethod || liveRequest?.payment || '';
+                                    await completeRideForUserSync(paymentMode);
+                                    setPhase('review');
                                 }}
                                 className="w-full h-15 text-white rounded-xl flex items-center justify-center gap-3 text-[14px] font-semibold uppercase tracking-wide shadow-xl"
                                 style={{ backgroundColor: routeStrokeColor, boxShadow: `0 18px 30px ${routeAccentMuted}` }}

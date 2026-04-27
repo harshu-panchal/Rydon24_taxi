@@ -1,9 +1,11 @@
 import crypto from 'node:crypto';
+import mongoose from 'mongoose';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { User } from '../models/User.js';
 import { UserWallet } from '../models/UserWallet.js';
 import { Notification } from '../../admin/promotions/models/Notification.js';
 import { BusService } from '../../admin/models/BusService.js';
+import { Driver } from '../../driver/models/Driver.js';
 import { comparePassword, hashPassword, signAccessToken } from '../services/authService.js';
 import { env } from '../../../../config/env.js';
 import { uploadDataUrlToCloudinary } from '../../../../utils/cloudinaryUpload.js';
@@ -18,6 +20,9 @@ import {
 import { assignPushTokenToEntity } from '../../services/pushTokenService.js';
 import { BusSeatHold } from '../models/BusSeatHold.js';
 import { BusBooking } from '../models/BusBooking.js';
+import { applyDriverWalletAdjustment } from '../../driver/services/walletService.js';
+import { emitToDriver } from '../../services/dispatchService.js';
+import { sendPushNotificationToEntities } from '../../services/pushNotificationService.js';
 
 const VALID_GENDERS = new Set(['male', 'female', 'other', 'prefer-not-to-say', '']);
 
@@ -64,6 +69,28 @@ const normalizeMoneyAmount = (value) => {
 const ensureUserWallet = async (userId) => {
   if (!userId) return;
   await UserWallet.updateOne({ userId }, { $setOnInsert: { userId } }, { upsert: true });
+};
+
+const serializeUserWalletTransaction = (entry = {}) => ({
+  id: entry._id,
+  kind: entry.kind,
+  amount: Number(entry.amount || 0),
+  title: entry.title || '',
+  counterpartyPhone: entry.counterpartyPhone || '',
+  createdAt: entry.createdAt || null,
+});
+
+const buildUserWalletPayload = (wallet) => {
+  const transactions = Array.isArray(wallet?.transactions) ? wallet.transactions : [];
+
+  return {
+    balance: Number(wallet?.balance || 0),
+    currency: 'INR',
+    recentTransactions: transactions
+      .slice()
+      .reverse()
+      .map(serializeUserWalletTransaction),
+  };
 };
 
 const resolveRazorpayCredentials = async () => {
@@ -706,21 +733,7 @@ export const getUserWallet = async (req, res) => {
 
   res.json({
     success: true,
-    data: {
-      balance: Number(wallet?.balance || 0),
-      currency: 'INR',
-      recentTransactions: transactions
-        .slice()
-        .reverse()
-        .map((tx) => ({
-          id: tx._id,
-          kind: tx.kind,
-          amount: Number(tx.amount || 0),
-          title: tx.title || '',
-          counterpartyPhone: tx.counterpartyPhone || '',
-          createdAt: tx.createdAt || null,
-        })),
-    },
+    data: buildUserWalletPayload({ ...wallet, transactions }),
   });
 };
 
@@ -755,21 +768,7 @@ export const topupUserWallet = async (req, res) => {
 
   res.status(201).json({
     success: true,
-    data: {
-      balance: Number(updatedWallet?.balance || 0),
-      currency: 'INR',
-      recentTransactions: transactions
-        .slice()
-        .reverse()
-        .map((entry) => ({
-          id: entry._id,
-          kind: entry.kind,
-          amount: Number(entry.amount || 0),
-          title: entry.title || '',
-          counterpartyPhone: entry.counterpartyPhone || '',
-          createdAt: entry.createdAt || null,
-        })),
-    },
+    data: buildUserWalletPayload({ ...updatedWallet, transactions }),
   });
 };
 
@@ -845,22 +844,129 @@ export const transferUserWallet = async (req, res) => {
 
   res.status(201).json({
     success: true,
-    data: {
-      balance: Number(wallet?.balance || 0),
-      currency: 'INR',
-      recentTransactions: transactions
-        .slice()
-        .reverse()
-        .map((entry) => ({
-          id: entry._id,
-          kind: entry.kind,
-          amount: Number(entry.amount || 0),
-          title: entry.title || '',
-          counterpartyPhone: entry.counterpartyPhone || '',
-          createdAt: entry.createdAt || null,
-        })),
-    },
+    data: buildUserWalletPayload({ ...wallet, transactions }),
   });
+};
+
+export const transferUserWalletToDriver = async (req, res) => {
+  const amount = normalizeMoneyAmount(req.body?.amount);
+  const driverPhone = normalizePhone(req.body?.phone);
+  validatePhone(driverPhone);
+
+  const senderId = req.auth?.sub;
+  const sender = await User.findById(senderId).select({ phone: 1, firstName: 1, lastName: 1, name: 1 }).lean();
+
+  if (!sender) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  if (sender.phone === driverPhone) {
+    throw new ApiError(400, 'Cannot transfer to same phone number');
+  }
+
+  const recipientDriver = await Driver.findOne({ phone: driverPhone })
+    .select({ _id: 1, phone: 1, firstName: 1, lastName: 1, name: 1 })
+    .lean();
+
+  if (!recipientDriver) {
+    throw new ApiError(404, 'Driver not found');
+  }
+
+  await ensureUserWallet(senderId);
+  const transferId = crypto.randomUUID();
+  const senderDisplayName = String(
+    sender.name || [sender.firstName, sender.lastName].filter(Boolean).join(' ') || 'Rider',
+  ).trim();
+  const driverDisplayName = String(
+    recipientDriver.name || [recipientDriver.firstName, recipientDriver.lastName].filter(Boolean).join(' ') || 'Driver',
+  ).trim();
+
+  const session = await mongoose.startSession();
+
+  try {
+    session.startTransaction();
+
+    const senderWallet = await UserWallet.findOne({ userId: senderId }).session(session);
+    if (!senderWallet) {
+      throw new ApiError(404, 'User wallet not found');
+    }
+
+    if (Number(senderWallet.balance || 0) < amount) {
+      throw new ApiError(400, 'Insufficient wallet balance');
+    }
+
+    senderWallet.balance = Math.round((Number(senderWallet.balance || 0) - amount) * 100) / 100;
+    senderWallet.transactions.push({
+      kind: 'debit',
+      amount,
+      title: `Sent to driver ${driverDisplayName}`,
+      counterpartyPhone: driverPhone,
+      provider: 'internal_driver_wallet_transfer',
+      providerPaymentId: transferId,
+    });
+    senderWallet.transactions = senderWallet.transactions.slice(-50);
+    await senderWallet.save({ session });
+
+    const walletUpdate = await applyDriverWalletAdjustment({
+      driverId: recipientDriver._id,
+      amount,
+      type: 'adjustment',
+      description: `Received from rider wallet (${senderDisplayName})`,
+      metadata: {
+        source: 'user_wallet_transfer',
+        transferId,
+        senderUserId: senderId,
+        senderPhone: sender.phone || '',
+        senderName: senderDisplayName,
+      },
+      session,
+    });
+
+    await session.commitTransaction();
+
+    emitToDriver(recipientDriver._id, 'driver:wallet:updated', {
+      wallet: walletUpdate.wallet,
+      transaction: walletUpdate.transaction,
+      notification: {
+        title: 'Wallet credited',
+        body: `Rs ${amount.toFixed(2)} received from rider wallet`,
+      },
+    });
+
+    sendPushNotificationToEntities({
+      driverIds: [recipientDriver._id],
+      title: 'Wallet credited',
+      body: `Rs ${amount.toFixed(2)} received from rider wallet`,
+      data: {
+        type: 'driver_wallet_credit',
+        amount: String(amount),
+        transferId,
+      },
+    }).catch(() => {});
+
+    const refreshedWallet = await UserWallet.findOne({ userId: senderId })
+      .select('balance transactions')
+      .slice('transactions', -10)
+      .lean();
+
+    res.status(201).json({
+      success: true,
+      data: {
+        ...buildUserWalletPayload(refreshedWallet),
+        transfer: {
+          id: transferId,
+          amount,
+          driverPhone,
+          driverName: driverDisplayName,
+        },
+      },
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
 };
 
 export const createRazorpayWalletTopupOrder = async (req, res) => {
@@ -964,25 +1070,9 @@ export const verifyRazorpayWalletTopup = async (req, res) => {
     throw new ApiError(404, 'User not found');
   }
 
-  const transactions = Array.isArray(wallet.transactions) ? wallet.transactions : [];
-
   res.status(201).json({
     success: true,
-    data: {
-      balance: Number(wallet.balance || 0),
-      currency: 'INR',
-      recentTransactions: transactions
-        .slice()
-        .reverse()
-        .map((entry) => ({
-          id: entry._id,
-          kind: entry.kind,
-          amount: Number(entry.amount || 0),
-          title: entry.title || '',
-          counterpartyPhone: entry.counterpartyPhone || '',
-          createdAt: entry.createdAt || null,
-      })),
-    },
+    data: buildUserWalletPayload(wallet),
   });
 };
 

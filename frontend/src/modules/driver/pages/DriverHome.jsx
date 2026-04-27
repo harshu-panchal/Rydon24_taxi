@@ -48,7 +48,7 @@ import SuvIcon from '@/assets/icons/SUV.png';
 import { socketService } from '../../../shared/api/socket';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../admin/utils/googleMaps';
 import { getCurrentDriver, getDriverNotifications, getLocalDriverToken } from '../services/registrationService';
-import { getUnreadDriverNotificationCount, getVisibleDriverNotifications } from '../utils/notificationState';
+import { addLocalDriverNotification, getUnreadDriverNotificationCount, getVisibleDriverNotifications } from '../utils/notificationState';
 import {
     playRideRequestAlertSound,
     stopRideRequestAlertSound,
@@ -285,7 +285,13 @@ const DriverHome = () => {
     const [vehicleIconUrl, setVehicleIconUrl] = useState(
         () => storedDriverInfo?.vehicleIconUrl || '',
     );
-    const [walletSummary, setWalletSummary] = useState({ balance: 0, cashLimit: 500, isBlocked: false });
+    const [walletSummary, setWalletSummary] = useState({
+        balance: 0,
+        cashLimit: 500,
+        minimumBalanceForOrders: 0,
+        availableForOrders: 0,
+        isBlocked: false,
+    });
     const driverCoordsRef = useRef(readStoredDriverCoords());
     const selfieInputRef = useRef(null);
     const acceptingRideIdRef = useRef('');
@@ -299,9 +305,12 @@ const DriverHome = () => {
     );
 
     const isBalanceCritical = useMemo(() => {
-        const balance = Number(walletSummary.balance || 0);
-        const limit = Number(walletSummary.cashLimit || 500);
-        return walletSummary.isBlocked || (balance <= -limit);
+        const minimumBalance = Number(walletSummary.minimumBalanceForOrders || 0);
+        const availableForOrders = Number.isFinite(Number(walletSummary.availableForOrders))
+            ? Number(walletSummary.availableForOrders)
+            : (Number(walletSummary.balance || 0) - minimumBalance);
+
+        return Boolean(walletSummary.isBlocked) || availableForOrders <= 0;
     }, [walletSummary]);
 
     const { isLoaded } = useAppGoogleMapsLoader();
@@ -958,6 +967,28 @@ const DriverHome = () => {
             const onWalletUpdated = (payload) => {
                 if (payload?.wallet) {
                     setWalletSummary(payload.wallet);
+                    const availableForOrders = Number.isFinite(Number(payload.wallet.availableForOrders))
+                        ? Number(payload.wallet.availableForOrders)
+                        : (Number(payload.wallet.balance || 0) - Number(payload.wallet.minimumBalanceForOrders || 0));
+
+                    if (Boolean(payload.wallet.isBlocked) || availableForOrders <= 0) {
+                        setShowRequest(false);
+                        setCurrentRequest(null);
+                        stopRideRequestAlertSound();
+                        setShowLowBalanceModal(true);
+                        setStatusMessage('Wallet balance limit reached. Top up to receive new ride requests.');
+                    }
+                }
+
+                if (payload?.notification) {
+                    addLocalDriverNotification({
+                        id: payload.notification.id || `wallet-${Date.now()}`,
+                        title: payload.notification.title || 'Payment received',
+                        body: payload.notification.body || 'A rider payment was received.',
+                        sentAt: payload.notification.sentAt || new Date().toISOString(),
+                        source: 'wallet_event',
+                    });
+                    refreshNotificationCount();
                 }
             };
 

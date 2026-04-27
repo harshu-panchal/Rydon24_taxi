@@ -479,6 +479,22 @@ export const serializeRideRealtime = (ride) => ({
   estimatedDistanceMeters: ride.estimatedDistanceMeters || 0,
   estimatedDurationMinutes: ride.estimatedDurationMinutes || 0,
   paymentMethod: ride.paymentMethod,
+  driverPaymentCollection: ride.driverPaymentCollection
+    ? {
+        provider: ride.driverPaymentCollection.provider || '',
+        providerId: ride.driverPaymentCollection.providerId || '',
+        providerOrderId: ride.driverPaymentCollection.providerOrderId || '',
+        providerPaymentId: ride.driverPaymentCollection.providerPaymentId || '',
+        providerMode: ride.driverPaymentCollection.providerMode || '',
+        source: ride.driverPaymentCollection.source || '',
+        status: ride.driverPaymentCollection.status || 'pending',
+        amount: Number(ride.driverPaymentCollection.amount || 0),
+        currency: ride.driverPaymentCollection.currency || 'INR',
+        linkUrl: ride.driverPaymentCollection.linkUrl || '',
+        paidAt: ride.driverPaymentCollection.paidAt || null,
+        updatedAt: ride.driverPaymentCollection.updatedAt || null,
+      }
+    : null,
   otp: ride.otp || '',
   parcel: ride.deliveryId?.parcel || ride.parcel || null,
   intercity: ride.intercity || null,

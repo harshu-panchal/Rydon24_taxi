@@ -24,6 +24,7 @@ import { findZoneByPickup } from "../services/locationService.js";
 import { listDriverServiceLocations } from "../services/serviceLocationService.js";
 import {
   applyDriverWalletAdjustment,
+  ensureDriverWalletCanAcceptRide,
   serializeDriverWallet,
   topUpDriverWallet,
 } from "../services/walletService.js";
@@ -836,6 +837,7 @@ export const goOnline = async (req, res) => {
     throw new ApiError(400, "A selfie is required before going online today");
   }
 
+  await ensureDriverWalletCanAcceptRide(existingDriver);
   await clearDriverActiveRideIfStale(existingDriver);
   const trackingBeforeOnline = mergeOnlineSessionIntoTracking(
     existingDriver.incentiveTracking || {},

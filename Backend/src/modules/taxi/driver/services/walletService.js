@@ -153,7 +153,7 @@ export const serializeDriverWallet = async (driver) => {
     isTransferEnabled: wallet.rules.isTransferEnabled,
     minimumTopUpAmount: wallet.rules.minimumTopUpAmount,
     minimumTransferAmount: wallet.rules.minimumTransferAmount,
-    isBlocked: wallet.isBlocked || !wallet.rules.isWalletEnabled || wallet.balance < wallet.minimumBalanceForOrders,
+    isBlocked: wallet.isBlocked || !wallet.rules.isWalletEnabled || wallet.balance <= wallet.minimumBalanceForOrders,
   };
 };
 
@@ -168,7 +168,7 @@ export const ensureDriverWalletCanAcceptRide = async (driverOrId, { session } = 
   }
 
   const wallet = await getWalletSnapshot(driver);
-  const isBlocked = wallet.isBlocked || !wallet.rules.isWalletEnabled || wallet.balance < wallet.minimumBalanceForOrders;
+  const isBlocked = wallet.isBlocked || !wallet.rules.isWalletEnabled || wallet.balance <= wallet.minimumBalanceForOrders;
 
   if (isBlocked) {
     await Driver.findByIdAndUpdate(driver._id, {
@@ -213,7 +213,7 @@ export const applyDriverWalletAdjustment = async ({
 
   const before = await getWalletSnapshot(driver);
   const balanceAfter = Math.round((before.balance + normalizedAmount) * 100) / 100;
-  const isBlockedAfter = !before.rules.isWalletEnabled || balanceAfter < before.minimumBalanceForOrders;
+  const isBlockedAfter = !before.rules.isWalletEnabled || balanceAfter <= before.minimumBalanceForOrders;
 
   const updatedDriver = await Driver.findByIdAndUpdate(
     driverId,

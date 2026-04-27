@@ -5,6 +5,7 @@ import { ArrowLeft, Bell, AlertCircle, RefreshCw, Radio, Trash2, CheckCircle2 } 
 import { getDriverNotifications } from '../../services/registrationService';
 import {
   getVisibleDriverNotifications,
+  getMergedDriverNotifications,
   hideAllDriverNotifications,
   hideDriverNotification,
   markDriverNotificationsAsRead,
@@ -56,7 +57,7 @@ const DriverNotifications = () => {
       const results = response?.data?.results || [];
       const visibleNotifications = getVisibleDriverNotifications(results);
       setNotifications(visibleNotifications);
-      markDriverNotificationsAsRead(visibleNotifications.map((notification) => notification.id || notification._id));
+      markDriverNotificationsAsRead(getMergedDriverNotifications(results).map((notification) => notification.id || notification._id));
     } catch (requestError) {
       setError(requestError?.message || 'Failed to load notifications');
     } finally {
@@ -172,7 +173,7 @@ const DriverNotifications = () => {
             </div>
             <div>
               <p className="text-[16px] font-black text-slate-700">No notifications yet</p>
-              <p className="text-[12px] font-bold text-slate-400 mt-1">Admin notifications will appear here automatically</p>
+              <p className="text-[12px] font-bold text-slate-400 mt-1">Admin and payment notifications will appear here automatically</p>
             </div>
           </div>
         ) : null}

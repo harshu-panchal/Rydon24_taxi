@@ -197,7 +197,22 @@ const rideSchema = new mongoose.Schema(
         default: '',
         trim: true,
       },
+      providerOrderId: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      providerPaymentId: {
+        type: String,
+        default: '',
+        trim: true,
+      },
       providerMode: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      source: {
         type: String,
         default: '',
         trim: true,

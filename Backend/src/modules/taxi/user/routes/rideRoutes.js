@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { authenticate, authenticateOrResolveUser } from '../../middlewares/authMiddleware.js';
 import {
+  createRazorpayRideCompletionOrder,
   cancelRide,
   createRazorpayRideTipOrder,
   createRide,
@@ -10,8 +11,10 @@ import {
   getRideById,
   listMyRides,
   listAvailableDrivers,
+  payRideCompletionWithWallet,
   submitRideReview,
   updateRideStatus,
+  verifyRazorpayRideCompletion,
   verifyRazorpayRideTip,
 } from '../controllers/rideController.js';
 
@@ -25,6 +28,9 @@ rideRouter.get('/active/me', authenticateOrResolveUser(['user', 'driver']), asyn
 rideRouter.patch('/:rideId/cancel', authenticate(['user']), asyncHandler(cancelRide));
 rideRouter.get('/:rideId', authenticateOrResolveUser(['user', 'driver']), asyncHandler(getRideById));
 rideRouter.patch('/:rideId/status', authenticate(['driver']), asyncHandler(updateRideStatus));
+rideRouter.post('/:rideId/complete-payment/razorpay/order', authenticate(['user']), asyncHandler(createRazorpayRideCompletionOrder));
+rideRouter.post('/:rideId/complete-payment/razorpay/verify', authenticate(['user']), asyncHandler(verifyRazorpayRideCompletion));
+rideRouter.post('/:rideId/complete-payment/wallet', authenticate(['user']), asyncHandler(payRideCompletionWithWallet));
 rideRouter.post('/:rideId/tip/razorpay/order', authenticate(['user']), asyncHandler(createRazorpayRideTipOrder));
 rideRouter.post('/:rideId/tip/razorpay/verify', authenticate(['user']), asyncHandler(verifyRazorpayRideTip));
 rideRouter.patch('/:rideId/feedback', authenticate(['user']), asyncHandler(submitRideReview));

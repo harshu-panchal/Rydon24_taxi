@@ -312,7 +312,6 @@ const Wallet = () => {
                 </Motion.span>
                 <span className="relative z-10">Refill</span>
               </Motion.button>
-
             </div>
           </div>
         </Motion.div>

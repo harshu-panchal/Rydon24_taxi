@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, ChevronRight, MessageSquare, Receipt, Share2, Star } from 'lucide-react';
+import { Banknote, CheckCircle2, ChevronRight, CreditCard, MessageSquare, Receipt, Share2, Star, Wallet } from 'lucide-react';
 import api from '../../../../shared/api/axiosInstance';
+import { userAuthService } from '../../services/authService';
 import { clearCurrentRide, getCurrentRide } from '../../services/currentRideService';
 import carIcon from '../../../../assets/icons/car.png';
 import bikeIcon from '../../../../assets/icons/bike.png';
@@ -11,6 +12,24 @@ import deliveryIcon from '../../../../assets/icons/Delivery.png';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const TIP_OPTIONS = [0, 20, 50, 100];
+const PAYMENT_OPTIONS = [
+  { id: 'cash', label: 'COD / Cash', sub: 'Pay driver directly', Icon: Banknote },
+  { id: 'online', label: 'Online', sub: 'UPI, cards or Razorpay', Icon: CreditCard },
+  { id: 'wallet', label: 'Wallet', sub: 'Use in-app wallet balance', Icon: Wallet },
+];
+const ONLINE_PAYMENT_OPTIONS = [
+  { id: 'upi', label: 'UPI', sub: 'PhonePe, GPay or Paytm' },
+  { id: 'card', label: 'Card', sub: 'Debit or credit card' },
+  { id: 'netbanking', label: 'Netbanking', sub: 'Choose your bank in checkout' },
+];
+const PAID_COLLECTION_STATUSES = new Set(['paid', 'captured', 'completed']);
+
+const normalizePaymentChoice = (value = '') => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized.includes('wallet')) return 'wallet';
+  if (normalized.includes('cash') || normalized.includes('cod')) return 'cash';
+  return 'online';
+};
 
 const getInitials = (name = '') =>
   String(name || '')
@@ -21,6 +40,8 @@ const getInitials = (name = '') =>
     .join('') || 'DR';
 
 const isLikelyVehiclePhoto = (value = '') => /^(https?:|data:image\/|blob:|\/uploads\/|\/images\/)/i.test(String(value || '').trim());
+const isCollectionPaid = (collection = null) =>
+  Boolean(collection?.paidAt) || PAID_COLLECTION_STATUSES.has(String(collection?.status || '').trim().toLowerCase());
 
 const getVehicleIcon = (serviceType = 'ride', driver = {}) => {
   const customIcon = String(driver.vehicleIconUrl || driver.map_icon || driver.icon || '').trim();
@@ -67,6 +88,11 @@ const RideComplete = () => {
   const [shareToast, setShareToast] = useState(false);
   const [error, setError] = useState('');
   const [vehicleImageBroken, setVehicleImageBroken] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(() => normalizePaymentChoice(state.paymentMethod || 'Cash'));
+  const [selectedOnlineMethod, setSelectedOnlineMethod] = useState('upi');
+  const [walletSnapshot, setWalletSnapshot] = useState({ balance: 0, currency: 'INR' });
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [paymentCollection, setPaymentCollection] = useState(() => state.driverPaymentCollection || null);
   const [tipSettings, setTipSettings] = useState({
     enable_tips: '1',
     min_tip_amount: '10',
@@ -76,6 +102,7 @@ const RideComplete = () => {
   const rideId = state.rideId || '';
   const fare = Number(state.fare || 22);
   const paymentMethod = state.paymentMethod || 'Cash';
+  const paymentMethodLabel = PAYMENT_OPTIONS.find((option) => option.id === selectedPaymentMethod)?.label || paymentMethod;
   const pickup = state.pickup || 'Pickup';
   const drop = state.drop || 'Drop';
   const serviceType = String(state.serviceType || state.type || 'ride').toLowerCase();
@@ -96,6 +123,8 @@ const RideComplete = () => {
     vehicleIconUrl: driver.vehicleIconUrl || state.vehicleIconUrl || state.vehicle?.vehicleIconUrl || state.vehicle?.icon || '',
   });
   const totalBill = fare + Number(selectedTip || 0);
+  const fareDueNow = isCollectionPaid(paymentCollection) ? 0 : fare;
+  const payableNow = fareDueNow + Number(selectedTip || 0);
   const tipsEnabled = String(tipSettings.enable_tips || '1') === '1';
   const minimumTipAmount = Number(tipSettings.min_tip_amount || 0);
   const availableTipOptions = useMemo(() => {
@@ -110,8 +139,6 @@ const RideComplete = () => {
   }, [minimumTipAmount, tipsEnabled]);
   const rideDate = new Date(state.completedAt || Date.now()).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   const rideTime = new Date(state.completedAt || Date.now()).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-  const tipOnlyTotal = Number(selectedTip || 0);
-
   useEffect(() => {
     // We keep the ride state for the review screen to allow refreshes
   }, []);
@@ -144,6 +171,10 @@ const RideComplete = () => {
         const payload = response?.data?.data || response?.data || response || {};
         const feedback = payload?.feedback || null;
 
+        if (active) {
+          setPaymentCollection(payload?.driverPaymentCollection || null);
+        }
+
         if (!active || !feedback) {
           return;
         }
@@ -167,6 +198,50 @@ const RideComplete = () => {
   useEffect(() => {
     setVehicleImageBroken(false);
   }, [driver.vehicleImage]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadWalletSnapshot = async () => {
+      if (selectedPaymentMethod !== 'wallet') {
+        return;
+      }
+
+      try {
+        setWalletLoading(true);
+        const response = await userAuthService.getWallet();
+        const wallet = response?.data?.wallet || response?.wallet || response?.data || response || {};
+
+        if (!active) {
+          return;
+        }
+
+        setWalletSnapshot({
+          balance: Number(wallet.balance || 0),
+          currency: wallet.currency || 'INR',
+        });
+      } catch (walletError) {
+        if (!active) {
+          return;
+        }
+
+        setWalletSnapshot((current) => ({
+          ...current,
+          balance: Number(current.balance || 0),
+        }));
+      } finally {
+        if (active) {
+          setWalletLoading(false);
+        }
+      }
+    };
+
+    loadWalletSnapshot();
+
+    return () => {
+      active = false;
+    };
+  }, [selectedPaymentMethod]);
 
   useEffect(() => {
     if (!tipsEnabled && selectedTip !== 0) {
@@ -230,25 +305,32 @@ const RideComplete = () => {
       return;
     }
 
+    if (selectedPaymentMethod === 'wallet' && Number(payableNow || 0) > Number(walletSnapshot.balance || 0)) {
+      setError('Wallet balance is too low for this payment amount.');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setError('');
 
       let response;
 
-      if (Number(selectedTip || 0) > 0) {
+      if (Number(payableNow || 0) > 0 && selectedPaymentMethod === 'online') {
         const scriptLoaded = await loadRazorpayScript();
         if (!scriptLoaded) {
           throw new Error('Razorpay SDK failed to load');
         }
 
-        const orderResponse = await api.post(`/rides/${rideId}/tip/razorpay/order`, {
+        const orderResponse = await api.post(`/rides/${rideId}/complete-payment/razorpay/order`, {
+          rating,
+          comment,
           tipAmount: selectedTip || 0,
         });
         const order = orderResponse?.data || orderResponse || {};
 
         if (!order.keyId || !order.orderId) {
-          throw new Error('Unable to start tip payment');
+          throw new Error('Unable to start ride payment');
         }
 
         let userInfo = {};
@@ -264,7 +346,7 @@ const RideComplete = () => {
             amount: order.amount,
             currency: order.currency || 'INR',
             name: appName,
-            description: `Tip for ${driver.name || 'driver'}`,
+            description: `Ride payment for ${driver.name || 'driver'}`,
             order_id: order.orderId,
             prefill: {
               name: userInfo?.name || '',
@@ -272,11 +354,11 @@ const RideComplete = () => {
               contact: userInfo?.phone ? `+91${userInfo.phone}` : '',
             },
             modal: {
-              ondismiss: () => reject(new Error('Tip payment was cancelled')),
+              ondismiss: () => reject(new Error('Ride payment was cancelled')),
             },
             handler: async (paymentResponse) => {
               try {
-                const verifyResponse = await api.post(`/rides/${rideId}/tip/razorpay/verify`, {
+                const verifyResponse = await api.post(`/rides/${rideId}/complete-payment/razorpay/verify`, {
                   ...paymentResponse,
                   rating,
                   comment,
@@ -284,7 +366,7 @@ const RideComplete = () => {
                 });
                 resolve(verifyResponse);
               } catch (verifyError) {
-                reject(new Error(verifyError?.message || 'Tip payment verification failed'));
+                reject(new Error(verifyError?.message || 'Ride payment verification failed'));
               }
             },
             theme: {
@@ -293,10 +375,16 @@ const RideComplete = () => {
           });
 
           rzp.on('payment.failed', (event) => {
-            reject(new Error(event?.error?.description || event?.error?.reason || 'Tip payment failed'));
+            reject(new Error(event?.error?.description || event?.error?.reason || 'Ride payment failed'));
           });
 
           rzp.open();
+        });
+      } else if (Number(payableNow || 0) > 0 && selectedPaymentMethod === 'wallet') {
+        response = await api.post(`/rides/${rideId}/complete-payment/wallet`, {
+          rating,
+          comment,
+          tipAmount: selectedTip || 0,
         });
       } else {
         response = await api.patch(`/rides/${rideId}/feedback`, {
@@ -311,6 +399,9 @@ const RideComplete = () => {
         setRating(Number(payload.feedback.rating || rating));
         setComment(payload.feedback.comment || comment);
         setSelectedTip(Number(payload.feedback.tipAmount || 0));
+      }
+      if (payload?.driverPaymentCollection) {
+        setPaymentCollection(payload.driverPaymentCollection);
       }
       setIsSubmitted(true);
       setShowSubmittedOverlay(true);
@@ -463,7 +554,7 @@ const RideComplete = () => {
               </div>
               <div className="mt-2 text-right">
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600">
-                  {paymentMethod}
+                  {paymentMethodLabel}
                 </span>
               </div>
             </div>
@@ -471,6 +562,132 @@ const RideComplete = () => {
         </div>
 
         <div className="rounded-[20px] border border-white/80 bg-white/95 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
+          {!isSubmitted ? (
+            <div className="mb-5">
+              <p className="text-center text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                Choose payment method
+              </p>
+              <div className="mt-3 grid gap-2">
+                {PAYMENT_OPTIONS.map(({ id, label, sub, Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedPaymentMethod(id);
+                      setError('');
+                    }}
+                    className={`flex items-center gap-3 rounded-[18px] border px-3 py-3 text-left transition-all ${
+                      selectedPaymentMethod === id
+                        ? 'border-orange-200 bg-orange-50/80'
+                        : 'border-slate-100 bg-slate-50/70'
+                    }`}
+                  >
+                    <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${
+                      selectedPaymentMethod === id ? 'bg-white text-orange-500' : 'bg-white text-slate-500'
+                    }`}>
+                      <Icon size={18} strokeWidth={2.5} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-black text-slate-900">{label}</p>
+                      <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{sub}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 rounded-[18px] border border-slate-100 bg-slate-50/80 p-3">
+                {selectedPaymentMethod === 'online' ? (
+                  <>
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Choose online method</p>
+                    <div className="mt-2 grid grid-cols-1 gap-2">
+                      {ONLINE_PAYMENT_OPTIONS.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => setSelectedOnlineMethod(option.id)}
+                          className={`rounded-[14px] border px-3 py-2 text-left transition-all ${
+                            selectedOnlineMethod === option.id
+                              ? 'border-orange-200 bg-orange-50'
+                              : 'border-slate-100 bg-white'
+                          }`}
+                        >
+                          <p className="text-[12px] font-black text-slate-900">{option.label}</p>
+                          <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{option.sub}</p>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-3 rounded-[14px] border border-orange-100 bg-white px-3 py-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
+                        <span>Ride fare</span>
+                        <span className="text-slate-900">Rs {fare.toFixed(2)}</span>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between text-[11px] font-bold text-slate-500">
+                        <span>Tip</span>
+                        <span className="text-slate-900">Rs {Number(selectedTip || 0).toFixed(2)}</span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2">
+                        <span className="text-[12px] font-black text-slate-900">Trip total</span>
+                        <span className="text-[14px] font-black text-slate-900">Rs {totalBill.toFixed(2)}</span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2">
+                        <span className="text-[12px] font-black text-slate-900">Pay now</span>
+                        <span className="text-[14px] font-black text-orange-600">Rs {Number(payableNow || 0).toFixed(2)}</span>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-[11px] font-bold text-slate-500">
+                      You&apos;ll continue in Razorpay checkout with {ONLINE_PAYMENT_OPTIONS.find((option) => option.id === selectedOnlineMethod)?.label || 'your selected method'} to pay the current due amount on this screen.
+                    </p>
+                  </>
+                ) : null}
+
+                {selectedPaymentMethod === 'wallet' ? (
+                  <>
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Wallet balance</p>
+                        <p className="mt-1 text-[16px] font-black text-slate-900">
+                          {walletLoading ? 'Loading...' : `Rs ${Number(walletSnapshot.balance || 0).toFixed(2)}`}
+                        </p>
+                      </div>
+                      <div className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                        {walletSnapshot.currency || 'INR'}
+                      </div>
+                    </div>
+                    <div className="mt-3 rounded-[14px] border border-emerald-100 bg-white px-3 py-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
+                        <span>Ride fare</span>
+                        <span className="text-slate-900">Rs {fare.toFixed(2)}</span>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between text-[11px] font-bold text-slate-500">
+                        <span>Tip</span>
+                        <span className="text-slate-900">Rs {Number(selectedTip || 0).toFixed(2)}</span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2">
+                        <span className="text-[12px] font-black text-slate-900">Trip total</span>
+                        <span className="text-[14px] font-black text-slate-900">Rs {totalBill.toFixed(2)}</span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2">
+                        <span className="text-[12px] font-black text-slate-900">Pay now</span>
+                        <span className="text-[14px] font-black text-emerald-600">Rs {Number(payableNow || 0).toFixed(2)}</span>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-[11px] font-bold text-slate-500">
+                      Wallet payment on this screen will cover the current due amount, including fare if it has not been collected yet.
+                    </p>
+                    {Number(payableNow || 0) > Number(walletSnapshot.balance || 0) ? (
+                      <p className="mt-2 text-[11px] font-black text-red-500">Not enough wallet balance for the current due amount.</p>
+                    ) : null}
+                  </>
+                ) : null}
+
+                {selectedPaymentMethod === 'cash' ? (
+                  <p className="text-[11px] font-bold text-slate-500">
+                    Cash payment on this screen is treated as an offline handoff to the driver.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
           {isSubmitted ? (
             <div className="text-center">
               <p className="text-center text-[10px] font-black uppercase tracking-[0.22em] text-emerald-500">
@@ -556,14 +773,30 @@ const RideComplete = () => {
           <button
             type="button"
             onClick={submitFeedback}
-            disabled={isSubmitting || isSubmitted}
+            disabled={isSubmitting || isSubmitted || (selectedPaymentMethod === 'wallet' && Number(payableNow || 0) > Number(walletSnapshot.balance || 0))}
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-[16px] bg-slate-900 py-3.5 text-[14px] font-black text-white shadow-[0_12px_24px_rgba(15,23,42,0.18)] disabled:opacity-60"
           >
             {isSubmitting
-              ? (tipOnlyTotal > 0 ? `Opening Razorpay for Rs ${tipOnlyTotal.toFixed(2)}...` : 'Saving your feedback...')
+              ? (
+                payableNow > 0
+                  ? selectedPaymentMethod === 'online'
+                    ? `Opening online payment for Rs ${payableNow.toFixed(2)}...`
+                    : selectedPaymentMethod === 'wallet'
+                      ? `Paying Rs ${payableNow.toFixed(2)} from wallet...`
+                      : `Saving cash payment of Rs ${payableNow.toFixed(2)}...`
+                  : 'Saving your feedback...'
+              )
               : isSubmitted
                 ? 'Feedback already saved'
-                : (tipOnlyTotal > 0 ? `Pay tip of Rs ${tipOnlyTotal.toFixed(2)} & submit` : 'Submit rating')}
+                : (
+                  payableNow > 0
+                    ? selectedPaymentMethod === 'wallet'
+                      ? `Pay Rs ${payableNow.toFixed(2)} from wallet`
+                      : selectedPaymentMethod === 'online'
+                        ? `Pay Rs ${payableNow.toFixed(2)} online`
+                        : `Confirm cash payment of Rs ${payableNow.toFixed(2)}`
+                    : 'Submit rating'
+                )}
             <ChevronRight size={16} />
           </button>
 
