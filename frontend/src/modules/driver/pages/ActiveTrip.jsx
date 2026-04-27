@@ -118,6 +118,7 @@ const getJobRideId = (job = {}) => String(job.rideId || job.id || job._id || job
 
 const getActiveTripPhaseKey = (id) => (id ? `driverActiveTripPhase:${id}` : '');
 const getActiveTripUiStateKey = (id) => (id ? `driverActiveTripUiState:${id}` : '');
+const ACTIVE_TRIP_SESSION_KEY = 'driverActiveTripSnapshot';
 
 const readStoredTripPhase = (id) => {
     const key = getActiveTripPhaseKey(id);
@@ -186,6 +187,31 @@ const clearStoredTripUiState = (id) => {
     }
 };
 
+const readStoredActiveTripSnapshot = () => {
+    try {
+        const raw = localStorage.getItem(ACTIVE_TRIP_SESSION_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+};
+
+const writeStoredActiveTripSnapshot = (snapshot) => {
+    try {
+        localStorage.setItem(ACTIVE_TRIP_SESSION_KEY, JSON.stringify(snapshot));
+    } catch {
+        // Ignore storage failures.
+    }
+};
+
+const clearStoredActiveTripSnapshot = () => {
+    try {
+        localStorage.removeItem(ACTIVE_TRIP_SESSION_KEY);
+    } catch {
+        // No-op.
+    }
+};
+
 const readStoredDriverCoords = () => {
     try {
         const stored = JSON.parse(localStorage.getItem('driverInfo') || '{}');
@@ -206,11 +232,16 @@ const readStoredDriverCoords = () => {
 
 const resolvePhaseFromJob = (job = {}) => {
     const rideId = getJobRideId(job);
+    const explicitPhase = String(job.phase || '').toLowerCase();
     const storedPhase = readStoredTripPhase(rideId);
     const liveStatus = String(job.liveStatus || job.status || '').toLowerCase();
 
     if (liveStatus === 'cancelled' || liveStatus === 'canceled') {
         return 'cancelled';
+    }
+
+    if (['to_pickup', 'otp_verification', 'in_trip', 'payment_confirm', 'review'].includes(explicitPhase)) {
+        return explicitPhase;
     }
 
     if (['to_pickup', 'otp_verification', 'in_trip', 'payment_confirm', 'review'].includes(storedPhase)) {
@@ -365,11 +396,47 @@ const formatTimerClock = (totalSeconds) => {
 
 const formatWholeMinutes = (value) => `${Math.max(0, Math.floor(Number(value) || 0))} min`;
 
+const buildPersistedTripState = (job = {}, overrides = {}) => {
+    const mergedJob = {
+        ...job,
+        ...overrides,
+    };
+    const currentRideId = getJobRideId(mergedJob);
+    const currentType = normalizeTripType(mergedJob);
+
+    if (!currentRideId) {
+        return null;
+    }
+
+    return {
+        type: currentType,
+        rideId: currentRideId,
+        phase: mergedJob.phase || '',
+        otp: mergedJob.otp || '',
+        arrivedAt: mergedJob.arrivedAt || '',
+        paymentMethod: mergedJob.paymentMethod || 'Cash',
+        pricingSnapshot: mergedJob.pricingSnapshot || null,
+        currentDriverCoords: mergedJob.lastDriverLocation?.coordinates || mergedJob.driverLocation?.coordinates || null,
+        request: {
+            type: currentType,
+            title: getTripTitle(currentType),
+            fare: `Rs ${mergedJob.fare || 0}`,
+            payment: mergedJob.paymentMethod || 'Cash',
+            pickup: getAreaName(mergedJob.pickupAddress, formatAddressFromPoint(mergedJob.pickupLocation, 'Pickup area')),
+            drop: getAreaName(mergedJob.dropAddress, formatAddressFromPoint(mergedJob.dropLocation, 'Drop area')),
+            requestId: currentRideId,
+            rideId: currentRideId,
+            raw: mergedJob,
+        },
+    };
+};
+
 const ActiveTrip = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const routeState = useMemo(() => location.state || {}, [location.state]);
-    const [hydratedTripState, setHydratedTripState] = useState(null);
+    const storedActiveTripSnapshot = useMemo(() => readStoredActiveTripSnapshot(), []);
+    const [hydratedTripState, setHydratedTripState] = useState(() => storedActiveTripSnapshot);
     const routeRideId = routeState?.rideId || routeState?.request?.rideId || '';
     const routeOtp = routeState?.request?.raw?.otp || routeState?.request?.otp || routeState?.otp || '';
     const [isHydratingTrip, setIsHydratingTrip] = useState(!routeRideId || !routeOtp);
@@ -378,6 +445,7 @@ const ActiveTrip = () => {
             clearStoredTripPhase(routeRideId);
             clearStoredTripUiState(routeRideId);
         }
+        clearStoredActiveTripSnapshot();
 
         navigate('/taxi/driver/home', {
             replace: true,
@@ -423,29 +491,23 @@ const ActiveTrip = () => {
                     return;
                 }
 
-                const currentType = normalizeTripType(currentJob);
                 const restoredPhase = resolvePhaseFromJob(currentJob);
-
-                setHydratedTripState({
-                    type: currentType,
-                    rideId: currentRideId,
-                    request: {
-                        type: currentType,
-                        title: getTripTitle(currentType),
-                        fare: `Rs ${currentJob.fare || 0}`,
-                        payment: currentJob.paymentMethod || 'Cash',
-                        pickup: getAreaName(currentJob.pickupAddress, formatAddressFromPoint(currentJob.pickupLocation, 'Pickup area')),
-                        drop: getAreaName(currentJob.dropAddress, formatAddressFromPoint(currentJob.dropLocation, 'Drop area')),
-                        requestId: currentRideId,
-                        rideId: currentRideId,
-                        raw: currentJob,
-                    },
-                    currentDriverCoords: currentJob.lastDriverLocation?.coordinates || null,
+                const nextPersistedState = buildPersistedTripState(currentJob, {
+                    phase: restoredPhase,
                 });
+
+                setHydratedTripState(nextPersistedState);
+                writeStoredActiveTripSnapshot(nextPersistedState);
                 setPhase(restoredPhase);
             } catch {
                 if (active) {
-                    exitToDriverHome('Could not restore active trip.');
+                    const fallbackSnapshot = readStoredActiveTripSnapshot();
+                    if (fallbackSnapshot?.rideId) {
+                        setHydratedTripState(fallbackSnapshot);
+                        setPhase(resolvePhaseFromJob(fallbackSnapshot?.request?.raw || fallbackSnapshot));
+                    } else {
+                        exitToDriverHome('Could not restore active trip.');
+                    }
                 }
             } finally {
                 if (active) {
@@ -490,7 +552,16 @@ const ActiveTrip = () => {
         [assignedDriverCoords, pickupPosition],
     );
 
-    const [phase, setPhase] = useState('to_pickup');
+    const [phase, setPhase] = useState(() => {
+        const initialState = storedActiveTripSnapshot || routeState;
+        const initialJob = initialState?.request?.raw || initialState?.request || initialState || {};
+
+        return resolvePhaseFromJob({
+            ...initialJob,
+            rideId: routeRideId || getJobRideId(initialState?.request || initialState),
+            phase: initialState?.phase || initialJob?.phase || '',
+        });
+    });
     const [otp, setOtp] = useState(['', '', '', '']);
     const [otpError, setOtpError] = useState('');
     const [selectedRating, setSelectedRating] = useState(0);
@@ -672,6 +743,38 @@ const ActiveTrip = () => {
     }, [driverPaymentStatus, localArrivedAt, paymentQr, paymentQrError, rideId, selectedPaymentMode, selectedRating]);
 
     useEffect(() => {
+        if (!rideId || !effectiveState) {
+            return;
+        }
+
+        const rawJob = liveRaw?.rideId || liveRaw?._id || liveRaw?.id
+            ? liveRaw
+            : liveRequest?.rideId || liveRequest?._id || liveRequest?.id
+                ? liveRequest?.raw || liveRequest
+                : effectiveState?.request?.raw || effectiveState;
+
+        const derivedLiveStatus =
+            phase === 'otp_verification'
+                ? 'arriving'
+                : phase === 'in_trip' || phase === 'payment_confirm' || phase === 'review'
+                    ? 'started'
+                    : rawJob?.liveStatus || rawJob?.status || 'accepted';
+        const derivedStatus =
+            phase === 'in_trip' || phase === 'payment_confirm' || phase === 'review'
+                ? 'ongoing'
+                : rawJob?.status || derivedLiveStatus;
+        const nextPersistedState = buildPersistedTripState(rawJob, {
+            phase,
+            liveStatus: derivedLiveStatus,
+            status: derivedStatus,
+            arrivedAt: phase === 'otp_verification' ? (localArrivedAt || rawJob?.arrivedAt || '') : '',
+        });
+        if (nextPersistedState) {
+            writeStoredActiveTripSnapshot(nextPersistedState);
+        }
+    }, [effectiveState, liveRaw, liveRequest, localArrivedAt, phase, rideId]);
+
+    useEffect(() => {
         if (!rideId || hydratedTripState) {
             return;
         }
@@ -815,6 +918,31 @@ const ActiveTrip = () => {
             status: nextStatus,
             paymentMethod: paymentMode || undefined,
         });
+    };
+
+    const completeRideAndExit = async () => {
+        const paymentMode = selectedPaymentMode || effectiveState?.paymentMethod || liveRequest?.payment || '';
+
+        try {
+            if (rideId) {
+                const driverToken = getLocalDriverToken();
+                await api.patch(
+                    `/rides/${rideId}/status`,
+                    {
+                        status: 'completed',
+                        paymentMethod: paymentMode || undefined,
+                    },
+                    withDriverAuthorization(driverToken),
+                );
+            }
+        } catch {
+            // Keep going with the socket publish so the trip can still complete in transient API failure cases.
+        }
+
+        publishRideStatus('completed', paymentMode);
+        clearStoredTripPhase(rideId);
+        clearStoredTripUiState(rideId);
+        navigate('/taxi/driver/home');
     };
 
     useEffect(() => {
@@ -983,7 +1111,7 @@ const ActiveTrip = () => {
         return () => window.clearInterval(intervalId);
     }, [driverPaymentStatus, paymentQr?.id, rideId]);
 
-    const startTripAfterOtp = (enteredOtp) => {
+    const startTripAfterOtp = async (enteredOtp) => {
         if (String(enteredOtp).length !== 4) {
             setOtpError('Enter the full 4 digit PIN.');
             return;
@@ -997,6 +1125,38 @@ const ActiveTrip = () => {
         setOtpError('');
         setLocalArrivedAt('');
         setPhase('in_trip');
+        const startedAtIso = new Date().toISOString();
+        const rawJobForSnapshot = liveRaw?.rideId || liveRaw?._id || liveRaw?.id
+            ? liveRaw
+            : liveRequest?.rideId || liveRequest?._id || liveRequest?.id
+                ? liveRequest?.raw || liveRequest
+                : effectiveState?.request?.raw || effectiveState;
+        const optimisticSnapshot = buildPersistedTripState(rawJobForSnapshot, {
+            phase: 'in_trip',
+            liveStatus: 'started',
+            status: 'ongoing',
+            startedAt: startedAtIso,
+            arrivedAt: '',
+        });
+
+        if (optimisticSnapshot) {
+            writeStoredActiveTripSnapshot(optimisticSnapshot);
+            setHydratedTripState(optimisticSnapshot);
+        }
+
+        try {
+            if (rideId) {
+                const driverToken = getLocalDriverToken();
+                await api.patch(
+                    `/rides/${rideId}/status`,
+                    { status: 'started' },
+                    withDriverAuthorization(driverToken),
+                );
+            }
+        } catch {
+            // Keep the optimistic local state; socket/live hydration will reconcile when available.
+        }
+
         publishRideStatus('started');
     };
 
@@ -1768,12 +1928,7 @@ const ActiveTrip = () => {
                                     ))}
                                 </div>
                             </div>
-                            <button onClick={() => {
-                                publishRideStatus('completed', selectedPaymentMode || effectiveState?.paymentMethod || liveRequest?.payment || '');
-                                clearStoredTripPhase(rideId);
-                                clearStoredTripUiState(rideId);
-                                navigate('/taxi/driver/home');
-                            }} className="w-full h-15 text-white rounded-xl flex items-center justify-center gap-3 text-[14px] font-semibold uppercase tracking-wide shadow-xl active:scale-95 transition-all" style={{ backgroundColor: routeStrokeColor, boxShadow: `0 18px 30px ${routeAccentMuted}` }}>Done <Check size={20} strokeWidth={4} /></button>
+                            <button onClick={completeRideAndExit} className="w-full h-15 text-white rounded-xl flex items-center justify-center gap-3 text-[14px] font-semibold uppercase tracking-wide shadow-xl active:scale-95 transition-all" style={{ backgroundColor: routeStrokeColor, boxShadow: `0 18px 30px ${routeAccentMuted}` }}>Done <Check size={20} strokeWidth={4} /></button>
                         </motion.div>
                     )}
                 </AnimatePresence>
