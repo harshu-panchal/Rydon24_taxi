@@ -717,6 +717,65 @@ const resolveOwnerForFleet = async (requester = {}) => {
   return isOwnerApproved(owner) ? owner : null;
 };
 
+const resolveAuthenticatedOwner = async (req) => {
+  if (String(req.auth?.role || "").toLowerCase() === "owner") {
+    const owner = await Owner.findById(req.auth?.sub)
+      .select("name company_name owner_name mobile phone email city transport_type service_location_id active approve status wallet")
+      .lean();
+    return isOwnerApproved(owner) ? owner : null;
+  }
+
+  const requester = await Driver.findById(req.auth?.sub)
+    .select("onboarding phone email service_location_id")
+    .lean();
+
+  if (!requester) {
+    return null;
+  }
+
+  return resolveOwnerForFleet(requester);
+};
+
+const serializeOwnerProfile = (owner = {}) => ({
+  id: owner._id,
+  name: owner.owner_name || owner.name || owner.company_name || "Owner",
+  phone: owner.mobile || owner.phone || "",
+  email: owner.email || "",
+  profileImage: "",
+  gender: "",
+  vehicleType: owner.transport_type || "taxi",
+  vehicleTypeId: null,
+  vehicleIconType: owner.transport_type || "taxi",
+  vehicleIconUrl: "",
+  vehicleMake: owner.company_name || "",
+  vehicleModel: "",
+  registerFor: owner.transport_type || "taxi",
+  vehicleNumber: "",
+  vehicleColor: "",
+  vehicleImage: "",
+  city: owner.city || "",
+  approve: owner.approve,
+  status: owner.status || "approved",
+  rating: 0,
+  wallet: {
+    balance: Number(owner.wallet?.balance || 0),
+    currency: "INR",
+  },
+  referralCode: "",
+  deletionRequest: { status: "none" },
+  isOnline: false,
+  isOnRide: false,
+  onlineSelfie: {},
+  location: null,
+  zoneId: null,
+  documents: {},
+  emergencyContacts: [],
+  onboarding: {
+    role: "owner",
+    convertedOwnerId: String(owner._id || ""),
+  },
+});
+
 const serializeDriverNotification = (item = {}) => ({
   id: String(item._id || ""),
   title: String(item.push_title || "").trim(),
@@ -892,6 +951,20 @@ export const goOnline = async (req, res) => {
 };
 
 export const getCurrentDriver = async (req, res) => {
+  if (String(req.auth?.role || "").toLowerCase() === "owner") {
+    const owner = await Owner.findById(req.auth.sub);
+
+    if (!owner) {
+      throw new ApiError(404, "Owner not found");
+    }
+
+    res.json({
+      success: true,
+      data: serializeOwnerProfile(owner.toObject()),
+    });
+    return;
+  }
+
   const driver = await Driver.findById(req.auth.sub);
 
   if (!driver) {
@@ -1125,6 +1198,10 @@ export const deleteDriverEmergencyContact = async (req, res) => {
 };
 
 export const updateCurrentDriver = async (req, res) => {
+  if (String(req.auth?.role || "").toLowerCase() === "owner") {
+    throw new ApiError(403, "Owner profile editing is not available from this screen");
+  }
+
   const driver = await Driver.findById(req.auth.sub);
 
   if (!driver) {
@@ -1319,6 +1396,28 @@ export const deleteCurrentDriverAccount = async (req, res) => {
 };
 
 export const getMyWallet = async (req, res) => {
+  if (String(req.auth?.role || "").toLowerCase() === "owner") {
+    const owner = await Owner.findById(req.auth.sub).lean();
+
+    if (!owner) {
+      throw new ApiError(404, "Owner not found");
+    }
+
+    res.json({
+      success: true,
+      data: {
+        wallet: {
+          balance: Number(owner.wallet?.balance || 0),
+          currency: "INR",
+        },
+        transactions: [],
+        withdrawalRequests: [],
+        settings: await getWalletSettings(),
+      },
+    });
+    return;
+  }
+
   const driver = await Driver.findById(req.auth.sub);
 
   if (!driver) {
@@ -1862,8 +1961,37 @@ export const getDriverApprovalStatus = async (req, res) => {
 
   const payload = verifyAccessToken(token);
 
-  if (payload.role !== "driver") {
+  if (!["driver", "owner"].includes(String(payload.role || "").toLowerCase())) {
     throw new ApiError(403, "Insufficient permissions for this resource");
+  }
+
+  if (String(payload.role || "").toLowerCase() === "owner") {
+    const owner = await Owner.findById(payload.sub);
+
+    if (!owner) {
+      throw new ApiError(404, "Owner not found");
+    }
+
+    res.setHeader(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate, proxy-revalidate",
+    );
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+
+    res.json({
+      success: true,
+      data: {
+        id: owner._id,
+        name: owner.owner_name || owner.name || owner.company_name || "",
+        phone: owner.mobile || owner.phone || "",
+        approve: owner.approve,
+        status: owner.status,
+        isOnline: false,
+        isOnRide: false,
+      },
+    });
+    return;
   }
 
   const driver = await Driver.findById(payload.sub);
@@ -1915,15 +2043,7 @@ export const getDriverDocumentTemplates = async (_req, res) => {
 };
 
 export const addOwnerVehicle = async (req, res) => {
-  const requester = await Driver.findById(req.auth.sub)
-    .select("onboarding phone email service_location_id")
-    .lean();
-
-  if (!requester) {
-    throw new ApiError(404, "Driver not found");
-  }
-
-  const owner = await resolveOwnerForFleet(requester);
+  const owner = await resolveAuthenticatedOwner(req);
 
   if (!owner?._id) {
     throw new ApiError(
@@ -2032,15 +2152,7 @@ export const addOwnerVehicle = async (req, res) => {
 };
 
 export const getOwnerFleetVehicles = async (req, res) => {
-  const requester = await Driver.findById(req.auth.sub)
-    .select("onboarding phone email")
-    .lean();
-
-  if (!requester) {
-    throw new ApiError(404, "Driver not found");
-  }
-
-  const owner = await resolveOwnerForFleet(requester);
+  const owner = await resolveAuthenticatedOwner(req);
 
   if (!owner?._id) {
     throw new ApiError(
@@ -2082,15 +2194,7 @@ export const getOwnerFleetVehicles = async (req, res) => {
 };
 
 export const deleteOwnerFleetVehicle = async (req, res) => {
-  const requester = await Driver.findById(req.auth.sub)
-    .select("onboarding phone email")
-    .lean();
-
-  if (!requester) {
-    throw new ApiError(404, "Driver not found");
-  }
-
-  const owner = await resolveOwnerForFleet(requester);
+  const owner = await resolveAuthenticatedOwner(req);
 
   if (!owner?._id) {
     throw new ApiError(
@@ -2118,15 +2222,7 @@ export const deleteOwnerFleetVehicle = async (req, res) => {
 };
 
 export const getOwnerFleetDrivers = async (req, res) => {
-  const requester = await Driver.findById(req.auth.sub)
-    .select("onboarding phone email")
-    .lean();
-
-  if (!requester) {
-    throw new ApiError(404, "Driver not found");
-  }
-
-  const owner = await resolveOwnerForFleet(requester);
+  const owner = await resolveAuthenticatedOwner(req);
 
   if (!owner?._id) {
     throw new ApiError(
@@ -2160,15 +2256,7 @@ export const getOwnerFleetDrivers = async (req, res) => {
 };
 
 export const createOwnerFleetDriver = async (req, res) => {
-  const requester = await Driver.findById(req.auth.sub)
-    .select("onboarding phone email")
-    .lean();
-
-  if (!requester) {
-    throw new ApiError(404, "Driver not found");
-  }
-
-  const owner = await resolveOwnerForFleet(requester);
+  const owner = await resolveAuthenticatedOwner(req);
 
   if (!owner?._id) {
     throw new ApiError(

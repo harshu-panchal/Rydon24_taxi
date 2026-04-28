@@ -58,12 +58,12 @@ driverRouter.post(
 );
 driverRouter.get(
   "/me",
-  authenticate(["driver"]),
+  authenticate(["driver", "owner"]),
   asyncHandler(getCurrentDriver),
 );
 driverRouter.patch(
   "/me",
-  authenticate(["driver"]),
+  authenticate(["driver", "owner"]),
   asyncHandler(updateCurrentDriver),
 );
 driverRouter.delete(
@@ -160,27 +160,27 @@ driverRouter.patch(
 driverRouter.get("/approval-status", asyncHandler(getDriverApprovalStatus));
 driverRouter.get(
   "/fleet/drivers",
-  authenticate(["driver"]),
+  authenticate(["driver", "owner"]),
   asyncHandler(getOwnerFleetDrivers),
 );
 driverRouter.post(
   "/fleet/drivers",
-  authenticate(["driver"]),
+  authenticate(["driver", "owner"]),
   asyncHandler(createOwnerFleetDriver),
 );
 driverRouter.get(
   "/fleet/vehicles",
-  authenticate(["driver"]),
+  authenticate(["driver", "owner"]),
   asyncHandler(getOwnerFleetVehicles),
 );
 driverRouter.post(
   "/fleet/vehicles",
-  authenticate(["driver"]),
+  authenticate(["driver", "owner"]),
   asyncHandler(addOwnerVehicle),
 );
 driverRouter.delete(
   "/fleet/vehicles/:vehicleId",
-  authenticate(["driver"]),
+  authenticate(["driver", "owner"]),
   asyncHandler(deleteOwnerFleetVehicle),
 );
 driverRouter.get("/service-locations", asyncHandler(getServiceLocations));

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { env } from '../../../../config/env.js';
+import { Owner } from '../../admin/models/Owner.js';
 import { Driver } from '../models/Driver.js';
 import { DriverLoginSession } from '../models/DriverLoginSession.js';
 import { signAccessToken } from './authService.js';
@@ -14,6 +15,8 @@ const normalizePhone = (phone) => {
 };
 
 const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000));
+const normalizeRole = (role) =>
+  String(role || 'driver').toLowerCase() === 'owner' ? 'owner' : 'driver';
 
 const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
 const getVisibleOtp = (otp) => (process.env.NODE_ENV !== 'production' ? String(otp) : null);
@@ -79,21 +82,51 @@ const publicDriverPayload = (driver) => ({
   isOnRide: driver.isOnRide,
 });
 
-export const startDriverLoginOtp = async ({ phone }) => {
+const publicOwnerPayload = (owner) => ({
+  id: owner._id,
+  name: owner.name || owner.company_name || '',
+  company_name: owner.company_name || '',
+  phone: owner.mobile || owner.phone || '',
+  email: owner.email || '',
+  city: owner.city || '',
+  approve: owner.approve,
+  status: owner.status,
+});
+
+const isApprovedDriver = (driver) =>
+  Boolean(driver) &&
+  driver.approve !== false &&
+  String(driver.status || '').toLowerCase() !== 'pending';
+
+const isApprovedOwner = (owner) =>
+  Boolean(owner) &&
+  owner.active !== false &&
+  (owner.approve === true || String(owner.status || '').toLowerCase() === 'approved');
+
+export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
   const normalizedPhone = normalizePhone(phone);
+  const normalizedRole = normalizeRole(role);
 
   if (!normalizedPhone || normalizedPhone.length !== 10) {
     throw new ApiError(400, 'A valid 10-digit mobile number is required');
   }
 
-  const driver = await Driver.findOne({ phone: normalizedPhone });
+  const account =
+    normalizedRole === 'owner'
+      ? await Owner.findOne({
+          $or: [{ mobile: normalizedPhone }, { phone: normalizedPhone }],
+        })
+      : await Driver.findOne({ phone: normalizedPhone });
 
-  if (!driver) {
-    throw new ApiError(404, 'Driver account not found');
+  if (!account) {
+    throw new ApiError(404, `${normalizedRole === 'owner' ? 'Owner' : 'Driver'} account not found`);
   }
 
-  if (driver.approve === false || String(driver.status || '').toLowerCase() === 'pending') {
-    throw new ApiError(403, 'Driver account is pending approval');
+  if (
+    (normalizedRole === 'owner' && !isApprovedOwner(account)) ||
+    (normalizedRole === 'driver' && !isApprovedDriver(account))
+  ) {
+    throw new ApiError(403, `${normalizedRole === 'owner' ? 'Owner' : 'Driver'} account is pending approval`);
   }
 
   const { otp, isStatic } = resolveDriverLoginOtpForPhone(normalizedPhone);
@@ -103,7 +136,8 @@ export const startDriverLoginOtp = async ({ phone }) => {
     { phone: normalizedPhone },
     {
       phone: normalizedPhone,
-      driverId: driver._id,
+      driverId: account._id,
+      accountRole: normalizedRole,
       otpHash: hashOtp(otp),
       otpExpiresAt: new Date(now + LOGIN_OTP_TTL_MS),
       verifiedAt: null,
@@ -136,6 +170,7 @@ export const startDriverLoginOtp = async ({ phone }) => {
 
 export const verifyDriverLoginOtp = async ({ phone, otp }) => {
   const session = await getSession(phone);
+  const normalizedRole = normalizeRole(session.accountRole);
 
   if (!otp || String(otp).trim().length !== 4) {
     throw new ApiError(400, 'A valid 4-digit OTP is required');
@@ -149,14 +184,20 @@ export const verifyDriverLoginOtp = async ({ phone, otp }) => {
     throw new ApiError(401, 'Invalid OTP');
   }
 
-  const driver = await Driver.findById(session.driverId);
+  const account =
+    normalizedRole === 'owner'
+      ? await Owner.findById(session.driverId)
+      : await Driver.findById(session.driverId);
 
-  if (!driver) {
-    throw new ApiError(404, 'Driver account not found');
+  if (!account) {
+    throw new ApiError(404, `${normalizedRole === 'owner' ? 'Owner' : 'Driver'} account not found`);
   }
 
-  if (driver.approve === false || String(driver.status || '').toLowerCase() === 'pending') {
-    throw new ApiError(403, 'Driver account is pending approval');
+  if (
+    (normalizedRole === 'owner' && !isApprovedOwner(account)) ||
+    (normalizedRole === 'driver' && !isApprovedDriver(account))
+  ) {
+    throw new ApiError(403, `${normalizedRole === 'owner' ? 'Owner' : 'Driver'} account is pending approval`);
   }
 
   session.verifiedAt = new Date();
@@ -166,7 +207,7 @@ export const verifyDriverLoginOtp = async ({ phone, otp }) => {
 
   return {
     message: 'OTP verified successfully',
-    token: signAccessToken({ sub: String(driver._id), role: 'driver' }),
-    driver: publicDriverPayload(driver),
+    token: signAccessToken({ sub: String(account._id), role: normalizedRole }),
+    driver: normalizedRole === 'owner' ? publicOwnerPayload(account) : publicDriverPayload(account),
   };
 };

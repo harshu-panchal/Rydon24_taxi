@@ -3,6 +3,7 @@ import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { authenticateOrResolveUser } from '../../middlewares/authMiddleware.js';
 import {
   createBusBookingOrder,
+  createRentalQuoteRequest,
   createRazorpayWalletTopupOrder,
   getBusSeatLayout,
   getBusRouteSuggestions,
@@ -29,13 +30,15 @@ import {
   verifyUserOtpRequest,
   verifyUserPhoneForOtpLogin,
 } from '../controllers/userController.js';
-import { getAppModules, getGoodsTypes, getPublicVehicleTypeCatalog } from '../../admin/controllers/adminController.js';
+import { getAppModules, getGoodsTypes, getPublicRentalVehicleCatalog, getPublicVehicleTypeCatalog } from '../../admin/controllers/adminController.js';
 
 export const userRouter = Router();
 
 userRouter.get('/app-modules', asyncHandler(getAppModules));
 userRouter.get('/goods-types', asyncHandler(getGoodsTypes));
 userRouter.get('/vehicle-types', asyncHandler(getPublicVehicleTypeCatalog));
+userRouter.get('/rental-vehicles', asyncHandler(getPublicRentalVehicleCatalog));
+userRouter.post('/rental-quote-requests', asyncHandler(createRentalQuoteRequest));
 userRouter.post('/register', asyncHandler(registerUser));
 userRouter.post('/signup', asyncHandler(signupUser));
 userRouter.post('/login', asyncHandler(loginUser));

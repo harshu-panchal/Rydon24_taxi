@@ -63,7 +63,7 @@ const PhoneRegistration = () => {
         try {
             clearDriverRegistrationSession();
             const response = isLoginPage
-                ? await sendDriverLoginOtp({ phone })
+                ? await sendDriverLoginOtp({ phone, role })
                 : await sendDriverOtp({ phone, role });
             const sessionData = response?.data?.session || {};
             const nextState = saveDriverRegistrationSession({

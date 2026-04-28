@@ -456,6 +456,7 @@ const AdminLayout = () => {
               { label: 'App Modules', path: '/admin/pricing/app-modules' },
               { label: 'Vehicle Type', path: '/admin/pricing/vehicle-type' },
               { label: 'Rental Vehicles', path: '/admin/pricing/rental-vehicles' },
+              { label: 'Rental Quote Requests', path: '/admin/pricing/rental-quotes' },
               { label: 'Rental Package Types', path: '/admin/pricing/rental-packages' },
               { label: 'Set Price', path: '/admin/pricing/set-price' },
               { label: 'Goods Types', path: '/admin/pricing/goods-types' },
@@ -465,6 +466,11 @@ const AdminLayout = () => {
             icon: Bus,
             label: 'Bus Service',
             path: '/admin/bus-service',
+          },
+          {
+            icon: Share2,
+            label: 'Pooling',
+            path: '/admin/pooling',
           },
           {
             icon: MapPin,

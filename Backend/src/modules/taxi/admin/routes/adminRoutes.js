@@ -17,6 +17,7 @@ import {
   createPreference,
   createRole,
   createPaymentMethod,
+  createPoolingRoute,
   createServiceLocation,
   createServiceStore,
   createRentalVehicleType,
@@ -41,6 +42,7 @@ import {
   deletePreference,
   deleteRole,
   deletePaymentMethod,
+  deletePoolingRoute,
   deleteRentalVehicleType,
   deleteSetPrice,
   deleteServiceLocation,
@@ -102,6 +104,8 @@ import {
   getPaymentGateways,
   getPaymentMethods,
   getPaymentSettings,
+  getPoolingRoutes,
+  getRentalQuoteRequests,
   getPreferences,
   getRentalVehicleTypes,
   getRideModules,
@@ -166,6 +170,8 @@ import {
   updateFleetVehicle,
   updatePaymentSettings,
   updatePaymentMethod,
+  updatePoolingRoute,
+  updateRentalQuoteRequest,
   updatePreferenceStatus,
   updateReferralTranslation,
   updateRentalVehicleType,
@@ -279,6 +285,12 @@ adminRouter.get('/admin/types/rental-vehicles', getRentalVehicleTypes);
 adminRouter.post('/admin/types/rental-vehicles', createRentalVehicleType);
 adminRouter.patch('/admin/types/rental-vehicles/:id', updateRentalVehicleType);
 adminRouter.delete('/admin/types/rental-vehicles/:id', deleteRentalVehicleType);
+adminRouter.get('/admin/pooling-routes', getPoolingRoutes);
+adminRouter.post('/admin/pooling-routes', createPoolingRoute);
+adminRouter.patch('/admin/pooling-routes/:id', updatePoolingRoute);
+adminRouter.delete('/admin/pooling-routes/:id', deletePoolingRoute);
+adminRouter.get('/admin/rental-quote-requests', getRentalQuoteRequests);
+adminRouter.patch('/admin/rental-quote-requests/:id', updateRentalQuoteRequest);
 adminRouter.get('/admin/goods-types', getGoodsTypes);
 adminRouter.post('/admin/goods-types', createGoodsType);
 adminRouter.patch('/admin/goods-types/:id', updateGoodsType);

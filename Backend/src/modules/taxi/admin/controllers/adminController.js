@@ -466,6 +466,9 @@ export const getVehicleTypeCatalog = asyncHandler(async (_req, res) =>
 export const getPublicVehicleTypeCatalog = asyncHandler(async (_req, res) =>
   ok(res, await adminService.listPublicVehicleCatalog()),
 );
+export const getPublicRentalVehicleCatalog = asyncHandler(async (_req, res) =>
+  ok(res, { results: await adminService.listPublicRentalVehicleCatalog() }),
+);
 export const getVehiclePreferenceOptions = asyncHandler(async (_req, res) =>
   ok(res, await adminService.listVehiclePreferences()),
 );
@@ -626,6 +629,26 @@ export const deleteRentalVehicleType = asyncHandler(async (req, res) => {
   await adminService.deleteRentalVehicleType(req.params.id);
   ok(res, { deleted: true });
 });
+
+export const getPoolingRoutes = asyncHandler(async (_req, res) =>
+  ok(res, { results: await adminService.listPoolingRoutes() }),
+);
+export const createPoolingRoute = asyncHandler(async (req, res) =>
+  ok(res, await adminService.createPoolingRoute(req.body)),
+);
+export const updatePoolingRoute = asyncHandler(async (req, res) =>
+  ok(res, await adminService.updatePoolingRoute(req.params.id, req.body)),
+);
+export const deletePoolingRoute = asyncHandler(async (req, res) => {
+  await adminService.deletePoolingRoute(req.params.id);
+  ok(res, { deleted: true });
+});
+export const getRentalQuoteRequests = asyncHandler(async (_req, res) =>
+  ok(res, { results: await adminService.listRentalQuoteRequests() }),
+);
+export const updateRentalQuoteRequest = asyncHandler(async (req, res) =>
+  ok(res, await adminService.updateRentalQuoteRequest(req.params.id, req.body, req.auth?.sub)),
+);
 
 export const getGoodsTypes = asyncHandler(async (_req, res) =>
   res.json(await adminService.listGoodsTypes()),

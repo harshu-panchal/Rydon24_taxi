@@ -80,6 +80,7 @@ const OTPVerification = () => {
                 const response = await verifyDriverLoginOtp({
                     phone,
                     otp: otp.join(''),
+                    role,
                 });
                 const payload = unwrap(response);
 
@@ -128,10 +129,11 @@ const OTPVerification = () => {
         setError('');
         try {
             if (isLoginFlow) {
-                const response = await sendDriverLoginOtp({ phone });
+                const response = await sendDriverLoginOtp({ phone, role });
                 saveDriverRegistrationSession({
                     ...session,
                     phone,
+                    role,
                     loginMode: true,
                     debugOtp: response?.data?.session?.debugOtp || '',
                 });

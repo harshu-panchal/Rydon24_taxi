@@ -20,6 +20,8 @@ import {
 import { assignPushTokenToEntity } from '../../services/pushTokenService.js';
 import { BusSeatHold } from '../models/BusSeatHold.js';
 import { BusBooking } from '../models/BusBooking.js';
+import { RentalQuoteRequest } from '../../admin/models/RentalQuoteRequest.js';
+import { RentalVehicleType } from '../../admin/models/RentalVehicleType.js';
 import { applyDriverWalletAdjustment } from '../../driver/services/walletService.js';
 import { emitToDriver } from '../../services/dispatchService.js';
 import { sendPushNotificationToEntities } from '../../services/pushNotificationService.js';
@@ -310,6 +312,27 @@ const serializeBusBooking = (booking) => ({
     toCity: booking.routeSnapshot?.destinationCity || '',
   },
   createdAt: booking.createdAt || null,
+});
+
+const serializeRentalQuoteRequest = (item = {}) => ({
+  id: String(item._id || item.id || ''),
+  vehicleTypeId: item.vehicleTypeId ? String(item.vehicleTypeId) : '',
+  vehicleName: item.vehicleName || '',
+  contactName: item.contactName || '',
+  contactPhone: item.contactPhone || '',
+  contactEmail: item.contactEmail || '',
+  requestedHours: Number(item.requestedHours || 0),
+  pickupDateTime: item.pickupDateTime || null,
+  returnDateTime: item.returnDateTime || null,
+  seatsNeeded: Number(item.seatsNeeded || 1),
+  luggageNeeded: Number(item.luggageNeeded || 0),
+  pickupLocation: item.pickupLocation || '',
+  dropLocation: item.dropLocation || '',
+  specialRequirements: item.specialRequirements || '',
+  status: item.status || 'pending',
+  adminQuotedAmount: Number(item.adminQuotedAmount || 0),
+  adminNote: item.adminNote || '',
+  createdAt: item.createdAt || null,
 });
 
 const toPositiveInteger = (value, fallback) => {
@@ -1492,6 +1515,64 @@ export const verifyBusBookingPayment = async (req, res) => {
   res.status(201).json({
     success: true,
     data: serializeBusBooking(booking),
+  });
+};
+
+export const createRentalQuoteRequest = async (req, res) => {
+  const payload = req.body || {};
+  const vehicleTypeId = String(payload.vehicleTypeId || '').trim();
+  const contactName = toCleanString(payload.contactName);
+  const contactPhone = normalizePhone(payload.contactPhone);
+  const contactEmail = normalizeEmail(payload.contactEmail);
+  const specialRequirements = toCleanString(payload.specialRequirements);
+  const pickupLocation = toCleanString(payload.pickupLocation);
+  const dropLocation = toCleanString(payload.dropLocation);
+  const requestedHours = Math.max(0, Number(payload.requestedHours || 0));
+  const seatsNeeded = Math.max(1, Number(payload.seatsNeeded || 1));
+  const luggageNeeded = Math.max(0, Number(payload.luggageNeeded || 0));
+
+  if (!mongoose.Types.ObjectId.isValid(vehicleTypeId)) {
+    throw new ApiError(400, 'Valid rental vehicle is required');
+  }
+
+  if (!contactName || contactName.length < 2) {
+    throw new ApiError(400, 'Contact name is required');
+  }
+
+  validatePhone(contactPhone);
+  validateEmail(contactEmail);
+
+  const vehicle = await RentalVehicleType.findById(vehicleTypeId).lean();
+  if (!vehicle || vehicle.active === false || vehicle.status !== 'active') {
+    throw new ApiError(404, 'Rental vehicle not found');
+  }
+
+  const pickupDateTime = payload.pickupDateTime ? new Date(payload.pickupDateTime) : null;
+  const returnDateTime = payload.returnDateTime ? new Date(payload.returnDateTime) : null;
+
+  const request = await RentalQuoteRequest.create({
+    userId: req.auth?.sub && mongoose.Types.ObjectId.isValid(req.auth.sub) ? req.auth.sub : null,
+    vehicleTypeId,
+    vehicleName: vehicle.name || '',
+    vehicleCategory: vehicle.vehicleCategory || '',
+    contactName,
+    contactPhone,
+    contactEmail,
+    requestedHours,
+    pickupDateTime: pickupDateTime && !Number.isNaN(pickupDateTime.getTime()) ? pickupDateTime : null,
+    returnDateTime: returnDateTime && !Number.isNaN(returnDateTime.getTime()) ? returnDateTime : null,
+    seatsNeeded,
+    luggageNeeded,
+    pickupLocation,
+    dropLocation,
+    specialRequirements,
+    status: 'pending',
+  });
+
+  return res.status(201).json({
+    success: true,
+    data: serializeRentalQuoteRequest(request.toObject()),
+    message: 'Rental quote request submitted successfully',
   });
 };
 

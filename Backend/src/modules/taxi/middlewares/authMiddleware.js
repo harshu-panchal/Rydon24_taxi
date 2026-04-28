@@ -94,6 +94,15 @@ export const authenticate = (allowedRoles = []) => async (req, _res, next) => {
       throw new ApiError(403, 'Driver account is pending approval');
     }
 
+    if (
+      normalizedRole === 'owner' &&
+      (entity.active === false ||
+        entity.approve === false ||
+        String(entity.status || '').toLowerCase() === 'pending')
+    ) {
+      throw new ApiError(403, 'Owner account is pending approval');
+    }
+
     attachResolvedAuth(req, payload);
 
     next();

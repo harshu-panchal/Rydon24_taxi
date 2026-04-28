@@ -6,12 +6,14 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock3,
+  CreditCard,
   Edit2,
   ImagePlus,
   Luggage,
   Plus,
   Save,
   Trash2,
+  Users,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -178,6 +180,15 @@ const buildDefaultForm = () => {
     capacity: countSeats(blueprint),
     luggageCapacity: 2,
     amenities: ['AC', 'GPS', 'Charging Port'],
+    serviceStoreIds: [],
+    poolingEnabled: false,
+    advancePayment: {
+      enabled: false,
+      paymentMode: 'fixed',
+      amount: 20,
+      label: 'Advance booking payment',
+      notes: '',
+    },
     blueprint,
     pricing: normalizePricing(),
     active: true,
@@ -244,10 +255,12 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
   const { id } = useParams();
   const isEditor = propMode === 'create' || propMode === 'edit';
   const [items, setItems] = useState([]);
+  const [serviceStores, setServiceStores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [formData, setFormData] = useState(buildDefaultForm);
+  const [togglingIds, setTogglingIds] = useState([]);
 
   useEffect(() => {
     let mounted = true;
@@ -256,14 +269,23 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
       setLoading(true);
       setErrorMessage('');
       try {
-        const response = await adminService.getRentalVehicleTypes();
+        const [response, serviceStoreResponse] = await Promise.all([
+          adminService.getRentalVehicleTypes(),
+          adminService.getServiceStores(),
+        ]);
         const results =
           response?.data?.data?.results ||
           response?.data?.results ||
           response?.results ||
           [];
+        const serviceStoreResults =
+          serviceStoreResponse?.data?.data?.results ||
+          serviceStoreResponse?.data?.results ||
+          serviceStoreResponse?.results ||
+          [];
         if (!mounted) return;
         setItems(results);
+        setServiceStores(serviceStoreResults);
 
         if (id) {
           const selected = results.find((item) => String(item.id || item._id) === String(id));
@@ -279,6 +301,15 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
               capacity: Number(selected.capacity || countSeats(selected.blueprint)),
               luggageCapacity: Number(selected.luggageCapacity || 0),
               amenities: Array.isArray(selected.amenities) ? selected.amenities : [],
+              serviceStoreIds: Array.isArray(selected.serviceStoreIds) ? selected.serviceStoreIds.map(String) : [],
+              poolingEnabled: Boolean(selected.poolingEnabled),
+              advancePayment: {
+                enabled: Boolean(selected.advancePayment?.enabled),
+                paymentMode: 'fixed',
+                amount: Number(selected.advancePayment?.amount ?? 20),
+                label: selected.advancePayment?.label || 'Advance booking payment',
+                notes: selected.advancePayment?.notes || '',
+              },
               blueprint: selected.blueprint?.lowerDeck?.length ? clone(selected.blueprint) : createBlueprintFromTemplate('compact_4'),
               pricing: normalizePricing(selected.pricing),
               active: selected.active !== false,
@@ -307,6 +338,27 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
 
   const updateForm = (field, value) => {
     setFormData((current) => ({ ...current, [field]: value }));
+  };
+
+  const updateAdvancePayment = (field, value) => {
+    setFormData((current) => ({
+      ...current,
+      advancePayment: {
+        ...current.advancePayment,
+        paymentMode: 'fixed',
+        [field]: value,
+      },
+    }));
+  };
+
+  const toggleServiceStore = (storeId) => {
+    const normalizedId = String(storeId);
+    setFormData((current) => ({
+      ...current,
+      serviceStoreIds: current.serviceStoreIds.includes(normalizedId)
+        ? current.serviceStoreIds.filter((item) => item !== normalizedId)
+        : [...current.serviceStoreIds, normalizedId],
+    }));
   };
 
   const handleTemplateChange = (templateKey) => {
@@ -434,6 +486,63 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
     }
   };
 
+  const handleTogglePooling = async (item) => {
+    const vehicleId = String(item.id || item._id);
+
+    if (!vehicleId || togglingIds.includes(vehicleId)) {
+      return;
+    }
+
+    const nextPoolingEnabled = !item.poolingEnabled;
+
+    setTogglingIds((current) => [...current, vehicleId]);
+    setItems((current) =>
+      current.map((entry) =>
+        String(entry.id || entry._id) === vehicleId
+          ? { ...entry, poolingEnabled: nextPoolingEnabled }
+          : entry,
+      ),
+    );
+
+    try {
+      const payload = {
+        ...item,
+        poolingEnabled: nextPoolingEnabled,
+        capacity: Number(item.capacity || countSeats(item.blueprint)),
+        active: item.active !== false,
+        status: item.active !== false ? 'active' : 'inactive',
+        amenities: Array.isArray(item.amenities) ? item.amenities : [],
+        pricing: normalizePricing(item.pricing),
+      };
+
+      const response = await adminService.updateRentalVehicleType(vehicleId, payload);
+      const updatedItem =
+        response?.data?.data ||
+        response?.data ||
+        payload;
+
+      setItems((current) =>
+        current.map((entry) =>
+          String(entry.id || entry._id) === vehicleId
+            ? { ...entry, ...updatedItem, poolingEnabled: Boolean(updatedItem.poolingEnabled) }
+            : entry,
+        ),
+      );
+      toast.success(`Pooling ${nextPoolingEnabled ? 'enabled' : 'disabled'} for ${item.name}`);
+    } catch (error) {
+      setItems((current) =>
+        current.map((entry) =>
+          String(entry.id || entry._id) === vehicleId
+            ? { ...entry, poolingEnabled: item.poolingEnabled }
+            : entry,
+        ),
+      );
+      toast.error(error?.response?.data?.message || error.message || 'Could not update pooling setting.');
+    } finally {
+      setTogglingIds((current) => current.filter((idValue) => idValue !== vehicleId));
+    }
+  };
+
   if (!isEditor) {
     return (
       <div className="min-h-screen bg-[#f6f7fb] p-6 lg:p-8">
@@ -543,6 +652,36 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                   </div>
                 </div>
 
+                <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3">
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Users size={15} />
+                    <span className="text-[11px] font-bold uppercase tracking-wide">Pooling</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                      item.poolingEnabled ? 'bg-sky-50 text-sky-700' : 'bg-slate-200 text-slate-600'
+                    }`}>
+                      {item.poolingEnabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleTogglePooling(item)}
+                      disabled={togglingIds.includes(String(item.id || item._id))}
+                      className={`relative h-7 w-14 rounded-full transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
+                        item.poolingEnabled ? 'bg-sky-500' : 'bg-slate-300'
+                      }`}
+                      aria-pressed={item.poolingEnabled}
+                      title="Toggle pooling"
+                    >
+                      <span
+                        className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-all ${
+                          item.poolingEnabled ? 'left-8' : 'left-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
                 <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Pricing Snapshot</p>
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -610,6 +749,14 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
 
       <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
         <div className="grid grid-cols-1 gap-8 p-6 lg:grid-cols-2 lg:p-8">
+          <div className="lg:col-span-2 rounded-[24px] border border-slate-200 bg-slate-50/70 px-5 py-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-indigo-500">Section 1</p>
+            <h2 className="mt-1 text-lg font-black text-slate-900">Vehicle Identity</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">
+              Fill these fields to define what this rental vehicle is called, what category it belongs to, and how admins will recognize it.
+            </p>
+          </div>
+
           <div>
             <label className={labelClass}>Vehicle Name *</label>
             <input
@@ -619,6 +766,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
               className={inputClass}
               placeholder="Honda Amaze"
             />
+            <p className="mt-2 text-xs text-slate-500">This is the main vehicle title shown in the rental catalog.</p>
           </div>
 
           <div>
@@ -634,6 +782,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                 </option>
               ))}
             </select>
+            <p className="mt-2 text-xs text-slate-500">Choose the overall class so the layout and pricing feel matched to the vehicle type.</p>
           </div>
 
           <div>
@@ -645,6 +794,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
               className={inputClass}
               placeholder="Comfortable city self-drive option"
             />
+            <p className="mt-2 text-xs text-slate-500">Use one short line that quickly explains the vehicle to the admin team.</p>
           </div>
 
           <div>
@@ -656,6 +806,42 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
               className={inputClass}
               placeholder="2"
             />
+            <p className="mt-2 text-xs text-slate-500">Set how many bags or luggage units this vehicle can comfortably carry.</p>
+          </div>
+
+          <div className="lg:col-span-2">
+            <label className={labelClass}>Available Service Stores</label>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+              {serviceStores.length === 0 ? (
+                <p className="text-xs font-medium text-slate-500">No service stores available yet.</p>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    {serviceStores.map((store) => {
+                      const storeId = String(store.id || store._id);
+                      const selected = formData.serviceStoreIds.includes(storeId);
+                      return (
+                        <button
+                          key={storeId}
+                          type="button"
+                          onClick={() => toggleServiceStore(storeId)}
+                          className={`rounded-full border px-3 py-2 text-xs font-bold transition-all ${
+                            selected
+                              ? 'border-slate-900 bg-slate-900 text-white'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                          }`}
+                        >
+                          {store.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-3 text-xs text-slate-500">
+                    Choose one or more stores where this rental vehicle will be available.
+                  </p>
+                </>
+              )}
+            </div>
           </div>
 
           <div className="lg:col-span-2">
@@ -667,6 +853,15 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
               className={inputClass}
               placeholder="Add a clear rental vehicle description for admin and future app use."
             />
+            <p className="mt-2 text-xs text-slate-500">Add a fuller explanation of the vehicle, comfort, or intended use.</p>
+          </div>
+
+          <div className="lg:col-span-2 rounded-[24px] border border-slate-200 bg-slate-50/70 px-5 py-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-indigo-500">Section 2</p>
+            <h2 className="mt-1 text-lg font-black text-slate-900">Media And Preview</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">
+              Upload the vehicle image and review the live card preview so you can confirm the admin setup looks correct.
+            </p>
           </div>
 
           <div>
@@ -701,6 +896,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                 </div>
               ) : null}
             </div>
+            <p className="mt-2 text-xs text-slate-500">This image is the visual identity for the rental vehicle card.</p>
           </div>
 
           <div className="space-y-6">
@@ -757,6 +953,88 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
               />
               <p className="mt-2 text-xs text-slate-500">Use comma separated amenities for quick admin setup.</p>
             </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <label className="text-sm font-bold text-slate-900">Enable Pooling</label>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Turn this on if this rental vehicle type is allowed to be used in pooled or shared rental flows.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updateForm('poolingEnabled', !formData.poolingEnabled)}
+                  className={`relative h-7 w-14 rounded-full transition-all ${formData.poolingEnabled ? 'bg-sky-500' : 'bg-slate-300'}`}
+                  aria-pressed={formData.poolingEnabled}
+                >
+                  <span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-all ${formData.poolingEnabled ? 'left-8' : 'left-1'}`} />
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CreditCard size={16} className="text-slate-400" />
+                    <label className="text-sm font-bold text-slate-900">Advance Booking Payment</label>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Decide whether users must pay some amount upfront when they book this rental vehicle in advance.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updateAdvancePayment('enabled', !formData.advancePayment?.enabled)}
+                  className={`relative h-7 w-14 rounded-full transition-all ${formData.advancePayment?.enabled ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                  aria-pressed={formData.advancePayment?.enabled}
+                >
+                  <span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-all ${formData.advancePayment?.enabled ? 'left-8' : 'left-1'}`} />
+                </button>
+              </div>
+
+              {formData.advancePayment?.enabled ? (
+                <div className="mt-4 space-y-4 rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
+                  <div>
+                    <label className={labelClass}>Payment Label</label>
+                    <input
+                      type="text"
+                      value={formData.advancePayment?.label || ''}
+                      onChange={(event) => updateAdvancePayment('label', event.target.value)}
+                      className={inputClass}
+                      placeholder="Advance booking payment"
+                    />
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Custom Advance Amount</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.advancePayment?.amount ?? 0}
+                      onChange={(event) => updateAdvancePayment('amount', Number(event.target.value || 0))}
+                      className={inputClass}
+                      placeholder="500"
+                    />
+                    <p className="mt-2 text-xs text-slate-500">
+                      Enter the exact amount the user must pay upfront while booking this vehicle.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Admin Note</label>
+                    <textarea
+                      rows="3"
+                      value={formData.advancePayment?.notes || ''}
+                      onChange={(event) => updateAdvancePayment('notes', event.target.value)}
+                      className={inputClass}
+                      placeholder="Optional note about how advance booking payment works for this vehicle."
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <div className="lg:col-span-2">
@@ -788,12 +1066,23 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                     <p className={`text-[10px] font-bold uppercase tracking-wide ${active ? 'text-slate-300' : 'text-slate-400'}`}>
                       {template.category}
                     </p>
-                  </button>
-                );
-              })}
+                </button>
+              );
+            })}
             </div>
 
             <SeatPreview blueprint={formData.blueprint} onToggleSeat={toggleSeat} />
+            <p className="mt-3 text-xs text-slate-500">
+              Pick the closest vehicle seating blueprint first, then block any seat positions you do not want included in the rental layout.
+            </p>
+          </div>
+
+          <div className="lg:col-span-2 rounded-[24px] border border-slate-200 bg-slate-50/70 px-5 py-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-indigo-500">Section 3</p>
+            <h2 className="mt-1 text-lg font-black text-slate-900">Pricing Setup</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">
+              Define how much the vehicle costs for different rental durations like 6 hours, 12 hours, or 24 hours.
+            </p>
           </div>
 
           <div className="lg:col-span-2">
@@ -837,6 +1126,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                       onChange={(event) => updatePricingRow(price.id, 'label', event.target.value)}
                       className={inputClass}
                       placeholder="6 Hours"
+                      title="Package name"
                     />
                     <input
                       type="number"
@@ -844,6 +1134,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                       onChange={(event) => updatePricingRow(price.id, 'durationHours', event.target.value)}
                       className={inputClass}
                       placeholder="6"
+                      title="Duration in hours"
                     />
                     <input
                       type="number"
@@ -851,6 +1142,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                       onChange={(event) => updatePricingRow(price.id, 'price', event.target.value)}
                       className={inputClass}
                       placeholder="799"
+                      title="Base rental price"
                     />
                     <input
                       type="number"
@@ -858,6 +1150,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                       onChange={(event) => updatePricingRow(price.id, 'includedKm', event.target.value)}
                       className={inputClass}
                       placeholder="60"
+                      title="Included kilometers"
                     />
                     <input
                       type="number"
@@ -865,6 +1158,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                       onChange={(event) => updatePricingRow(price.id, 'extraHourPrice', event.target.value)}
                       className={inputClass}
                       placeholder="120"
+                      title="Extra hour charge"
                     />
                     <input
                       type="number"
@@ -872,7 +1166,16 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                       onChange={(event) => updatePricingRow(price.id, 'extraKmPrice', event.target.value)}
                       className={inputClass}
                       placeholder="12"
+                      title="Extra kilometer charge"
                     />
+                  </div>
+                  <div className="mt-3 grid gap-2 text-[11px] font-medium text-slate-500 md:grid-cols-3 xl:grid-cols-6">
+                    <span>Package label</span>
+                    <span>Hours</span>
+                    <span>Base rent</span>
+                    <span>Included km</span>
+                    <span>Extra hour</span>
+                    <span>Extra km</span>
                   </div>
                 </div>
               ))}
@@ -882,6 +1185,11 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
 
         <div className="grid grid-cols-1 gap-4 border-t border-slate-100 bg-slate-50/50 p-6 lg:grid-cols-[1fr_auto] lg:items-center">
           <div className="space-y-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-indigo-500">Section 4</p>
+              <h2 className="mt-1 text-lg font-black text-slate-900">Publishing</h2>
+              <p className="mt-1 text-sm font-medium text-slate-500">Use this final part to decide whether the rental vehicle should stay live in the admin catalog.</p>
+            </div>
             <div className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
               Seat capacity follows the selected blueprint so the admin can control the rental layout visually and keep pricing tied to the exact vehicle setup.
             </div>

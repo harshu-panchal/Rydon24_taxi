@@ -192,8 +192,10 @@ const AdminDriverIncentive = lazy(() => import('./modules/admin/pages/price-mana
 const AdminSurgePricing = lazy(() => import('./modules/admin/pages/price-management/SurgePricing'));
 const AdminVehicleType = lazy(() => import('./modules/admin/pages/price-management/VehicleType'));
 const AdminRentalVehicleTypes = lazy(() => import('./modules/admin/pages/price-management/RentalVehicleTypes'));
+const AdminRentalQuoteRequests = lazy(() => import('./modules/admin/pages/price-management/RentalQuoteRequests'));
 const AdminRentalPackageTypes = lazy(() => import('./modules/admin/pages/price-management/RentalPackageTypes'));
 const AdminGoodsTypes = lazy(() => import('./modules/admin/pages/price-management/GoodsTypes'));
+const AdminPoolingManager = lazy(() => import('./modules/admin/pages/pooling/PoolingManager'));
 const AdminBusServiceManager = lazy(() => import('./modules/admin/pages/bus-service/BusServiceManager'));
 const AdminPricingPlaceholder = ({ title }) => (
   <div className="flex flex-col items-center justify-center min-h-[500px] text-gray-400 bg-white rounded-[32px] border border-gray-100 shadow-sm p-10">
@@ -825,6 +827,15 @@ function App() {
                 <Route path="deliveries" element={<AdminDeliveries />} />
                 <Route path="ongoing" element={<AdminOngoing />} />
                 <Route path="bus-service" element={<AdminBusServiceManager />} />
+                <Route path="pooling" element={<AdminPoolingManager />} />
+                <Route
+                  path="pooling/create"
+                  element={<AdminPoolingManager mode="create" />}
+                />
+                <Route
+                  path="pooling/edit/:id"
+                  element={<AdminPoolingManager mode="edit" />}
+                />
                 <Route path="wallet/payment" element={<AdminWalletPayment />} />
                 <Route path="users" element={<AdminUserList />} />
                 <Route path="users/create" element={<AdminUserCreate />} />
@@ -1115,6 +1126,10 @@ function App() {
                   <Route
                     path="rental-vehicles/edit/:id"
                     element={<AdminRentalVehicleTypes mode="edit" />}
+                  />
+                  <Route
+                    path="rental-quotes"
+                    element={<AdminRentalQuoteRequests />}
                   />
                   <Route
                     path="rental-packages"

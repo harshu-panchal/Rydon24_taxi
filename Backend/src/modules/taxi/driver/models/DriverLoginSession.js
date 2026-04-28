@@ -14,6 +14,12 @@ const driverLoginSessionSchema = new mongoose.Schema(
       ref: 'TaxiDriver',
       required: true,
     },
+    accountRole: {
+      type: String,
+      enum: ['driver', 'owner'],
+      default: 'driver',
+      required: true,
+    },
     otpHash: {
       type: String,
       required: true,

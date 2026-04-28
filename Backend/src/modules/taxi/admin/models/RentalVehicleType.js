@@ -76,6 +76,36 @@ const rentalVehiclePricingSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const rentalVehicleAdvancePaymentSchema = new mongoose.Schema(
+  {
+    enabled: {
+      type: Boolean,
+      default: false,
+    },
+    paymentMode: {
+      type: String,
+      enum: ['full', 'percentage', 'fixed'],
+      default: 'percentage',
+    },
+    amount: {
+      type: Number,
+      default: 20,
+      min: 0,
+    },
+    label: {
+      type: String,
+      default: 'Advance booking payment',
+      trim: true,
+    },
+    notes: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+  },
+  { _id: false },
+);
+
 const rentalVehicleTypeSchema = new mongoose.Schema(
   {
     transport_type: {
@@ -127,6 +157,15 @@ const rentalVehicleTypeSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    serviceStoreIds: {
+      type: [mongoose.Schema.Types.ObjectId],
+      ref: 'TaxiServiceStore',
+      default: [],
+    },
+    poolingEnabled: {
+      type: Boolean,
+      default: false,
+    },
     blueprint: {
       templateKey: {
         type: String,
@@ -145,6 +184,16 @@ const rentalVehicleTypeSchema = new mongoose.Schema(
     pricing: {
       type: [rentalVehiclePricingSchema],
       default: [],
+    },
+    advancePayment: {
+      type: rentalVehicleAdvancePaymentSchema,
+      default: () => ({
+        enabled: false,
+        paymentMode: 'percentage',
+        amount: 20,
+        label: 'Advance booking payment',
+        notes: '',
+      }),
     },
     status: {
       type: String,
