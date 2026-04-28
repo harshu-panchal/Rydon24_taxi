@@ -9,9 +9,11 @@ const ServiceTile = ({ icon, label, description, path, accentClass, loading }) =
 
   if (loading) {
     return (
-      <div className="flex w-full animate-pulse flex-col items-center justify-center gap-1.5 rounded-[18px] border border-gray-50 bg-gray-50 px-1.5 py-2.5">
-        <div className="h-12 w-12 rounded-[18px] bg-gray-200" />
-        <div className="h-3 w-12 rounded-full bg-gray-200" />
+      <div className="flex w-full min-h-[112px] items-center justify-center">
+        <div className="flex h-[100px] w-[90%] animate-pulse flex-col items-center justify-center gap-2 rounded-[16px] border border-white/20 bg-white/65 px-1 py-1.5">
+        <div className="h-[72px] w-[72px] rounded-[16px] bg-gray-200" />
+          <div className="h-3 w-12 rounded-full bg-gray-200" />
+        </div>
       </div>
     );
   }
@@ -22,17 +24,19 @@ const ServiceTile = ({ icon, label, description, path, accentClass, loading }) =
       whileHover={{ y: -1.5 }}
       whileTap={{ scale: 0.98 }}
       onClick={() => path && navigate(path)}
-      className="flex h-full min-h-[108px] w-full flex-col items-center justify-center gap-1.5 rounded-[18px] border border-white/80 bg-white/90 px-2 py-3 shadow-[0_8px_14px_rgba(15,23,42,0.05)] transition-transform"
+      className="flex h-full min-h-[112px] w-full items-center justify-center transition-transform"
     >
-      <div className={`flex h-12 w-12 items-center justify-center rounded-[18px] ${accentClass || 'bg-gray-50'}`}>
-        <img src={icon} alt={label} className="h-10 w-10 object-contain drop-shadow-sm" />
-      </div>
+      <div className="flex h-[100px] w-[90%] flex-col items-center justify-center gap-1 rounded-[16px] border border-white/20 bg-white/82 px-1 py-1.5 shadow-[0_5px_10px_rgba(15,23,42,0.03)]">
+        <div className={`flex h-[72px] w-[72px] items-center justify-center rounded-[16px] ${accentClass || 'bg-gray-50'}`}>
+          <img src={icon} alt={label} className="h-[60px] w-[60px] object-contain drop-shadow-sm" />
+        </div>
 
-      <div className="flex flex-col items-center gap-0.5 text-center">
-        <span className="min-h-[24px] text-[10.5px] font-black leading-tight tracking-tight text-slate-900 line-clamp-2 uppercase">
-          {label}
-        </span>
-        <span className="sr-only">{description}</span>
+        <div className="flex flex-col items-center gap-0.5 text-center">
+          <span className="min-h-[24px] text-[10.5px] font-black leading-tight tracking-tight text-slate-900 line-clamp-2 uppercase">
+            {label}
+          </span>
+          <span className="sr-only">{description}</span>
+        </div>
       </div>
     </motion.button>
   );
