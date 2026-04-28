@@ -919,7 +919,11 @@ const SelectLocation = () => {
                       </div>
                     </div>
                     <div
-                      className={`flex-1 flex items-center bg-indigo-50/70 border border-indigo-100/70 rounded-xl px-3 py-2.5 transition-all ${activeInput === idx ? 'ring-2 ring-indigo-200' : ''}`}
+                      className={`flex-1 flex items-center rounded-xl px-3 py-2.5 transition-all ${
+                        stop.trim().length > 0
+                          ? 'bg-white/90 border border-indigo-200 shadow-[0_10px_24px_rgba(99,102,241,0.10)]'
+                          : 'bg-indigo-50/70 border border-indigo-100/70'
+                      } ${activeInput === idx ? 'ring-2 ring-indigo-200' : ''}`}
                       onClick={() => setActiveInput(idx)}
                     >
                       <input
@@ -929,7 +933,9 @@ const SelectLocation = () => {
                         placeholder={`Stop ${idx + 1} location...`}
                         onFocus={() => setActiveInput(idx)}
                         onChange={(e) => updateStop(idx, sanitizeLocationInput(e.target.value))}
-                        className="w-full bg-transparent border-none text-[15px] font-medium text-slate-900 focus:outline-none placeholder:text-indigo-300"
+                        className={`w-full bg-transparent border-none text-[15px] font-medium text-slate-900 focus:outline-none ${
+                          stop.trim().length > 0 ? 'placeholder:text-slate-300' : 'placeholder:text-indigo-300'
+                        }`}
                       />
                       {stop.length > 0 && (
                         <button onClick={() => updateStop(idx, '')} className="ml-2 shrink-0">

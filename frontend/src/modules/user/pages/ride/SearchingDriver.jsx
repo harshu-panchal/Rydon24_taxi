@@ -782,7 +782,7 @@ const SearchingDriver = () => {
                       {/* Vehicle Details Pill */}
                       <div className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 border border-slate-200/50">
                         <p className="text-[12px] font-black text-slate-600">
-                          {[driver.vehicleColor, driver.vehicleModel, "Taxi"].filter(Boolean).join(' ') || "White Dzire Taxi"}
+                          {[driver.vehicleColor, driver.vehicleMake, driver.vehicleModel, driver.vehicleType || "Taxi"].filter(Boolean).join(' ') || "White Dzire Taxi"}
                         </p>
                       </div>
                     </div>

@@ -1831,10 +1831,12 @@ const ActiveTrip = () => {
                             </div>
                             <motion.button
                                 whileTap={{ scale: 0.96 }}
-                                onClick={async () => {
-                                    const paymentMode = selectedPaymentMode || effectiveState?.paymentMethod || liveRequest?.payment || '';
-                                    await completeRideForUserSync(paymentMode);
-                                    setPhase('review');
+                                onClick={() => {
+                                    setSelectedPaymentMode('');
+                                    setPaymentQr(null);
+                                    setPaymentQrError('');
+                                    setDriverPaymentStatus('pending');
+                                    setPhase('payment_confirm');
                                 }}
                                 className="w-full h-15 text-white rounded-xl flex items-center justify-center gap-3 text-[14px] font-semibold uppercase tracking-wide shadow-xl"
                                 style={{ backgroundColor: routeStrokeColor, boxShadow: `0 18px 30px ${routeAccentMuted}` }}
@@ -1919,7 +1921,11 @@ const ActiveTrip = () => {
                             <motion.button
                                 whileTap={{ scale: 0.96 }}
                                 disabled={driverPaymentStatus !== 'success'}
-                                onClick={() => setPhase('review')}
+                                onClick={async () => {
+                                    const paymentMode = selectedPaymentMode || effectiveState?.paymentMethod || liveRequest?.payment || '';
+                                    await completeRideForUserSync(paymentMode);
+                                    setPhase('review');
+                                }}
                                 className={`w-full h-15 rounded-xl flex items-center justify-center gap-3 text-[14px] font-semibold uppercase tracking-wide shadow-xl transition-all ${driverPaymentStatus === 'success' ? 'text-white' : 'bg-slate-100 text-slate-300 pointer-events-none'}`}
                                 style={driverPaymentStatus === 'success' ? { backgroundColor: routeStrokeColor, boxShadow: `0 18px 30px ${routeAccentMuted}` } : undefined}
                             >

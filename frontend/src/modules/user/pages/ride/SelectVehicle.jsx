@@ -52,9 +52,17 @@ const buildFallbackRoute = (origin, destination) => {
   ];
 };
 
-const VehicleMapPreview = ({ center, dropPosition, drivers, selectedVehicle, isLoaded, loadError }) => {
+const VehicleMapPreview = ({ center, dropPosition, stops = [], drivers, selectedVehicle, isLoaded, loadError }) => {
   const [routePath, setRoutePath] = useState([]);
   const [routeError, setRouteError] = useState('');
+  const waypointRequests = useMemo(
+    () =>
+      (Array.isArray(stops) ? stops : [])
+        .map((stop) => String(stop || '').trim())
+        .filter(Boolean)
+        .map((stop) => ({ location: stop, stopover: true })),
+    [stops],
+  );
 
   useEffect(() => {
     if (!isLoaded || !dropPosition || !window.google?.maps?.DirectionsService) {
@@ -70,6 +78,7 @@ const VehicleMapPreview = ({ center, dropPosition, drivers, selectedVehicle, isL
       {
         origin: center,
         destination: dropPosition,
+        waypoints: waypointRequests,
         travelMode: window.google.maps.TravelMode.DRIVING,
         provideRouteAlternatives: false,
       },
@@ -97,7 +106,7 @@ const VehicleMapPreview = ({ center, dropPosition, drivers, selectedVehicle, isL
     return () => {
       active = false;
     };
-  }, [center, dropPosition, isLoaded]);
+  }, [center, dropPosition, isLoaded, waypointRequests]);
 
   if (!HAS_VALID_GOOGLE_MAPS_KEY) {
     return (
@@ -738,6 +747,10 @@ const SelectVehicle = () => {
       {
         origin: pickupPosition,
         destination: dropPosition,
+        waypoints: stops
+          .map((stop) => String(stop || '').trim())
+          .filter(Boolean)
+          .map((stop) => ({ location: stop, stopover: true })),
         travelMode: window.google.maps.TravelMode.DRIVING,
         provideRouteAlternatives: false,
       },
@@ -770,7 +783,7 @@ const SelectVehicle = () => {
     return () => {
       active = false;
     };
-  }, [dropCoords, dropPosition, isMapLoaded, mapLoadError, pickupCoords, pickupPosition]);
+  }, [dropCoords, dropPosition, isMapLoaded, mapLoadError, pickupCoords, pickupPosition, stops]);
 
   const pricedVehicles = useMemo(
     () =>
@@ -961,6 +974,7 @@ const SelectVehicle = () => {
         <VehicleMapPreview
           center={pickupPosition}
           dropPosition={dropPosition}
+          stops={stops}
           drivers={onlineDrivers}
           selectedVehicle={selectedVehicle}
           isLoaded={isMapLoaded}
