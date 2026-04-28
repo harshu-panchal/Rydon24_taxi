@@ -50,6 +50,9 @@ const ServiceGrid = () => {
     if (module.transport_type === 'delivery') return '/taxi/user/parcel/type';
     if (module.service_type === 'rental') return '/taxi/user/rental';
     if (module.service_type === 'outstation') return '/taxi/user/intercity';
+    if (module.service_type === 'pooling' || module.name.toLowerCase().includes('pooling')) {
+      return '/taxi/user/pooling';
+    }
     
     // Default taxi paths based on name/keywords if needed, or just generic select-location
     if (module.name.toLowerCase().includes('cab') || module.name.toLowerCase().includes('taxi')) {

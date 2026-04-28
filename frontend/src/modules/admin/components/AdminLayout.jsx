@@ -470,8 +470,12 @@ const AdminLayout = () => {
           },
           {
             icon: Share2,
-            label: 'Pooling',
-            path: '/admin/pooling',
+            label: 'Car Pooling',
+            subItems: [
+              { label: 'Pooling Vehicles', path: '/admin/pooling/vehicles' },
+              { label: 'Routes & Stops', path: '/admin/pooling/routes' },
+              { label: 'Pooling Bookings', path: '/admin/pooling/bookings' },
+            ],
           },
           {
             icon: MapPin,

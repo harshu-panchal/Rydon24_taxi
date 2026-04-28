@@ -41,4 +41,20 @@ export const userService = {
     const response = await api.get('/admin/service-stores');
     return response.data;
   },
+  searchPoolingRoutes: async (params) => {
+    const response = await api.get('/users/pooling/search', { params });
+    return response.data;
+  },
+  getPoolingRouteDetails: async (id) => {
+    const response = await api.get(`/users/pooling/routes/${id}`);
+    return response.data;
+  },
+  createPoolingBooking: async (payload) => {
+    const response = await api.post('/users/pooling/bookings', payload);
+    return response.data;
+  },
+  getMyPoolingBookings: async () => {
+    const response = await api.get('/users/pooling/bookings');
+    return response.data;
+  },
 };

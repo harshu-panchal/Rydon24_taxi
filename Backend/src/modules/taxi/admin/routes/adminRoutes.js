@@ -191,6 +191,15 @@ import {
   getTransportTypes,
   deleteFleetVehicle,
 } from '../controllers/adminController.js';
+import {
+  getPoolingVehicles,
+  createPoolingVehicle,
+  updatePoolingVehicle,
+  deletePoolingVehicle,
+  getPoolingBookings,
+  updatePoolingBookingStatus,
+  uploadImage,
+} from '../controllers/poolingController.js';
 import { promotionsRouter } from '../promotions/routes/index.js';
 
 export const adminRouter = Router();
@@ -291,6 +300,16 @@ adminRouter.get('/admin/pooling-routes', getPoolingRoutes);
 adminRouter.post('/admin/pooling-routes', createPoolingRoute);
 adminRouter.patch('/admin/pooling-routes/:id', updatePoolingRoute);
 adminRouter.delete('/admin/pooling-routes/:id', deletePoolingRoute);
+
+adminRouter.get('/admin/pooling-vehicles', getPoolingVehicles);
+adminRouter.post('/admin/pooling-vehicles', createPoolingVehicle);
+adminRouter.patch('/admin/pooling-vehicles/:id', updatePoolingVehicle);
+adminRouter.delete('/admin/pooling-vehicles/:id', deletePoolingVehicle);
+
+adminRouter.get('/admin/pooling-bookings', getPoolingBookings);
+adminRouter.patch('/admin/pooling-bookings/:id/status', updatePoolingBookingStatus);
+
+adminRouter.post('/admin/upload-image', uploadImage);
 adminRouter.get('/admin/rental-booking-requests', getRentalBookingRequests);
 adminRouter.patch('/admin/rental-booking-requests/:id', updateRentalBookingRequest);
 adminRouter.get('/admin/rental-quote-requests', getRentalQuoteRequests);

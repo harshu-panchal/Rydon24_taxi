@@ -89,6 +89,12 @@ const RentalConfirmed = lazy(() => import('./modules/user/pages/rental/RentalCon
 const IntercityHome = lazy(() => import('./modules/user/pages/intercity/IntercityHome'));
 const CabSharing = lazy(() => import('./modules/user/pages/cabsharing/CabSharing'));
 
+// Car Pooling flow
+const UserPoolingHome = lazy(() => import('./modules/user/pages/pooling/PoolingHome'));
+const UserPoolingList = lazy(() => import('./modules/user/pages/pooling/PoolingList'));
+const UserPoolingSeats = lazy(() => import('./modules/user/pages/pooling/PoolingSeats'));
+const UserPoolingConfirm = lazy(() => import('./modules/user/pages/pooling/PoolingConfirm'));
+
 // Profile Settings Sub-pages
 const ProfileSettings = lazy(() => import('./modules/user/pages/profile/ProfileSettings'));
 const PaymentSettings = lazy(() => import('./modules/user/pages/profile/PaymentSettings'));
@@ -197,6 +203,9 @@ const AdminRentalQuoteRequests = lazy(() => import('./modules/admin/pages/price-
 const AdminRentalPackageTypes = lazy(() => import('./modules/admin/pages/price-management/RentalPackageTypes'));
 const AdminGoodsTypes = lazy(() => import('./modules/admin/pages/price-management/GoodsTypes'));
 const AdminPoolingManager = lazy(() => import('./modules/admin/pages/pooling/PoolingManager'));
+const AdminPoolingVehicles = lazy(() => import('./modules/admin/pages/pooling/PoolingVehicles'));
+const AdminPoolingVehicleForm = lazy(() => import('./modules/admin/pages/pooling/PoolingVehicleForm'));
+const AdminPoolingBookings = lazy(() => import('./modules/admin/pages/pooling/PoolingBookings'));
 const AdminBusServiceManager = lazy(() => import('./modules/admin/pages/bus-service/BusServiceManager'));
 const AdminPricingPlaceholder = ({ title }) => (
   <div className="flex flex-col items-center justify-center min-h-[500px] text-gray-400 bg-white rounded-[32px] border border-gray-100 shadow-sm p-10">
@@ -641,6 +650,10 @@ function App() {
                 element={<RideDetail />}
               />
 
+              <Route path="/taxi/user/pooling" element={<UserPoolingHome />} />
+              <Route path="/taxi/user/pooling/list" element={<UserPoolingList />} />
+              <Route path="/taxi/user/pooling/seats/:id" element={<UserPoolingSeats />} />
+              <Route path="/taxi/user/pooling/confirm" element={<UserPoolingConfirm />} />
               <Route path="/taxi/user/rental" element={<BikeRentalHome />} />
               <Route
                 path="/taxi/user/rental/vehicle"
@@ -828,7 +841,8 @@ function App() {
                 <Route path="deliveries" element={<AdminDeliveries />} />
                 <Route path="ongoing" element={<AdminOngoing />} />
                 <Route path="bus-service" element={<AdminBusServiceManager />} />
-                <Route path="pooling" element={<AdminPoolingManager />} />
+                <Route path="pooling" element={<Navigate to="/admin/pooling/routes" replace />} />
+                <Route path="pooling/routes" element={<AdminPoolingManager />} />
                 <Route
                   path="pooling/create"
                   element={<AdminPoolingManager mode="create" />}
@@ -837,6 +851,16 @@ function App() {
                   path="pooling/edit/:id"
                   element={<AdminPoolingManager mode="edit" />}
                 />
+                <Route path="pooling/vehicles" element={<AdminPoolingVehicles />} />
+                <Route
+                  path="pooling/vehicles/create"
+                  element={<AdminPoolingVehicleForm />}
+                />
+                <Route
+                  path="pooling/vehicles/edit/:id"
+                  element={<AdminPoolingVehicleForm />}
+                />
+                <Route path="pooling/bookings" element={<AdminPoolingBookings />} />
                 <Route path="wallet/payment" element={<AdminWalletPayment />} />
                 <Route path="users" element={<AdminUserList />} />
                 <Route path="users/create" element={<AdminUserCreate />} />

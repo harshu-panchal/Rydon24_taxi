@@ -218,6 +218,16 @@ export const adminService = {
   updatePoolingRoute: (id, data) => api.patch(`/admin/pooling-routes/${id}`, data),
   deletePoolingRoute: (id) => api.delete(`/admin/pooling-routes/${id}`),
 
+  getPoolingVehicles: () => api.get('/admin/pooling-vehicles'),
+  createPoolingVehicle: (data) => api.post('/admin/pooling-vehicles', data),
+  updatePoolingVehicle: (id, data) => api.patch(`/admin/pooling-vehicles/${id}`, data),
+  deletePoolingVehicle: (id) => api.delete(`/admin/pooling-vehicles/${id}`),
+
+  getPoolingBookings: () => api.get('/admin/pooling-bookings'),
+  updatePoolingBookingStatus: (id, status) => api.patch(`/admin/pooling-bookings/${id}/status`, { status }),
+
+  uploadImage: (image) => api.post('/admin/upload-image', { image }),
+
   /**
    * Languages Management (Master)
    */

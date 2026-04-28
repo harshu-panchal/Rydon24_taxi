@@ -35,6 +35,12 @@ import {
   verifyUserOtpRequest,
   verifyUserPhoneForOtpLogin,
 } from '../controllers/userController.js';
+import {
+  searchPoolingRoutes,
+  getPoolingRouteDetails,
+  createPoolingBooking,
+  getMyPoolingBookings
+} from '../controllers/poolingController.js';
 import { getAppModules, getGoodsTypes, getPublicRentalVehicleCatalog, getPublicVehicleTypeCatalog } from '../../admin/controllers/adminController.js';
 
 export const userRouter = Router();
@@ -75,3 +81,8 @@ userRouter.get('/buses/:id/seats', authenticateOrResolveUser(['user']), asyncHan
 userRouter.get('/bus-bookings', authenticateOrResolveUser(['user']), asyncHandler(listMyBusBookings));
 userRouter.post('/bus-bookings/order', authenticateOrResolveUser(['user']), asyncHandler(createBusBookingOrder));
 userRouter.post('/bus-bookings/verify', authenticateOrResolveUser(['user']), asyncHandler(verifyBusBookingPayment));
+
+userRouter.get('/pooling/search', authenticateOrResolveUser(['user']), asyncHandler(searchPoolingRoutes));
+userRouter.get('/pooling/routes/:id', authenticateOrResolveUser(['user']), asyncHandler(getPoolingRouteDetails));
+userRouter.post('/pooling/bookings', authenticateOrResolveUser(['user']), asyncHandler(createPoolingBooking));
+userRouter.get('/pooling/bookings', authenticateOrResolveUser(['user']), asyncHandler(getMyPoolingBookings));

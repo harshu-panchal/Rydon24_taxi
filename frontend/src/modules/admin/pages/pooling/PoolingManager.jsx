@@ -73,45 +73,43 @@ const buildDefaultForm = () => ({
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
-const countBlueprintSeats = (blueprint = {}) =>
-  ['lowerDeck', 'upperDeck']
-    .flatMap((deckKey) => (Array.isArray(blueprint?.[deckKey]) ? blueprint[deckKey] : []))
-    .flat()
-    .filter((cell) => cell?.kind === 'seat').length;
+const countBlueprintSeats = (blueprint = {}) => {
+  if (Array.isArray(blueprint?.layout)) {
+    return blueprint.layout.filter(cell => cell.type === 'seat').length;
+  }
+  return 0;
+};
 
 const BlueprintMini = ({ blueprint }) => {
-  const rows = blueprint?.lowerDeck || [];
+  const layout = blueprint?.layout || [];
+  const rows = blueprint?.rows || 0;
+  const cols = blueprint?.cols || 0;
 
-  if (!rows.length) {
+  if (!layout.length) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center text-[11px] font-semibold text-slate-400">
-        No blueprint
+        No layout blueprint
       </div>
     );
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-      <div className="space-y-1.5">
-        {rows.map((row, rowIndex) => (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2">
+      <div 
+        className="grid gap-1"
+        style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+      >
+        {layout.map((cell, idx) => (
           <div
-            key={`bp-row-${rowIndex}`}
-            className="grid gap-1.5"
-            style={{ gridTemplateColumns: `repeat(${Math.max(1, row.length)}, minmax(0, 1fr))` }}
-          >
-            {row.map((cell, cellIndex) => (
-              <div
-                key={`bp-cell-${rowIndex}-${cellIndex}`}
-                className={`h-7 rounded-lg ${
-                  cell?.kind === 'seat'
-                    ? cell.status === 'blocked'
-                      ? 'border border-rose-200 bg-rose-50'
-                      : 'border border-slate-200 bg-white'
-                    : 'bg-transparent'
-                }`}
-              />
-            ))}
-          </div>
+            key={idx}
+            className={`h-2.5 rounded-sm ${
+              cell.type === 'seat' 
+                ? 'bg-indigo-400' 
+                : cell.type === 'driver' 
+                ? 'bg-slate-900' 
+                : 'bg-slate-200'
+            }`}
+          />
         ))}
       </div>
     </div>
@@ -222,7 +220,7 @@ const PoolingManager = ({ mode: propMode }) => {
       try {
         const [routesResponse, vehiclesResponse] = await Promise.all([
           adminService.getPoolingRoutes(),
-          adminService.getRentalVehicleTypes(),
+          adminService.getPoolingVehicles(),
         ]);
 
         const routeResults =
@@ -230,12 +228,8 @@ const PoolingManager = ({ mode: propMode }) => {
           routesResponse?.data?.results ||
           routesResponse?.results ||
           [];
-        const vehicleResults =
-          vehiclesResponse?.data?.data?.results ||
-          vehiclesResponse?.data?.results ||
-          vehiclesResponse?.results ||
-          [];
-        const poolingVehicles = vehicleResults.filter((item) => item.poolingEnabled);
+        const vehicleResults = vehiclesResponse?.data || [];
+        const poolingVehicles = vehicleResults.filter((item) => item.status === 'active');
 
         if (!mounted) return;
 
@@ -444,7 +438,7 @@ const PoolingManager = ({ mode: propMode }) => {
       }
 
       toast.success(id ? 'Pooling route updated' : 'Pooling route created');
-      navigate('/admin/pooling');
+      navigate('/admin/pooling/routes');
     } catch (error) {
       setErrorMessage(error?.response?.data?.message || error.message || 'Could not save pooling route.');
     } finally {
@@ -642,7 +636,7 @@ const PoolingManager = ({ mode: propMode }) => {
       <div className="mx-auto max-w-7xl">
         <button
           type="button"
-          onClick={() => navigate('/admin/pooling')}
+          onClick={() => navigate('/admin/pooling/routes')}
           className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-slate-800"
         >
           <ArrowLeft size={16} />
