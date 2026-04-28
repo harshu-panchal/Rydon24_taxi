@@ -6,6 +6,20 @@ import userBusService from '../../services/busService';
 
 const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
 
+const formatTravelDate = (dateStr) => {
+  if (!dateStr) return '';
+  try {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    });
+  } catch (err) {
+    return dateStr;
+  }
+};
+
 const BusList = () => {
   const navigate = useNavigate();
   const location = useLocation();
