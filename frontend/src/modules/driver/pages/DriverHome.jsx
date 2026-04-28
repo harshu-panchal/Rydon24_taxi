@@ -169,6 +169,36 @@ const compressSelfieForUpload = async (file) => {
     return compressed;
 };
 
+const compressSelfieDataUrl = async (dataUrl) => {
+    const image = await loadImageFromDataUrl(dataUrl);
+    const maxSide = 1280;
+    const largestSide = Math.max(image.width, image.height, 1);
+    const scale = largestSide > maxSide ? maxSide / largestSide : 1;
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext('2d');
+    if (!context) {
+        return dataUrl;
+    }
+
+    context.drawImage(image, 0, 0, width, height);
+
+    let quality = 0.82;
+    let compressed = canvas.toDataURL('image/jpeg', quality);
+
+    while (compressed.length > 8_500_000 && quality > 0.45) {
+        quality -= 0.1;
+        compressed = canvas.toDataURL('image/jpeg', quality);
+    }
+
+    return compressed;
+};
+
 const getMapIconForVehicle = (iconType = '') => {
     const raw = String(iconType || '').trim();
     if (/^(https?:|data:image\/|blob:|\/uploads\/|\/images\/|\/[^/])/.test(raw)) {
@@ -329,6 +359,7 @@ const DriverHome = () => {
     const [isTogglingDuty, setIsTogglingDuty] = useState(false);
     const [showOfflineConfirm, setShowOfflineConfirm] = useState(false);
     const [showOnlineSelfiePrompt, setShowOnlineSelfiePrompt] = useState(false);
+    const [showSelfieCameraCapture, setShowSelfieCameraCapture] = useState(false);
     const [selfieUploading, setSelfieUploading] = useState(false);
     const [selfieError, setSelfieError] = useState('');
     const [onlineSelfie, setOnlineSelfie] = useState(null);
@@ -347,6 +378,8 @@ const DriverHome = () => {
     });
     const driverCoordsRef = useRef(readStoredDriverCoords());
     const selfieCameraInputRef = useRef(null);
+    const selfieVideoRef = useRef(null);
+    const selfieStreamRef = useRef(null);
     const acceptingRideIdRef = useRef('');
     const currentRequestRef = useRef(null);
     const recoveryTimeoutsRef = useRef([]);
@@ -766,16 +799,20 @@ const DriverHome = () => {
         setShowOnlineSelfiePrompt(true);
     }, [goOnline, isHydratingDriver, isOnline, isTogglingDuty, onlineSelfie]);
 
-    const handleSelfieSelected = useCallback(async (event) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
+    const stopSelfieCameraStream = useCallback(() => {
+        if (selfieStreamRef.current) {
+            selfieStreamRef.current.getTracks().forEach((track) => track.stop());
+            selfieStreamRef.current = null;
+        }
+    }, []);
 
+    const uploadSelfieDataUrl = useCallback(async (sourceDataUrl) => {
         setSelfieUploading(true);
         setSelfieError('');
 
         try {
             setStatusMessage('Processing selfie...');
-            const base64Image = await compressSelfieForUpload(file);
+            const base64Image = await compressSelfieDataUrl(sourceDataUrl);
 
             setStatusMessage('Uploading selfie...');
             const uploadResult = await uploadService.uploadImage(base64Image, 'driver-online-selfies');
@@ -790,7 +827,9 @@ const DriverHome = () => {
                 capturedAt: new Date().toISOString(),
                 forDate: new Date().toISOString().slice(0, 10),
             });
+            setShowSelfieCameraCapture(false);
             setShowOnlineSelfiePrompt(false);
+            stopSelfieCameraStream();
             await goOnline(selfieUrl);
         } catch (error) {
             setSelfieError(error?.message || 'Failed to upload selfie');
@@ -801,7 +840,81 @@ const DriverHome = () => {
                 selfieCameraInputRef.current.value = '';
             }
         }
-    }, [goOnline]);
+    }, [goOnline, stopSelfieCameraStream]);
+
+    const openSelfieCamera = useCallback(async () => {
+        if (!navigator.mediaDevices?.getUserMedia) {
+            selfieCameraInputRef.current?.click();
+            return;
+        }
+
+        try {
+            setSelfieError('');
+            setStatusMessage('Opening camera...');
+            stopSelfieCameraStream();
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'user',
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                },
+                audio: false,
+            });
+
+            selfieStreamRef.current = stream;
+            setShowSelfieCameraCapture(true);
+        } catch (error) {
+            const message = error?.message || 'Could not access the camera.';
+            setSelfieError(message);
+            setStatusMessage(message);
+            selfieCameraInputRef.current?.click();
+        }
+    }, [stopSelfieCameraStream]);
+
+    useEffect(() => {
+        if (!showSelfieCameraCapture || !selfieVideoRef.current || !selfieStreamRef.current) {
+            return;
+        }
+
+        const video = selfieVideoRef.current;
+        video.srcObject = selfieStreamRef.current;
+        video.play().catch(() => {});
+    }, [showSelfieCameraCapture]);
+
+    const captureSelfieFromCamera = useCallback(async () => {
+        const video = selfieVideoRef.current;
+        if (!video) {
+            setSelfieError('Camera preview is not ready yet.');
+            return;
+        }
+
+        const width = video.videoWidth || 720;
+        const height = video.videoHeight || 1280;
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext('2d');
+
+        if (!context) {
+            setSelfieError('Could not capture selfie frame.');
+            return;
+        }
+
+        context.drawImage(video, 0, 0, width, height);
+        const snapshot = canvas.toDataURL('image/jpeg', 0.9);
+        await uploadSelfieDataUrl(snapshot);
+    }, [uploadSelfieDataUrl]);
+
+    const handleSelfieSelected = useCallback(async (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        const base64Image = await compressSelfieForUpload(file);
+        await uploadSelfieDataUrl(base64Image);
+    }, [uploadSelfieDataUrl]);
+
+    useEffect(() => () => {
+        stopSelfieCameraStream();
+    }, [stopSelfieCameraStream]);
 
     const recoverRealtimeSession = useCallback(async ({ reason = 'resume' } = {}) => {
         if (!isOnline || isHydratingDriver || isTogglingDuty) {
@@ -1296,34 +1409,62 @@ const DriverHome = () => {
                                 </p>
                             ) : null}
 
+                            {showSelfieCameraCapture ? (
+                                <div className="mt-4 overflow-hidden rounded-[20px] border border-slate-200 bg-slate-950">
+                                    <video
+                                        ref={selfieVideoRef}
+                                        autoPlay
+                                        playsInline
+                                        muted
+                                        className="h-64 w-full object-cover"
+                                    />
+                                </div>
+                            ) : null}
+
                             <div className="mt-5 grid grid-cols-2 gap-3">
                                 <button
                                     type="button"
                                     disabled={selfieUploading}
-                                    onClick={() => setShowOnlineSelfiePrompt(false)}
+                                    onClick={() => {
+                                        stopSelfieCameraStream();
+                                        setShowSelfieCameraCapture(false);
+                                        setShowOnlineSelfiePrompt(false);
+                                    }}
                                     className="h-12 rounded-[16px] border border-slate-200 bg-slate-50 text-[12px] font-black uppercase tracking-[0.14em] text-slate-500 disabled:opacity-60"
                                 >
                                     Cancel
                                 </button>
-                                <label
-                                    className={`relative flex h-12 items-center justify-center gap-2 rounded-[16px] text-[11px] font-black uppercase tracking-[0.14em] transition-all ${
-                                        selfieUploading
-                                            ? 'cursor-not-allowed bg-emerald-200 text-white/80'
-                                            : 'cursor-pointer bg-emerald-500 text-white shadow-[0_14px_28px_rgba(16,185,129,0.28)]'
-                                    }`}
-                                >
-                                    <Camera size={14} />
-                                    {selfieUploading ? 'Uploading...' : 'Camera'}
-                                    <input
-                                        ref={selfieCameraInputRef}
-                                        type="file"
-                                        accept="image/*"
-                                        capture="user"
+                                {showSelfieCameraCapture ? (
+                                    <button
+                                        type="button"
                                         disabled={selfieUploading}
-                                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                                        onChange={handleSelfieSelected}
-                                    />
-                                </label>
+                                        onClick={captureSelfieFromCamera}
+                                        className="h-12 rounded-[16px] bg-emerald-500 text-[11px] font-black uppercase tracking-[0.14em] text-white shadow-[0_14px_28px_rgba(16,185,129,0.28)] disabled:opacity-60"
+                                    >
+                                        {selfieUploading ? 'Uploading...' : 'Capture'}
+                                    </button>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        disabled={selfieUploading}
+                                        onClick={openSelfieCamera}
+                                        className="relative h-12 rounded-[16px] bg-emerald-500 text-[11px] font-black uppercase tracking-[0.14em] text-white shadow-[0_14px_28px_rgba(16,185,129,0.28)] disabled:opacity-60"
+                                    >
+                                        <span className="flex items-center justify-center gap-2">
+                                            <Camera size={14} />
+                                            Open Camera
+                                        </span>
+                                        <input
+                                            ref={selfieCameraInputRef}
+                                            type="file"
+                                            accept="image/*"
+                                            capture="user"
+                                            disabled={selfieUploading}
+                                            className="absolute inset-0 h-full w-full opacity-0 pointer-events-none"
+                                            onChange={handleSelfieSelected}
+                                        />
+                                    </button>
+                                )}
                             </div>
                         </motion.div>
                     </>
