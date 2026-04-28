@@ -289,6 +289,7 @@ const AppModules = ({ mode: propMode }) => {
                           <option value="outstation">Outstation</option>
                           <option value="rental">Rental</option>
                           <option value="bid">Bid</option>
+                          <option value="pooling">Pooling</option>
                         </select>
                       </div>
 
@@ -440,11 +441,11 @@ const AppModules = ({ mode: propMode }) => {
     <div className="min-h-screen bg-[#F3F4F9] animate-in fade-in duration-500 font-sans flex flex-col">
       {/* Header matches Image 2 */}
       <div className="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between shrink-0 shadow-sm relative z-10">
-        <h1 className="text-[14px] font-black text-slate-900 uppercase tracking-tight">CREATE</h1>
+        <h1 className="text-[14px] font-black text-slate-900 uppercase tracking-tight">{isEdit ? 'EDIT' : 'CREATE'}</h1>
         <div className="flex items-center gap-2 text-[11px] font-bold text-gray-400">
           <span className="hover:text-indigo-600 cursor-pointer" onClick={() => navigate("/admin/pricing/app-modules")}>App Modules</span>
           <ChevronRight size={12} className="opacity-50" />
-          <span className="text-gray-700">Create</span>
+          <span className="text-gray-700">{isEdit ? 'Edit' : 'Create'}</span>
         </div>
       </div>
 
@@ -467,6 +468,7 @@ const AppModules = ({ mode: propMode }) => {
                 <option value="outstation">Outstation</option>
                 <option value="rental">Rental</option>
                 <option value="bid">Bid</option>
+                <option value="pooling">Pooling</option>
               </select>
             </div>
 
@@ -475,7 +477,7 @@ const AppModules = ({ mode: propMode }) => {
               <select name="transport_type" value={formData.transport_type} onChange={handleInputChange} className={selectClass}>
                 <option value="">Choose Transport Type</option>
                 {transportTypes.map(t => (
-                  <option key={t.id || t._id} value={t.name}>{t.display_name}</option>
+                  <option key={t.id || t._id} value={t.name}>{t.display_name || t.name}</option>
                 ))}
               </select>
             </div>
