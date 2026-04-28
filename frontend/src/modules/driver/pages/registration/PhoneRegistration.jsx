@@ -209,6 +209,24 @@ const PhoneRegistration = () => {
                         {modeConfig.highlight}
                     </p>
 
+                    <div className="rounded-[22px] border border-[#eadcc7] bg-[#fffaf2] px-4 py-4 text-center shadow-[0_10px_30px_rgba(138,106,61,0.08)]">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#9a7b50]">
+                            {role === 'owner' ? 'Driver Access' : 'Fleet Owner Access'}
+                        </p>
+                        <p className="mt-2 text-[13px] font-medium leading-6 text-slate-600">
+                            {role === 'owner'
+                                ? 'Not managing a fleet? Switch back to the driver side and continue with your normal trip account.'
+                                : 'Are you a fleet owner? Switch to the fleet owner side to manage vehicles, drivers, and payouts.'}
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => setRole(role === 'owner' ? 'driver' : 'owner')}
+                            className="mt-3 inline-flex items-center justify-center rounded-full border border-[#d8be95] bg-white px-4 py-2 text-[12px] font-semibold text-[#8a5a22] transition hover:bg-[#fff4e3]"
+                        >
+                            {role === 'owner' ? 'Continue as Driver' : 'Continue as Fleet Owner'}
+                        </button>
+                    </div>
+
                     <div className="space-y-3">
                         <button 
                             onClick={() => navigate(isLoginPage ? '/taxi/driver/reg-phone' : '/taxi/driver/login')}
