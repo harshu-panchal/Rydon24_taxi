@@ -11,7 +11,6 @@ import {
     Target, 
     Layers, 
     Zap,
-    ImagePlus,
     IndianRupee, 
     TrendingUp, 
     Star, 
@@ -116,6 +115,58 @@ const toLatLng = (coordinates) => {
     }
 
     return { lat: Number(lat), lng: Number(lng) };
+};
+
+const readFileAsDataUrl = (file) =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Failed to read selected selfie'));
+        reader.readAsDataURL(file);
+    });
+
+const loadImageFromDataUrl = (dataUrl) =>
+    new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error('Failed to process selected selfie'));
+        image.src = dataUrl;
+    });
+
+const compressSelfieForUpload = async (file) => {
+    const originalDataUrl = await readFileAsDataUrl(file);
+
+    if (typeof document === 'undefined') {
+        return originalDataUrl;
+    }
+
+    const image = await loadImageFromDataUrl(originalDataUrl);
+    const maxSide = 1280;
+    const largestSide = Math.max(image.width, image.height, 1);
+    const scale = largestSide > maxSide ? maxSide / largestSide : 1;
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext('2d');
+    if (!context) {
+        return originalDataUrl;
+    }
+
+    context.drawImage(image, 0, 0, width, height);
+
+    let quality = 0.82;
+    let compressed = canvas.toDataURL('image/jpeg', quality);
+
+    while (compressed.length > 8_500_000 && quality > 0.45) {
+        quality -= 0.1;
+        compressed = canvas.toDataURL('image/jpeg', quality);
+    }
+
+    return compressed;
 };
 
 const getMapIconForVehicle = (iconType = '') => {
@@ -296,7 +347,6 @@ const DriverHome = () => {
     });
     const driverCoordsRef = useRef(readStoredDriverCoords());
     const selfieCameraInputRef = useRef(null);
-    const selfieGalleryInputRef = useRef(null);
     const acceptingRideIdRef = useRef('');
     const currentRequestRef = useRef(null);
     const recoveryTimeoutsRef = useRef([]);
@@ -724,13 +774,10 @@ const DriverHome = () => {
         setSelfieError('');
 
         try {
-            const base64Image = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(String(reader.result || ''));
-                reader.onerror = () => reject(new Error('Failed to read selected selfie'));
-                reader.readAsDataURL(file);
-            });
+            setStatusMessage('Processing selfie...');
+            const base64Image = await compressSelfieForUpload(file);
 
+            setStatusMessage('Uploading selfie...');
             const uploadResult = await uploadService.uploadImage(base64Image, 'driver-online-selfies');
             const selfieUrl = uploadResult?.url || uploadResult?.secureUrl || '';
 
@@ -747,13 +794,11 @@ const DriverHome = () => {
             await goOnline(selfieUrl);
         } catch (error) {
             setSelfieError(error?.message || 'Failed to upload selfie');
+            setStatusMessage(error?.message || 'Failed to upload selfie');
         } finally {
             setSelfieUploading(false);
             if (selfieCameraInputRef.current) {
                 selfieCameraInputRef.current.value = '';
-            }
-            if (selfieGalleryInputRef.current) {
-                selfieGalleryInputRef.current.value = '';
             }
         }
     }, [goOnline]);
@@ -1251,7 +1296,7 @@ const DriverHome = () => {
                                 </p>
                             ) : null}
 
-                            <div className="mt-5 grid grid-cols-3 gap-3">
+                            <div className="mt-5 grid grid-cols-2 gap-3">
                                 <button
                                     type="button"
                                     disabled={selfieUploading}
@@ -1260,24 +1305,6 @@ const DriverHome = () => {
                                 >
                                     Cancel
                                 </button>
-                                <label
-                                    className={`relative flex h-12 items-center justify-center gap-2 rounded-[16px] border text-[11px] font-black uppercase tracking-[0.14em] transition-all ${
-                                        selfieUploading
-                                            ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
-                                            : 'cursor-pointer border-slate-200 bg-white text-slate-700'
-                                    }`}
-                                >
-                                    <ImagePlus size={14} />
-                                    Gallery
-                                    <input
-                                        ref={selfieGalleryInputRef}
-                                        type="file"
-                                        accept="image/*"
-                                        disabled={selfieUploading}
-                                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                                        onChange={handleSelfieSelected}
-                                    />
-                                </label>
                                 <label
                                     className={`relative flex h-12 items-center justify-center gap-2 rounded-[16px] text-[11px] font-black uppercase tracking-[0.14em] transition-all ${
                                         selfieUploading
