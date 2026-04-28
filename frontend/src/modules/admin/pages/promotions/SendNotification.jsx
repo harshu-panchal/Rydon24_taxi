@@ -8,7 +8,6 @@ import {
   Loader2,
   MapPin,
   Plus,
-  Save,
   Send,
   Trash2,
   Users,
@@ -81,6 +80,35 @@ const FieldLabel = ({ children, required = false }) => (
   </label>
 );
 
+const buildDeliveryAlertMessage = (responseData) => {
+  const delivery = responseData?.data?.delivery || {};
+  const deliveredCount = Number(delivery.deliveredCount || 0);
+  const failedCount = Number(delivery.failedCount || 0);
+  const targetCount = Number(delivery.targetCount || 0);
+  const invalidTokenCount = Number(delivery.invalidTokenCount || 0);
+  const reason = String(delivery.reason || '').trim();
+
+  if (!delivery.attempted) {
+    return reason || responseData?.data?.message || 'Notification created, but push delivery is not configured.';
+  }
+
+  const parts = [`Notification sent. Delivered to ${deliveredCount} of ${targetCount} device(s).`];
+
+  if (failedCount > 0) {
+    parts.push(`${failedCount} failed.`);
+  }
+
+  if (invalidTokenCount > 0) {
+    parts.push(`${invalidTokenCount} invalid token(s) were cleaned up.`);
+  }
+
+  if (reason) {
+    parts.push(reason);
+  }
+
+  return parts.join(' ');
+};
+
 const SendNotification = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -152,7 +180,7 @@ const SendNotification = () => {
     setImagePreview(URL.createObjectURL(file));
   };
 
-  const handleSave = async (event) => {
+  const handleSend = async (event) => {
     event.preventDefault();
 
     if (!formData.service_location_id || !formData.send_to || !formData.push_title || !formData.message) {
@@ -184,10 +212,7 @@ const SendNotification = () => {
       const data = await adminService.sendNotification(payload);
 
       if (data.success) {
-        const deliveryMessage =
-          data.data?.message ||
-          data.data?.delivery?.reason ||
-          'Push notification sent successfully';
+        const deliveryMessage = buildDeliveryAlertMessage(data);
         setFormData(createInitialFormData());
         setImagePreview(null);
         await fetchData();
@@ -197,7 +222,7 @@ const SendNotification = () => {
         alert(data.message || 'Failed to send notification');
       }
     } catch (error) {
-      console.error('Save notification error:', error);
+      console.error('Send notification error:', error);
       alert(`Error: ${error.message}`);
     } finally {
       setSaving(false);
@@ -364,7 +389,7 @@ const SendNotification = () => {
         ) : (
           <Motion.form
             key="notification-create"
-            onSubmit={handleSave}
+            onSubmit={handleSend}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -374,7 +399,7 @@ const SendNotification = () => {
               <SectionCard
                 icon={Send}
                 title="Notification Configuration"
-                description="First image wali sari fields is create screen me available hain."
+                description="Choose the audience, write the message, and send the push right away."
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
@@ -484,8 +509,8 @@ const SendNotification = () => {
                   disabled={saving}
                   className="w-full py-3 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
                 >
-                  {saving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
-                  Save Notification
+                  {saving ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
+                  Send Notification
                 </button>
                 <button
                   type="button"

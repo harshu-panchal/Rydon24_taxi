@@ -498,8 +498,8 @@ export const createNotification = async (payload) => {
     notification: serializedNotification,
     delivery,
     message: delivery.attempted
-      ? 'Notification saved and push delivery attempted'
-      : 'Notification saved but push delivery is not configured',
+      ? 'Notification sent and push delivery attempted'
+      : 'Notification created but push delivery is not configured',
   };
 };
 
