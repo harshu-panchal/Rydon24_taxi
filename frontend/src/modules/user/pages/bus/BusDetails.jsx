@@ -21,6 +21,20 @@ const loadRazorpayScript = () =>
     document.body.appendChild(script);
   });
 
+const formatTravelDate = (dateStr) => {
+  if (!dateStr) return '';
+  try {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    });
+  } catch (err) {
+    return dateStr;
+  }
+};
+
 const BusDetails = () => {
   const navigate = useNavigate();
   const location = useLocation();
