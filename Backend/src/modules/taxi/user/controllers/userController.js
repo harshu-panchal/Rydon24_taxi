@@ -390,6 +390,7 @@ const serializeRentalBookingRequest = (item = {}) => ({
   status: item.status || 'pending',
   adminNote: item.adminNote || '',
   assignedAt: item.assignedAt || null,
+  completionRequestedAt: item.completionRequestedAt || null,
   completedAt: item.completedAt || null,
   finalCharge: Number(item.finalCharge || 0),
   finalElapsedMinutes: Number(item.finalElapsedMinutes || 0),
@@ -1898,7 +1899,7 @@ export const createRentalBookingRequest = async (req, res) => {
 export const getMyActiveRentalBooking = async (req, res) => {
   const item = await RentalBookingRequest.findOne({
     userId: req.auth?.sub,
-    status: { $in: ['assigned', 'confirmed'] },
+    status: { $in: ['assigned', 'confirmed', 'end_requested'] },
   })
     .sort({ updatedAt: -1, createdAt: -1 })
     .lean();
@@ -1911,12 +1912,15 @@ export const getMyActiveRentalBooking = async (req, res) => {
   }
 
   const metrics = computeRentalRideMetrics(item);
+  const effectiveMetrics = ['end_requested', 'completed'].includes(String(item.status || ''))
+    ? computeRentalRideMetrics(item, item.completionRequestedAt || item.completedAt || new Date())
+    : metrics;
 
   return res.status(200).json({
     success: true,
     data: {
       ...serializeRentalBookingRequest(item),
-      rideMetrics: metrics,
+      rideMetrics: effectiveMetrics,
     },
   });
 };
@@ -1941,11 +1945,12 @@ export const endMyActiveRentalRide = async (req, res) => {
     throw new ApiError(409, 'This rental ride cannot be ended right now');
   }
 
-  const completedAt = new Date();
-  const metrics = computeRentalRideMetrics(item, completedAt);
+  const completionRequestedAt = new Date();
+  const metrics = computeRentalRideMetrics(item, completionRequestedAt);
 
-  item.status = 'completed';
-  item.completedAt = completedAt;
+  item.status = 'end_requested';
+  item.completionRequestedAt = completionRequestedAt;
+  item.completedAt = null;
   item.finalCharge = metrics.currentCharge;
   item.finalElapsedMinutes = metrics.elapsedMinutes;
 
@@ -1960,7 +1965,7 @@ export const endMyActiveRentalRide = async (req, res) => {
         currentCharge: item.finalCharge,
       },
     },
-    message: 'Rental ride ended successfully',
+    message: 'Rental ride end request sent for admin review',
   });
 };
 

@@ -79,7 +79,7 @@ const Home = () => {
   useEffect(() => {
     const timer = window.setInterval(() => {
       setClockNow(Date.now());
-    }, 30000);
+    }, 1000); // Updated to 1s for real-time ticking feel
 
     return () => window.clearInterval(timer);
   }, []);
@@ -93,6 +93,8 @@ const Home = () => {
     refreshCurrentRide();
     window.addEventListener('storage', refreshCurrentRide);
     window.addEventListener(CURRENT_RIDE_UPDATED_EVENT, refreshCurrentRide);
+
+    let cancelled = false;
 
     const syncCurrentRide = async () => {
       try {
@@ -111,14 +113,16 @@ const Home = () => {
             vehicleIconUrl: rideData.vehicleIconUrl,
             vehicleIconType: rideData.vehicleIconType,
           };
+          if (cancelled) return;
           saveCurrentRide(normalizedRide);
           return;
         }
 
         const rentalResponse = await userService.getActiveRentalBooking();
-        const rentalRide = rentalResponse?.data || null;
+        const rentalRide = rentalResponse?.id ? rentalResponse : (rentalResponse?.data || null);
 
         if (rentalRide?.id) {
+          if (cancelled) return;
           saveCurrentRide({
             rideId: rentalRide.id,
             bookingReference: rentalRide.bookingReference,
@@ -141,7 +145,8 @@ const Home = () => {
               vehicleIconUrl: rentalRide.assignedVehicle?.image || rentalRide.vehicleImage,
             },
             vehicleIconUrl: rentalRide.assignedVehicle?.image || rentalRide.vehicleImage,
-            assignedAt: rentalRide.assignedAt,
+            assignedAt: rentalRide.assignedAt || rentalRide.createdAt,
+            completionRequestedAt: rentalRide.completionRequestedAt,
             hourlyRate: rentalRide.rideMetrics?.hourlyRate || 0,
             elapsedMinutes: rentalRide.rideMetrics?.elapsedMinutes || 0,
             remainingDue: rentalRide.rideMetrics?.remainingDue || 0,
@@ -149,19 +154,33 @@ const Home = () => {
             paymentMethodLabel: rentalRide.paymentMethodLabel,
             serviceLocation: rentalRide.serviceLocation,
             assignedVehicle: rentalRide.assignedVehicle,
+            finalCharge: rentalRide.finalCharge || 0,
+            finalElapsedMinutes: rentalRide.finalElapsedMinutes || 0,
           });
           return;
         }
 
+        if (cancelled) return;
         clearCurrentRide();
       } catch {
         // Fallback for offline or errors
       }
     };
 
+    const handleWindowFocus = () => {
+      syncCurrentRide();
+    };
+
     syncCurrentRide();
+    const syncTimer = window.setInterval(syncCurrentRide, 10000);
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleWindowFocus);
 
     return () => {
+      cancelled = true;
+      window.clearInterval(syncTimer);
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleWindowFocus);
       window.removeEventListener('storage', refreshCurrentRide);
       window.removeEventListener(CURRENT_RIDE_UPDATED_EVENT, refreshCurrentRide);
     };
@@ -181,32 +200,45 @@ const Home = () => {
   const rideStage = String(currentRide?.liveStatus || currentRide?.status || 'accepted').toLowerCase();
   const rideStageLabel =
     serviceType === 'rental'
-      ? rideStage === 'assigned'
-        ? 'Rental in progress'
-        : 'Rental booking active'
+      ? rideStage === 'end_requested'
+        ? 'End ride review pending'
+        : rideStage === 'assigned'
+          ? 'Rental in progress'
+          : 'Rental booking active'
       : rideStage === 'started'
-      ? serviceType === 'parcel' ? 'Parcel in transit' : 'Ride in progress'
-      : rideStage === 'arriving'
+        ? serviceType === 'parcel' ? 'Parcel in transit' : 'Ride in progress'
+        : rideStage === 'arriving'
         ? serviceType === 'parcel' ? 'Driver reached sender' : 'Driver arrived'
         : serviceType === 'parcel'
           ? 'Parcel booked'
           : 'Ride booked';
-  const rentalElapsedMinutes = serviceType === 'rental' && currentRide?.assignedAt
-    ? Math.max(0, Math.ceil((clockNow - new Date(currentRide.assignedAt).getTime()) / 60000))
-    : Number(currentRide?.elapsedMinutes || 0);
-  const rentalElapsedHours = rentalElapsedMinutes / 60;
+  const rentalElapsedSeconds = serviceType === 'rental' && currentRide?.assignedAt
+    ? String(currentRide?.status || '').toLowerCase() === 'end_requested' && Number(currentRide?.finalElapsedMinutes || 0) > 0
+      ? Number(currentRide.finalElapsedMinutes || 0) * 60
+      : Math.max(1, Math.floor((clockNow - new Date(currentRide.assignedAt).getTime()) / 1000))
+    : Number(currentRide?.elapsedMinutes || 0) * 60;
+
+  const rentalElapsedHours = rentalElapsedSeconds / 3600;
   const rentalCurrentCharge = serviceType === 'rental'
-    ? Math.min(
-        Number(currentRide?.totalCost || 0),
-        Math.max(
-          Number(currentRide?.advancePaid || 0),
-          Number(currentRide?.hourlyRate || 0) * rentalElapsedHours,
-        ),
-      )
+    ? String(currentRide?.status || '').toLowerCase() === 'end_requested' && Number(currentRide?.finalCharge || 0) > 0
+      ? Number(currentRide.finalCharge || 0)
+      : Math.min(
+          Number(currentRide?.totalCost || 0),
+          Math.max(
+            Number(currentRide?.advancePaid || 0),
+            Number(currentRide?.hourlyRate || 0) * rentalElapsedHours,
+          ),
+        )
     : Number(currentRide?.fare || 0);
-  const rentalTimerLabel = serviceType === 'rental'
-    ? `${Math.floor(rentalElapsedMinutes / 60)}h ${String(rentalElapsedMinutes % 60).padStart(2, '0')}m`
-    : '';
+
+  const formatRentalTime = (totalSeconds) => {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+  };
+
+  const rentalTimerLabel = serviceType === 'rental' ? formatRentalTime(rentalElapsedSeconds) : '';
 
   const footerIllustrationBg = {
     backgroundImage: 'url(/home_footer_gemini.png)',
@@ -244,6 +276,50 @@ const Home = () => {
       <div className="absolute bottom-28 right-[-40px] h-40 w-40 rounded-full bg-blue-100/60 blur-3xl pointer-events-none" />
 
       <div className="relative z-10 space-y-4 pb-6">
+        {currentRide && serviceType === 'rental' ? (
+          <Motion.button
+            type="button"
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => navigate(trackingPath, { state: currentRide })}
+            className="w-full overflow-hidden border-b border-emerald-100 bg-white/60 p-5 text-center shadow-sm backdrop-blur-2xl"
+          >
+            <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(16,185,129,0.04)_0%,rgba(5,150,105,0.01)_100%)] pointer-events-none" />
+            
+            <div className="relative flex flex-col items-center gap-2">
+              <div className="flex items-center gap-2">
+                <div className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                </div>
+                <p className="text-[9px] font-black uppercase tracking-[0.3em] text-emerald-700/60">
+                  Rental Session Active
+                </p>
+              </div>
+
+              <div className="flex items-baseline gap-2">
+                <span className="text-[32px] font-black tracking-tight text-slate-950 leading-none">
+                  {rentalTimerLabel}
+                </span>
+                <span className="text-[12px] font-black text-emerald-600">
+                  ₹{rentalCurrentCharge.toFixed(0)}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <div className="flex items-center gap-1">
+                  <Clock3 size={10} strokeWidth={3} className="text-slate-300" />
+                  ₹{Number(currentRide.hourlyRate || 0).toFixed(0)} / hr
+                </div>
+                <div className="h-1 w-1 rounded-full bg-slate-200" />
+                <div className="flex items-center gap-1">
+                  <span className="text-slate-300">Due</span> ₹{Math.max(0, Number(currentRide?.remainingDue || 0)).toFixed(0)}
+                </div>
+              </div>
+            </div>
+          </Motion.button>
+        ) : null}
         <HeaderGreeting />
         <ServiceGrid />
         <LocationMapSection />
@@ -326,7 +402,7 @@ const Home = () => {
               <div className="flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
                 <p className="text-[9px] font-black uppercase tracking-[0.22em] text-orange-600">
-                  {serviceType === 'parcel' ? 'Parcel in progress' : serviceType === 'rental' ? 'Rental in progress' : 'Current Ride'}
+                  {serviceType === 'parcel' ? 'Parcel in progress' : serviceType === 'rental' ? (rideStage === 'end_requested' ? 'Rental end review' : 'Rental in progress') : 'Current Ride'}
                 </p>
               </div>
               <p className="mt-0.5 truncate text-[14px] font-black leading-tight text-slate-900">

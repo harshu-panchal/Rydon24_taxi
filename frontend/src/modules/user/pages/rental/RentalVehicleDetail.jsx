@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { GoogleMap, MarkerF } from '@react-google-maps/api';
 import {
   ArrowLeft,
   Car,
@@ -20,7 +21,10 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSettings } from '../../../../shared/context/SettingsContext';
+import { HAS_VALID_GOOGLE_MAPS_KEY, INDIA_CENTER, useAppGoogleMapsLoader } from '../../../admin/utils/googleMaps';
 import { userService } from '../../services/userService';
+
+const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100/60';
@@ -108,6 +112,17 @@ const formatDistance = (value) => {
   return `${value.toFixed(value < 10 ? 1 : 0)} km away`;
 };
 
+const toMapPoint = (latitude, longitude) => {
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    return { lat, lng };
+  }
+
+  return null;
+};
+
 const normalizeListResponse = (payload) => {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.results)) return payload.results;
@@ -161,6 +176,8 @@ const RentalVehicleDetail = () => {
   const [locationError, setLocationError] = useState('');
   const [userCoordinates, setUserCoordinates] = useState(null);
   const [isLocatingUser, setIsLocatingUser] = useState(false);
+  const mapRef = useRef(null);
+  const { isLoaded: isMapLoaded, loadError: mapLoadError } = useAppGoogleMapsLoader();
   const [quoteForm, setQuoteForm] = useState({
     contactName: '',
     contactPhone: '',
@@ -229,6 +246,55 @@ const RentalVehicleDetail = () => {
     [selectedServiceLocationId, serviceLocations],
   );
 
+  const selectedLocationMapPoint = useMemo(
+    () =>
+      selectedServiceLocation?.primaryPoint ||
+      selectedServiceLocation?.pickupPoints?.[0]?.position ||
+      null,
+    [selectedServiceLocation],
+  );
+
+  const mapCenter = useMemo(
+    () => selectedLocationMapPoint || serviceLocations[0]?.primaryPoint || INDIA_CENTER,
+    [selectedLocationMapPoint, serviceLocations],
+  );
+
+  const mapMarkers = useMemo(
+    () =>
+      serviceLocations.flatMap((locationItem, index) => {
+        const markers = [];
+        const isSelected = String(locationItem.id) === String(selectedServiceLocationId);
+        const isClosest = index === 0 && Boolean(userCoordinates);
+
+        if (locationItem.primaryPoint) {
+          markers.push({
+            key: `location-${locationItem.id}`,
+            position: locationItem.primaryPoint,
+            title: locationItem.name,
+            type: 'location',
+            locationId: locationItem.id,
+            isSelected,
+            isClosest,
+          });
+        }
+
+        (locationItem.pickupPoints || []).forEach((pickupPoint, pickupIndex) => {
+          markers.push({
+            key: `pickup-${locationItem.id}-${pickupPoint.id || pickupIndex}`,
+            position: pickupPoint.position,
+            title: `${locationItem.name} pickup point`,
+            type: 'pickup',
+            locationId: locationItem.id,
+            isSelected,
+            isClosest,
+          });
+        });
+
+        return markers;
+      }),
+    [selectedServiceLocationId, serviceLocations, userCoordinates],
+  );
+
   const summaryBadges = useMemo(
     () => [
       { icon: Users, label: `${vehicle.capacity || 0} seats` },
@@ -243,6 +309,29 @@ const RentalVehicleDetail = () => {
       setSelectedPackageId(String(defaultPackage.id));
     }
   }, [defaultPackage]);
+
+  useEffect(() => {
+    if (!isMapLoaded || !mapRef.current || !window.google?.maps || !mapMarkers.length) {
+      return;
+    }
+
+    const bounds = new window.google.maps.LatLngBounds();
+    mapMarkers.forEach((marker) => bounds.extend(marker.position));
+
+    if (bounds.isEmpty()) {
+      mapRef.current.setCenter(mapCenter);
+      mapRef.current.setZoom(12);
+      return;
+    }
+
+    if (mapMarkers.length === 1 && selectedLocationMapPoint) {
+      mapRef.current.panTo(selectedLocationMapPoint);
+      mapRef.current.setZoom(13);
+      return;
+    }
+
+    mapRef.current.fitBounds(bounds, 56);
+  }, [isMapLoaded, mapCenter, mapMarkers, selectedLocationMapPoint]);
 
   useEffect(() => {
     let mounted = true;
@@ -297,6 +386,24 @@ const RentalVehicleDetail = () => {
             const locationStores = scopedStores.filter(
               (store) => resolveStoreServiceLocationId(store) === id,
             );
+            const pickupPoints = locationStores
+              .map((store, storeIndex) => {
+                const position = toMapPoint(store.latitude, store.longitude);
+
+                if (!position) return null;
+
+                return {
+                  id: String(store._id || store.id || `${id}-pickup-${storeIndex}`),
+                  name: store.name || `Pickup point ${storeIndex + 1}`,
+                  address: store.address || '',
+                  position,
+                };
+              })
+              .filter(Boolean);
+            const primaryPoint =
+              toMapPoint(item.latitude, item.longitude) ||
+              pickupPoints[0]?.position ||
+              null;
 
             const distanceCandidates = [
               calculateDistanceKm(coords, {
@@ -324,6 +431,8 @@ const RentalVehicleDetail = () => {
                 '',
               latitude: Number(item.latitude),
               longitude: Number(item.longitude),
+              primaryPoint,
+              pickupPoints,
               distanceKm: nearestDistanceKm,
               distanceLabel: formatDistance(nearestDistanceKm),
               storeCount: locationStores.length,
@@ -684,6 +793,104 @@ const RentalVehicleDetail = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
+                  <div className="overflow-hidden rounded-[22px] border border-slate-100 bg-slate-50">
+                    <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-white/80 px-4 py-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                          Pickup Map
+                        </p>
+                        <p className="mt-0.5 text-[12px] font-bold text-slate-600">
+                          Available rental pickup points pinned on Google Maps.
+                        </p>
+                      </div>
+                      {selectedServiceLocation?.distanceLabel ? (
+                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">
+                          {selectedServiceLocation.distanceLabel}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="relative h-64 w-full bg-slate-200">
+                      {!HAS_VALID_GOOGLE_MAPS_KEY ? (
+                        <div className="flex h-full items-center justify-center px-6 text-center">
+                          <div className="rounded-[18px] bg-white/90 px-4 py-4 shadow-sm">
+                            <p className="text-[12px] font-bold text-slate-900">Google Maps key missing</p>
+                            <p className="mt-1 text-[11px] font-bold text-slate-500">
+                              Set `VITE_GOOGLE_MAPS_API_KEY` in `frontend/.env`.
+                            </p>
+                          </div>
+                        </div>
+                      ) : mapLoadError ? (
+                        <div className="flex h-full items-center justify-center px-6 text-center">
+                          <div className="rounded-[18px] bg-white/90 px-4 py-4 shadow-sm">
+                            <p className="text-[12px] font-bold text-slate-900">Google Maps failed to load</p>
+                            <p className="mt-1 text-[11px] font-bold text-slate-500">
+                              Check the browser key restrictions and reload.
+                            </p>
+                          </div>
+                        </div>
+                      ) : !isMapLoaded ? (
+                        <div className="flex h-full items-center justify-center">
+                          <div className="flex items-center gap-2 rounded-[16px] bg-white/90 px-4 py-3 shadow-sm">
+                            <Loader2 size={18} className="animate-spin text-slate-500" />
+                            <span className="text-[12px] font-bold text-slate-700">Loading map</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <GoogleMap
+                          mapContainerStyle={MAP_CONTAINER_STYLE}
+                          center={mapCenter}
+                          zoom={12}
+                          onLoad={(map) => {
+                            mapRef.current = map;
+                          }}
+                          options={{
+                            disableDefaultUI: true,
+                            zoomControl: true,
+                            clickableIcons: false,
+                            streetViewControl: false,
+                            fullscreenControl: false,
+                            mapTypeControl: false,
+                            gestureHandling: 'greedy',
+                          }}
+                        >
+                          {mapMarkers.map((marker) => (
+                            <MarkerF
+                              key={marker.key}
+                              position={marker.position}
+                              title={marker.title}
+                              onClick={() => setSelectedServiceLocationId(String(marker.locationId))}
+                              icon={{
+                                path: window.google.maps.SymbolPath.CIRCLE,
+                                fillColor: marker.isSelected ? '#10b981' : marker.type === 'location' ? '#0f172a' : '#f59e0b',
+                                fillOpacity: 1,
+                                strokeColor: marker.isClosest ? '#ecfeff' : '#ffffff',
+                                strokeWeight: marker.isSelected ? 3 : 2,
+                                scale: marker.isSelected ? (marker.type === 'location' ? 11 : 9) : marker.type === 'location' ? 8 : 6,
+                              }}
+                            />
+                          ))}
+                        </GoogleMap>
+                      )}
+
+                      {selectedServiceLocation ? (
+                        <div className="pointer-events-none absolute left-3 top-3 rounded-[14px] border border-white/80 bg-white/92 px-3 py-2 shadow-sm">
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                            {selectedServiceLocation.id === serviceLocations[0]?.id && selectedServiceLocation.distanceLabel
+                              ? 'Closest Service Point'
+                              : 'Selected Service Point'}
+                          </p>
+                          <p className="mt-1 text-[12px] font-black text-slate-900">
+                            {selectedServiceLocation.name}
+                          </p>
+                          <p className="mt-0.5 max-w-[180px] text-[10px] font-bold text-slate-500">
+                            {selectedServiceLocation.address || `${appName} pickup point`}
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
                   {serviceLocations.map((item, index) => {
                     const isSelected = String(selectedServiceLocationId) === String(item.id);
 

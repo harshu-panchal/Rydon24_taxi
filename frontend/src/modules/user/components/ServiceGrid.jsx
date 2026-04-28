@@ -26,9 +26,9 @@ const ServiceTile = ({ icon, label, description, path, accentClass, loading }) =
       onClick={() => path && navigate(path)}
       className="flex h-full min-h-[112px] w-full items-center justify-center transition-transform"
     >
-      <div className="flex h-[100px] w-[90%] flex-col items-center justify-center gap-1 rounded-[16px] border border-white/20 bg-white/82 px-1 py-1.5 shadow-[0_5px_10px_rgba(15,23,42,0.03)]">
-        <div className={`flex h-[72px] w-[72px] items-center justify-center rounded-[16px] ${accentClass || 'bg-gray-50'}`}>
-          <img src={icon} alt={label} className="h-[60px] w-[60px] object-contain drop-shadow-sm" />
+      <div className="flex h-[108px] w-[92%] flex-col items-center justify-center gap-1.5 px-1 py-1">
+        <div className={`flex h-[82px] w-[82px] items-center justify-center rounded-[18px] ${accentClass || 'bg-gray-50'}`}>
+          <img src={icon} alt={label} className="h-[70px] w-[70px] object-contain drop-shadow-sm" />
         </div>
 
         <div className="flex flex-col items-center gap-0.5 text-center">

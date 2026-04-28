@@ -2,7 +2,7 @@ const CURRENT_RIDE_STORAGE_KEY = 'rydon24_current_ride';
 
 export const CURRENT_RIDE_UPDATED_EVENT = 'rydon24:current-ride-updated';
 
-const ACTIVE_RIDE_STATUSES = new Set(['accepted', 'arriving', 'started', 'ongoing', 'assigned', 'confirmed']);
+const ACTIVE_RIDE_STATUSES = new Set(['accepted', 'arriving', 'started', 'ongoing', 'assigned', 'confirmed', 'end_requested']);
 const TERMINAL_RIDE_STATUSES = new Set(['completed', 'cancelled', 'delivered']);
 
 const notifyCurrentRideChange = () => {

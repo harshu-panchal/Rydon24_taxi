@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { CheckCircle2, MapPin, Clock, Camera, Home, Upload } from 'lucide-react';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 import { userService } from '../../services/userService';
-import { clearCurrentRide } from '../../services/currentRideService';
+import { saveCurrentRide } from '../../services/currentRideService';
 
 const buildRentalBookingPayload = ({
   state,
@@ -59,16 +59,17 @@ const RentalConfirmed = () => {
 
   const activeRentalRide = state?.serviceType === 'rental' && state?.rideId ? state : null;
   const isCompletedRentalRide = Boolean(activeRentalRide?.completedAt || state?.summaryMode === 'completed');
+  const isEndRequestPending = String(activeRentalRide?.status || '').toLowerCase() === 'end_requested' && !isCompletedRentalRide;
 
   useEffect(() => {
-    if (!activeRentalRide || isCompletedRentalRide) return undefined;
+    if (!activeRentalRide || isCompletedRentalRide || isEndRequestPending) return undefined;
 
     const timer = window.setInterval(() => {
       setClockNow(Date.now());
-    }, 30000);
+    }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [activeRentalRide, isCompletedRentalRide]);
+  }, [activeRentalRide, isCompletedRentalRide, isEndRequestPending]);
 
   if (!state.vehicle && !activeRentalRide) {
     navigate('/rental');
@@ -87,18 +88,24 @@ const RentalConfirmed = () => {
     paymentMethodLabel,
     bookingReference,
   } = state;
-  const liveElapsedMinutes = activeRentalRide?.assignedAt
-    ? Math.max(0, Math.ceil((clockNow - new Date(activeRentalRide.assignedAt).getTime()) / 60000))
-    : Number(activeRentalRide?.elapsedMinutes || 0);
-  const liveElapsedLabel = `${Math.floor(liveElapsedMinutes / 60)}h ${String(liveElapsedMinutes % 60).padStart(2, '0')}m`;
+  const liveElapsedSeconds = activeRentalRide?.assignedAt
+    ? isEndRequestPending && Number(activeRentalRide?.finalElapsedMinutes || 0) > 0
+      ? Number(activeRentalRide.finalElapsedMinutes || 0) * 60
+      : Math.max(1, Math.floor((clockNow - new Date(activeRentalRide.assignedAt || activeRentalRide.createdAt).getTime()) / 1000))
+    : Number(activeRentalRide?.elapsedMinutes || 0) * 60;
+
+  const liveElapsedLabel = `${Math.floor(liveElapsedSeconds / 3600)}h ${String(Math.floor((liveElapsedSeconds % 3600) / 60)).padStart(2, '0')}m ${String(liveElapsedSeconds % 60).padStart(2, '0')}s`;
+
   const liveCharge = activeRentalRide
-    ? Math.min(
-        Number(activeRentalRide.totalCost || 0),
-        Math.max(
-          Number(activeRentalRide.advancePaid || 0),
-          Number(activeRentalRide.hourlyRate || 0) * (liveElapsedMinutes / 60),
-        ),
-      )
+    ? isEndRequestPending && Number(activeRentalRide?.finalCharge || 0) > 0
+      ? Number(activeRentalRide.finalCharge || 0)
+      : Math.min(
+          Number(activeRentalRide.totalCost || 0),
+          Math.max(
+            Number(activeRentalRide.advancePaid || 0),
+            Number(activeRentalRide.hourlyRate || 0) * (liveElapsedSeconds / 3600),
+          ),
+        )
     : 0;
   const completedCharge = Number(activeRentalRide?.finalCharge || activeRentalRide?.fare || 0);
   const activeVehicleImage = activeRentalRide?.assignedVehicle?.image || activeRentalRide?.vehicle?.image || state.vehicle?.image;
@@ -168,18 +175,21 @@ const RentalConfirmed = () => {
       setEndingRide(true);
       const response = await userService.endRentalRide(activeRentalRide.rideId);
       const payload = response?.data || null;
-      clearCurrentRide();
+      const nextRideState = {
+        ...activeRentalRide,
+        ...payload,
+        rideId: payload?.id || activeRentalRide.rideId,
+        fare: payload?.finalCharge || payload?.rideMetrics?.currentCharge || finalTotal,
+        completionRequestedAt: payload?.completionRequestedAt || new Date().toISOString(),
+        status: payload?.status || 'end_requested',
+        liveStatus: payload?.status || 'end_requested',
+        finalCharge: payload?.finalCharge || payload?.rideMetrics?.currentCharge || finalTotal,
+        finalElapsedMinutes: payload?.finalElapsedMinutes || payload?.rideMetrics?.elapsedMinutes || liveElapsedMinutes,
+      };
+      saveCurrentRide(nextRideState);
       navigate('/rental/confirmed', {
         replace: true,
-        state: {
-          ...activeRentalRide,
-          ...payload,
-          rideId: payload?.id || activeRentalRide.rideId,
-          fare: payload?.finalCharge || payload?.rideMetrics?.currentCharge || finalTotal,
-          completedAt: payload?.completedAt || new Date().toISOString(),
-          finalCharge: payload?.finalCharge || payload?.rideMetrics?.currentCharge || finalTotal,
-          summaryMode: 'completed',
-        },
+        state: nextRideState,
       });
     } catch (error) {
       console.error(error);
@@ -205,10 +215,10 @@ const RentalConfirmed = () => {
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">
-                {isCompletedRentalRide ? 'Ride Completed' : 'Rental In Progress'}
+                {isCompletedRentalRide ? 'Ride Completed' : isEndRequestPending ? 'End Review Pending' : 'Rental In Progress'}
               </p>
               <h1 className="text-[22px] font-black text-slate-900 tracking-tight mt-0.5">
-                {isCompletedRentalRide ? 'Final rental total' : 'Vehicle assigned'}
+                {isCompletedRentalRide ? 'Final rental total' : isEndRequestPending ? 'Awaiting admin confirmation' : 'Vehicle assigned'}
               </h1>
               <p className="text-[12px] font-bold text-slate-400 mt-1">
                 Booking ID: <span className="text-slate-700 font-black">{activeRentalRide.bookingReference || bookingId}</span>
@@ -237,7 +247,7 @@ const RentalConfirmed = () => {
               <div className="flex items-center justify-between rounded-[14px] bg-slate-50 px-4 py-3">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Time Elapsed</p>
-                  <p className="mt-1 text-[18px] font-black text-slate-900">{isCompletedRentalRide ? `${Math.floor(Number(activeRentalRide.finalElapsedMinutes || liveElapsedMinutes) / 60)}h ${String(Number(activeRentalRide.finalElapsedMinutes || liveElapsedMinutes) % 60).padStart(2, '0')}m` : liveElapsedLabel}</p>
+                  <p className="mt-1 text-[18px] font-black text-slate-900">{liveElapsedLabel}</p>
                 </div>
                 <Clock size={18} className="text-orange-500" />
               </div>
@@ -247,12 +257,12 @@ const RentalConfirmed = () => {
                   <p className="mt-1 text-[16px] font-black text-emerald-600">Rs.{Number(activeRentalRide.advancePaid || activeRentalRide.payableNow || 0).toFixed(0)}</p>
                 </div>
                 <div className="rounded-[14px] bg-slate-50 px-4 py-3">
-                  <p className="text-[10px] font-bold text-slate-400">{isCompletedRentalRide ? 'Final total' : 'Charge till now'}</p>
+                  <p className="text-[10px] font-bold text-slate-400">{isCompletedRentalRide ? 'Final total' : isEndRequestPending ? 'Frozen total for review' : 'Charge till now'}</p>
                   <p className="mt-1 text-[16px] font-black text-slate-900">Rs.{finalTotal.toFixed(0)}</p>
                 </div>
               </div>
               <div className="rounded-[14px] bg-slate-50 px-4 py-3">
-                <p className="text-[10px] font-bold text-slate-400">{isCompletedRentalRide ? 'Final payable balance' : 'Current remaining due'}</p>
+                <p className="text-[10px] font-bold text-slate-400">{isCompletedRentalRide ? 'Final payable balance' : isEndRequestPending ? 'Pending settlement after review' : 'Current remaining due'}</p>
                 <p className="mt-1 text-[16px] font-black text-slate-900">
                   Rs.{Math.max(0, finalTotal - Number(activeRentalRide.advancePaid || activeRentalRide.payableNow || 0)).toFixed(0)}
                 </p>
@@ -278,19 +288,21 @@ const RentalConfirmed = () => {
             <p className="text-[12px] font-bold text-slate-500 leading-relaxed">
               {isCompletedRentalRide
                 ? `Your rental ride has ended. Final total is Rs.${finalTotal.toFixed(0)} and the remaining amount is payable at drop-off.`
-                : `Your rental is active now. The live charge keeps updating based on elapsed time until you end the ride.`}
+                : isEndRequestPending
+                  ? `Your end-ride request has been sent to admin for review. The current elapsed time and charge are now frozen until admin confirms the closure.`
+                  : `Your rental is active now. The live charge keeps updating based on elapsed time until you end the ride.`}
             </p>
           </motion.div>
         </div>
 
         <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 pb-6 pt-3 bg-gradient-to-t from-[#EEF2F7] via-[#F3F4F6]/95 to-transparent pointer-events-none z-30">
-          {isCompletedRentalRide ? (
+          {isCompletedRentalRide || isEndRequestPending ? (
             <motion.button
               whileTap={{ scale: 0.98 }}
               onClick={() => navigate('/user')}
               className="pointer-events-auto w-full bg-slate-900 py-4 rounded-[18px] text-[15px] font-black text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] flex items-center justify-center gap-2"
             >
-              <Home size={16} strokeWidth={2.5} /> Back to Home
+              <Home size={16} strokeWidth={2.5} /> {isCompletedRentalRide ? 'Back to Home' : 'Track from Home'}
             </motion.button>
           ) : (
             <motion.button
@@ -299,7 +311,7 @@ const RentalConfirmed = () => {
               disabled={endingRide}
               className="pointer-events-auto w-full bg-slate-900 py-4 rounded-[18px] text-[15px] font-black text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] flex items-center justify-center gap-2 disabled:opacity-60"
             >
-              <CheckCircle2 size={16} strokeWidth={2.5} /> {endingRide ? 'Ending ride...' : 'End Ride'}
+              <CheckCircle2 size={16} strokeWidth={2.5} /> {endingRide ? 'Sending end request...' : 'Request End Ride'}
             </motion.button>
           )}
         </div>

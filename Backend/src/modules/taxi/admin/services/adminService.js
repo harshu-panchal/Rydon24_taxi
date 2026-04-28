@@ -845,7 +845,10 @@ const serializeRentalBookingRequest = (item = {}) => ({
   },
   status: item.status || 'pending',
   assignedAt: item.assignedAt || null,
+  completionRequestedAt: item.completionRequestedAt || null,
   completedAt: item.completedAt || null,
+  finalCharge: Number(item.finalCharge || 0),
+  finalElapsedMinutes: Number(item.finalElapsedMinutes || 0),
   cancelledAt: item.cancelledAt || null,
   cancelReason: item.cancelReason || '',
   adminNote: item.adminNote || '',
@@ -879,6 +882,50 @@ const toNullableNumber = (value) => {
   if (value === '' || value === null || value === undefined) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+};
+
+const computeRentalRideMetrics = (item = {}, endedAt = null) => {
+  const startDate = item.assignedAt || item.pickupDateTime || item.createdAt;
+  const startMs = startDate ? new Date(startDate).getTime() : NaN;
+  const endMs = endedAt ? new Date(endedAt).getTime() : Date.now();
+
+  const safeRequestedHours = Math.max(
+    Number(item.requestedHours || 0),
+    Number(item.selectedPackage?.durationHours || 0),
+    1,
+  );
+  const hourlyRate = Number(item.totalCost || item.selectedPackage?.price || 0) / safeRequestedHours;
+
+  if (!Number.isFinite(startMs)) {
+    return {
+      hourlyRate: Math.max(0, hourlyRate),
+      elapsedMinutes: 0,
+      elapsedHours: 0,
+      currentCharge: Math.max(0, Number(item.payableNow || 0)),
+      remainingDue: Math.max(0, Number(item.totalCost || 0) - Number(item.payableNow || 0)),
+    };
+  }
+
+  const elapsedMs = Math.max(0, endMs - startMs);
+  const elapsedMinutes = Math.max(0, Math.ceil(elapsedMs / 60000));
+  const elapsedHours = elapsedMs / 3600000;
+  const uncappedCharge = Math.max(Number(item.payableNow || 0), hourlyRate * elapsedHours);
+  const currentCharge = Math.min(
+    Number(item.totalCost || 0),
+    Math.round((uncappedCharge + Number.EPSILON) * 100) / 100,
+  );
+  const remainingDue = Math.max(
+    0,
+    Math.round((currentCharge - Number(item.payableNow || 0) + Number.EPSILON) * 100) / 100,
+  );
+
+  return {
+    hourlyRate: Math.max(0, Math.round((hourlyRate + Number.EPSILON) * 100) / 100),
+    elapsedMinutes,
+    elapsedHours: Math.round((elapsedHours + Number.EPSILON) * 100) / 100,
+    currentCharge,
+    remainingDue,
+  };
 };
 
 const normalizeZoneCoordinates = (coordinates = []) => {
@@ -6420,7 +6467,13 @@ export const getDashboardData = async () => {
       .sort({ createdAt: -1 })
       .lean();
 
-    return items.map((item) => serializeRentalBookingRequest(item));
+    return items.map((item) => ({
+      ...serializeRentalBookingRequest(item),
+      rideMetrics: computeRentalRideMetrics(
+        item,
+        item.completedAt || item.completionRequestedAt || null,
+      ),
+    }));
   };
 
   export const getRentalBookingRequestById = async (id) => {
@@ -6433,7 +6486,13 @@ export const getDashboardData = async () => {
       throw new ApiError(404, 'Rental booking request not found');
     }
 
-    return serializeRentalBookingRequest(item);
+    return {
+      ...serializeRentalBookingRequest(item),
+      rideMetrics: computeRentalRideMetrics(
+        item,
+        item.completedAt || item.completionRequestedAt || null,
+      ),
+    };
   };
 
   export const updateRentalBookingRequest = async (id, payload = {}, adminId = null) => {
@@ -6443,7 +6502,7 @@ export const getDashboardData = async () => {
     }
 
     if (payload.status !== undefined) {
-      if (!['pending', 'confirmed', 'assigned', 'completed', 'cancelled'].includes(String(payload.status))) {
+      if (!['pending', 'confirmed', 'assigned', 'end_requested', 'completed', 'cancelled'].includes(String(payload.status))) {
         throw new ApiError(400, 'Invalid rental booking request status');
       }
       item.status = String(payload.status);
@@ -6476,8 +6535,13 @@ export const getDashboardData = async () => {
           image: assignedVehicle.image || '',
         };
         item.assignedAt = new Date();
+        item.completionRequestedAt = null;
+        item.finalCharge = 0;
+        item.finalElapsedMinutes = 0;
 
-        if (!payload.status && ['pending', 'confirmed'].includes(String(item.status || ''))) {
+        if (
+          !['end_requested', 'completed', 'cancelled'].includes(String(payload.status || item.status || ''))
+        ) {
           item.status = 'assigned';
         }
       }
@@ -6500,8 +6564,33 @@ export const getDashboardData = async () => {
       }
     }
 
+    if (item.status === 'end_requested') {
+      item.completionRequestedAt = item.completionRequestedAt || new Date();
+      const metrics = computeRentalRideMetrics(item, item.completionRequestedAt);
+      item.finalCharge = Math.max(0, Number(item.finalCharge || metrics.currentCharge || 0));
+      item.finalElapsedMinutes = Math.max(
+        0,
+        Number(item.finalElapsedMinutes || metrics.elapsedMinutes || 0),
+      );
+      item.completedAt = null;
+    } else if (payload.status !== undefined) {
+      item.completionRequestedAt = null;
+      if (payload.status !== 'completed') {
+        item.finalCharge = 0;
+        item.finalElapsedMinutes = 0;
+      }
+    }
+
     if (item.status === 'completed') {
       item.completedAt = item.completedAt || new Date();
+      if (!item.finalCharge || !item.finalElapsedMinutes) {
+        const metrics = computeRentalRideMetrics(item, item.completedAt);
+        item.finalCharge = Math.max(0, Number(item.finalCharge || metrics.currentCharge || 0));
+        item.finalElapsedMinutes = Math.max(
+          0,
+          Number(item.finalElapsedMinutes || metrics.elapsedMinutes || 0),
+        );
+      }
     } else if (payload.status !== undefined && payload.status !== 'completed') {
       item.completedAt = null;
     }
@@ -6515,7 +6604,13 @@ export const getDashboardData = async () => {
       .populate('vehicleTypeId', 'name vehicleCategory image')
       .lean();
 
-    return serializeRentalBookingRequest(populated);
+    return {
+      ...serializeRentalBookingRequest(populated),
+      rideMetrics: computeRentalRideMetrics(
+        populated,
+        populated.completedAt || populated.completionRequestedAt || null,
+      ),
+    };
   };
 
 

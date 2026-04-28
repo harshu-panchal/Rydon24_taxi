@@ -212,10 +212,14 @@ const rentalBookingRequestSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['pending', 'confirmed', 'assigned', 'completed', 'cancelled'],
+      enum: ['pending', 'confirmed', 'assigned', 'end_requested', 'completed', 'cancelled'],
       default: 'pending',
     },
     assignedAt: {
+      type: Date,
+      default: null,
+    },
+    completionRequestedAt: {
       type: Date,
       default: null,
     },
