@@ -450,6 +450,7 @@ const AdminLayout = () => {
             label: 'Price Management',
             subItems: [
               { label: 'Service Location', path: '/admin/pricing/service-location' },
+              { label: 'Service Stores', path: '/admin/pricing/service-stores' },
               { label: 'Zone', path: '/admin/pricing/zone' },
               { label: 'Airport', path: '/admin/pricing/airport' },
               { label: 'App Modules', path: '/admin/pricing/app-modules' },

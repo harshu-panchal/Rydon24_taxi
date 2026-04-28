@@ -24,6 +24,7 @@ import { createDefaultThirdPartySettings } from '../data/defaultThirdPartySettin
 import { RentalPackageType } from '../models/RentalPackageType.js';
 import { SetPrice } from '../models/SetPrice.js';
 import { ServiceLocation } from '../models/ServiceLocation.js';
+import { ServiceStore } from '../models/ServiceStore.js';
 import { Vehicle } from '../models/Vehicle.js';
 import { Driver } from '../../driver/models/Driver.js';
 import { Zone } from '../../driver/models/Zone.js';
@@ -367,6 +368,24 @@ const normalizeZoneCoordinates = (coordinates = []) => {
 
 const normalizeAirportBoundary = (coordinates = []) => normalizeZoneCoordinates(coordinates);
 
+const normalizePointLocationPayload = (payload = {}, fallback = {}) => {
+  const latitude = Number(payload.latitude ?? payload.lat ?? fallback.latitude);
+  const longitude = Number(payload.longitude ?? payload.lng ?? fallback.longitude);
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    throw new ApiError(400, 'A valid store location pin is required');
+  }
+
+  return {
+    latitude,
+    longitude,
+    location: {
+      type: 'Point',
+      coordinates: [longitude, latitude],
+    },
+  };
+};
+
 const serializeZone = (zone) => ({
   _id: zone._id,
   id: zone._id,
@@ -387,6 +406,36 @@ const serializeZone = (zone) => ({
     : [],
   createdAt: zone.createdAt,
   updatedAt: zone.updatedAt,
+});
+
+const serializeServiceStore = (store) => ({
+  _id: store._id,
+  id: store._id,
+  name: store.name || '',
+  address: store.address || '',
+  zone_id: store.zone_id
+    ? {
+        _id: store.zone_id._id || store.zone_id,
+        name: store.zone_id.name || '',
+        service_location_id:
+          store.zone_id.service_location_id?._id || store.zone_id.service_location_id || '',
+      }
+    : null,
+  service_location_id: store.service_location_id
+    ? {
+        _id: store.service_location_id._id || store.service_location_id,
+        name: store.service_location_id.service_location_name || store.service_location_id.name || '',
+        country: store.service_location_id.country || '',
+      }
+    : null,
+  latitude:
+    Number(store.latitude ?? store.location?.coordinates?.[1] ?? null),
+  longitude:
+    Number(store.longitude ?? store.location?.coordinates?.[0] ?? null),
+  status: store.status || (store.active === false ? 'inactive' : 'active'),
+  active: store.active !== false,
+  createdAt: store.createdAt,
+  updatedAt: store.updatedAt,
 });
 
 const serializeSetPrice = (item) => ({
@@ -5187,6 +5236,121 @@ export const getDashboardData = async () => {
       .lean();
 
     return zones.map(serializeZone);
+  };
+
+  export const listServiceStores = async () => {
+    const stores = await ServiceStore.find()
+      .populate({
+        path: 'zone_id',
+        select: 'name service_location_id',
+      })
+      .populate('service_location_id', 'name service_location_name country')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return stores.map(serializeServiceStore);
+  };
+
+  export const createServiceStore = async (payload) => {
+    const name = String(payload.name || '').trim();
+    if (!name) {
+      throw new ApiError(400, 'Service store name is required');
+    }
+
+    if (!payload.zone_id || !mongoose.isValidObjectId(payload.zone_id)) {
+      throw new ApiError(400, 'A valid zone is required');
+    }
+
+    const zone = await Zone.findById(payload.zone_id).select('_id service_location_id').lean();
+    if (!zone) {
+      throw new ApiError(404, 'Zone not found');
+    }
+
+    const point = normalizePointLocationPayload(payload);
+    const status = payload.status || 'active';
+
+    const store = await ServiceStore.create({
+      name,
+      zone_id: zone._id,
+      service_location_id: zone.service_location_id || null,
+      address: String(payload.address || '').trim(),
+      ...point,
+      status,
+      active: status === 'active',
+    });
+
+    const populatedStore = await ServiceStore.findById(store._id)
+      .populate({
+        path: 'zone_id',
+        select: 'name service_location_id',
+      })
+      .populate('service_location_id', 'name service_location_name country')
+      .lean();
+
+    return serializeServiceStore(populatedStore);
+  };
+
+  export const updateServiceStore = async (id, payload) => {
+    const store = await ServiceStore.findById(id);
+    if (!store) {
+      throw new ApiError(404, 'Service store not found');
+    }
+
+    if (payload.name !== undefined) {
+      const name = String(payload.name || '').trim();
+      if (!name) {
+        throw new ApiError(400, 'Service store name is required');
+      }
+      store.name = name;
+    }
+
+    if (payload.zone_id !== undefined) {
+      if (!payload.zone_id || !mongoose.isValidObjectId(payload.zone_id)) {
+        throw new ApiError(400, 'A valid zone is required');
+      }
+
+      const zone = await Zone.findById(payload.zone_id).select('_id service_location_id').lean();
+      if (!zone) {
+        throw new ApiError(404, 'Zone not found');
+      }
+
+      store.zone_id = zone._id;
+      store.service_location_id = zone.service_location_id || null;
+    }
+
+    if (payload.address !== undefined) {
+      store.address = String(payload.address || '').trim();
+    }
+
+    if (payload.latitude !== undefined || payload.longitude !== undefined) {
+      Object.assign(store, normalizePointLocationPayload(payload, store.toObject()));
+    }
+
+    if (payload.status !== undefined) {
+      store.status = payload.status || 'active';
+      store.active = store.status === 'active';
+    }
+
+    await store.save();
+
+    const populatedStore = await ServiceStore.findById(store._id)
+      .populate({
+        path: 'zone_id',
+        select: 'name service_location_id',
+      })
+      .populate('service_location_id', 'name service_location_name country')
+      .lean();
+
+    return serializeServiceStore(populatedStore);
+  };
+
+  export const deleteServiceStore = async (id) => {
+    const deleted = await ServiceStore.findByIdAndDelete(id);
+    if (!deleted) {
+      throw new ApiError(404, 'Service store not found');
+    }
+
+    return true;
   };
 
   export const createZone = async (payload) => {

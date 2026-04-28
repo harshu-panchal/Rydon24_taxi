@@ -18,6 +18,7 @@ import {
   createRole,
   createPaymentMethod,
   createServiceLocation,
+  createServiceStore,
   createSetPrice,
   createSubscriptionPlan,
   createUser,
@@ -41,6 +42,7 @@ import {
   deletePaymentMethod,
   deleteSetPrice,
   deleteServiceLocation,
+  deleteServiceStore,
   deleteUser,
   deleteZone,
   downloadDriverDutyReport,
@@ -106,6 +108,7 @@ import {
   getReferralDashboard,
   getSetPrices,
   getServiceLocations,
+  getServiceStores,
   getSmsSettings,
   getSubscriptionPlans,
   getSubscriptionSettings,
@@ -164,6 +167,7 @@ import {
   updateReferralTranslation,
   updateSetPrice,
   updateServiceLocation,
+  updateServiceStore,
   updateSmsSettings,
   updateUser,
   updateVehicleType,
@@ -245,6 +249,10 @@ adminRouter.get('/admin/service-locations/nearby', getNearbyServiceLocations);
 adminRouter.post('/admin/service-locations', createServiceLocation);
 adminRouter.patch('/admin/service-locations/:id', updateServiceLocation);
 adminRouter.delete('/admin/service-locations/:id', deleteServiceLocation);
+adminRouter.get('/admin/service-stores', getServiceStores);
+adminRouter.post('/admin/service-stores', createServiceStore);
+adminRouter.patch('/admin/service-stores/:id', updateServiceStore);
+adminRouter.delete('/admin/service-stores/:id', deleteServiceStore);
 adminRouter.get('/common/ride_modules', getRideModules);
 adminRouter.get('/admin/types/vehicle-types/list', getVehicleTypes);
 adminRouter.get('/admin/types/vehicle-types', getVehicleTypeCatalog);

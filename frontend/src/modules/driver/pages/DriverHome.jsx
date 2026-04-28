@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Bell, 
+    Camera,
     Navigation, 
     Wallet, 
     Clock, 
@@ -10,6 +11,7 @@ import {
     Target, 
     Layers, 
     Zap,
+    ImagePlus,
     IndianRupee, 
     TrendingUp, 
     Star, 
@@ -293,7 +295,8 @@ const DriverHome = () => {
         isBlocked: false,
     });
     const driverCoordsRef = useRef(readStoredDriverCoords());
-    const selfieInputRef = useRef(null);
+    const selfieCameraInputRef = useRef(null);
+    const selfieGalleryInputRef = useRef(null);
     const acceptingRideIdRef = useRef('');
     const currentRequestRef = useRef(null);
     const recoveryTimeoutsRef = useRef([]);
@@ -746,8 +749,11 @@ const DriverHome = () => {
             setSelfieError(error?.message || 'Failed to upload selfie');
         } finally {
             setSelfieUploading(false);
-            if (selfieInputRef.current) {
-                selfieInputRef.current.value = '';
+            if (selfieCameraInputRef.current) {
+                selfieCameraInputRef.current.value = '';
+            }
+            if (selfieGalleryInputRef.current) {
+                selfieGalleryInputRef.current.value = '';
             }
         }
     }, [goOnline]);
@@ -1245,16 +1251,7 @@ const DriverHome = () => {
                                 </p>
                             ) : null}
 
-                            <input
-                                ref={selfieInputRef}
-                                type="file"
-                                accept="image/*"
-                                capture="user"
-                                className="hidden"
-                                onChange={handleSelfieSelected}
-                            />
-
-                            <div className="mt-5 grid grid-cols-2 gap-3">
+                            <div className="mt-5 grid grid-cols-3 gap-3">
                                 <button
                                     type="button"
                                     disabled={selfieUploading}
@@ -1263,14 +1260,43 @@ const DriverHome = () => {
                                 >
                                     Cancel
                                 </button>
-                                <button
-                                    type="button"
-                                    disabled={selfieUploading}
-                                    onClick={() => selfieInputRef.current?.click()}
-                                    className="h-12 rounded-[16px] bg-emerald-500 text-[12px] font-black uppercase tracking-[0.14em] text-white shadow-[0_14px_28px_rgba(16,185,129,0.28)] disabled:opacity-60"
+                                <label
+                                    className={`relative flex h-12 items-center justify-center gap-2 rounded-[16px] border text-[11px] font-black uppercase tracking-[0.14em] transition-all ${
+                                        selfieUploading
+                                            ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+                                            : 'cursor-pointer border-slate-200 bg-white text-slate-700'
+                                    }`}
                                 >
-                                    {selfieUploading ? 'Uploading...' : 'Take Selfie'}
-                                </button>
+                                    <ImagePlus size={14} />
+                                    Gallery
+                                    <input
+                                        ref={selfieGalleryInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        disabled={selfieUploading}
+                                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                                        onChange={handleSelfieSelected}
+                                    />
+                                </label>
+                                <label
+                                    className={`relative flex h-12 items-center justify-center gap-2 rounded-[16px] text-[11px] font-black uppercase tracking-[0.14em] transition-all ${
+                                        selfieUploading
+                                            ? 'cursor-not-allowed bg-emerald-200 text-white/80'
+                                            : 'cursor-pointer bg-emerald-500 text-white shadow-[0_14px_28px_rgba(16,185,129,0.28)]'
+                                    }`}
+                                >
+                                    <Camera size={14} />
+                                    {selfieUploading ? 'Uploading...' : 'Camera'}
+                                    <input
+                                        ref={selfieCameraInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        capture="user"
+                                        disabled={selfieUploading}
+                                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                                        onChange={handleSelfieSelected}
+                                    />
+                                </label>
                             </div>
                         </motion.div>
                     </>

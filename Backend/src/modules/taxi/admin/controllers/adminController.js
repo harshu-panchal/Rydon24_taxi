@@ -408,17 +408,30 @@ export const getReferralDashboard = asyncHandler(async (_req, res) =>
 export const getServiceLocations = asyncHandler(async (_req, res) =>
   ok(res, await adminService.listServiceLocations()),
 );
+export const getServiceStores = asyncHandler(async (_req, res) =>
+  ok(res, { results: await adminService.listServiceStores() }),
+);
 export const getCountries = asyncHandler(async (_req, res) =>
   ok(res, { results: await adminService.listCountries() }),
 );
 export const createServiceLocation = asyncHandler(async (req, res) =>
   ok(res, await adminService.createServiceLocation(req.body)),
 );
+export const createServiceStore = asyncHandler(async (req, res) =>
+  ok(res, await adminService.createServiceStore(req.body)),
+);
 export const updateServiceLocation = asyncHandler(async (req, res) =>
   ok(res, await adminService.updateServiceLocation(req.params.id, req.body)),
 );
+export const updateServiceStore = asyncHandler(async (req, res) =>
+  ok(res, await adminService.updateServiceStore(req.params.id, req.body)),
+);
 export const deleteServiceLocation = asyncHandler(async (req, res) => {
   await adminService.deleteServiceLocation(req.params.id);
+  ok(res, { deleted: true });
+});
+export const deleteServiceStore = asyncHandler(async (req, res) => {
+  await adminService.deleteServiceStore(req.params.id);
   ok(res, { deleted: true });
 });
 export const getNearbyServiceLocations = asyncHandler(async (req, res) =>
