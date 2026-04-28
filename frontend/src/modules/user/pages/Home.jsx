@@ -276,50 +276,6 @@ const Home = () => {
       <div className="absolute bottom-28 right-[-40px] h-40 w-40 rounded-full bg-blue-100/60 blur-3xl pointer-events-none" />
 
       <div className="relative z-10 space-y-4 pb-6">
-        {currentRide && serviceType === 'rental' ? (
-          <Motion.button
-            type="button"
-            initial={{ y: -20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => navigate(trackingPath, { state: currentRide })}
-            className="w-full overflow-hidden border-b border-emerald-100 bg-white/60 p-5 text-center shadow-sm backdrop-blur-2xl"
-          >
-            <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(16,185,129,0.04)_0%,rgba(5,150,105,0.01)_100%)] pointer-events-none" />
-            
-            <div className="relative flex flex-col items-center gap-2">
-              <div className="flex items-center gap-2">
-                <div className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                </div>
-                <p className="text-[9px] font-black uppercase tracking-[0.3em] text-emerald-700/60">
-                  Rental Session Active
-                </p>
-              </div>
-
-              <div className="flex items-baseline gap-2">
-                <span className="text-[32px] font-black tracking-tight text-slate-950 leading-none">
-                  {rentalTimerLabel}
-                </span>
-                <span className="text-[12px] font-black text-emerald-600">
-                  ₹{rentalCurrentCharge.toFixed(0)}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                <div className="flex items-center gap-1">
-                  <Clock3 size={10} strokeWidth={3} className="text-slate-300" />
-                  ₹{Number(currentRide.hourlyRate || 0).toFixed(0)} / hr
-                </div>
-                <div className="h-1 w-1 rounded-full bg-slate-200" />
-                <div className="flex items-center gap-1">
-                  <span className="text-slate-300">Due</span> ₹{Math.max(0, Number(currentRide?.remainingDue || 0)).toFixed(0)}
-                </div>
-              </div>
-            </div>
-          </Motion.button>
-        ) : null}
         <HeaderGreeting />
         <ServiceGrid />
         <LocationMapSection />
@@ -385,7 +341,7 @@ const Home = () => {
       </div>
 
       <AnimatePresence>
-        {currentRide && (
+        {currentRide && serviceType !== 'rental' && (
           <Motion.button
             type="button"
             initial={{ y: 24, opacity: 0, scale: 0.96 }}

@@ -60,6 +60,48 @@ const RentalConfirmed = () => {
   const activeRentalRide = state?.serviceType === 'rental' && state?.rideId ? state : null;
   const isCompletedRentalRide = Boolean(activeRentalRide?.completedAt || state?.summaryMode === 'completed');
   const isEndRequestPending = String(activeRentalRide?.status || '').toLowerCase() === 'end_requested' && !isCompletedRentalRide;
+  const [distanceToHub, setDistanceToHub] = useState(null);
+  const [locationError, setLocationError] = useState(null);
+
+  useEffect(() => {
+    if (!activeRentalRide || isCompletedRentalRide || isEndRequestPending) return undefined;
+
+    let watchId;
+    const hubLat = activeRentalRide?.serviceLocation?.latitude;
+    const hubLon = activeRentalRide?.serviceLocation?.longitude;
+
+    if (navigator.geolocation && hubLat && hubLon) {
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, hubLat, hubLon);
+          setDistanceToHub(dist);
+          setLocationError(null);
+        },
+        (err) => {
+          console.error('Location error:', err);
+          setLocationError('Please enable location access to end the ride.');
+        },
+        { enableHighAccuracy: true },
+      );
+    }
+
+    return () => {
+      if (watchId) navigator.geolocation.clearWatch(watchId);
+    };
+  }, [activeRentalRide, isCompletedRentalRide, isEndRequestPending]);
+
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3; // meters
+    const q1 = (lat1 * Math.PI) / 180;
+    const q2 = (lat2 * Math.PI) / 180;
+    const dq = ((lat2 - lat1) * Math.PI) / 180;
+    const dl = ((lon2 - lon1) * Math.PI) / 180;
+    const a = Math.sin(dq / 2) * Math.sin(dq / 2) + Math.cos(q1) * Math.cos(q2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  const isWithinHubRange = distanceToHub !== null && distanceToHub <= 100;
 
   useEffect(() => {
     if (!activeRentalRide || isCompletedRentalRide || isEndRequestPending) return undefined;
@@ -305,14 +347,30 @@ const RentalConfirmed = () => {
               <Home size={16} strokeWidth={2.5} /> {isCompletedRentalRide ? 'Back to Home' : 'Track from Home'}
             </motion.button>
           ) : (
-            <motion.button
-              whileTap={{ scale: 0.98 }}
-              onClick={handleEndRide}
-              disabled={endingRide}
-              className="pointer-events-auto w-full bg-slate-900 py-4 rounded-[18px] text-[15px] font-black text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] flex items-center justify-center gap-2 disabled:opacity-60"
-            >
-              <CheckCircle2 size={16} strokeWidth={2.5} /> {endingRide ? 'Sending end request...' : 'Request End Ride'}
-            </motion.button>
+            <div className="pointer-events-auto w-full space-y-3">
+              {!isWithinHubRange && !locationError && (
+                <div className="bg-orange-50 border border-orange-100 rounded-[14px] px-4 py-2 text-center">
+                  <p className="text-[11px] font-black text-orange-600">
+                    {distanceToHub !== null 
+                      ? `Return to hub to end ride (${Math.round(distanceToHub)}m away)` 
+                      : 'Calculating distance to hub...'}
+                  </p>
+                </div>
+              )}
+              {locationError && (
+                <div className="bg-rose-50 border border-rose-100 rounded-[14px] px-4 py-2 text-center">
+                  <p className="text-[11px] font-black text-rose-600">{locationError}</p>
+                </div>
+              )}
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={handleEndRide}
+                disabled={endingRide || !isWithinHubRange}
+                className="w-full bg-slate-900 py-4 rounded-[18px] text-[15px] font-black text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale-[0.5]"
+              >
+                <CheckCircle2 size={16} strokeWidth={2.5} /> {endingRide ? 'Sending end request...' : 'Request End Ride'}
+              </motion.button>
+            </div>
           )}
         </div>
       </div>
