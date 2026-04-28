@@ -649,6 +649,12 @@ export const getRentalQuoteRequests = asyncHandler(async (_req, res) =>
 export const updateRentalQuoteRequest = asyncHandler(async (req, res) =>
   ok(res, await adminService.updateRentalQuoteRequest(req.params.id, req.body, req.auth?.sub)),
 );
+export const getRentalBookingRequests = asyncHandler(async (_req, res) =>
+  ok(res, { results: await adminService.listRentalBookingRequests() }),
+);
+export const updateRentalBookingRequest = asyncHandler(async (req, res) =>
+  ok(res, await adminService.updateRentalBookingRequest(req.params.id, req.body, req.auth?.sub)),
+);
 
 export const getGoodsTypes = asyncHandler(async (_req, res) =>
   res.json(await adminService.listGoodsTypes()),

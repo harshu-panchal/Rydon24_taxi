@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import AuthLayout from '../../components/AuthLayout';
 import { Phone } from 'lucide-react';
-import { userAuthService } from '../../services/authService';
+import { getLocalUserToken, userAuthService } from '../../services/authService';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const Login = () => {
@@ -14,8 +14,21 @@ const Login = () => {
   const [error, setError] = useState(() => String(location.state?.error || ''));
   const navigate = useNavigate();
   const appName = settings.general?.app_name || 'App';
+  const userHomeRoute = useMemo(
+    () => (location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '/user'),
+    [location.pathname],
+  );
 
   const isValidPhone = phoneNumber.length === 10 && /^\d+$/.test(phoneNumber);
+
+  useEffect(() => {
+    const token = getLocalUserToken();
+    if (!token) {
+      return;
+    }
+
+    navigate(userHomeRoute, { replace: true });
+  }, [navigate, userHomeRoute]);
 
   const handleLogin = async (e) => {
     e.preventDefault();

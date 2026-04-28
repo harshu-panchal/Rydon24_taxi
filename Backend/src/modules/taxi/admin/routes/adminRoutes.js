@@ -105,6 +105,7 @@ import {
   getPaymentMethods,
   getPaymentSettings,
   getPoolingRoutes,
+  getRentalBookingRequests,
   getRentalQuoteRequests,
   getPreferences,
   getRentalVehicleTypes,
@@ -171,6 +172,7 @@ import {
   updatePaymentSettings,
   updatePaymentMethod,
   updatePoolingRoute,
+  updateRentalBookingRequest,
   updateRentalQuoteRequest,
   updatePreferenceStatus,
   updateReferralTranslation,
@@ -289,6 +291,8 @@ adminRouter.get('/admin/pooling-routes', getPoolingRoutes);
 adminRouter.post('/admin/pooling-routes', createPoolingRoute);
 adminRouter.patch('/admin/pooling-routes/:id', updatePoolingRoute);
 adminRouter.delete('/admin/pooling-routes/:id', deletePoolingRoute);
+adminRouter.get('/admin/rental-booking-requests', getRentalBookingRequests);
+adminRouter.patch('/admin/rental-booking-requests/:id', updateRentalBookingRequest);
 adminRouter.get('/admin/rental-quote-requests', getRentalQuoteRequests);
 adminRouter.patch('/admin/rental-quote-requests/:id', updateRentalQuoteRequest);
 adminRouter.get('/admin/goods-types', getGoodsTypes);

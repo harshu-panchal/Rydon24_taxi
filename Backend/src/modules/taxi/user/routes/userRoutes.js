@@ -3,6 +3,8 @@ import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { authenticateOrResolveUser } from '../../middlewares/authMiddleware.js';
 import {
   createBusBookingOrder,
+  createRentalAdvancePaymentOrder,
+  createRentalBookingRequest,
   createRentalQuoteRequest,
   createRazorpayWalletTopupOrder,
   getBusSeatLayout,
@@ -12,7 +14,9 @@ import {
   getCurrentUser,
   getUserNotifications,
   deleteUserNotification,
+  endMyActiveRentalRide,
   clearAllUserNotifications,
+  getMyActiveRentalBooking,
   loginUser,
   registerUser,
   requestAccountDeletion,
@@ -26,6 +30,7 @@ import {
   updateCurrentUser,
   uploadUserProfileImage,
   verifyBusBookingPayment,
+  verifyRentalAdvancePayment,
   verifyRazorpayWalletTopup,
   verifyUserOtpRequest,
   verifyUserPhoneForOtpLogin,
@@ -39,6 +44,9 @@ userRouter.get('/goods-types', asyncHandler(getGoodsTypes));
 userRouter.get('/vehicle-types', asyncHandler(getPublicVehicleTypeCatalog));
 userRouter.get('/rental-vehicles', asyncHandler(getPublicRentalVehicleCatalog));
 userRouter.post('/rental-quote-requests', asyncHandler(createRentalQuoteRequest));
+userRouter.post('/rental-bookings', authenticateOrResolveUser(['user']), asyncHandler(createRentalBookingRequest));
+userRouter.get('/rental-bookings/active', authenticateOrResolveUser(['user']), asyncHandler(getMyActiveRentalBooking));
+userRouter.post('/rental-bookings/:id/end', authenticateOrResolveUser(['user']), asyncHandler(endMyActiveRentalRide));
 userRouter.post('/register', asyncHandler(registerUser));
 userRouter.post('/signup', asyncHandler(signupUser));
 userRouter.post('/login', asyncHandler(loginUser));
@@ -59,6 +67,8 @@ userRouter.post('/wallet/transfer', authenticateOrResolveUser(['user']), asyncHa
 userRouter.post('/wallet/transfer/driver', authenticateOrResolveUser(['user']), asyncHandler(transferUserWalletToDriver));
 userRouter.post('/wallet/razorpay/order', authenticateOrResolveUser(['user']), asyncHandler(createRazorpayWalletTopupOrder));
 userRouter.post('/wallet/razorpay/verify', authenticateOrResolveUser(['user']), asyncHandler(verifyRazorpayWalletTopup));
+userRouter.post('/rental-advance/razorpay/order', authenticateOrResolveUser(['user']), asyncHandler(createRentalAdvancePaymentOrder));
+userRouter.post('/rental-advance/razorpay/verify', authenticateOrResolveUser(['user']), asyncHandler(verifyRentalAdvancePayment));
 userRouter.get('/buses/routes', authenticateOrResolveUser(['user']), asyncHandler(getBusRouteSuggestions));
 userRouter.get('/buses/search', authenticateOrResolveUser(['user']), asyncHandler(searchBuses));
 userRouter.get('/buses/:id/seats', authenticateOrResolveUser(['user']), asyncHandler(getBusSeatLayout));

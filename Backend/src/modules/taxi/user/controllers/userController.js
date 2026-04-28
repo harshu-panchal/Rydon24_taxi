@@ -20,6 +20,7 @@ import {
 import { assignPushTokenToEntity } from '../../services/pushTokenService.js';
 import { BusSeatHold } from '../models/BusSeatHold.js';
 import { BusBooking } from '../models/BusBooking.js';
+import { RentalBookingRequest } from '../../admin/models/RentalBookingRequest.js';
 import { RentalQuoteRequest } from '../../admin/models/RentalQuoteRequest.js';
 import { RentalVehicleType } from '../../admin/models/RentalVehicleType.js';
 import { applyDriverWalletAdjustment } from '../../driver/services/walletService.js';
@@ -334,6 +335,105 @@ const serializeRentalQuoteRequest = (item = {}) => ({
   adminNote: item.adminNote || '',
   createdAt: item.createdAt || null,
 });
+
+const serializeRentalBookingRequest = (item = {}) => ({
+  id: String(item._id || item.id || ''),
+  bookingReference: item.bookingReference || '',
+  userId: item.userId ? String(item.userId) : '',
+  vehicleTypeId: item.vehicleTypeId ? String(item.vehicleTypeId) : '',
+  vehicleName: item.vehicleName || '',
+  vehicleCategory: item.vehicleCategory || '',
+  vehicleImage: item.vehicleImage || '',
+  selectedPackage: {
+    packageId: item.selectedPackage?.packageId || '',
+    label: item.selectedPackage?.label || '',
+    durationHours: Number(item.selectedPackage?.durationHours || 0),
+    price: Number(item.selectedPackage?.price || 0),
+  },
+  serviceLocation: {
+    locationId: item.serviceLocation?.locationId || '',
+    name: item.serviceLocation?.name || '',
+    address: item.serviceLocation?.address || '',
+    city: item.serviceLocation?.city || '',
+    latitude: item.serviceLocation?.latitude ?? null,
+    longitude: item.serviceLocation?.longitude ?? null,
+    distanceKm: item.serviceLocation?.distanceKm ?? null,
+  },
+  pickupDateTime: item.pickupDateTime || null,
+  returnDateTime: item.returnDateTime || null,
+  requestedHours: Number(item.requestedHours || 0),
+  totalCost: Number(item.totalCost || 0),
+  payableNow: Number(item.payableNow || 0),
+  advancePaymentLabel: item.advancePaymentLabel || '',
+  paymentStatus: item.paymentStatus || 'pending',
+  paymentMethod: item.paymentMethod || '',
+  paymentMethodLabel: item.paymentMethodLabel || '',
+  payment: {
+    provider: item.payment?.provider || '',
+    status: item.payment?.status || '',
+    amount: Number(item.payment?.amount || 0),
+    currency: item.payment?.currency || 'INR',
+    orderId: item.payment?.orderId || '',
+    paymentId: item.payment?.paymentId || '',
+    signature: item.payment?.signature || '',
+  },
+  contactName: item.contactName || '',
+  contactPhone: item.contactPhone || '',
+  contactEmail: item.contactEmail || '',
+  kycCompleted: Boolean(item.kycCompleted),
+  assignedVehicle: {
+    vehicleId: item.assignedVehicle?.vehicleId ? String(item.assignedVehicle.vehicleId) : '',
+    name: item.assignedVehicle?.name || '',
+    vehicleCategory: item.assignedVehicle?.vehicleCategory || '',
+    image: item.assignedVehicle?.image || '',
+  },
+  status: item.status || 'pending',
+  adminNote: item.adminNote || '',
+  assignedAt: item.assignedAt || null,
+  completedAt: item.completedAt || null,
+  finalCharge: Number(item.finalCharge || 0),
+  finalElapsedMinutes: Number(item.finalElapsedMinutes || 0),
+  createdAt: item.createdAt || null,
+  updatedAt: item.updatedAt || null,
+});
+
+const computeRentalRideMetrics = (item = {}, endedAt = null) => {
+  const startDate = item.assignedAt || item.pickupDateTime || item.createdAt;
+  const startMs = startDate ? new Date(startDate).getTime() : NaN;
+  const endMs = endedAt ? new Date(endedAt).getTime() : Date.now();
+
+  const safeRequestedHours = Math.max(
+    Number(item.requestedHours || 0),
+    Number(item.selectedPackage?.durationHours || 0),
+    1,
+  );
+  const hourlyRate = Number(item.totalCost || item.selectedPackage?.price || 0) / safeRequestedHours;
+
+  if (!Number.isFinite(startMs)) {
+    return {
+      hourlyRate: Math.max(0, hourlyRate),
+      elapsedMinutes: 0,
+      elapsedHours: 0,
+      currentCharge: Math.max(0, Number(item.payableNow || 0)),
+      remainingDue: Math.max(0, Number(item.totalCost || 0) - Number(item.payableNow || 0)),
+    };
+  }
+
+  const elapsedMs = Math.max(0, endMs - startMs);
+  const elapsedMinutes = Math.max(0, Math.ceil(elapsedMs / 60000));
+  const elapsedHours = elapsedMs / 3600000;
+  const uncappedCharge = Math.max(Number(item.payableNow || 0), hourlyRate * elapsedHours);
+  const currentCharge = Math.min(Number(item.totalCost || 0), Math.round((uncappedCharge + Number.EPSILON) * 100) / 100);
+  const remainingDue = Math.max(0, Math.round((currentCharge - Number(item.payableNow || 0) + Number.EPSILON) * 100) / 100);
+
+  return {
+    hourlyRate: Math.max(0, Math.round((hourlyRate + Number.EPSILON) * 100) / 100),
+    elapsedMinutes,
+    elapsedHours: Math.round((elapsedHours + Number.EPSILON) * 100) / 100,
+    currentCharge,
+    remainingDue,
+  };
+};
 
 const toPositiveInteger = (value, fallback) => {
   const parsed = Number.parseInt(value, 10);
@@ -1025,6 +1125,51 @@ export const createRazorpayWalletTopupOrder = async (req, res) => {
   });
 };
 
+export const createRentalAdvancePaymentOrder = async (req, res) => {
+  const amount = normalizeMoneyAmount(req.body?.amount);
+  const vehicleId = String(req.body?.vehicleId || '').trim();
+  const vehicleName = String(req.body?.vehicleName || 'Rental booking').trim();
+  const pickup = String(req.body?.pickup || '').trim();
+  const returnTime = String(req.body?.returnTime || '').trim();
+  const { keyId, keySecret } = await resolveRazorpayCredentials();
+
+  const amountPaise = Math.round(amount * 100);
+  const userId = String(req.auth?.sub || '');
+  const compactUserId = userId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'guest';
+  const receipt = `rentadv_${compactUserId}_${Date.now().toString(36)}`;
+
+  const order = await razorpayRequest({
+    method: 'POST',
+    path: '/orders',
+    body: {
+      amount: amountPaise,
+      currency: 'INR',
+      receipt,
+      notes: {
+        userId,
+        vehicleId,
+        vehicleName,
+        pickup,
+        returnTime,
+        purpose: 'rental_advance_payment',
+      },
+    },
+    keyId,
+    keySecret,
+  });
+
+  res.status(201).json({
+    success: true,
+    data: {
+      keyId,
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency || 'INR',
+      bookingReference: `RNT-${Date.now().toString(36).slice(-6).toUpperCase()}`,
+    },
+  });
+};
+
 export const verifyRazorpayWalletTopup = async (req, res) => {
   const orderId = String(req.body?.razorpay_order_id || '');
   const paymentId = String(req.body?.razorpay_payment_id || '');
@@ -1096,6 +1241,54 @@ export const verifyRazorpayWalletTopup = async (req, res) => {
   res.status(201).json({
     success: true,
     data: buildUserWalletPayload(wallet),
+  });
+};
+
+export const verifyRentalAdvancePayment = async (req, res) => {
+  const orderId = String(req.body?.razorpay_order_id || '').trim();
+  const paymentId = String(req.body?.razorpay_payment_id || '').trim();
+  const signature = String(req.body?.razorpay_signature || '').trim();
+
+  if (!orderId || !paymentId || !signature) {
+    throw new ApiError(400, 'Payment verification fields are required');
+  }
+
+  const { keyId, keySecret } = await resolveRazorpayCredentials();
+
+  const expectedSignature = crypto
+    .createHmac('sha256', keySecret)
+    .update(`${orderId}|${paymentId}`)
+    .digest('hex');
+
+  if (expectedSignature !== signature) {
+    throw new ApiError(400, 'Invalid payment signature');
+  }
+
+  const order = await razorpayRequest({
+    method: 'GET',
+    path: `/orders/${encodeURIComponent(orderId)}`,
+    keyId,
+    keySecret,
+  });
+
+  const amountPaise = Number(order?.amount);
+  if (!Number.isFinite(amountPaise) || amountPaise <= 0) {
+    throw new ApiError(400, 'Invalid order amount');
+  }
+
+  res.status(201).json({
+    success: true,
+    data: {
+      provider: 'razorpay',
+      status: 'paid',
+      amount: Math.round(amountPaise) / 100,
+      currency: order.currency || 'INR',
+      orderId,
+      paymentId,
+      signature,
+      notes: order?.notes || {},
+    },
+    message: 'Rental advance payment verified successfully',
   });
 };
 
@@ -1573,6 +1766,201 @@ export const createRentalQuoteRequest = async (req, res) => {
     success: true,
     data: serializeRentalQuoteRequest(request.toObject()),
     message: 'Rental quote request submitted successfully',
+  });
+};
+
+export const createRentalBookingRequest = async (req, res) => {
+  const payload = req.body || {};
+  const vehicleTypeId = String(payload.vehicleTypeId || payload.vehicleId || '').trim();
+  const bookingReference = toCleanString(payload.bookingReference) || `RNT-${Date.now().toString(36).slice(-6).toUpperCase()}`;
+  const paymentStatus = toCleanString(payload.paymentStatus).toLowerCase() || 'pending';
+  const paymentMethod = toCleanString(payload.paymentMethod).toLowerCase();
+  const paymentMethodLabel = toCleanString(payload.paymentMethodLabel);
+  const advancePaymentLabel = toCleanString(payload.advancePaymentLabel) || 'Advance booking payment';
+  const totalCost = Math.max(0, Number(payload.totalCost || 0));
+  const payableNow = Math.max(0, Number(payload.payableNow || payload.deposit || 0));
+  const kycCompleted = Boolean(payload.kycCompleted);
+
+  if (!mongoose.Types.ObjectId.isValid(vehicleTypeId)) {
+    throw new ApiError(400, 'Valid rental vehicle is required');
+  }
+
+  if (!['pending', 'paid', 'not_required', 'failed'].includes(paymentStatus)) {
+    throw new ApiError(400, 'Invalid rental payment status');
+  }
+
+  const pickupDateTime = payload.pickupDateTime ? new Date(payload.pickupDateTime) : null;
+  const returnDateTime = payload.returnDateTime ? new Date(payload.returnDateTime) : null;
+
+  if (!pickupDateTime || Number.isNaN(pickupDateTime.getTime())) {
+    throw new ApiError(400, 'Valid pickup date and time is required');
+  }
+
+  if (!returnDateTime || Number.isNaN(returnDateTime.getTime())) {
+    throw new ApiError(400, 'Valid return date and time is required');
+  }
+
+  if (returnDateTime <= pickupDateTime) {
+    throw new ApiError(400, 'Return date and time must be after pickup');
+  }
+
+  const [vehicle, user] = await Promise.all([
+    RentalVehicleType.findById(vehicleTypeId).lean(),
+    User.findById(req.auth?.sub).lean(),
+  ]);
+
+  if (!vehicle || vehicle.active === false || vehicle.status !== 'active') {
+    throw new ApiError(404, 'Rental vehicle not found');
+  }
+
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  const requestedHours = Math.max(
+    0,
+    Math.round((((returnDateTime.getTime() - pickupDateTime.getTime()) / 3600000) + Number.EPSILON) * 100) / 100,
+  );
+
+  const selectedPackage = payload.selectedPackage || {};
+  const serviceLocation = payload.serviceLocation || {};
+  const paymentPayload = payload.payment || {};
+
+  const update = {
+    userId: user._id,
+    bookingReference,
+    vehicleTypeId,
+    vehicleName: vehicle.name || '',
+    vehicleCategory: vehicle.vehicleCategory || '',
+    vehicleImage: vehicle.image || '',
+    selectedPackage: {
+      packageId: toCleanString(selectedPackage.id || selectedPackage.packageId || ''),
+      label: toCleanString(selectedPackage.label),
+      durationHours: Math.max(0, Number(selectedPackage.durationHours || 0)),
+      price: Math.max(0, Number(selectedPackage.price || 0)),
+    },
+    serviceLocation: {
+      locationId: toCleanString(serviceLocation.id || serviceLocation._id || serviceLocation.locationId || ''),
+      name: toCleanString(serviceLocation.name),
+      address: toCleanString(serviceLocation.address),
+      city: toCleanString(serviceLocation.city || serviceLocation.country),
+      latitude: Number.isFinite(Number(serviceLocation.latitude)) ? Number(serviceLocation.latitude) : null,
+      longitude: Number.isFinite(Number(serviceLocation.longitude)) ? Number(serviceLocation.longitude) : null,
+      distanceKm: Number.isFinite(Number(serviceLocation.distanceKm)) ? Number(serviceLocation.distanceKm) : null,
+    },
+    pickupDateTime,
+    returnDateTime,
+    requestedHours,
+    totalCost,
+    payableNow,
+    advancePaymentLabel,
+    paymentStatus,
+    paymentMethod,
+    paymentMethodLabel,
+    payment: {
+      provider: toCleanString(paymentPayload.provider),
+      status: toCleanString(paymentPayload.status) || paymentStatus,
+      amount: Math.max(0, Number(paymentPayload.amount || payableNow || 0)),
+      currency: toCleanString(paymentPayload.currency) || 'INR',
+      orderId: toCleanString(paymentPayload.orderId || paymentPayload.razorpay_order_id),
+      paymentId: toCleanString(paymentPayload.paymentId || paymentPayload.razorpay_payment_id),
+      signature: toCleanString(paymentPayload.signature || paymentPayload.razorpay_signature),
+    },
+    contactName: toCleanString(user.name),
+    contactPhone: toCleanString(user.phone),
+    contactEmail: toCleanString(user.email),
+    kycCompleted,
+  };
+
+  const request = await RentalBookingRequest.findOneAndUpdate(
+    { bookingReference, userId: user._id },
+    {
+      $set: update,
+      $setOnInsert: {
+        status: 'pending',
+        adminNote: '',
+      },
+    },
+    {
+      new: true,
+      upsert: true,
+      setDefaultsOnInsert: true,
+    },
+  ).lean();
+
+  return res.status(201).json({
+    success: true,
+    data: serializeRentalBookingRequest(request),
+    message: 'Rental booking request submitted successfully',
+  });
+};
+
+export const getMyActiveRentalBooking = async (req, res) => {
+  const item = await RentalBookingRequest.findOne({
+    userId: req.auth?.sub,
+    status: { $in: ['assigned', 'confirmed'] },
+  })
+    .sort({ updatedAt: -1, createdAt: -1 })
+    .lean();
+
+  if (!item) {
+    return res.status(200).json({
+      success: true,
+      data: null,
+    });
+  }
+
+  const metrics = computeRentalRideMetrics(item);
+
+  return res.status(200).json({
+    success: true,
+    data: {
+      ...serializeRentalBookingRequest(item),
+      rideMetrics: metrics,
+    },
+  });
+};
+
+export const endMyActiveRentalRide = async (req, res) => {
+  const bookingId = String(req.params?.id || '').trim();
+
+  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+    throw new ApiError(400, 'Valid rental booking id is required');
+  }
+
+  const item = await RentalBookingRequest.findOne({
+    _id: bookingId,
+    userId: req.auth?.sub,
+  });
+
+  if (!item) {
+    throw new ApiError(404, 'Rental booking not found');
+  }
+
+  if (!['assigned', 'confirmed'].includes(String(item.status || ''))) {
+    throw new ApiError(409, 'This rental ride cannot be ended right now');
+  }
+
+  const completedAt = new Date();
+  const metrics = computeRentalRideMetrics(item, completedAt);
+
+  item.status = 'completed';
+  item.completedAt = completedAt;
+  item.finalCharge = metrics.currentCharge;
+  item.finalElapsedMinutes = metrics.elapsedMinutes;
+
+  await item.save();
+
+  return res.status(200).json({
+    success: true,
+    data: {
+      ...serializeRentalBookingRequest(item.toObject()),
+      rideMetrics: {
+        ...metrics,
+        currentCharge: item.finalCharge,
+      },
+    },
+    message: 'Rental ride ended successfully',
   });
 };
 

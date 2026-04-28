@@ -1,8 +1,53 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { CheckCircle2, MapPin, Clock, Camera, Home, Upload } from 'lucide-react';
 import { useSettings } from '../../../../shared/context/SettingsContext';
+import { userService } from '../../services/userService';
+import { clearCurrentRide } from '../../services/currentRideService';
+
+const buildRentalBookingPayload = ({
+  state,
+  vehicle,
+  bookingReference,
+}) => ({
+  bookingReference,
+  vehicleTypeId: vehicle.id || vehicle._id,
+  pickupDateTime: state.pickup,
+  returnDateTime: state.returnTime,
+  totalCost: Number(state.totalCost || 0),
+  payableNow: Number(state.deposit || 0),
+  advancePaymentLabel: state.vehicle?.advancePayment?.label || 'Advance booking payment',
+  paymentStatus: state.paymentStatus || 'pending',
+  paymentMethod: state.paymentMethod || '',
+  paymentMethodLabel: state.paymentMethodLabel || '',
+  payment: state.payment || {
+    provider: state.paymentMethodLabel ? 'razorpay' : 'manual',
+    status: state.paymentStatus || 'pending',
+    amount: Number(state.deposit || 0),
+    currency: 'INR',
+  },
+  kycCompleted: true,
+  selectedPackage: state.selectedPackage
+    ? {
+        id: state.selectedPackage.id || state.selectedPackage._id || '',
+        label: state.selectedPackage.label || '',
+        durationHours: Number(state.selectedPackage.durationHours || 0),
+        price: Number(state.selectedPackage.price || 0),
+      }
+    : null,
+  serviceLocation: state.serviceLocation
+    ? {
+        id: state.serviceLocation.id || state.serviceLocation._id || '',
+        name: state.serviceLocation.name || '',
+        address: state.serviceLocation.address || '',
+        city: state.serviceLocation.city || state.serviceLocation.country || '',
+        latitude: state.serviceLocation.latitude,
+        longitude: state.serviceLocation.longitude,
+        distanceKm: state.serviceLocation.distanceKm,
+      }
+    : null,
+});
 
 const RentalConfirmed = () => {
   const navigate = useNavigate();
@@ -10,17 +55,257 @@ const RentalConfirmed = () => {
   const { settings } = useSettings();
   const appName = settings.general?.app_name || 'App';
   const state = location.state || {};
+  const [clockNow, setClockNow] = useState(() => Date.now());
 
-  if (!state.vehicle) {
+  const activeRentalRide = state?.serviceType === 'rental' && state?.rideId ? state : null;
+  const isCompletedRentalRide = Boolean(activeRentalRide?.completedAt || state?.summaryMode === 'completed');
+
+  useEffect(() => {
+    if (!activeRentalRide || isCompletedRentalRide) return undefined;
+
+    const timer = window.setInterval(() => {
+      setClockNow(Date.now());
+    }, 30000);
+
+    return () => window.clearInterval(timer);
+  }, [activeRentalRide, isCompletedRentalRide]);
+
+  if (!state.vehicle && !activeRentalRide) {
     navigate('/rental');
     return null;
   }
 
-  const { vehicle, duration, pickup, returnTime, totalCost, deposit, serviceLocation, selectedPackage } = state;
+  const {
+    vehicle,
+    duration,
+    pickup,
+    returnTime,
+    totalCost,
+    deposit,
+    serviceLocation,
+    selectedPackage,
+    paymentMethodLabel,
+    bookingReference,
+  } = state;
+  const liveElapsedMinutes = activeRentalRide?.assignedAt
+    ? Math.max(0, Math.ceil((clockNow - new Date(activeRentalRide.assignedAt).getTime()) / 60000))
+    : Number(activeRentalRide?.elapsedMinutes || 0);
+  const liveElapsedLabel = `${Math.floor(liveElapsedMinutes / 60)}h ${String(liveElapsedMinutes % 60).padStart(2, '0')}m`;
+  const liveCharge = activeRentalRide
+    ? Math.min(
+        Number(activeRentalRide.totalCost || 0),
+        Math.max(
+          Number(activeRentalRide.advancePaid || 0),
+          Number(activeRentalRide.hourlyRate || 0) * (liveElapsedMinutes / 60),
+        ),
+      )
+    : 0;
+  const completedCharge = Number(activeRentalRide?.finalCharge || activeRentalRide?.fare || 0);
+  const activeVehicleImage = activeRentalRide?.assignedVehicle?.image || activeRentalRide?.vehicle?.image || state.vehicle?.image;
+  const activeVehicleName = activeRentalRide?.assignedVehicle?.name || activeRentalRide?.vehicle?.name || state.vehicle?.name || 'Rental Vehicle';
+  const activeVehicleCategory = activeRentalRide?.assignedVehicle?.vehicleCategory || activeRentalRide?.driver?.vehicle || state.vehicle?.vehicleCategory || 'Rental';
   const [conditionPhoto, setConditionPhoto] = useState(null);
+  const [resolvedBookingReference, setResolvedBookingReference] = useState(bookingReference || '');
+  const [endingRide, setEndingRide] = useState(false);
   const inputRef = useRef();
+  const bookingId = resolvedBookingReference || `RNT-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
-  const bookingId = `RNT-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  useEffect(() => {
+    if (activeRentalRide) {
+      setResolvedBookingReference(activeRentalRide.bookingReference || '');
+      return undefined;
+    }
+
+    let mounted = true;
+
+    const ensureRentalBookingRequest = async () => {
+      const alreadySaved = state.bookingRequest?.id || state.bookingRequest?._id || bookingReference;
+      const canPersist =
+        vehicle &&
+        pickup &&
+        returnTime &&
+        ['paid', 'not_required'].includes(String(state.paymentStatus || '').toLowerCase());
+
+      if (alreadySaved || !canPersist) {
+        return;
+      }
+
+      try {
+        const response = await userService.createRentalBookingRequest(
+          buildRentalBookingPayload({
+            state,
+            vehicle,
+            bookingReference: '',
+          }),
+        );
+        const saved = response?.data || response || {};
+        if (mounted && saved.bookingReference) {
+          setResolvedBookingReference(saved.bookingReference);
+        }
+      } catch (error) {
+        console.error('Could not persist rental booking from confirmation page', error);
+      }
+    };
+
+    ensureRentalBookingRequest();
+
+    return () => {
+      mounted = false;
+    };
+  }, [activeRentalRide, bookingReference, pickup, returnTime, state, vehicle]);
+
+  const finalTotal = useMemo(() => {
+    if (isCompletedRentalRide) {
+      return completedCharge;
+    }
+    return liveCharge;
+  }, [completedCharge, isCompletedRentalRide, liveCharge]);
+
+  const handleEndRide = async () => {
+    if (!activeRentalRide?.rideId) return;
+
+    try {
+      setEndingRide(true);
+      const response = await userService.endRentalRide(activeRentalRide.rideId);
+      const payload = response?.data || null;
+      clearCurrentRide();
+      navigate('/rental/confirmed', {
+        replace: true,
+        state: {
+          ...activeRentalRide,
+          ...payload,
+          rideId: payload?.id || activeRentalRide.rideId,
+          fare: payload?.finalCharge || payload?.rideMetrics?.currentCharge || finalTotal,
+          completedAt: payload?.completedAt || new Date().toISOString(),
+          finalCharge: payload?.finalCharge || payload?.rideMetrics?.currentCharge || finalTotal,
+          summaryMode: 'completed',
+        },
+      });
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setEndingRide(false);
+    }
+  };
+
+  if (activeRentalRide) {
+    return (
+      <div className="min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_38%,#EEF2F7_100%)] max-w-lg mx-auto font-sans pb-28 relative overflow-hidden">
+        <div className="absolute -top-16 right-[-40px] h-44 w-44 rounded-full bg-emerald-100/60 blur-3xl pointer-events-none" />
+
+        <div className="px-5 pt-14 space-y-5">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.35 }}
+            className="flex flex-col items-center text-center gap-3 py-5"
+          >
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center shadow-[0_8px_24px_rgba(16,185,129,0.15)] ${isCompletedRentalRide ? 'bg-emerald-50' : 'bg-orange-50'}`}>
+              <CheckCircle2 size={32} className={isCompletedRentalRide ? 'text-emerald-500' : 'text-orange-500'} strokeWidth={2} />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">
+                {isCompletedRentalRide ? 'Ride Completed' : 'Rental In Progress'}
+              </p>
+              <h1 className="text-[22px] font-black text-slate-900 tracking-tight mt-0.5">
+                {isCompletedRentalRide ? 'Final rental total' : 'Vehicle assigned'}
+              </h1>
+              <p className="text-[12px] font-bold text-slate-400 mt-1">
+                Booking ID: <span className="text-slate-700 font-black">{activeRentalRide.bookingReference || bookingId}</span>
+              </p>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="rounded-[20px] border border-white/80 bg-white/90 shadow-[0_4px_14px_rgba(15,23,42,0.05)] overflow-hidden"
+          >
+            <div className="px-5 py-4 flex items-center gap-4 bg-[linear-gradient(135deg,#FFF7ED_0%,#FEF3C7_100%)]">
+              {activeVehicleImage ? (
+                <img src={activeVehicleImage} alt={activeVehicleName} className="h-16 w-20 object-contain drop-shadow-lg shrink-0" />
+              ) : (
+                <div className="h-16 w-20 rounded-2xl bg-white/70 shrink-0" />
+              )}
+              <div>
+                <p className="text-[15px] font-black text-slate-900">{activeVehicleName}</p>
+                <p className="text-[11px] font-bold text-slate-500 mt-0.5">{activeVehicleCategory}</p>
+              </div>
+            </div>
+            <div className="px-5 py-4 space-y-3 border-t border-slate-50">
+              <div className="flex items-center justify-between rounded-[14px] bg-slate-50 px-4 py-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Time Elapsed</p>
+                  <p className="mt-1 text-[18px] font-black text-slate-900">{isCompletedRentalRide ? `${Math.floor(Number(activeRentalRide.finalElapsedMinutes || liveElapsedMinutes) / 60)}h ${String(Number(activeRentalRide.finalElapsedMinutes || liveElapsedMinutes) % 60).padStart(2, '0')}m` : liveElapsedLabel}</p>
+                </div>
+                <Clock size={18} className="text-orange-500" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-[14px] bg-slate-50 px-4 py-3">
+                  <p className="text-[10px] font-bold text-slate-400">Advance paid</p>
+                  <p className="mt-1 text-[16px] font-black text-emerald-600">Rs.{Number(activeRentalRide.advancePaid || activeRentalRide.payableNow || 0).toFixed(0)}</p>
+                </div>
+                <div className="rounded-[14px] bg-slate-50 px-4 py-3">
+                  <p className="text-[10px] font-bold text-slate-400">{isCompletedRentalRide ? 'Final total' : 'Charge till now'}</p>
+                  <p className="mt-1 text-[16px] font-black text-slate-900">Rs.{finalTotal.toFixed(0)}</p>
+                </div>
+              </div>
+              <div className="rounded-[14px] bg-slate-50 px-4 py-3">
+                <p className="text-[10px] font-bold text-slate-400">{isCompletedRentalRide ? 'Final payable balance' : 'Current remaining due'}</p>
+                <p className="mt-1 text-[16px] font-black text-slate-900">
+                  Rs.{Math.max(0, finalTotal - Number(activeRentalRide.advancePaid || activeRentalRide.payableNow || 0)).toFixed(0)}
+                </p>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <MapPin size={13} className="text-orange-400 shrink-0" />
+                <p className="text-[11px] font-black text-slate-700">
+                  {activeRentalRide.serviceLocation?.name || `${appName} Hub`}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.12 }}
+            className="flex items-start gap-3 rounded-[16px] border border-white/80 bg-white/90 px-4 py-3.5 shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
+          >
+            <div className="w-8 h-8 rounded-[10px] bg-emerald-50 flex items-center justify-center shrink-0">
+              <CheckCircle2 size={15} className="text-emerald-500" strokeWidth={2} />
+            </div>
+            <p className="text-[12px] font-bold text-slate-500 leading-relaxed">
+              {isCompletedRentalRide
+                ? `Your rental ride has ended. Final total is Rs.${finalTotal.toFixed(0)} and the remaining amount is payable at drop-off.`
+                : `Your rental is active now. The live charge keeps updating based on elapsed time until you end the ride.`}
+            </p>
+          </motion.div>
+        </div>
+
+        <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 pb-6 pt-3 bg-gradient-to-t from-[#EEF2F7] via-[#F3F4F6]/95 to-transparent pointer-events-none z-30">
+          {isCompletedRentalRide ? (
+            <motion.button
+              whileTap={{ scale: 0.98 }}
+              onClick={() => navigate('/user')}
+              className="pointer-events-auto w-full bg-slate-900 py-4 rounded-[18px] text-[15px] font-black text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] flex items-center justify-center gap-2"
+            >
+              <Home size={16} strokeWidth={2.5} /> Back to Home
+            </motion.button>
+          ) : (
+            <motion.button
+              whileTap={{ scale: 0.98 }}
+              onClick={handleEndRide}
+              disabled={endingRide}
+              className="pointer-events-auto w-full bg-slate-900 py-4 rounded-[18px] text-[15px] font-black text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] flex items-center justify-center gap-2 disabled:opacity-60"
+            >
+              <CheckCircle2 size={16} strokeWidth={2.5} /> {endingRide ? 'Ending ride...' : 'End Ride'}
+            </motion.button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_38%,#EEF2F7_100%)] max-w-lg mx-auto font-sans pb-28 relative overflow-hidden">
@@ -93,6 +378,9 @@ const RentalConfirmed = () => {
               <div className="text-right">
                 <p className="text-[10px] font-bold text-slate-400">Advance paid</p>
                 <p className="text-[15px] font-black text-emerald-600">Rs.{deposit}</p>
+                {paymentMethodLabel ? (
+                  <p className="text-[10px] font-bold text-slate-400 mt-0.5">{paymentMethodLabel} via Razorpay</p>
+                ) : null}
               </div>
             </div>
           </div>

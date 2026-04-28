@@ -10,6 +10,65 @@ const PAYMENT_METHODS = [
   { id: 'wallet', label: 'Wallet', icon: Wallet },
 ];
 
+const loadRazorpayScript = () =>
+  new Promise((resolve) => {
+    if (window.Razorpay) {
+      resolve(true);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+
+const buildRentalBookingPayload = ({
+  state,
+  vehicle,
+  payableNow,
+  advancePaymentLabel,
+  paymentStatus,
+  paymentMethod,
+  paymentMethodLabel,
+  payment,
+  bookingReference,
+}) => ({
+  bookingReference,
+  vehicleTypeId: vehicle.id || vehicle._id,
+  pickupDateTime: state.pickup,
+  returnDateTime: state.returnTime,
+  totalCost: Number(state.totalCost || 0),
+  payableNow: Number(payableNow || 0),
+  advancePaymentLabel,
+  paymentStatus,
+  paymentMethod,
+  paymentMethodLabel,
+  payment,
+  kycCompleted: true,
+  selectedPackage: state.selectedPackage
+    ? {
+        id: state.selectedPackage.id || state.selectedPackage._id || '',
+        label: state.selectedPackage.label || '',
+        durationHours: Number(state.selectedPackage.durationHours || 0),
+        price: Number(state.selectedPackage.price || 0),
+      }
+    : null,
+  serviceLocation: state.serviceLocation
+    ? {
+        id: state.serviceLocation.id || state.serviceLocation._id || '',
+        name: state.serviceLocation.name || '',
+        address: state.serviceLocation.address || '',
+        city: state.serviceLocation.city || state.serviceLocation.country || '',
+        latitude: state.serviceLocation.latitude,
+        longitude: state.serviceLocation.longitude,
+        distanceKm: state.serviceLocation.distanceKm,
+      }
+    : null,
+});
+
 const RentalDeposit = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -67,15 +126,161 @@ const RentalDeposit = () => {
   const advancePaymentLabel = advancePayment.label || 'Advance booking payment';
   const [method, setMethod] = useState('upi');
   const [paying, setPaying] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
 
-  const handlePay = () => {
+  const submitBookingRequest = async ({
+    paymentStatus,
+    paymentMethod,
+    paymentMethodLabel,
+    payment,
+    bookingReference,
+  }) => {
+    const response = await userService.createRentalBookingRequest(
+      buildRentalBookingPayload({
+        state,
+        vehicle,
+        payableNow,
+        advancePaymentLabel,
+        paymentStatus,
+        paymentMethod,
+        paymentMethodLabel,
+        payment,
+        bookingReference,
+      }),
+    );
+
+    return response?.data || response || {};
+  };
+
+  const handlePay = async () => {
+    if (paying) return;
+
+    setPaymentError('');
+
+    if (payableNow <= 0) {
+      try {
+        const bookingRequest = await submitBookingRequest({
+          paymentStatus: 'not_required',
+          paymentMethod: method,
+          paymentMethodLabel: PAYMENT_METHODS.find((item) => item.id === method)?.label || 'Online',
+          payment: {
+            provider: 'manual',
+            status: 'not_required',
+            amount: 0,
+            currency: 'INR',
+          },
+          bookingReference: '',
+        });
+
+        navigate('/rental/confirmed', {
+          state: {
+            ...state,
+            vehicle,
+            deposit: payableNow,
+            paymentMethod: method,
+            paymentStatus: 'not_required',
+            bookingReference: bookingRequest.bookingReference || '',
+            bookingRequest,
+          },
+        });
+      } catch (error) {
+        setPaymentError(error?.message || 'Unable to save rental booking');
+      }
+      return;
+    }
+
     setPaying(true);
-    setTimeout(() => {
-      setPaying(false);
-      navigate('/rental/confirmed', {
-        state: { ...state, vehicle, deposit: payableNow },
+
+    try {
+      const scriptLoaded = await loadRazorpayScript();
+      if (!scriptLoaded) {
+        throw new Error('Razorpay SDK failed to load');
+      }
+
+      const orderResponse = await userService.createRentalAdvanceOrder({
+        amount: payableNow,
+        vehicleId: vehicle.id || vehicle._id,
+        vehicleName: vehicle.name,
+        pickup: state.pickup,
+        returnTime: state.returnTime,
       });
-    }, 2000);
+      const order = orderResponse?.data || orderResponse || {};
+
+      if (!order.keyId || !order.orderId) {
+        throw new Error('Unable to start rental payment');
+      }
+
+      let userInfo = {};
+      try {
+        userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+      } catch {
+        userInfo = {};
+      }
+
+      const methodLabel = PAYMENT_METHODS.find((item) => item.id === method)?.label || 'Online';
+      const rzp = new window.Razorpay({
+        key: order.keyId,
+        amount: order.amount,
+        currency: order.currency || 'INR',
+        name: vehicle.name || 'Rental Booking',
+        description: `${advancePaymentLabel} - ${methodLabel}`,
+        order_id: order.orderId,
+        prefill: {
+          name: userInfo?.name || '',
+          email: userInfo?.email || '',
+          contact: userInfo?.phone || '',
+        },
+        modal: {
+          ondismiss: () => {
+            setPaying(false);
+          },
+        },
+        theme: {
+          color: '#0F172A',
+        },
+        handler: async (response) => {
+          try {
+            const verifyResponse = await userService.verifyRentalAdvancePayment(response);
+            const payment = verifyResponse?.data || verifyResponse || {};
+            const bookingRequest = await submitBookingRequest({
+              paymentStatus: 'paid',
+              paymentMethod: method,
+              paymentMethodLabel: methodLabel,
+              payment,
+              bookingReference: order.bookingReference || '',
+            });
+            navigate('/rental/confirmed', {
+              replace: true,
+              state: {
+                ...state,
+                vehicle,
+                deposit: payableNow,
+                paymentMethod: method,
+                paymentMethodLabel: methodLabel,
+                paymentStatus: 'paid',
+                payment,
+                bookingReference: bookingRequest.bookingReference || order.bookingReference || '',
+                bookingRequest,
+              },
+            });
+          } catch (verifyError) {
+            setPaymentError(verifyError?.message || 'Payment completed but the rental booking could not be saved');
+            setPaying(false);
+          }
+        },
+      });
+
+      rzp.on('payment.failed', (event) => {
+        const message = event?.error?.description || event?.error?.reason || 'Payment failed';
+        setPaymentError(message);
+        setPaying(false);
+      });
+
+      rzp.open();
+    } catch (error) {
+      setPaymentError(error?.message || 'Unable to continue with payment');
+      setPaying(false);
+    }
   };
 
   return (
@@ -192,6 +397,11 @@ const RentalDeposit = () => {
               </button>
             ))}
           </div>
+          {paymentError ? (
+            <div className="rounded-[14px] border border-rose-100 bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-500">
+              {paymentError}
+            </div>
+          ) : null}
         </motion.div>
       </div>
 
@@ -206,7 +416,7 @@ const RentalDeposit = () => {
             <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
           ) : (
             <>
-              <CreditCard size={16} strokeWidth={2.5} /> Pay Rs.{payableNow} via Razorpay
+              <CreditCard size={16} strokeWidth={2.5} /> Confirm & Pay Rs.{payableNow}
             </>
           )}
         </motion.button>

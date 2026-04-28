@@ -14,6 +14,19 @@ const normalizePhone = (phone) => {
   return digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
 };
 
+const buildPhoneCandidates = (phone) => {
+  const normalizedPhone = normalizePhone(phone);
+  const candidates = new Set();
+
+  if (normalizedPhone) {
+    candidates.add(normalizedPhone);
+    candidates.add(`91${normalizedPhone}`);
+    candidates.add(`+91${normalizedPhone}`);
+  }
+
+  return [...candidates];
+};
+
 const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000));
 const normalizeRole = (role) =>
   String(role || 'driver').toLowerCase() === 'owner' ? 'owner' : 'driver';
@@ -106,6 +119,7 @@ const isApprovedOwner = (owner) =>
 export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
   const normalizedPhone = normalizePhone(phone);
   const normalizedRole = normalizeRole(role);
+  const phoneCandidates = buildPhoneCandidates(phone);
 
   if (!normalizedPhone || normalizedPhone.length !== 10) {
     throw new ApiError(400, 'A valid 10-digit mobile number is required');
@@ -114,9 +128,9 @@ export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
   const account =
     normalizedRole === 'owner'
       ? await Owner.findOne({
-          $or: [{ mobile: normalizedPhone }, { phone: normalizedPhone }],
+          $or: [{ mobile: { $in: phoneCandidates } }, { phone: { $in: phoneCandidates } }],
         })
-      : await Driver.findOne({ phone: normalizedPhone });
+      : await Driver.findOne({ phone: { $in: phoneCandidates } });
 
   if (!account) {
     throw new ApiError(404, `${normalizedRole === 'owner' ? 'Owner' : 'Driver'} account not found`);

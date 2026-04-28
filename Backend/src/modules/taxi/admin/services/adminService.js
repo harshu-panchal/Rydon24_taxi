@@ -22,6 +22,7 @@ import { ReferralTranslation } from '../models/ReferralTranslation.js';
 import { AdminThirdPartySetting } from '../models/AdminThirdPartySetting.js';
 import { createDefaultThirdPartySettings } from '../data/defaultThirdPartySettings.js';
 import { RentalPackageType } from '../models/RentalPackageType.js';
+import { RentalBookingRequest } from '../models/RentalBookingRequest.js';
 import { PoolingRoute } from '../models/PoolingRoute.js';
 import { RentalVehicleType } from '../models/RentalVehicleType.js';
 import { RentalQuoteRequest } from '../models/RentalQuoteRequest.js';
@@ -770,6 +771,83 @@ const serializeRentalQuoteRequest = (item = {}) => ({
   specialRequirements: item.specialRequirements || '',
   status: item.status || 'pending',
   adminQuotedAmount: Number(item.adminQuotedAmount || 0),
+  adminNote: item.adminNote || '',
+  reviewedAt: item.reviewedAt || null,
+  createdAt: item.createdAt || null,
+  updatedAt: item.updatedAt || null,
+});
+
+const serializeRentalBookingRequest = (item = {}) => ({
+  id: String(item._id || item.id || ''),
+  _id: item._id,
+  bookingReference: item.bookingReference || '',
+  userId: item.userId
+    ? {
+        id: String(item.userId?._id || item.userId),
+        name: item.userId?.name || item.contactName || '',
+        phone: item.userId?.phone || item.contactPhone || '',
+        email: item.userId?.email || item.contactEmail || '',
+      }
+    : null,
+  vehicleTypeId: item.vehicleTypeId
+    ? {
+        id: String(item.vehicleTypeId?._id || item.vehicleTypeId),
+        name: item.vehicleTypeId?.name || item.vehicleName || '',
+        vehicleCategory: item.vehicleTypeId?.vehicleCategory || item.vehicleCategory || '',
+        image: item.vehicleTypeId?.image || item.vehicleImage || '',
+      }
+    : null,
+  vehicleName: item.vehicleName || item.vehicleTypeId?.name || '',
+  vehicleCategory: item.vehicleCategory || item.vehicleTypeId?.vehicleCategory || '',
+  vehicleImage: item.vehicleImage || item.vehicleTypeId?.image || '',
+  selectedPackage: {
+    packageId: item.selectedPackage?.packageId || '',
+    label: item.selectedPackage?.label || '',
+    durationHours: Number(item.selectedPackage?.durationHours || 0),
+    price: Number(item.selectedPackage?.price || 0),
+  },
+  serviceLocation: {
+    locationId: item.serviceLocation?.locationId || '',
+    name: item.serviceLocation?.name || '',
+    address: item.serviceLocation?.address || '',
+    city: item.serviceLocation?.city || '',
+    latitude: item.serviceLocation?.latitude ?? null,
+    longitude: item.serviceLocation?.longitude ?? null,
+    distanceKm: item.serviceLocation?.distanceKm ?? null,
+  },
+  pickupDateTime: item.pickupDateTime || null,
+  returnDateTime: item.returnDateTime || null,
+  requestedHours: Number(item.requestedHours || 0),
+  totalCost: Number(item.totalCost || 0),
+  payableNow: Number(item.payableNow || 0),
+  advancePaymentLabel: item.advancePaymentLabel || '',
+  paymentStatus: item.paymentStatus || 'pending',
+  paymentMethod: item.paymentMethod || '',
+  paymentMethodLabel: item.paymentMethodLabel || '',
+  payment: {
+    provider: item.payment?.provider || '',
+    status: item.payment?.status || '',
+    amount: Number(item.payment?.amount || 0),
+    currency: item.payment?.currency || 'INR',
+    orderId: item.payment?.orderId || '',
+    paymentId: item.payment?.paymentId || '',
+    signature: item.payment?.signature || '',
+  },
+  contactName: item.contactName || '',
+  contactPhone: item.contactPhone || '',
+  contactEmail: item.contactEmail || '',
+  kycCompleted: Boolean(item.kycCompleted),
+  assignedVehicle: {
+    vehicleId: item.assignedVehicle?.vehicleId ? String(item.assignedVehicle.vehicleId) : '',
+    name: item.assignedVehicle?.name || '',
+    vehicleCategory: item.assignedVehicle?.vehicleCategory || '',
+    image: item.assignedVehicle?.image || '',
+  },
+  status: item.status || 'pending',
+  assignedAt: item.assignedAt || null,
+  completedAt: item.completedAt || null,
+  cancelledAt: item.cancelledAt || null,
+  cancelReason: item.cancelReason || '',
   adminNote: item.adminNote || '',
   reviewedAt: item.reviewedAt || null,
   createdAt: item.createdAt || null,
@@ -6333,6 +6411,111 @@ export const getDashboardData = async () => {
       .lean();
 
     return serializeRentalQuoteRequest(populated);
+  };
+
+  export const listRentalBookingRequests = async () => {
+    const items = await RentalBookingRequest.find()
+      .populate('userId', 'name phone email')
+      .populate('vehicleTypeId', 'name vehicleCategory image')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return items.map((item) => serializeRentalBookingRequest(item));
+  };
+
+  export const getRentalBookingRequestById = async (id) => {
+    const item = await RentalBookingRequest.findById(id)
+      .populate('userId', 'name phone email')
+      .populate('vehicleTypeId', 'name vehicleCategory image')
+      .lean();
+
+    if (!item) {
+      throw new ApiError(404, 'Rental booking request not found');
+    }
+
+    return serializeRentalBookingRequest(item);
+  };
+
+  export const updateRentalBookingRequest = async (id, payload = {}, adminId = null) => {
+    const item = await RentalBookingRequest.findById(id);
+    if (!item) {
+      throw new ApiError(404, 'Rental booking request not found');
+    }
+
+    if (payload.status !== undefined) {
+      if (!['pending', 'confirmed', 'assigned', 'completed', 'cancelled'].includes(String(payload.status))) {
+        throw new ApiError(400, 'Invalid rental booking request status');
+      }
+      item.status = String(payload.status);
+    }
+
+    if (payload.assignedVehicleId !== undefined) {
+      const assignedVehicleId = String(payload.assignedVehicleId || '').trim();
+
+      if (!assignedVehicleId) {
+        item.assignedVehicle = {
+          vehicleId: null,
+          name: '',
+          vehicleCategory: '',
+          image: '',
+        };
+        item.assignedAt = null;
+      } else {
+        const assignedVehicle = await RentalVehicleType.findById(assignedVehicleId)
+          .select('name vehicleCategory image')
+          .lean();
+
+        if (!assignedVehicle) {
+          throw new ApiError(404, 'Assigned rental vehicle not found');
+        }
+
+        item.assignedVehicle = {
+          vehicleId: assignedVehicle._id,
+          name: assignedVehicle.name || '',
+          vehicleCategory: assignedVehicle.vehicleCategory || '',
+          image: assignedVehicle.image || '',
+        };
+        item.assignedAt = new Date();
+
+        if (!payload.status && ['pending', 'confirmed'].includes(String(item.status || ''))) {
+          item.status = 'assigned';
+        }
+      }
+    }
+
+    if (payload.cancelReason !== undefined) {
+      item.cancelReason = String(payload.cancelReason || '').trim();
+    }
+
+    if (payload.adminNote !== undefined) {
+      item.adminNote = String(payload.adminNote || '').trim();
+    }
+
+    if (item.status === 'cancelled') {
+      item.cancelledAt = item.cancelledAt || new Date();
+    } else if (payload.status !== undefined) {
+      item.cancelledAt = null;
+      if (payload.cancelReason === undefined) {
+        item.cancelReason = item.cancelReason || '';
+      }
+    }
+
+    if (item.status === 'completed') {
+      item.completedAt = item.completedAt || new Date();
+    } else if (payload.status !== undefined && payload.status !== 'completed') {
+      item.completedAt = null;
+    }
+
+    item.reviewedAt = new Date();
+    item.reviewedBy = adminId || null;
+    await item.save();
+
+    const populated = await RentalBookingRequest.findById(item._id)
+      .populate('userId', 'name phone email')
+      .populate('vehicleTypeId', 'name vehicleCategory image')
+      .lean();
+
+    return serializeRentalBookingRequest(populated);
   };
 
 
