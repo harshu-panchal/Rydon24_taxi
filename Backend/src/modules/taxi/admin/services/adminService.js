@@ -22,6 +22,7 @@ import { ReferralTranslation } from '../models/ReferralTranslation.js';
 import { AdminThirdPartySetting } from '../models/AdminThirdPartySetting.js';
 import { createDefaultThirdPartySettings } from '../data/defaultThirdPartySettings.js';
 import { RentalPackageType } from '../models/RentalPackageType.js';
+import { RentalVehicleType } from '../models/RentalVehicleType.js';
 import { SetPrice } from '../models/SetPrice.js';
 import { ServiceLocation } from '../models/ServiceLocation.js';
 import { ServiceStore } from '../models/ServiceStore.js';
@@ -308,6 +309,197 @@ const serializeBusService = (item = {}) => ({
     countSeatsInBlueprintDeck(item.blueprint?.lowerDeck || []) +
       countSeatsInBlueprintDeck(item.blueprint?.upperDeck || []),
   status: item.status || 'draft',
+  createdAt: item.createdAt,
+  updatedAt: item.updatedAt,
+});
+
+const createRentalSeatCell = (rowNumber, seatCode, variant = 'seat') => ({
+  kind: 'seat',
+  id: `R${rowNumber}${seatCode}`,
+  label: `${rowNumber}${seatCode}`,
+  variant,
+  status: 'available',
+});
+
+const createRentalAisleCell = () => ({
+  kind: 'aisle',
+  id: '',
+  label: '',
+  variant: 'seat',
+  status: 'available',
+});
+
+const createRentalRowFromPattern = (rowNumber, pattern = []) =>
+  pattern.map((cell) => {
+    if (!cell || cell === 'aisle') {
+      return createRentalAisleCell();
+    }
+
+    if (typeof cell === 'string') {
+      return createRentalSeatCell(rowNumber, cell, 'seat');
+    }
+
+    return createRentalSeatCell(rowNumber, cell.code, cell.variant || 'seat');
+  });
+
+const buildRentalBlueprintTemplate = (templateKey = 'compact_4') => {
+  switch (templateKey) {
+    case 'bike_1':
+      return {
+        templateKey,
+        lowerDeck: [createRentalRowFromPattern(1, ['A'])],
+        upperDeck: [],
+      };
+    case 'auto_3':
+      return {
+        templateKey,
+        lowerDeck: [
+          createRentalRowFromPattern(1, ['A']),
+          createRentalRowFromPattern(2, ['B', 'aisle', 'C']),
+        ],
+        upperDeck: [],
+      };
+    case 'suv_6':
+      return {
+        templateKey,
+        lowerDeck: [
+          createRentalRowFromPattern(1, ['A', 'aisle', 'B']),
+          createRentalRowFromPattern(2, ['C', 'aisle', 'D']),
+          createRentalRowFromPattern(3, ['E', 'aisle', 'F']),
+        ],
+        upperDeck: [],
+      };
+    case 'suv_7':
+      return {
+        templateKey,
+        lowerDeck: [
+          createRentalRowFromPattern(1, ['A', 'aisle', 'B']),
+          createRentalRowFromPattern(2, ['C', 'D', 'E']),
+          createRentalRowFromPattern(3, ['F', 'aisle', 'G']),
+        ],
+        upperDeck: [],
+      };
+    case 'van_8':
+      return {
+        templateKey,
+        lowerDeck: [
+          createRentalRowFromPattern(1, ['A', 'aisle', 'B']),
+          createRentalRowFromPattern(2, ['C', 'D', 'E']),
+          createRentalRowFromPattern(3, ['F', 'G', 'H']),
+        ],
+        upperDeck: [],
+      };
+    case 'compact_4':
+    default:
+      return {
+        templateKey: 'compact_4',
+        lowerDeck: [
+          createRentalRowFromPattern(1, ['A', 'aisle', 'B']),
+          createRentalRowFromPattern(2, ['C', 'aisle', 'D']),
+        ],
+        upperDeck: [],
+      };
+  }
+};
+
+const DEFAULT_RENTAL_PRICING = [
+  { id: 'pkg-6h', label: '6 Hours', durationHours: 6, price: 799, includedKm: 60, extraHourPrice: 120, extraKmPrice: 12, active: true },
+  { id: 'pkg-12h', label: '12 Hours', durationHours: 12, price: 1299, includedKm: 120, extraHourPrice: 110, extraKmPrice: 11, active: true },
+  { id: 'pkg-24h', label: '24 Hours', durationHours: 24, price: 1999, includedKm: 240, extraHourPrice: 95, extraKmPrice: 10, active: true },
+];
+
+const normalizeRentalPricingItem = (item = {}, index = 0) => ({
+  id: sanitizeBusText(item.id, `pkg-${index + 1}`),
+  label: sanitizeBusText(item.label, `${Number(item.durationHours || 0) || index + 1} Hours`),
+  durationHours: Math.max(1, sanitizeBusSeatPrice(item.durationHours, index + 1)),
+  price: Math.max(0, sanitizeBusSeatPrice(item.price, 0)),
+  includedKm: Math.max(0, sanitizeBusSeatPrice(item.includedKm, 0)),
+  extraHourPrice: Math.max(0, sanitizeBusSeatPrice(item.extraHourPrice, 0)),
+  extraKmPrice: Math.max(0, sanitizeBusSeatPrice(item.extraKmPrice, 0)),
+  active: item.active === undefined ? true : normalizeBoolean(item.active),
+});
+
+const normalizeRentalVehiclePayload = (payload = {}, existing = {}) => {
+  const fallbackBlueprint = existing.blueprint?.lowerDeck?.length
+    ? {
+        templateKey: existing.blueprint?.templateKey || 'compact_4',
+        lowerDeck: normalizeBusDeck(existing.blueprint?.lowerDeck || []),
+        upperDeck: normalizeBusDeck(existing.blueprint?.upperDeck || []),
+      }
+    : buildRentalBlueprintTemplate(payload.blueprint?.templateKey || existing.blueprint?.templateKey || 'compact_4');
+
+  const blueprint = payload.blueprint
+    ? {
+        templateKey: sanitizeBusText(payload.blueprint?.templateKey, fallbackBlueprint.templateKey || 'compact_4'),
+        lowerDeck: normalizeBusDeck(payload.blueprint?.lowerDeck ?? fallbackBlueprint.lowerDeck ?? []),
+        upperDeck: normalizeBusDeck(payload.blueprint?.upperDeck ?? fallbackBlueprint.upperDeck ?? []),
+      }
+    : fallbackBlueprint;
+
+  const capacityFromBlueprint =
+    countSeatsInBlueprintDeck(blueprint.lowerDeck) + countSeatsInBlueprintDeck(blueprint.upperDeck);
+
+  return {
+    transport_type: sanitizeBusText(payload.transport_type, existing.transport_type || 'rental') || 'rental',
+    name: sanitizeBusText(payload.name, existing.name || ''),
+    short_description: sanitizeBusText(payload.short_description, existing.short_description || ''),
+    description: sanitizeBusText(payload.description, existing.description || ''),
+    vehicleCategory: sanitizeBusText(payload.vehicleCategory, existing.vehicleCategory || 'Car'),
+    image: sanitizeBusText(payload.image, existing.image || ''),
+    map_icon: sanitizeBusText(payload.map_icon, existing.map_icon || ''),
+    capacity:
+      payload.capacity !== undefined
+        ? Math.max(1, sanitizeBusSeatPrice(payload.capacity, capacityFromBlueprint || 1))
+        : Math.max(1, capacityFromBlueprint || sanitizeBusSeatPrice(existing.capacity, 4)),
+    luggageCapacity: Math.max(0, sanitizeBusSeatPrice(payload.luggageCapacity, existing.luggageCapacity || 0)),
+    amenities: Array.isArray(payload.amenities)
+      ? payload.amenities.map((item) => sanitizeBusText(item)).filter(Boolean)
+      : Array.isArray(existing.amenities)
+        ? existing.amenities
+        : [],
+    blueprint,
+    pricing: Array.isArray(payload.pricing) && payload.pricing.length
+      ? payload.pricing.map((item, index) => normalizeRentalPricingItem(item, index))
+      : Array.isArray(existing.pricing) && existing.pricing.length
+        ? existing.pricing.map((item, index) => normalizeRentalPricingItem(item, index))
+        : DEFAULT_RENTAL_PRICING.map((item, index) => normalizeRentalPricingItem(item, index)),
+    status: payload.status
+      ? (payload.status === 'inactive' ? 'inactive' : 'active')
+      : normalizeBoolean(payload.active ?? existing.active ?? true)
+        ? 'active'
+        : 'inactive',
+    active: normalizeBoolean(payload.active ?? existing.active ?? true),
+  };
+};
+
+const serializeRentalVehicleType = (item = {}) => ({
+  id: String(item._id || item.id || ''),
+  _id: item._id,
+  transport_type: item.transport_type || 'rental',
+  name: item.name || '',
+  short_description: item.short_description || '',
+  description: item.description || '',
+  vehicleCategory: item.vehicleCategory || 'Car',
+  image: item.image || '',
+  map_icon: item.map_icon || '',
+  capacity: Math.max(
+    1,
+    item.capacity ||
+      countSeatsInBlueprintDeck(item.blueprint?.lowerDeck || []) +
+        countSeatsInBlueprintDeck(item.blueprint?.upperDeck || []),
+  ),
+  luggageCapacity: sanitizeBusSeatPrice(item.luggageCapacity, 0),
+  amenities: Array.isArray(item.amenities) ? item.amenities : [],
+  blueprint: {
+    templateKey: item.blueprint?.templateKey || 'compact_4',
+    lowerDeck: normalizeBusDeck(item.blueprint?.lowerDeck || []),
+    upperDeck: normalizeBusDeck(item.blueprint?.upperDeck || []),
+  },
+  pricing: Array.isArray(item.pricing)
+    ? item.pricing.map((price, index) => normalizeRentalPricingItem(price, index))
+    : DEFAULT_RENTAL_PRICING.map((price, index) => normalizeRentalPricingItem(price, index)),
+  status: item.status || 'active',
+  active: item.active !== false && item.status !== 'inactive',
   createdAt: item.createdAt,
   updatedAt: item.updatedAt,
 });
@@ -5657,6 +5849,54 @@ export const getDashboardData = async () => {
   export const deleteBusService = async (id) => {
     const item = await BusService.findByIdAndDelete(id);
     if (!item) throw new ApiError(404, 'Bus service not found');
+    return true;
+  };
+
+  export const listRentalVehicleTypes = async () => {
+    const items = await RentalVehicleType.find().sort({ createdAt: -1 }).lean();
+    return items.map((item) => serializeRentalVehicleType(item));
+  };
+
+  export const createRentalVehicleType = async (payload = {}) => {
+    const normalizedPayload = normalizeRentalVehiclePayload(payload);
+
+    if (!normalizedPayload.name) {
+      throw new ApiError(400, 'Rental vehicle name is required');
+    }
+
+    const item = await RentalVehicleType.create({
+      ...normalizedPayload,
+      active: normalizedPayload.status === 'active',
+    });
+
+    return serializeRentalVehicleType(item.toObject());
+  };
+
+  export const updateRentalVehicleType = async (id, payload = {}) => {
+    const existingItem = await RentalVehicleType.findById(id);
+
+    if (!existingItem) {
+      throw new ApiError(404, 'Rental vehicle type not found');
+    }
+
+    const normalizedPayload = normalizeRentalVehiclePayload(payload, existingItem.toObject());
+
+    if (!normalizedPayload.name) {
+      throw new ApiError(400, 'Rental vehicle name is required');
+    }
+
+    Object.assign(existingItem, {
+      ...normalizedPayload,
+      active: normalizedPayload.status === 'active',
+    });
+    await existingItem.save();
+
+    return serializeRentalVehicleType(existingItem.toObject());
+  };
+
+  export const deleteRentalVehicleType = async (id) => {
+    const item = await RentalVehicleType.findByIdAndDelete(id);
+    if (!item) throw new ApiError(404, 'Rental vehicle type not found');
     return true;
   };
 

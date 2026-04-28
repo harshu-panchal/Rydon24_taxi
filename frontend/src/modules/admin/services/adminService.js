@@ -205,6 +205,10 @@ export const adminService = {
   createRentalPackageType: (data) => api.post('/admin/types/rental-packages', data),
   updateRentalPackageType: (id, data) => api.patch(`/admin/types/rental-packages/${id}`, data),
   deleteRentalPackageType: (id) => api.delete(`/admin/types/rental-packages/${id}`),
+  getRentalVehicleTypes: () => api.get('/admin/types/rental-vehicles'),
+  createRentalVehicleType: (data) => api.post('/admin/types/rental-vehicles', data),
+  updateRentalVehicleType: (id, data) => api.patch(`/admin/types/rental-vehicles/${id}`, data),
+  deleteRentalVehicleType: (id) => api.delete(`/admin/types/rental-vehicles/${id}`),
 
   /**
    * Languages Management (Master)

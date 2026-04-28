@@ -390,13 +390,25 @@ const DriverHome = () => {
         [vehicleIconType, vehicleIconUrl],
     );
 
-    const isBalanceCritical = useMemo(() => {
-        const minimumBalance = Number(walletSummary.minimumBalanceForOrders || 0);
-        const availableForOrders = Number.isFinite(Number(walletSummary.availableForOrders))
-            ? Number(walletSummary.availableForOrders)
-            : (Number(walletSummary.balance || 0) - minimumBalance);
+    const walletAlertState = useMemo(() => {
+        const balance = Number(walletSummary.balance || 0);
+        const cashLimit = Math.max(0, Number(walletSummary.cashLimit || 0));
+        const cashLimitUsed = Math.max(0, balance < 0 ? Math.abs(balance) : 0);
+        const remainingCashLimit = Math.max(0, cashLimit - cashLimitUsed);
+        const warningThreshold = cashLimit > 0
+            ? Math.min(cashLimit, Math.max(50, cashLimit * 0.15))
+            : 0;
+        const isBlocked = Boolean(walletSummary.isBlocked) || (cashLimit > 0 && remainingCashLimit <= 0);
+        const isWarning = !isBlocked && cashLimitUsed > 0 && remainingCashLimit <= warningThreshold;
 
-        return Boolean(walletSummary.isBlocked) || availableForOrders <= 0;
+        return {
+            cashLimit,
+            cashLimitUsed,
+            remainingCashLimit,
+            warningThreshold,
+            isBlocked,
+            isWarning,
+        };
     }, [walletSummary]);
 
     const { isLoaded } = useAppGoogleMapsLoader();
@@ -441,10 +453,10 @@ const DriverHome = () => {
 
     useEffect(() => {
         // Automatically show modal if driver is blocked and tries to open the app
-        if (isBalanceCritical && !isOnline && !isHydratingDriver) {
+        if ((walletAlertState.isBlocked || walletAlertState.isWarning) && !isOnline && !isHydratingDriver) {
             setShowLowBalanceModal(true);
         }
-    }, [isBalanceCritical, isOnline, isHydratingDriver]);
+    }, [walletAlertState, isOnline, isHydratingDriver]);
 
     useEffect(() => {
         currentRequestRef.current = currentRequest;
@@ -676,7 +688,7 @@ const DriverHome = () => {
     }, [updateDriverLocation]);
 
     const goOnline = useCallback(async (selfieImageUrl = '') => {
-        if (isBalanceCritical) {
+        if (walletAlertState.isBlocked) {
             setShowLowBalanceModal(true);
             setStatusMessage('Please top up your wallet to go online.');
             return;
@@ -752,7 +764,7 @@ const DriverHome = () => {
         } finally {
             setIsTogglingDuty(false);
         }
-    }, [updateDriverLocation]);
+    }, [updateDriverLocation, walletAlertState.isBlocked]);
 
     const goOffline = useCallback(async () => {
         setIsTogglingDuty(true);
@@ -1131,16 +1143,26 @@ const DriverHome = () => {
             const onWalletUpdated = (payload) => {
                 if (payload?.wallet) {
                     setWalletSummary(payload.wallet);
-                    const availableForOrders = Number.isFinite(Number(payload.wallet.availableForOrders))
-                        ? Number(payload.wallet.availableForOrders)
-                        : (Number(payload.wallet.balance || 0) - Number(payload.wallet.minimumBalanceForOrders || 0));
 
-                    if (Boolean(payload.wallet.isBlocked) || availableForOrders <= 0) {
+                    const balance = Number(payload.wallet.balance || 0);
+                    const cashLimit = Math.max(0, Number(payload.wallet.cashLimit || 0));
+                    const cashLimitUsed = Math.max(0, balance < 0 ? Math.abs(balance) : 0);
+                    const remainingCashLimit = Math.max(0, cashLimit - cashLimitUsed);
+                    const warningThreshold = cashLimit > 0
+                        ? Math.min(cashLimit, Math.max(50, cashLimit * 0.15))
+                        : 0;
+                    const isWalletBlocked = Boolean(payload.wallet.isBlocked) || (cashLimit > 0 && remainingCashLimit <= 0);
+                    const isWalletWarning = !isWalletBlocked && cashLimitUsed > 0 && remainingCashLimit <= warningThreshold;
+
+                    if (isWalletBlocked) {
                         setShowRequest(false);
                         setCurrentRequest(null);
                         stopRideRequestAlertSound();
                         setShowLowBalanceModal(true);
-                        setStatusMessage('Wallet balance limit reached. Top up to receive new ride requests.');
+                        setStatusMessage('Cash limit reached. Top up to receive new ride requests.');
+                    } else if (isWalletWarning) {
+                        setShowLowBalanceModal(true);
+                        setStatusMessage('Available cash limit is getting low. Top up soon.');
                     }
                 }
 
@@ -1328,7 +1350,7 @@ const DriverHome = () => {
                 onClose={() => setShowLowBalanceModal(false)}
                 balance={Number(walletSummary.balance || 0)}
                 cashLimit={Number(walletSummary.cashLimit || 500)}
-                isBlocked={isBalanceCritical}
+                isBlocked={walletAlertState.isBlocked}
             />
 
             <AnimatePresence>

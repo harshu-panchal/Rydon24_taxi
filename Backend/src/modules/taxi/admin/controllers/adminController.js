@@ -613,6 +613,20 @@ export const deleteBusService = asyncHandler(async (req, res) => {
   ok(res, { deleted: true });
 });
 
+export const getRentalVehicleTypes = asyncHandler(async (_req, res) =>
+  ok(res, { results: await adminService.listRentalVehicleTypes() }),
+);
+export const createRentalVehicleType = asyncHandler(async (req, res) =>
+  ok(res, await adminService.createRentalVehicleType(req.body)),
+);
+export const updateRentalVehicleType = asyncHandler(async (req, res) =>
+  ok(res, await adminService.updateRentalVehicleType(req.params.id, req.body)),
+);
+export const deleteRentalVehicleType = asyncHandler(async (req, res) => {
+  await adminService.deleteRentalVehicleType(req.params.id);
+  ok(res, { deleted: true });
+});
+
 export const getGoodsTypes = asyncHandler(async (_req, res) =>
   res.json(await adminService.listGoodsTypes()),
 );

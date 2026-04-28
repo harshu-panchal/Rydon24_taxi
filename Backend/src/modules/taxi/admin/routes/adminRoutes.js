@@ -19,6 +19,7 @@ import {
   createPaymentMethod,
   createServiceLocation,
   createServiceStore,
+  createRentalVehicleType,
   createSetPrice,
   createSubscriptionPlan,
   createUser,
@@ -40,6 +41,7 @@ import {
   deletePreference,
   deleteRole,
   deletePaymentMethod,
+  deleteRentalVehicleType,
   deleteSetPrice,
   deleteServiceLocation,
   deleteServiceStore,
@@ -101,6 +103,7 @@ import {
   getPaymentMethods,
   getPaymentSettings,
   getPreferences,
+  getRentalVehicleTypes,
   getRideModules,
   getRoles,
   getReferralSettings,
@@ -165,6 +168,7 @@ import {
   updatePaymentMethod,
   updatePreferenceStatus,
   updateReferralTranslation,
+  updateRentalVehicleType,
   updateSetPrice,
   updateServiceLocation,
   updateServiceStore,
@@ -271,6 +275,10 @@ adminRouter.get('/admin/bus-services', getBusServices);
 adminRouter.post('/admin/bus-services', createBusService);
 adminRouter.patch('/admin/bus-services/:id', updateBusService);
 adminRouter.delete('/admin/bus-services/:id', deleteBusService);
+adminRouter.get('/admin/types/rental-vehicles', getRentalVehicleTypes);
+adminRouter.post('/admin/types/rental-vehicles', createRentalVehicleType);
+adminRouter.patch('/admin/types/rental-vehicles/:id', updateRentalVehicleType);
+adminRouter.delete('/admin/types/rental-vehicles/:id', deleteRentalVehicleType);
 adminRouter.get('/admin/goods-types', getGoodsTypes);
 adminRouter.post('/admin/goods-types', createGoodsType);
 adminRouter.patch('/admin/goods-types/:id', updateGoodsType);

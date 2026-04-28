@@ -1,0 +1,939 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ArrowLeft,
+  Armchair,
+  Car,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  Edit2,
+  ImagePlus,
+  Luggage,
+  Plus,
+  Save,
+  Trash2,
+} from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useNavigate, useParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import { adminService } from '../../services/adminService';
+
+const inputClass =
+  'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100/60';
+const labelClass = 'mb-2 block text-[12px] font-bold text-slate-700';
+
+const createSeatCell = (rowNumber, seatCode, variant = 'seat') => ({
+  kind: 'seat',
+  id: `R${rowNumber}${seatCode}`,
+  label: `${rowNumber}${seatCode}`,
+  variant,
+  status: 'available',
+});
+
+const createAisleCell = () => ({
+  kind: 'aisle',
+  id: '',
+  label: '',
+  variant: 'seat',
+  status: 'available',
+});
+
+const createRowFromPattern = (rowNumber, pattern = []) =>
+  pattern.map((cell) => {
+    if (!cell || cell === 'aisle') return createAisleCell();
+    if (typeof cell === 'string') return createSeatCell(rowNumber, cell);
+    return createSeatCell(rowNumber, cell.code, cell.variant || 'seat');
+  });
+
+const RENTAL_BLUEPRINT_TEMPLATES = [
+  {
+    key: 'bike_1',
+    label: 'Bike',
+    category: 'Single seat',
+    create: () => ({
+      templateKey: 'bike_1',
+      lowerDeck: [createRowFromPattern(1, ['A'])],
+      upperDeck: [],
+    }),
+  },
+  {
+    key: 'auto_3',
+    label: 'Auto 3',
+    category: 'Rear bench',
+    create: () => ({
+      templateKey: 'auto_3',
+      lowerDeck: [
+        createRowFromPattern(1, ['A']),
+        createRowFromPattern(2, ['B', 'aisle', 'C']),
+      ],
+      upperDeck: [],
+    }),
+  },
+  {
+    key: 'compact_4',
+    label: 'Compact 4',
+    category: '2 rows',
+    create: () => ({
+      templateKey: 'compact_4',
+      lowerDeck: [
+        createRowFromPattern(1, ['A', 'aisle', 'B']),
+        createRowFromPattern(2, ['C', 'aisle', 'D']),
+      ],
+      upperDeck: [],
+    }),
+  },
+  {
+    key: 'suv_6',
+    label: 'SUV 6',
+    category: '3 rows',
+    create: () => ({
+      templateKey: 'suv_6',
+      lowerDeck: [
+        createRowFromPattern(1, ['A', 'aisle', 'B']),
+        createRowFromPattern(2, ['C', 'aisle', 'D']),
+        createRowFromPattern(3, ['E', 'aisle', 'F']),
+      ],
+      upperDeck: [],
+    }),
+  },
+  {
+    key: 'suv_7',
+    label: 'SUV 7',
+    category: 'Captain + bench',
+    create: () => ({
+      templateKey: 'suv_7',
+      lowerDeck: [
+        createRowFromPattern(1, ['A', 'aisle', 'B']),
+        createRowFromPattern(2, ['C', 'D', 'E']),
+        createRowFromPattern(3, ['F', 'aisle', 'G']),
+      ],
+      upperDeck: [],
+    }),
+  },
+  {
+    key: 'van_8',
+    label: 'Van 8',
+    category: 'Large carrier',
+    create: () => ({
+      templateKey: 'van_8',
+      lowerDeck: [
+        createRowFromPattern(1, ['A', 'aisle', 'B']),
+        createRowFromPattern(2, ['C', 'D', 'E']),
+        createRowFromPattern(3, ['F', 'G', 'H']),
+      ],
+      upperDeck: [],
+    }),
+  },
+];
+
+const DEFAULT_PRICING = [
+  { id: 'pkg-6h', label: '6 Hours', durationHours: 6, price: 799, includedKm: 60, extraHourPrice: 120, extraKmPrice: 12, active: true },
+  { id: 'pkg-12h', label: '12 Hours', durationHours: 12, price: 1299, includedKm: 120, extraHourPrice: 110, extraKmPrice: 11, active: true },
+  { id: 'pkg-24h', label: '24 Hours', durationHours: 24, price: 1999, includedKm: 240, extraHourPrice: 95, extraKmPrice: 10, active: true },
+];
+
+const clone = (value) => JSON.parse(JSON.stringify(value));
+
+const createBlueprintFromTemplate = (templateKey = 'compact_4') => {
+  const template = RENTAL_BLUEPRINT_TEMPLATES.find((item) => item.key === templateKey) || RENTAL_BLUEPRINT_TEMPLATES[2];
+  return clone(template.create());
+};
+
+const countSeats = (blueprint = {}) =>
+  ['lowerDeck', 'upperDeck']
+    .flatMap((deckKey) => (Array.isArray(blueprint?.[deckKey]) ? blueprint[deckKey] : []))
+    .flat()
+    .filter((cell) => cell?.kind === 'seat').length;
+
+const normalizePricing = (items = DEFAULT_PRICING) =>
+  (Array.isArray(items) && items.length ? items : DEFAULT_PRICING).map((item, index) => ({
+    id: String(item.id || `pkg-${index + 1}`),
+    label: String(item.label || `${item.durationHours || index + 1} Hours`),
+    durationHours: Number(item.durationHours || index + 1),
+    price: Number(item.price || 0),
+    includedKm: Number(item.includedKm || 0),
+    extraHourPrice: Number(item.extraHourPrice || 0),
+    extraKmPrice: Number(item.extraKmPrice || 0),
+    active: item.active !== false,
+  }));
+
+const fileToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+const buildDefaultForm = () => {
+  const blueprint = createBlueprintFromTemplate('compact_4');
+  return {
+    transport_type: 'rental',
+    name: '',
+    short_description: '',
+    description: '',
+    vehicleCategory: 'Car',
+    image: '',
+    map_icon: '',
+    capacity: countSeats(blueprint),
+    luggageCapacity: 2,
+    amenities: ['AC', 'GPS', 'Charging Port'],
+    blueprint,
+    pricing: normalizePricing(),
+    active: true,
+    status: 'active',
+  };
+};
+
+const SeatCell = ({ cell, onToggle }) => {
+  if (!cell || cell.kind !== 'seat') {
+    return <div className="h-12 rounded-2xl bg-slate-100/90" />;
+  }
+
+  const blocked = cell.status === 'blocked';
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={`relative flex h-12 items-center justify-center rounded-2xl border text-[11px] font-black tracking-wide transition ${
+        blocked
+          ? 'border-rose-200 bg-rose-50 text-rose-600'
+          : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:text-indigo-600'
+      }`}
+    >
+      <span className="absolute inset-x-2 top-1.5 h-1 rounded-full bg-slate-200" />
+      {cell.label}
+    </button>
+  );
+};
+
+const SeatPreview = ({ blueprint, onToggleSeat }) => (
+  <div className="rounded-[28px] border border-slate-200 bg-slate-50/80 p-5 shadow-inner">
+    <div className="mb-4 flex items-center justify-between">
+      <div>
+        <h3 className="text-sm font-bold text-slate-900">Vehicle Blueprint</h3>
+        <p className="text-[11px] font-medium text-slate-500">Tap seats to block them from the layout.</p>
+      </div>
+      <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold text-slate-500">
+        {countSeats(blueprint)} seats
+      </div>
+    </div>
+
+    <div className="space-y-3">
+      {(blueprint?.lowerDeck || []).map((row, rowIndex) => (
+        <div
+          key={`row-${rowIndex}`}
+          className="grid gap-2"
+          style={{ gridTemplateColumns: `repeat(${Math.max(1, row.length)}, minmax(0, 1fr))` }}
+        >
+          {row.map((cell, cellIndex) => (
+            <SeatCell
+              key={`${rowIndex}-${cellIndex}-${cell?.id || 'aisle'}`}
+              cell={cell}
+              onToggle={() => onToggleSeat(cell?.id)}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const RentalVehicleTypes = ({ mode: propMode }) => {
+  const navigate = useNavigate();
+  const { id } = useParams();
+  const isEditor = propMode === 'create' || propMode === 'edit';
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [formData, setFormData] = useState(buildDefaultForm);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const load = async () => {
+      setLoading(true);
+      setErrorMessage('');
+      try {
+        const response = await adminService.getRentalVehicleTypes();
+        const results =
+          response?.data?.data?.results ||
+          response?.data?.results ||
+          response?.results ||
+          [];
+        if (!mounted) return;
+        setItems(results);
+
+        if (id) {
+          const selected = results.find((item) => String(item.id || item._id) === String(id));
+          if (selected) {
+            setFormData({
+              transport_type: selected.transport_type || 'rental',
+              name: selected.name || '',
+              short_description: selected.short_description || '',
+              description: selected.description || '',
+              vehicleCategory: selected.vehicleCategory || 'Car',
+              image: selected.image || '',
+              map_icon: selected.map_icon || '',
+              capacity: Number(selected.capacity || countSeats(selected.blueprint)),
+              luggageCapacity: Number(selected.luggageCapacity || 0),
+              amenities: Array.isArray(selected.amenities) ? selected.amenities : [],
+              blueprint: selected.blueprint?.lowerDeck?.length ? clone(selected.blueprint) : createBlueprintFromTemplate('compact_4'),
+              pricing: normalizePricing(selected.pricing),
+              active: selected.active !== false,
+              status: selected.status || 'active',
+            });
+          }
+        } else if (propMode === 'create') {
+          setFormData(buildDefaultForm());
+        }
+      } catch (error) {
+        if (mounted) {
+          setErrorMessage(error?.response?.data?.message || error.message || 'Could not load rental vehicles.');
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, [id, propMode]);
+
+  const totalActive = useMemo(() => items.filter((item) => item.active !== false).length, [items]);
+
+  const updateForm = (field, value) => {
+    setFormData((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleTemplateChange = (templateKey) => {
+    const blueprint = createBlueprintFromTemplate(templateKey);
+    setFormData((current) => ({
+      ...current,
+      blueprint,
+      capacity: countSeats(blueprint),
+    }));
+  };
+
+  const toggleSeat = (seatId) => {
+    if (!seatId) return;
+    setFormData((current) => {
+      const nextBlueprint = clone(current.blueprint);
+      nextBlueprint.lowerDeck = (nextBlueprint.lowerDeck || []).map((row) =>
+        row.map((cell) =>
+          cell?.kind === 'seat' && cell.id === seatId
+            ? { ...cell, status: cell.status === 'blocked' ? 'available' : 'blocked' }
+            : cell,
+        ),
+      );
+
+      return {
+        ...current,
+        blueprint: nextBlueprint,
+        capacity: countSeats(nextBlueprint),
+      };
+    });
+  };
+
+  const handleImageChange = async (event, field) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const result = await fileToDataUrl(file);
+    updateForm(field, result);
+    event.target.value = '';
+  };
+
+  const updatePricingRow = (pricingId, field, value) => {
+    setFormData((current) => ({
+      ...current,
+      pricing: current.pricing.map((item) =>
+        item.id === pricingId
+          ? {
+              ...item,
+              [field]:
+                ['durationHours', 'price', 'includedKm', 'extraHourPrice', 'extraKmPrice'].includes(field)
+                  ? Number(value || 0)
+                  : value,
+            }
+          : item,
+      ),
+    }));
+  };
+
+  const addPricingRow = () => {
+    setFormData((current) => ({
+      ...current,
+      pricing: [
+        ...current.pricing,
+        {
+          id: `pkg-${Date.now()}`,
+          label: 'Custom Package',
+          durationHours: 1,
+          price: 0,
+          includedKm: 0,
+          extraHourPrice: 0,
+          extraKmPrice: 0,
+          active: true,
+        },
+      ],
+    }));
+  };
+
+  const removePricingRow = (pricingId) => {
+    setFormData((current) => ({
+      ...current,
+      pricing: current.pricing.filter((item) => item.id !== pricingId),
+    }));
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setErrorMessage('');
+
+    try {
+      const payload = {
+        ...formData,
+        capacity: countSeats(formData.blueprint),
+        active: formData.active,
+        status: formData.active ? 'active' : 'inactive',
+        amenities: (Array.isArray(formData.amenities) ? formData.amenities : [])
+          .map((item) => String(item).trim())
+          .filter(Boolean),
+      };
+
+      if (!payload.name.trim()) {
+        throw new Error('Vehicle name is required');
+      }
+
+      if (id) {
+        await adminService.updateRentalVehicleType(id, payload);
+      } else {
+        await adminService.createRentalVehicleType(payload);
+      }
+
+      toast.success(id ? 'Rental vehicle updated' : 'Rental vehicle created');
+      navigate('/admin/pricing/rental-vehicles');
+    } catch (error) {
+      setErrorMessage(error?.response?.data?.message || error.message || 'Could not save rental vehicle.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async (vehicleId) => {
+    if (!window.confirm('Delete this rental vehicle type?')) return;
+    try {
+      await adminService.deleteRentalVehicleType(vehicleId);
+      setItems((current) => current.filter((item) => String(item.id || item._id) !== String(vehicleId)));
+      toast.success('Rental vehicle removed');
+    } catch (error) {
+      toast.error(error?.response?.data?.message || error.message || 'Could not delete rental vehicle.');
+    }
+  };
+
+  if (!isEditor) {
+    return (
+      <div className="min-h-screen bg-[#f6f7fb] p-6 lg:p-8">
+        <div className="mb-6">
+          <div className="mb-2 flex items-center gap-1.5 text-xs text-slate-400">
+            <span>Pricing</span>
+            <ChevronRight size={12} />
+            <span className="text-slate-700">Rental Vehicles</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Rental Vehicles</h1>
+              <p className="mt-1 text-sm text-slate-500">Manage self-drive vehicle types, duration pricing, and seat blueprints.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/admin/pricing/rental-vehicles/create')}
+              className="inline-flex items-center gap-2 rounded-xl bg-[#2e3c78] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#24305f]"
+            >
+              <Plus size={18} />
+              Add Rental Vehicle
+            </button>
+          </div>
+        </div>
+
+        <div className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                <Car size={20} />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Total Types</p>
+                <p className="text-2xl font-bold text-slate-900">{items.length}</p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                <CheckCircle2 size={20} />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Active Types</p>
+                <p className="text-2xl font-bold text-slate-900">{totalActive}</p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+                <Clock3 size={20} />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Hourly Packages</p>
+                <p className="text-2xl font-bold text-slate-900">{items.reduce((sum, item) => sum + (item.pricing?.length || 0), 0)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {errorMessage ? (
+          <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-600">
+            {errorMessage}
+          </div>
+        ) : null}
+
+        <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
+          {loading ? (
+            <div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-400">Loading rental vehicles...</div>
+          ) : items.length === 0 ? (
+            <div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-400">No rental vehicles configured yet.</div>
+          ) : (
+            items.map((item) => (
+              <div key={item.id || item._id} className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50">
+                      {item.image ? (
+                        <img src={item.image} alt={item.name} className="h-12 w-12 object-contain" />
+                      ) : (
+                        <Car size={24} className="text-slate-400" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-slate-900">{item.name}</p>
+                      <p className="text-xs font-semibold text-slate-500">{item.vehicleCategory || 'Rental vehicle'}</p>
+                    </div>
+                  </div>
+                  <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide ${item.active !== false ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {item.active !== false ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+
+                <div className="mt-5 grid grid-cols-3 gap-3">
+                  <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Seats</p>
+                    <p className="mt-1 text-sm font-black text-slate-900">{item.capacity || 0}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Bags</p>
+                    <p className="mt-1 text-sm font-black text-slate-900">{item.luggageCapacity || 0}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Packages</p>
+                    <p className="mt-1 text-sm font-black text-slate-900">{item.pricing?.length || 0}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Pricing Snapshot</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {(item.pricing || []).slice(0, 3).map((price) => (
+                      <span key={price.id} className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-slate-700">
+                        {price.label}: Rs {price.price}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-5 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/admin/pricing/rental-vehicles/edit/${item.id || item._id}`)}
+                    className="rounded-xl p-2 text-slate-400 transition hover:bg-blue-50 hover:text-blue-600"
+                  >
+                    <Edit2 size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(item.id || item._id)}
+                    className="rounded-xl p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#f6f7fb] p-6 lg:p-8">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <div className="mb-2 flex items-center gap-1.5 text-xs text-slate-400">
+            <span>Pricing</span>
+            <ChevronRight size={12} />
+            <span className="text-slate-700">Rental Vehicles</span>
+            <ChevronRight size={12} />
+            <span className="text-slate-700">{id ? 'Edit' : 'Create'}</span>
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900">{id ? 'Edit Rental Vehicle' : 'Create Rental Vehicle'}</h1>
+          <p className="mt-1 text-sm text-slate-500">Configure self-drive vehicle details, pricing by hour, and a seat-based blueprint.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/admin/pricing/rental-vehicles')}
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+        >
+          <ArrowLeft size={16} />
+          Back
+        </button>
+      </div>
+
+      {errorMessage ? (
+        <div className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-600">
+          {errorMessage}
+        </div>
+      ) : null}
+
+      <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+        <div className="grid grid-cols-1 gap-8 p-6 lg:grid-cols-2 lg:p-8">
+          <div>
+            <label className={labelClass}>Vehicle Name *</label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(event) => updateForm('name', event.target.value)}
+              className={inputClass}
+              placeholder="Honda Amaze"
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Category *</label>
+            <select
+              value={formData.vehicleCategory}
+              onChange={(event) => updateForm('vehicleCategory', event.target.value)}
+              className={inputClass}
+            >
+              {['Bike', 'Auto', 'Car', 'SUV', 'Van'].map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className={labelClass}>Short Description</label>
+            <input
+              type="text"
+              value={formData.short_description}
+              onChange={(event) => updateForm('short_description', event.target.value)}
+              className={inputClass}
+              placeholder="Comfortable city self-drive option"
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Luggage Capacity</label>
+            <input
+              type="number"
+              value={formData.luggageCapacity}
+              onChange={(event) => updateForm('luggageCapacity', Number(event.target.value || 0))}
+              className={inputClass}
+              placeholder="2"
+            />
+          </div>
+
+          <div className="lg:col-span-2">
+            <label className={labelClass}>Description</label>
+            <textarea
+              rows="4"
+              value={formData.description}
+              onChange={(event) => updateForm('description', event.target.value)}
+              className={inputClass}
+              placeholder="Add a clear rental vehicle description for admin and future app use."
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Vehicle Image</label>
+            <div className="rounded-2xl border border-dashed border-slate-300 p-4">
+              <div className="flex min-h-[280px] items-center justify-center overflow-hidden rounded-2xl bg-slate-50">
+                {formData.image ? (
+                  <img src={formData.image} alt="Vehicle preview" className="max-h-[240px] w-full object-contain p-4" />
+                ) : (
+                  <label className="flex cursor-pointer flex-col items-center gap-3 text-center">
+                    <input type="file" accept="image/*" className="hidden" onChange={(event) => handleImageChange(event, 'image')} />
+                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-indigo-600 shadow-sm">
+                      <ImagePlus size={20} />
+                    </span>
+                    <span className="text-sm font-semibold text-slate-700">Upload rental vehicle image</span>
+                  </label>
+                )}
+              </div>
+              {formData.image ? (
+                <div className="mt-3 flex gap-2">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">
+                    Change
+                    <input type="file" accept="image/*" className="hidden" onChange={(event) => handleImageChange(event, 'image')} />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => updateForm('image', '')}
+                    className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-bold text-rose-600"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="rounded-[24px] border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-slate-50 p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Live Summary</p>
+              <div className="mt-4 flex items-center gap-3">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm">
+                  {formData.image ? (
+                    <img src={formData.image} alt={formData.name || 'Vehicle'} className="h-12 w-12 object-contain" />
+                  ) : (
+                    <Car size={24} className="text-slate-400" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-lg font-black text-slate-900">{formData.name || 'Rental Vehicle'}</p>
+                  <p className="truncate text-sm font-semibold text-slate-500">{formData.short_description || 'Your hourly rental setup preview appears here.'}</p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-white px-4 py-3 shadow-sm">
+                  <div className="flex items-center gap-2 text-slate-500">
+                    <Armchair size={15} />
+                    <span className="text-[11px] font-bold uppercase tracking-wide">Seats</span>
+                  </div>
+                  <p className="mt-1 text-lg font-black text-slate-900">{countSeats(formData.blueprint)}</p>
+                </div>
+                <div className="rounded-2xl bg-white px-4 py-3 shadow-sm">
+                  <div className="flex items-center gap-2 text-slate-500">
+                    <Luggage size={15} />
+                    <span className="text-[11px] font-bold uppercase tracking-wide">Bags</span>
+                  </div>
+                  <p className="mt-1 text-lg font-black text-slate-900">{formData.luggageCapacity}</p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className={labelClass}>Amenities</label>
+              <input
+                type="text"
+                value={formData.amenities.join(', ')}
+                onChange={(event) =>
+                  updateForm(
+                    'amenities',
+                    event.target.value
+                      .split(',')
+                      .map((item) => item.trim())
+                      .filter(Boolean),
+                  )
+                }
+                className={inputClass}
+                placeholder="AC, GPS, Charging Port"
+              />
+              <p className="mt-2 text-xs text-slate-500">Use comma separated amenities for quick admin setup.</p>
+            </div>
+          </div>
+
+          <div className="lg:col-span-2">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Layout Blueprint</h2>
+                <p className="text-xs font-medium text-slate-500">Choose the closest layout and customize blocked seats if needed.</p>
+              </div>
+              <div className="rounded-full bg-slate-50 px-4 py-2 text-xs font-bold text-slate-600">
+                Capacity auto-sync: {countSeats(formData.blueprint)} seats
+              </div>
+            </div>
+
+            <div className="mb-5 flex flex-wrap gap-3">
+              {RENTAL_BLUEPRINT_TEMPLATES.map((template) => {
+                const active = formData.blueprint?.templateKey === template.key;
+                return (
+                  <button
+                    key={template.key}
+                    type="button"
+                    onClick={() => handleTemplateChange(template.key)}
+                    className={`rounded-2xl border px-4 py-3 text-left transition-all ${
+                      active
+                        ? 'border-slate-900 bg-slate-900 text-white shadow-lg'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    <p className="text-sm font-bold">{template.label}</p>
+                    <p className={`text-[10px] font-bold uppercase tracking-wide ${active ? 'text-slate-300' : 'text-slate-400'}`}>
+                      {template.category}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+
+            <SeatPreview blueprint={formData.blueprint} onToggleSeat={toggleSeat} />
+          </div>
+
+          <div className="lg:col-span-2">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Hourly Pricing Packages</h2>
+                <p className="text-xs font-medium text-slate-500">Set separate rent for 6 hours, 12 hours, 24 hours, or any custom duration.</p>
+              </div>
+              <button
+                type="button"
+                onClick={addPricingRow}
+                className="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-700 shadow-sm border border-slate-200"
+              >
+                <Plus size={15} />
+                Add Package
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {formData.pricing.map((price) => (
+                <div key={price.id} className="rounded-[26px] border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-black text-slate-900">{price.label}</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Rental package</p>
+                    </div>
+                    {formData.pricing.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => removePricingRow(price.id)}
+                        className="rounded-xl border border-rose-200 bg-white p-2 text-rose-500 transition hover:bg-rose-50"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+                    <input
+                      value={price.label}
+                      onChange={(event) => updatePricingRow(price.id, 'label', event.target.value)}
+                      className={inputClass}
+                      placeholder="6 Hours"
+                    />
+                    <input
+                      type="number"
+                      value={price.durationHours}
+                      onChange={(event) => updatePricingRow(price.id, 'durationHours', event.target.value)}
+                      className={inputClass}
+                      placeholder="6"
+                    />
+                    <input
+                      type="number"
+                      value={price.price}
+                      onChange={(event) => updatePricingRow(price.id, 'price', event.target.value)}
+                      className={inputClass}
+                      placeholder="799"
+                    />
+                    <input
+                      type="number"
+                      value={price.includedKm}
+                      onChange={(event) => updatePricingRow(price.id, 'includedKm', event.target.value)}
+                      className={inputClass}
+                      placeholder="60"
+                    />
+                    <input
+                      type="number"
+                      value={price.extraHourPrice}
+                      onChange={(event) => updatePricingRow(price.id, 'extraHourPrice', event.target.value)}
+                      className={inputClass}
+                      placeholder="120"
+                    />
+                    <input
+                      type="number"
+                      value={price.extraKmPrice}
+                      onChange={(event) => updatePricingRow(price.id, 'extraKmPrice', event.target.value)}
+                      className={inputClass}
+                      placeholder="12"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 border-t border-slate-100 bg-slate-50/50 p-6 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div className="space-y-3">
+            <div className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Seat capacity follows the selected blueprint so the admin can control the rental layout visually and keep pricing tied to the exact vehicle setup.
+            </div>
+            <label className="flex items-center gap-3 text-sm font-medium text-slate-700">
+              <input
+                type="checkbox"
+                checked={formData.active}
+                onChange={(event) => {
+                  updateForm('active', event.target.checked);
+                  updateForm('status', event.target.checked ? 'active' : 'inactive');
+                }}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              Active rental vehicle type
+            </label>
+          </div>
+
+          <div className="flex flex-col gap-3 lg:items-end">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving || loading}
+              className="inline-flex min-w-[190px] items-center justify-center gap-2 rounded-xl bg-[#2e3c78] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#24305f] disabled:opacity-60"
+            >
+              <Save size={16} />
+              {isSaving ? 'Saving...' : id ? 'Update Rental Vehicle' : 'Create Rental Vehicle'}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/admin/pricing/rental-vehicles')}
+              className="text-sm font-medium text-slate-500 transition hover:text-slate-700"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {!loading && formData.active ? (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="fixed bottom-8 right-8 flex h-14 w-14 items-center justify-center rounded-full bg-[#14b8a6] text-white shadow-2xl"
+          >
+            <CheckCircle2 size={24} />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+export default RentalVehicleTypes;

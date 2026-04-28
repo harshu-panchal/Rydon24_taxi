@@ -10,8 +10,12 @@ const LowBalanceModal = ({ isOpen, onClose, balance, cashLimit, isBlocked }) => 
     
     if (!isOpen) return null;
 
-    const remainingLimit = Math.max(0, cashLimit + balance); // Assuming balance is negative if owing
-    const progress = Math.min(100, Math.max(0, (Math.abs(balance) / cashLimit) * 100));
+    const normalizedCashLimit = Math.max(0, Number(cashLimit || 0));
+    const cashLimitUsed = Math.max(0, Number(balance || 0) < 0 ? Math.abs(Number(balance || 0)) : 0);
+    const remainingLimit = Math.max(0, normalizedCashLimit - cashLimitUsed);
+    const progress = normalizedCashLimit > 0
+        ? Math.min(100, Math.max(0, (cashLimitUsed / normalizedCashLimit) * 100))
+        : 0;
 
     return (
         <AnimatePresence>
