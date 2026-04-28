@@ -66,6 +66,24 @@ const normalizePreferredVehicleTypes = (value = '') =>
     .map((entry) => normalizeLabel(entry))
     .filter(Boolean);
 
+const normalizeVehicleLabel = (value = '') =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ');
+
+const getVehicleTokens = (vehicle = {}) =>
+  [
+    vehicle.name,
+    vehicle.vehicle_type,
+    vehicle.label,
+    vehicle.icon_types,
+    vehicle.transport_type,
+  ]
+    .map(normalizeVehicleLabel)
+    .filter(Boolean);
+
 const findVehicleMatch = (types, preferredLabel) => {
   const exactMatch = types.find((type) => normalizeLabel(type.name || type.vehicle_type || type.label) === preferredLabel);
   if (exactMatch) return exactMatch;
@@ -103,14 +121,31 @@ const pickParcelVehicles = (types = [], preferredType = '') => {
   return parcelFirst ? [parcelFirst] : activeTypes.slice(0, 1);
 };
 
-const ActionBtn = ({ icon: Icon, label, onClick, color = 'bg-gray-50 text-gray-700' }) => (
+const findVehicleById = (types = [], vehicleId = '') =>
+  types.find((type) => String(type?._id || type?.id) === String(vehicleId || '')) || null;
+
+const isVehicleCompatibleWithGoodsType = (vehicle, goodsTypeFor = '') => {
+  const allowedLabels = String(goodsTypeFor || 'both')
+    .split(',')
+    .map(normalizeVehicleLabel)
+    .filter(Boolean);
+
+  if (!allowedLabels.length || allowedLabels.includes('both') || allowedLabels.includes('all')) {
+    return true;
+  }
+
+  const tokens = getVehicleTokens(vehicle);
+  return allowedLabels.some((label) => tokens.some((token) => token.includes(label) || label.includes(token)));
+};
+
+const ActionBtn = ({ icon, label, onClick, color = 'bg-gray-50 text-gray-700' }) => (
   <Motion.button
     whileHover={{ scale: 1.02 }}
     whileTap={{ scale: 0.94 }}
     onClick={onClick}
     className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl border border-gray-100 transition-all ${color}`}
   >
-    <Icon size={18} strokeWidth={2.5} />
+    {React.createElement(icon, { size: 18, strokeWidth: 2.5 })}
     <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
   </Motion.button>
 );
@@ -375,7 +410,10 @@ const ParcelSearchingDriver = () => {
 
         const vehicleCatalog = unwrap(vehicleCatalogResponse);
         const vehicleTypes = vehicleCatalog?.vehicle_types || vehicleCatalog?.results || (Array.isArray(vehicleCatalog) ? vehicleCatalog : []);
-        const selectedVehicleTypes = pickParcelVehicles(vehicleTypes, preferredVehicleType);
+        const requestedVehicle = findVehicleById(vehicleTypes, routeState.selectedVehicleId);
+        const selectedVehicleTypes = requestedVehicle && isVehicleCompatibleWithGoodsType(requestedVehicle, preferredVehicleType)
+          ? [requestedVehicle]
+          : pickParcelVehicles(vehicleTypes, preferredVehicleType);
         const selectedVehicleType = selectedVehicleTypes[0];
         const selectedVehicleTypeIds = selectedVehicleTypes.map((type) => type?._id || type?.id).filter(Boolean);
 
@@ -464,7 +502,8 @@ const ParcelSearchingDriver = () => {
         }, SEARCH_TIMEOUT_MS);
       } catch (error) {
         if (disposed) return;
-        setBookingError(error?.message || 'Dispatch failed.');
+        const errorMessage = error?.response?.data?.message || error?.response?.data?.error || error?.message || 'Dispatch failed.';
+        setBookingError(errorMessage);
         setSearchStatus('Error creating booking.');
         clearTimeout(searchTimeoutRef.current);
       }

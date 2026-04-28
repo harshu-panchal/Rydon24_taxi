@@ -109,10 +109,6 @@ const userSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
-    fcmTokens: {
-      type: [String],
-      default: [],
-    },
     dateOfBirth: {
       type: Date,
       default: null,

@@ -271,141 +271,136 @@ const BusHome = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#fff5f5_0%,#fff7ed_28%,#f8fafc_100%)] max-w-lg mx-auto font-sans pb-32 relative overflow-hidden">
-      <div className="absolute inset-x-0 top-0 h-52 bg-[radial-gradient(circle_at_top,#ef444422,transparent_68%)] pointer-events-none" />
-      <div className="absolute -top-20 right-[-38px] h-48 w-48 rounded-full bg-orange-200/25 blur-3xl pointer-events-none" />
-      <div className="absolute top-64 left-[-54px] h-44 w-44 rounded-full bg-rose-200/25 blur-3xl pointer-events-none" />
-
-      <header className="bg-white/90 backdrop-blur-md px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-white/80 shadow-[0_4px_20px_rgba(15,23,42,0.05)]">
+    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-sans pb-32 relative overflow-hidden">
+      <header className="bg-white px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-slate-100 shadow-sm">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
-            className="w-9 h-9 rounded-[12px] border border-white/80 bg-white/90 flex items-center justify-center shadow-sm active:scale-95 transition-all"
+            className="w-9 h-9 rounded-xl border border-slate-200 bg-white flex items-center justify-center shadow-sm active:scale-95 transition-all"
           >
-            <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
+            <ArrowLeft size={18} className="text-slate-900" />
           </button>
           <div className="flex-1">
-            <p className="text-[9px] font-black uppercase tracking-[0.26em] text-[#dc2626]">Bus Tickets</p>
-            <h1 className="text-[19px] font-black tracking-tight text-slate-900 leading-none">Book your next route</h1>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Bus Tickets</p>
+            <h1 className="text-xl font-bold text-slate-900">Book your journey</h1>
           </div>
         </div>
       </header>
 
-      <div className="px-5 pt-5 space-y-4">
-        <div className="rounded-[28px] bg-gradient-to-br from-[#7f1d1d] via-[#dc2626] to-[#fb923c] p-5 text-white shadow-[0_12px_28px_rgba(127,29,29,0.25)]">
+      <div className="px-5 pt-6 space-y-6">
+        <div className="rounded-3xl bg-slate-900 p-6 text-white shadow-xl shadow-slate-200">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-100">Inspired by modern bus booking</p>
-              <h2 className="mt-1 text-[24px] font-black leading-tight">Search buses in 3 taps.</h2>
-              <p className="mt-2 text-[12px] font-semibold text-rose-50/90">
-                Pick from active routes already configured in admin, then jump straight to seats and payment.
+              <h2 className="text-2xl font-bold leading-tight">Travel with ease</h2>
+              <p className="mt-2 text-sm text-slate-300 font-medium">
+                Find and book bus tickets for your preferred routes in just a few clicks.
               </p>
             </div>
-            <div className="w-14 h-14 rounded-[18px] bg-white/15 border border-white/20 flex items-center justify-center shrink-0">
-              <Ticket size={26} />
+            <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center shrink-0">
+              <BusFront size={24} className="text-white" />
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            <div className="rounded-[16px] bg-white/12 border border-white/15 px-3 py-2">
-              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/70">Routes</p>
-              <p className="mt-1 text-[16px] font-black">{routeSuggestions.length || 0}</p>
+          <div className="mt-6 grid grid-cols-3 gap-4 border-t border-white/10 pt-4">
+            <div>
+              <p className="text-[10px] font-bold uppercase text-slate-400">Routes</p>
+              <p className="mt-1 text-lg font-bold">{routeSuggestions.length || 0}</p>
             </div>
-            <div className="rounded-[16px] bg-white/12 border border-white/15 px-3 py-2">
-              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/70">Cities</p>
-              <p className="mt-1 text-[16px] font-black">{cityOptions.length || 0}</p>
+            <div>
+              <p className="text-[10px] font-bold uppercase text-slate-400">Cities</p>
+              <p className="mt-1 text-lg font-bold">{cityOptions.length || 0}</p>
             </div>
-            <div className="rounded-[16px] bg-white/12 border border-white/15 px-3 py-2">
-              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/70">Date</p>
-              <p className="mt-1 text-[13px] font-black">{formatTravelDate(date) || 'Choose'}</p>
+            <div>
+              <p className="text-[10px] font-bold uppercase text-slate-400">Date</p>
+              <p className="mt-1 text-sm font-bold">{formatTravelDate(date) || 'Choose'}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white/92 rounded-[28px] p-5 shadow-[0_8px_30px_rgba(15,23,42,0.06)] border border-white/80 space-y-4 relative">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-[14px] bg-red-50 text-red-500 flex items-center justify-center">
-              <Search size={18} />
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-slate-50 text-slate-600 flex items-center justify-center">
+              <Search size={20} />
             </div>
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Search Buses</p>
-              <h3 className="text-[17px] font-black text-slate-900">From, to, date. That’s it.</h3>
+              <h3 className="text-lg font-bold text-slate-900">Search Buses</h3>
+              <p className="text-xs text-slate-500 font-medium">Find available buses on your route</p>
             </div>
           </div>
 
-          <div className="rounded-[24px] border border-slate-100 bg-slate-50/90 p-4 space-y-3">
-            <div className="rounded-[20px] border border-white bg-white px-4 py-3 shadow-sm">
-              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-                <MapPin size={12} className="text-red-400" /> From
+          <div className="space-y-4">
+            <div className="relative">
+              <div className="absolute left-4 top-4 text-slate-400">
+                <MapPin size={16} />
               </div>
-              <input
-                type="text"
-                list="bus-route-cities"
-                value={fromCity}
-                onChange={(event) => setFromCity(event.target.value)}
-                placeholder="Enter source city"
-                className="mt-1 w-full bg-transparent text-[18px] font-black text-slate-900 focus:outline-none"
-              />
-              <p className="mt-1 text-[11px] font-semibold text-slate-500">Start typing or tap one of the live cities below.</p>
-            </div>
-
-            <div className="flex justify-center -my-1">
-              <button
-                type="button"
-                onClick={swapCities}
-                className="w-11 h-11 rounded-full bg-white border border-orange-100 text-orange-600 flex items-center justify-center shadow-sm active:scale-95"
-              >
-                <ArrowRightLeft size={18} />
-              </button>
-            </div>
-
-            <div className="rounded-[20px] border border-white bg-white px-4 py-3 shadow-sm">
-              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-                <MapPin size={12} className="text-emerald-500" /> To
+              <div className="pl-12 pr-4 py-3 bg-slate-50 rounded-2xl border border-slate-100">
+                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">From</label>
+                <input
+                  type="text"
+                  list="bus-route-cities"
+                  value={fromCity}
+                  onChange={(event) => setFromCity(event.target.value)}
+                  placeholder="Enter source city"
+                  className="w-full bg-transparent text-base font-semibold text-slate-900 focus:outline-none placeholder:text-slate-300"
+                />
               </div>
-              <input
-                type="text"
-                list="bus-route-cities"
-                value={toCity}
-                onChange={(event) => setToCity(event.target.value)}
-                placeholder="Enter destination city"
-                className="mt-1 w-full bg-transparent text-[18px] font-black text-slate-900 focus:outline-none"
-              />
-              <p className="mt-1 text-[11px] font-semibold text-slate-500">We only show routes that already exist in the system.</p>
+              
+              <div className="absolute right-6 top-1/2 -translate-y-1/2 z-10">
+                <button
+                  type="button"
+                  onClick={swapCities}
+                  className="w-10 h-10 rounded-full bg-white border border-slate-200 text-slate-600 flex items-center justify-center shadow-sm active:rotate-180 transition-transform duration-300"
+                >
+                  <ArrowRightLeft size={16} />
+                </button>
+              </div>
             </div>
 
-            <div className="rounded-[20px] border border-white bg-white px-4 py-3 shadow-sm">
-              <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-                <Calendar size={12} className="text-orange-500" /> Date of Journey
-              </label>
-              <button
-                type="button"
-                onClick={openCalendar}
-                className="mt-1 flex w-full items-center justify-between gap-3 bg-transparent text-left text-[17px] font-black text-slate-900"
-              >
-                <span>{formatTravelDate(date) || 'Choose date'}</span>
-                <span className="rounded-full bg-orange-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-orange-600">
-                  Open calendar
-                </span>
-              </button>
+            <div className="relative">
+              <div className="absolute left-4 top-4 text-slate-400">
+                <MapPin size={16} />
+              </div>
+              <div className="pl-12 pr-4 py-3 bg-slate-50 rounded-2xl border border-slate-100">
+                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">To</label>
+                <input
+                  type="text"
+                  list="bus-route-cities"
+                  value={toCity}
+                  onChange={(event) => setToCity(event.target.value)}
+                  placeholder="Enter destination city"
+                  className="w-full bg-transparent text-base font-semibold text-slate-900 focus:outline-none placeholder:text-slate-300"
+                />
+              </div>
             </div>
+
+            <button
+              type="button"
+              onClick={openCalendar}
+              className="w-full flex items-center gap-4 pl-4 pr-4 py-3 bg-slate-50 rounded-2xl border border-slate-100 text-left"
+            >
+              <div className="text-slate-400">
+                <Calendar size={16} />
+              </div>
+              <div className="flex-1">
+                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Date of Journey</label>
+                <span className="text-base font-semibold text-slate-900">{formatTravelDate(date) || 'Choose date'}</span>
+              </div>
+              <span className="text-xs font-bold text-slate-400">Change</span>
+            </button>
           </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Quick dates</p>
-              <p className="text-[11px] font-bold text-slate-400">Future dates only</p>
-            </div>
+          <div className="space-y-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Quick dates</p>
             <div className="flex flex-wrap gap-2">
               {quickDates.map((item) => (
                 <button
                   key={item.value}
                   type="button"
                   onClick={() => setDate(item.value)}
-                  className={`rounded-full border px-3 py-2 text-[11px] font-black transition-all ${
+                  className={`rounded-full px-4 py-2 text-xs font-bold transition-all ${
                     date === item.value
-                      ? 'border-red-200 bg-red-50 text-red-600'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200 hover:text-orange-600'
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-slate-50 text-slate-600 border border-slate-100 hover:border-slate-300'
                   }`}
                 >
                   {item.label}
@@ -420,197 +415,135 @@ const BusHome = () => {
             ))}
           </datalist>
 
-          <div className="grid grid-cols-1 gap-3">
-            <div className="rounded-[22px] border border-slate-100 bg-[#fff7ed] p-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500">Choose source city</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {filteredFromCities.map((city) => (
-                  <button
-                    key={`from-${city}`}
-                    type="button"
-                    onClick={() => {
-                      setFromCity(city);
-                      setError('');
-                    }}
-                    className={`rounded-full border px-3 py-2 text-[11px] font-black transition-all ${
-                      normalizeCity(fromCity) === normalizeCity(city)
-                        ? 'border-orange-200 bg-orange-100 text-orange-700'
-                        : 'border-orange-100 bg-white text-slate-600'
-                    }`}
-                  >
-                    {city}
-                  </button>
-                ))}
-                {!filteredFromCities.length ? (
-                  <p className="text-[12px] font-semibold text-slate-500">No matching source cities yet.</p>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="rounded-[22px] border border-slate-100 bg-[#f0fdf4] p-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">Choose destination city</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {filteredToCities.map((city) => (
-                  <button
-                    key={`to-${city}`}
-                    type="button"
-                    onClick={() => {
-                      setToCity(city);
-                      setError('');
-                    }}
-                    className={`rounded-full border px-3 py-2 text-[11px] font-black transition-all ${
-                      normalizeCity(toCity) === normalizeCity(city)
-                        ? 'border-emerald-200 bg-emerald-100 text-emerald-700'
-                        : 'border-emerald-100 bg-white text-slate-600'
-                    }`}
-                  >
-                    {city}
-                  </button>
-                ))}
-                {!filteredToCities.length ? (
-                  <p className="text-[12px] font-semibold text-slate-500">Pick a source city to narrow destinations.</p>
-                ) : null}
-              </div>
-            </div>
-          </div>
-
-          {matchingRoute ? (
-            <div className="rounded-[22px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-[12px] font-bold text-emerald-700 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 min-w-0">
-                <Route size={14} className="shrink-0" />
-                <span className="truncate">
-                  Route available: {matchingRoute.fromCity} to {matchingRoute.toCity}
+          <div className="space-y-4">
+            {matchingRoute && (
+              <div className="rounded-2xl bg-emerald-50 border border-emerald-100 px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Route size={14} className="text-emerald-600" />
+                  <span className="text-xs font-bold text-emerald-700">Route available</span>
+                </div>
+                <span className="text-xs font-bold text-emerald-700">
+                  Starts at ₹{Number(matchingRoute.startingPrice || 0)}
                 </span>
               </div>
-              <span className="shrink-0 rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-black text-emerald-700">
-                from Rs {Number(matchingRoute.startingPrice || 0)}
-              </span>
-            </div>
-          ) : null}
+            )}
 
-          {hasTypedInvalidRoute ? (
-            <div className="rounded-[22px] border border-rose-100 bg-rose-50 px-4 py-3 text-[12px] font-bold text-rose-600">
-              This route is not active right now. Use one of the live route suggestions below.
-            </div>
-          ) : null}
+            {hasTypedInvalidRoute && (
+              <div className="rounded-2xl bg-slate-50 border border-slate-100 px-4 py-3 text-xs font-bold text-slate-500">
+                This specific route is not available. Please check the list below.
+              </div>
+            )}
 
-          {error ? (
-            <div className="rounded-[22px] border border-rose-100 bg-rose-50 px-4 py-3 text-[12px] font-bold text-rose-600">
-              {error}
-            </div>
-          ) : null}
+            {error && (
+              <div className="rounded-2xl bg-rose-50 border border-rose-100 px-4 py-3 text-xs font-bold text-rose-600">
+                {error}
+              </div>
+            )}
 
-          {!busEnabled ? (
-            <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] font-bold text-amber-700">
-              Bus service is currently disabled from admin transport settings.
-            </div>
-          ) : null}
+            {!busEnabled && (
+              <div className="rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 text-xs font-bold text-amber-700">
+                Bus service is currently disabled.
+              </div>
+            )}
 
-          <motion.button
-            whileTap={{ scale: 0.98 }}
-            onClick={handleSearch}
-            className="w-full bg-[#111827] text-white py-4 rounded-[20px] text-[15px] font-black uppercase tracking-[0.18em] flex items-center justify-center gap-2 shadow-[0_10px_26px_rgba(17,24,39,0.18)] active:scale-95 transition-all"
-          >
-            Search Buses <ChevronRight size={18} strokeWidth={3} className="opacity-80" />
-          </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.98 }}
+              onClick={handleSearch}
+              className="w-full bg-slate-900 text-white py-4 rounded-2xl text-base font-bold flex items-center justify-center gap-2 shadow-lg shadow-slate-200 active:scale-95 transition-all"
+            >
+              Search Buses <ChevronRight size={18} />
+            </motion.button>
+          </div>
         </div>
 
-        <div className="rounded-[28px] border border-white/80 bg-white/92 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Popular right now</p>
-              <h3 className="mt-1 text-[18px] font-black text-slate-900">Available routes from your system</h3>
-            </div>
-            {routesLoading ? <Loader2 size={18} className="animate-spin text-orange-500 shrink-0" /> : null}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-bold text-slate-900">Popular Routes</h3>
+            {routesLoading && <Loader2 size={18} className="animate-spin text-slate-400" />}
           </div>
 
-          <div className="mt-4 space-y-3">
+          <div className="space-y-3">
             {featuredRoutes.map((route) => (
               <button
                 key={`${route.fromCity}-${route.toCity}`}
                 type="button"
                 onClick={() => fillRoute(route)}
-                className="w-full rounded-[22px] border border-slate-100 bg-[linear-gradient(135deg,#ffffff_0%,#fff7ed_100%)] px-4 py-4 text-left shadow-sm active:scale-[0.99] transition-transform"
+                className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-4 text-left shadow-sm active:scale-[0.99] transition-transform"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Live Route</p>
-                    <h4 className="mt-1 text-[17px] font-black text-slate-900 truncate">
-                      {route.fromCity} <span className="text-orange-500">to</span> {route.toCity}
+                    <h4 className="text-base font-bold text-slate-900 truncate">
+                      {route.fromCity} → {route.toCity}
                     </h4>
-                    <p className="mt-1 text-[12px] font-semibold text-slate-500 truncate">
-                      {route.operatorName || 'Available bus operator'}
+                    <p className="mt-1 text-xs font-medium text-slate-500 truncate">
+                      {route.operatorName || 'Multiple operators available'}
                     </p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Starts from</p>
-                    <p className="mt-1 text-[18px] font-black text-slate-900">Rs {Number(route.startingPrice || 0)}</p>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">From</p>
+                    <p className="text-lg font-bold text-slate-900">₹{Number(route.startingPrice || 0)}</p>
                   </div>
                 </div>
               </button>
             ))}
           </div>
 
-          {!routesLoading && !featuredRoutes.length && !routesError ? (
-            <p className="mt-4 text-[12px] font-bold text-slate-500">No active bus routes are available yet.</p>
-          ) : null}
+          {!routesLoading && !featuredRoutes.length && !routesError && (
+            <p className="text-center py-8 text-sm font-medium text-slate-400">No active routes found.</p>
+          )}
 
-          {routesError ? (
-            <p className="mt-4 text-[12px] font-bold text-rose-600">{routesError}</p>
-          ) : null}
+          {routesError && (
+            <p className="text-center py-8 text-sm font-medium text-rose-500">{routesError}</p>
+          )}
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 pb-6 pt-3 bg-gradient-to-t from-[#F8FAFC] via-[#F8FAFC]/95 to-transparent z-30">
-        <motion.button
-          whileTap={{ scale: 0.97 }}
-          onClick={handleSearch}
-          className="w-full bg-[#111827] text-white py-4 rounded-[18px] text-[15px] font-black uppercase tracking-[0.18em] flex items-center justify-center gap-2 shadow-[0_10px_26px_rgba(17,24,39,0.22)] active:scale-95 transition-all"
-        >
-          Search Buses <ChevronRight size={18} strokeWidth={3} className="opacity-80" />
-        </motion.button>
-      </div>
-
-      {calendarOpen ? (
-        <div className="fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-[2px] px-4 py-6 flex items-end justify-center">
-          <div className="w-full max-w-lg rounded-[30px] bg-white p-5 shadow-[0_20px_60px_rgba(15,23,42,0.24)]">
-            <div className="flex items-center justify-between gap-3">
+      {calendarOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-sm flex items-end justify-center p-4">
+          <motion.div 
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-center justify-between mb-6">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Pick journey date</p>
-                <h3 className="mt-1 text-[20px] font-black text-slate-900">{monthLabel}</h3>
+                <p className="text-[10px] font-bold uppercase text-slate-400 mb-1">Select Journey Date</p>
+                <h3 className="text-xl font-bold text-slate-900">{monthLabel}</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setCalendarOpen(false)}
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500"
+                className="w-10 h-10 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-slate-100 transition-colors"
               >
-                <X size={18} />
+                <X size={20} />
               </button>
             </div>
 
-            <div className="mt-4 flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-4 mb-6">
               <button
                 type="button"
                 onClick={() => setCalendarMonth((current) => addMonths(current, -1))}
-                className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-700"
+                className="w-10 h-10 rounded-xl border border-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-50"
               >
-                <ChevronLeft size={18} />
+                <ChevronLeft size={20} />
               </button>
-              <div className="rounded-full bg-red-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-red-600">
-                {formatTravelDate(date)}
+              <div className="flex-1 text-center">
+                <span className="text-sm font-bold text-slate-900 px-4 py-2 bg-slate-50 rounded-full">
+                  {formatTravelDate(date)}
+                </span>
               </div>
               <button
                 type="button"
                 onClick={() => setCalendarMonth((current) => addMonths(current, 1))}
-                className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-700"
+                className="w-10 h-10 rounded-xl border border-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-50"
               >
-                <ChevronRight size={18} />
+                <ChevronRight size={20} />
               </button>
             </div>
 
-            <div className="mt-5 grid grid-cols-7 gap-2">
-              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
-                <div key={day} className="text-center text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+            <div className="grid grid-cols-7 gap-1 mb-6">
+              {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, i) => (
+                <div key={i} className="text-center text-[10px] font-bold text-slate-400 py-2">
                   {day}
                 </div>
               ))}
@@ -626,14 +559,14 @@ const BusHome = () => {
                     type="button"
                     disabled={isDisabled}
                     onClick={() => selectCalendarDate(day)}
-                    className={`aspect-square rounded-[18px] text-center text-[13px] font-black transition-all ${
+                    className={`aspect-square rounded-xl text-sm font-bold transition-all flex items-center justify-center ${
                       isSelected
-                        ? 'bg-red-500 text-white shadow-[0_10px_20px_rgba(239,68,68,0.28)]'
+                        ? 'bg-slate-900 text-white shadow-lg'
                         : isDisabled
-                          ? 'bg-slate-50 text-slate-300'
+                          ? 'text-slate-200'
                           : isCurrentMonth
-                            ? 'bg-white text-slate-800 border border-slate-100 hover:border-orange-200 hover:text-orange-600'
-                            : 'bg-slate-50 text-slate-400'
+                            ? 'text-slate-800 hover:bg-slate-50'
+                            : 'text-slate-300'
                     }`}
                   >
                     {day.getDate()}
@@ -642,27 +575,28 @@ const BusHome = () => {
               })}
             </div>
 
-            <div className="mt-5 flex items-center justify-between gap-3 rounded-[20px] bg-slate-50 px-4 py-3">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Selected</p>
-                <p className="mt-1 text-[14px] font-black text-slate-900">{formatTravelDate(date)}</p>
-              </div>
+            <div className="flex gap-3">
               <button
                 type="button"
                 onClick={() => {
                   setDate(getTomorrowDate());
-                  setCalendarMonth(getMonthStart(new Date(getTomorrowDate())));
                   setCalendarOpen(false);
-                  setError('');
                 }}
-                className="rounded-full bg-white px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-700 border border-slate-200"
+                className="flex-1 py-3 rounded-2xl bg-slate-50 text-slate-700 text-sm font-bold border border-slate-100"
               >
                 Tomorrow
               </button>
+              <button
+                type="button"
+                onClick={() => setCalendarOpen(false)}
+                className="flex-1 py-3 rounded-2xl bg-slate-900 text-white text-sm font-bold"
+              >
+                Confirm
+              </button>
             </div>
-          </div>
+          </motion.div>
         </div>
-      ) : null}
+      )}
 
       <BottomNavbar />
     </div>

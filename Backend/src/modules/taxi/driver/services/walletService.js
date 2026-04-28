@@ -47,7 +47,12 @@ const resolveCommissionConfigForRide = async (ride, session) => {
   }
 
   if (ride?.vehicleTypeId) {
-    const normalizedTransportType = String(ride.transport_type || 'taxi').trim().toLowerCase() || 'taxi';
+    const normalizedServiceType = String(ride?.serviceType || '').trim().toLowerCase();
+    const savedTransportType = String(ride.transport_type || '').trim().toLowerCase();
+    const normalizedTransportType =
+      normalizedServiceType === 'parcel'
+        ? (savedTransportType === 'delivery' || savedTransportType === 'both' ? savedTransportType : 'delivery')
+        : (savedTransportType || 'taxi');
     const filters = [
       {
         vehicle_type: ride.vehicleTypeId,

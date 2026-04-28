@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -73,8 +73,10 @@ const formatCoordLabel = (coords) => {
 };
 
 const formatLatLngLabel = (position) => `${position.lat.toFixed(5)}, ${position.lng.toFixed(5)}`;
+const COORDINATE_LABEL_REGEX = /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/;
+const isCoordinateLabel = (value = '') => COORDINATE_LABEL_REGEX.test(String(value || '').trim());
 
-const PhoneInput = ({ label, value, onChange, error, name, onClearError }) => (
+const PhoneInput = ({ label, value, onChange, error, name, onClearError, disabled = false }) => (
   <div className="space-y-2">
     <label className="ml-1 text-[11px] font-black uppercase tracking-widest text-slate-400">{label}</label>
     <div
@@ -95,13 +97,14 @@ const PhoneInput = ({ label, value, onChange, error, name, onClearError }) => (
       <input
         type="tel"
         maxLength={10}
+        disabled={disabled}
         className="flex-1 bg-transparent text-[15px] font-semibold text-slate-900 outline-none placeholder:text-slate-300"
         value={value}
         placeholder="10-digit mobile number"
         onChange={(event) => {
           const nextValue = event.target.value.replace(/\D/g, '');
           onChange(nextValue);
-          if (onClearError) onClearError(name);
+          if (onClearError) onClearError(name, nextValue);
         }}
       />
       {value && PHONE_REGEX.test(value) ? <CheckCircle2 size={18} className="shrink-0 text-emerald-500" /> : null}
@@ -306,6 +309,8 @@ const ContactDetailsSheet = ({
   setSenderName,
   senderMobile,
   setSenderMobile,
+  useSelfForReceiver,
+  setUseSelfForReceiver,
   receiverName,
   setReceiverName,
   receiverMobile,
@@ -372,13 +377,27 @@ const ContactDetailsSheet = ({
                 <p className="text-sm font-black text-slate-900">Receiver</p>
               </div>
 
+              <label className="flex cursor-pointer items-center gap-3 rounded-[18px] border border-slate-200 bg-slate-50/80 px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={useSelfForReceiver}
+                  onChange={(event) => setUseSelfForReceiver(event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                />
+                <div>
+                  <p className="text-sm font-bold text-slate-900">Receiver is self</p>
+                  <p className="text-[11px] font-medium text-slate-500">Auto-fill receiver details with your user details</p>
+                </div>
+              </label>
+
               <div className="space-y-2">
-                <div className={`flex items-center gap-3 rounded-[18px] border px-4 py-3 ${errors.receiverName ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-slate-50/80'}`}>
+                <div className={`flex items-center gap-3 rounded-[18px] border px-4 py-3 ${errors.receiverName ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-slate-50/80'} ${useSelfForReceiver ? 'opacity-70' : ''}`}>
                   <User size={16} className="text-slate-400" />
                   <input
                     type="text"
                     value={receiverName}
                     placeholder="Receiver name"
+                    disabled={useSelfForReceiver}
                     onChange={(event) => {
                       setReceiverName(event.target.value);
                       clearError('receiverName');
@@ -389,7 +408,7 @@ const ContactDetailsSheet = ({
                 {errors.receiverName ? <p className="text-[11px] font-black text-red-500">{errors.receiverName}</p> : null}
               </div>
 
-              <PhoneInput label="Mobile Number" value={receiverMobile} onChange={setReceiverMobile} error={errors.receiverMobile} name="receiverMobile" onClearError={clearError} />
+              <PhoneInput label="Mobile Number" value={receiverMobile} onChange={setReceiverMobile} error={errors.receiverMobile} name="receiverMobile" onClearError={clearError} disabled={useSelfForReceiver} />
             </div>
           </div>
 
@@ -413,6 +432,18 @@ const SenderReceiverDetails = () => {
   const storedUser = useMemo(() => readStoredUserInfo(), []);
   const [senderName, setSenderName] = useState(() => parcelState.senderName || storedUser?.name || '');
   const [senderMobile, setSenderMobile] = useState(() => parcelState.senderMobile || storedUser?.phone || '');
+  const [useSelfForReceiver, setUseSelfForReceiver] = useState(() => {
+    const receiverNameSeed = String(parcelState.receiverName || '').trim();
+    const receiverMobileSeed = String(parcelState.receiverMobile || '').trim();
+    const userNameSeed = String(storedUser?.name || '').trim();
+    const userPhoneSeed = String(storedUser?.phone || '').trim();
+    return Boolean(
+      receiverNameSeed &&
+      receiverMobileSeed &&
+      receiverNameSeed === userNameSeed &&
+      receiverMobileSeed === userPhoneSeed,
+    );
+  });
   const [receiverName, setReceiverName] = useState(() => parcelState.receiverName || '');
   const [receiverMobile, setReceiverMobile] = useState(() => parcelState.receiverMobile || '');
   const [pickup, setPickup] = useState(() => parcelState.pickup || '');
@@ -423,6 +454,7 @@ const SenderReceiverDetails = () => {
   const [isContactSheetOpen, setIsContactSheetOpen] = useState(false);
   const [isLocatingPickup, setIsLocatingPickup] = useState(false);
   const [errors, setErrors] = useState({});
+  const autoPickupRequestedRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -473,7 +505,10 @@ const SenderReceiverDetails = () => {
     if (!pickup.trim()) nextErrors.pickup = 'Pickup location is required';
     if (!drop.trim()) nextErrors.drop = 'Drop location is required';
     setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+    return {
+      isValid: Object.keys(nextErrors).length === 0,
+      nextErrors,
+    };
   };
 
   const clearError = (key) => {
@@ -481,7 +516,52 @@ const SenderReceiverDetails = () => {
     setErrors((prev) => ({ ...prev, [key]: '' }));
   };
 
-  const resolveAddressFromCoords = (position) =>
+  const syncReceiverWithSelf = () => {
+    const nextName = String(storedUser?.name || senderName || '').trim();
+    const nextPhone = String(storedUser?.phone || senderMobile || '').trim();
+
+    setReceiverName(nextName);
+    setReceiverMobile(nextPhone);
+    setErrors((prev) => ({
+      ...prev,
+      receiverName: '',
+      receiverMobile: nextPhone && !PHONE_REGEX.test(nextPhone) ? 'Enter a valid 10-digit number' : '',
+    }));
+  };
+
+  useEffect(() => {
+    if (!useSelfForReceiver) return;
+    const timer = setTimeout(() => {
+      const nextName = String(storedUser?.name || senderName || '').trim();
+      const nextPhone = String(storedUser?.phone || senderMobile || '').trim();
+
+      setReceiverName(nextName);
+      setReceiverMobile(nextPhone);
+      setErrors((prev) => ({
+        ...prev,
+        receiverName: '',
+        receiverMobile: nextPhone && !PHONE_REGEX.test(nextPhone) ? 'Enter a valid 10-digit number' : '',
+      }));
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [senderMobile, senderName, storedUser, useSelfForReceiver]);
+
+  const validatePhoneField = (key, value) => {
+    const trimmedValue = String(value || '').trim();
+
+    setErrors((prev) => {
+      const nextError = trimmedValue && !PHONE_REGEX.test(trimmedValue) ? 'Enter a valid 10-digit number' : '';
+      if (prev[key] === nextError) return prev;
+      return { ...prev, [key]: nextError };
+    });
+  };
+
+  const clearPhoneError = (key, value) => {
+    validatePhoneField(key, value);
+  };
+
+  const resolveAddressFromCoords = useEffectEvent((position) =>
     new Promise((resolve) => {
       if (!isGoogleMapsLoaded || !window.google?.maps?.Geocoder) {
         resolve(formatLatLngLabel(position));
@@ -495,9 +575,9 @@ const SenderReceiverDetails = () => {
         }
         resolve(formatLatLngLabel(position));
       });
-    });
+    }));
 
-  const useCurrentPickupLocation = () => {
+  const requestCurrentPickupLocation = useEffectEvent(() => {
     if (!navigator.geolocation) {
       setErrors((prev) => ({ ...prev, pickup: 'Current location is not available' }));
       return;
@@ -520,7 +600,37 @@ const SenderReceiverDetails = () => {
       },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
     );
-  };
+  });
+
+  useEffect(() => {
+    if (autoPickupRequestedRef.current || pickup.trim()) return;
+    autoPickupRequestedRef.current = true;
+    const timer = setTimeout(() => {
+      requestCurrentPickupLocation();
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [pickup]);
+
+  useEffect(() => {
+    if (!pickupCoords || !pickup || !isCoordinateLabel(pickup) || !isGoogleMapsLoaded) {
+      return;
+    }
+
+    let active = true;
+
+    resolveAddressFromCoords(coordPairToLatLng(pickupCoords)).then((resolvedAddress) => {
+      if (!active || !resolvedAddress || isCoordinateLabel(resolvedAddress)) {
+        return;
+      }
+
+      setPickup((current) => (isCoordinateLabel(current) ? resolvedAddress : current));
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [isGoogleMapsLoaded, pickup, pickupCoords]);
 
   const applySuggestion = (type, value) => {
     if (type === 'pickup') {
@@ -536,8 +646,10 @@ const SenderReceiverDetails = () => {
   };
 
   const handleProceed = () => {
-    if (!validate()) {
-      if (errors.senderName || errors.senderMobile || errors.receiverName || errors.receiverMobile) {
+    const { isValid, nextErrors } = validate();
+
+    if (!isValid) {
+      if (nextErrors.senderName || nextErrors.senderMobile || nextErrors.receiverName || nextErrors.receiverMobile) {
         setIsContactSheetOpen(true);
       }
       return;
@@ -612,12 +724,36 @@ const SenderReceiverDetails = () => {
         setSenderName={setSenderName}
         senderMobile={senderMobile}
         setSenderMobile={setSenderMobile}
+        useSelfForReceiver={useSelfForReceiver}
+        setUseSelfForReceiver={(checked) => {
+          setUseSelfForReceiver(checked);
+          if (!checked) {
+            return;
+          }
+          syncReceiverWithSelf();
+        }}
         receiverName={receiverName}
-        setReceiverName={setReceiverName}
+        setReceiverName={(value) => {
+          if (useSelfForReceiver) {
+            setUseSelfForReceiver(false);
+          }
+          setReceiverName(value);
+        }}
         receiverMobile={receiverMobile}
-        setReceiverMobile={setReceiverMobile}
+        setReceiverMobile={(value) => {
+          if (useSelfForReceiver) {
+            setUseSelfForReceiver(false);
+          }
+          setReceiverMobile(value);
+        }}
         errors={errors}
-        clearError={clearError}
+        clearError={(key, value) => {
+          if (key === 'senderMobile' || key === 'receiverMobile') {
+            clearPhoneError(key, value);
+            return;
+          }
+          clearError(key);
+        }}
       />
 
       <header className="sticky top-0 z-20 flex items-center px-4 py-4">
@@ -655,10 +791,16 @@ const SenderReceiverDetails = () => {
                     )}
                   </div>
                   <p className="mt-1 text-[13px] font-medium text-slate-500 truncate">
-                    {pickup || 'Set pickup location'}
+                    {pickup || (isLocatingPickup ? 'Detecting current location...' : 'Set pickup location')}
                   </p>
                 </div>
-                <ChevronRight size={16} className="text-slate-300 shrink-0 ml-2 transition-transform group-hover:translate-x-0.5" />
+                <div className="ml-2 shrink-0">
+                  {isLocatingPickup ? (
+                    <Navigation size={16} className="text-blue-500 animate-pulse" />
+                  ) : (
+                    <ChevronRight size={16} className="text-slate-300 transition-transform group-hover:translate-x-0.5" />
+                  )}
+                </div>
               </button>
 
               <hr className="border-slate-50" />

@@ -40,10 +40,7 @@ export const assignPushTokenToEntity = (entity, { token, platform }) => {
   const fieldName = getPushTokenField(normalizedPlatform);
 
   entity[fieldName] = normalizedToken;
-
-  if (Array.isArray(entity.fcmTokens)) {
-    entity.fcmTokens = Array.from(new Set([...entity.fcmTokens, normalizedToken])).filter(Boolean);
-  }
+  entity.set?.('fcmTokens', undefined, { strict: false });
 
   return {
     token: normalizedToken,

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion as Motion } from 'framer-motion';
 import {
     AlertCircle,
     ArrowDownLeft,
@@ -11,7 +11,6 @@ import {
     Wallet,
     X,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import api from '../../../shared/api/axiosInstance';
 import { socketService } from '../../../shared/api/socket';
@@ -139,7 +138,6 @@ const StatPill = ({ label, value, tone = 'dark' }) => {
 };
 
 const DriverWallet = () => {
-    const navigate = useNavigate();
     const { settings: appSettings } = useSettings();
     const appName = appSettings.general?.app_name || 'App';
     const [wallet, setWallet] = useState(emptyWallet);
@@ -234,8 +232,21 @@ const DriverWallet = () => {
         const cashRideCommission = transactions
             .filter((tx) => tx.type === 'commission_deduction')
             .reduce((sum, tx) => sum + Math.abs(Number(tx.amount || 0)), 0);
+        const totalAppEarnings = transactions
+            .filter((tx) => ['ride_earning', 'adjustment'].includes(tx.type))
+            .reduce((sum, tx) => {
+                const amount = Number(tx.amount || 0);
+                const source = String(tx.metadata?.source || '').toLowerCase();
+
+                if (tx.type === 'ride_earning') {
+                    return sum + Math.max(amount, 0);
+                }
+
+                return source === 'user_wallet_transfer' ? sum + Math.max(amount, 0) : sum;
+            }, 0);
 
         return {
+            totalAppEarnings,
             onlineRideEarnings,
             cashRideCommission,
         };
@@ -558,6 +569,7 @@ const DriverWallet = () => {
                         </section>
 
                         <section className="grid grid-cols-1 gap-3">
+                            <StatPill label={`${appName} earnings`} value={money(walletSummary.totalAppEarnings)} tone="good" />
                             <StatPill label="Top-up minimum" value={money(rules.minimumTopUp)} tone="dark" />
                             <div className="grid grid-cols-2 gap-3">
                                 <StatPill label="Online earnings" value={money(walletSummary.onlineRideEarnings)} tone="good" />
@@ -567,7 +579,10 @@ const DriverWallet = () => {
 
                         <section className="space-y-3">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-sm font-black text-slate-950">Recent transactions</h3>
+                                <div>
+                                    <h3 className="text-sm font-black text-slate-950">Recent transactions</h3>
+                                    <p className="mt-1 text-[11px] font-bold text-slate-500">Filter earnings and wallet entries by type</p>
+                                </div>
                                 <p className="text-xs font-bold text-slate-500">{recentTransactions.length} shown</p>
                             </div>
 
@@ -598,7 +613,7 @@ const DriverWallet = () => {
                                 recentTransactions.map((tx, index) => {
                                     const isDebit = Number(tx.amount || 0) < 0;
                                     return (
-                                        <motion.div
+                                        <Motion.div
                                             key={tx._id || tx.id || index}
                                             initial={{ opacity: 0, y: 8 }}
                                             animate={{ opacity: 1, y: 0 }}
@@ -619,7 +634,7 @@ const DriverWallet = () => {
                                                 <p className={`text-sm font-black ${isDebit ? 'text-rose-600' : 'text-emerald-700'}`}>{money(tx.amount)}</p>
                                                 <p className="mt-1 text-[10px] font-black uppercase text-slate-400">Bal {money(tx.balanceAfter)}</p>
                                             </div>
-                                        </motion.div>
+                                        </Motion.div>
                                     );
                                 })
                             )}
@@ -631,7 +646,7 @@ const DriverWallet = () => {
             <AnimatePresence>
                 {showTopUp && (
                     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/55 px-3 backdrop-blur-sm">
-                        <motion.div
+                        <Motion.div
                             initial={{ y: '100%' }}
                             animate={{ y: 0 }}
                             exit={{ y: '100%' }}
@@ -693,7 +708,7 @@ const DriverWallet = () => {
                                     </button>
                                 </div>
                             )}
-                        </motion.div>
+                        </Motion.div>
                     </div>
                 )}
             </AnimatePresence>
@@ -701,7 +716,7 @@ const DriverWallet = () => {
             <AnimatePresence>
                 {showWithdraw && (
                     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/55 px-3 backdrop-blur-sm">
-                        <motion.div
+                        <Motion.div
                             initial={{ y: '100%' }}
                             animate={{ y: 0 }}
                             exit={{ y: '100%' }}
@@ -754,7 +769,7 @@ const DriverWallet = () => {
                                     </button>
                                 </div>
                             )}
-                        </motion.div>
+                        </Motion.div>
                     </div>
                 )}
             </AnimatePresence>

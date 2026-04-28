@@ -161,52 +161,48 @@ const Wallet = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_38%,#EEF2F7_100%)] max-w-lg mx-auto flex flex-col font-sans pb-24 relative overflow-x-hidden">
-      <div className="absolute -top-20 right-[-40px] h-48 w-48 rounded-full bg-orange-100/55 blur-3xl pointer-events-none" />
-      <div className="absolute top-64 left-[-60px] h-56 w-56 rounded-full bg-emerald-100/50 blur-3xl pointer-events-none" />
-      <div className="absolute bottom-24 right-[-40px] h-44 w-44 rounded-full bg-blue-100/50 blur-3xl pointer-events-none" />
-
+    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto flex flex-col font-sans pb-24 relative overflow-x-hidden">
       <AnimatePresence>
         {showAddMoney && (
-          <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/40 backdrop-blur-sm p-4">
             <Motion.div
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
-              className="bg-white w-full max-w-md rounded-[32px] p-8 pb-10 space-y-8 shadow-2xl relative"
+              className="bg-white w-full max-w-md rounded-3xl p-8 pb-10 space-y-8 shadow-2xl relative"
             >
               <button
                 onClick={() => setShowAddMoney(false)}
-                className="absolute top-6 right-6 w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center text-gray-400 active:scale-90"
+                className="absolute top-6 right-6 w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400 active:scale-90 transition-colors"
               >
                 <Plus size={20} className="rotate-45" />
               </button>
 
               <div className="text-center space-y-2">
-                <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tight">Add Money</h3>
-                <p className="text-[12px] font-bold text-gray-400 tracking-widest uppercase">Select amount to top-up</p>
+                <h3 className="text-xl font-bold text-slate-900">Add Money</h3>
+                <p className="text-[10px] font-bold text-slate-400 tracking-wider uppercase">Select amount to top-up</p>
               </div>
 
               {isSuccess ? (
-                <Motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }} className="flex flex-col items-center py-8 gap-4">
-                  <div className="w-20 h-20 bg-green-50 text-green-500 rounded-full flex items-center justify-center shadow-inner">
-                    <History size={40} strokeWidth={3} />
+                <Motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex flex-col items-center py-8 gap-4">
+                  <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center">
+                    <History size={32} />
                   </div>
                   <div className="text-center">
-                    <p className="text-lg font-black text-gray-900 leading-none">Wallet Refilled!</p>
-                    <p className="text-[11px] font-bold text-gray-400 mt-2 uppercase tracking-widest">Balance updated successfully</p>
+                    <p className="text-lg font-bold text-slate-900">Wallet Refilled!</p>
+                    <p className="text-xs font-medium text-slate-400 mt-1">Balance updated successfully</p>
                   </div>
                 </Motion.div>
               ) : (
                 <div className="space-y-8">
-                  <div className="relative group">
-                    <span className="absolute left-6 top-1/2 -translate-y-1/2 text-2xl font-black text-gray-400 group-focus-within:text-orange-500 transition-colors">Rs</span>
+                  <div className="relative">
+                    <span className="absolute left-6 top-1/2 -translate-y-1/2 text-xl font-bold text-slate-400">₹</span>
                     <input
                       type="number"
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
                       placeholder="0.00"
-                      className="w-full h-20 bg-gray-50 border-2 border-gray-100 rounded-[24px] pl-16 pr-6 text-3xl font-black text-gray-900 focus:outline-none focus:border-orange-500/30 transition-all text-center placeholder:text-gray-200"
+                      className="w-full h-16 bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-6 text-2xl font-bold text-slate-900 focus:outline-none focus:border-slate-300 transition-all text-center placeholder:text-slate-200"
                     />
                   </div>
 
@@ -215,11 +211,11 @@ const Wallet = () => {
                       <button
                         key={val}
                         onClick={() => setAmount(val)}
-                        className={`py-3 rounded-2xl font-black text-[13px] border-2 transition-all ${
-                          amount === val ? 'bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-200' : 'bg-white border-gray-100 text-gray-500'
+                        className={`py-3 rounded-xl font-bold text-sm transition-all ${
+                          amount === val ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-600 border border-slate-100'
                         }`}
                       >
-                        +Rs {val}
+                        +₹{val}
                       </button>
                     ))}
                   </div>
@@ -227,15 +223,12 @@ const Wallet = () => {
                   <button
                     onClick={handleAddMoney}
                     disabled={isAdding || !amount}
-                    className={`w-full h-16 rounded-[24px] font-black text-[15px] uppercase tracking-widest shadow-xl transition-all flex items-center justify-center gap-3 active:scale-95 ${
-                      isAdding ? 'bg-gray-100 text-gray-300 shadow-none' : 'bg-orange-500 text-white shadow-orange-200'
+                    className={`w-full h-14 rounded-2xl font-bold text-base shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 ${
+                      isAdding || !amount ? 'bg-slate-100 text-slate-400 shadow-none cursor-not-allowed' : 'bg-slate-900 text-white shadow-slate-200'
                     }`}
                   >
-                    {isAdding ? 'Processing...' : (
-                      <>
-                        Refill Wallet <Plus size={20} strokeWidth={3} />
-                      </>
-                    )}
+                    {isAdding ? 'Processing...' : 'Refill Wallet'}
+                    {!isAdding && <Plus size={18} />}
                   </button>
                 </div>
               )}
@@ -244,140 +237,110 @@ const Wallet = () => {
         )}
       </AnimatePresence>
 
-      <header className="sticky top-0 z-30">
-        <div className="bg-white/70 backdrop-blur-md border-b border-white/70 shadow-[0_10px_20px_rgba(15,23,42,0.05)]">
-          <div className="px-5 py-4 flex items-center gap-3">
-            <button
-              onClick={() => navigate(-1)}
-              className="w-9 h-9 rounded-full bg-white/80 border border-white/80 shadow-sm flex items-center justify-center active:scale-95 transition-transform"
-            >
-              <ArrowLeft size={20} className="text-gray-900" strokeWidth={2.5} />
-            </button>
-            <h1 className="text-[19px] font-black text-gray-900 tracking-tight">My Wallet</h1>
-          </div>
+      <header className="bg-white px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-slate-100 shadow-sm">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate(-1)}
+            className="w-9 h-9 rounded-xl border border-slate-200 bg-white flex items-center justify-center shadow-sm active:scale-95 transition-all"
+          >
+            <ArrowLeft size={18} className="text-slate-900" />
+          </button>
+          <h1 className="text-lg font-bold text-slate-900">My Wallet</h1>
         </div>
       </header>
 
-      <div className="px-5 mt-4">
+      <div className="px-5 mt-6">
         <Motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          whileHover={{ y: -2 }}
-          transition={{ duration: 0.22, ease: 'easeOut' }}
-          className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-[36px] p-8 text-white shadow-2xl relative overflow-hidden group"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-slate-900 rounded-3xl p-8 text-white shadow-xl shadow-slate-200 relative overflow-hidden"
         >
-          <Motion.div
-            aria-hidden="true"
-            className="absolute inset-0 bg-[radial-gradient(260px_180px_at_20%_25%,rgba(249,115,22,0.18),transparent_60%)]"
-            animate={{ opacity: [0.1, 0.22, 0.1], x: [0, 10, 0], y: [0, -6, 0] }}
-            transition={{ duration: 5.2, repeat: Infinity, ease: 'easeInOut' }}
-          />
-          <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/10 rounded-full blur-[80px] -mr-32 -mt-32 group-hover:bg-orange-500/20 transition-colors" />
-
           <div className="relative z-10 flex flex-col gap-8">
             <div className="space-y-1">
-              <p className="text-white/30 font-black uppercase tracking-[0.2em] text-[8px]">Current Liquidity</p>
-              <Motion.h2
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, ease: 'easeOut', delay: 0.05 }}
-                className="text-4xl font-black tracking-tighter"
-              >
+              <p className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Available Balance</p>
+              <h2 className="text-4xl font-bold tracking-tight">
                 {walletLoading ? (
-                  <>Rs 0<span className="text-white/20 text-2xl">.00</span></>
+                  <>₹ 0<span className="text-slate-600 text-2xl">.00</span></>
                 ) : (
-                  <>Rs {balanceText.whole}<span className="text-white/20 text-2xl">.{balanceText.decimals}</span></>
+                  <>₹ {balanceText.whole}<span className="text-slate-600 text-2xl">.{balanceText.decimals}</span></>
                 )}
-              </Motion.h2>
-              {walletError && <p className="text-[11px] font-bold text-red-300 mt-2">{walletError}</p>}
+              </h2>
+              {walletError && <p className="text-xs font-bold text-rose-400 mt-2">{walletError}</p>}
             </div>
 
             <div className="flex items-center gap-3">
-              <Motion.button
+              <button
                 type="button"
                 onClick={() => setShowAddMoney(true)}
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.97 }}
-                className="group/cta relative flex-1 bg-white/10 text-white h-14 rounded-2xl font-black text-[13px] uppercase tracking-widest flex items-center justify-center gap-2 border border-white/15 shadow-lg shadow-orange-500/10 overflow-hidden backdrop-blur-md"
+                className="flex-1 bg-white text-slate-900 h-12 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
               >
-                <span aria-hidden="true" className="absolute inset-0 bg-orange-500/55" />
-                <Motion.span
-                  aria-hidden="true"
-                  className="absolute -left-16 top-0 h-full w-24 bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.55),transparent)] opacity-60"
-                  animate={{ x: [0, 320] }}
-                  transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut', repeatDelay: 1.2 }}
-                />
-                <Motion.span aria-hidden="true" className="relative z-10" whileHover={{ y: -1 }} transition={{ duration: 0.18, ease: 'easeOut' }}>
-                  <Plus size={16} strokeWidth={3} />
-                </Motion.span>
-                <span className="relative z-10">Refill</span>
-              </Motion.button>
+                <Plus size={16} strokeWidth={2.5} />
+                Add Money
+              </button>
             </div>
           </div>
         </Motion.div>
       </div>
 
-      <div className="px-5 mt-8">
-        <div
+      <div className="px-5 mt-6">
+        <button
           onClick={() => navigate(`${basePath}/referral`)}
-          className="bg-gradient-to-r from-orange-50 to-white border border-orange-100 rounded-[32px] p-6 flex items-center gap-5 cursor-pointer active:scale-98 transition-all shadow-sm group"
+          className="w-full bg-white border border-slate-100 rounded-3xl p-5 flex items-center gap-4 active:scale-[0.98] transition-all shadow-sm group"
         >
-          <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-orange-500 shadow-xl shadow-orange-100 group-hover:bg-orange-500 group-hover:text-white transition-all shrink-0 border border-orange-50">
-            <Gift size={24} strokeWidth={2.5} />
+          <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-900 group-hover:bg-slate-900 group-hover:text-white transition-all shrink-0">
+            <Gift size={20} />
           </div>
-          <div className="flex-1">
-            <h4 className="text-[15px] font-black text-gray-900 tracking-tight">Refer & Earn Rs50</h4>
-            <p className="text-[11px] font-bold text-gray-400 mt-0.5 uppercase tracking-wider">Invite friends to {appName}</p>
+          <div className="flex-1 text-left">
+            <h4 className="text-sm font-bold text-slate-900">Refer & Earn ₹50</h4>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Invite friends to {appName}</p>
           </div>
-          <ArrowLeft size={20} className="text-orange-200 rotate-180 group-hover:text-orange-500 transition-colors" />
-        </div>
+          <ArrowLeft size={18} className="text-slate-300 rotate-180 group-hover:text-slate-900 transition-colors" />
+        </button>
       </div>
 
       <div className="px-5 mt-10">
-        <div className="flex items-center justify-between mb-6 px-1">
-          <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest leading-none">History Log</h3>
-          <button onClick={() => navigate(`${basePath}/activity`)} className="text-[10px] font-black text-orange-500 uppercase tracking-wider">View All</button>
+        <div className="flex items-center justify-between mb-4 px-1">
+          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Transaction History</h3>
+          <button onClick={() => navigate(`${basePath}/activity`)} className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">View All</button>
         </div>
-        <div className="bg-white rounded-[36px] border border-gray-50 shadow-sm p-3 flex flex-col gap-2">
+        
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden divide-y divide-slate-50">
           {walletLoading ? (
-            <div className="p-6 text-center text-[12px] font-bold text-gray-400">Loading...</div>
+            <div className="p-8 text-center text-xs font-bold text-slate-400">Loading transactions...</div>
           ) : wallet.recentTransactions?.length ? (
             wallet.recentTransactions.map((tx) => {
               const isDebit = tx.kind === 'debit';
               const title = tx.title || (isDebit ? 'Debit' : 'Credit');
               const sign = isDebit ? '-' : '+';
               const amountText = formatInr(tx.amount);
-              const whenText = tx.createdAt ? new Date(tx.createdAt).toLocaleString('en-IN') : '';
+              const whenText = tx.createdAt ? new Date(tx.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 
               return (
-                <div key={tx.id} className="flex items-center gap-4 p-4 rounded-[28px] hover:bg-gray-50 transition-all active:scale-[0.99] group">
+                <div key={tx.id} className="flex items-center gap-4 p-4 hover:bg-slate-50 transition-colors group">
                   <div
-                    className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform ${
-                      isDebit ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-500'
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+                      isDebit ? 'bg-slate-50 text-slate-600' : 'bg-emerald-50 text-emerald-600'
                     }`}
                   >
-                    {isDebit ? <ArrowLeft size={20} strokeWidth={3} className="rotate-45" /> : <Plus size={20} strokeWidth={3} />}
+                    {isDebit ? <ArrowLeft size={16} className="rotate-45" /> : <Plus size={16} />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-[15px] font-black text-gray-900 truncate tracking-tight">{title}</h4>
-                    <p className="text-[11px] font-bold text-gray-400 mt-1 uppercase tracking-widest">{whenText}</p>
+                    <h4 className="text-sm font-bold text-slate-900 truncate">{title}</h4>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">{whenText}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <h4 className={`text-[16px] font-black tracking-tight ${isDebit ? 'text-gray-900' : 'text-emerald-600'}`}>
-                      {sign}Rs {amountText}
+                    <h4 className={`text-base font-bold ${isDebit ? 'text-slate-900' : 'text-emerald-600'}`}>
+                      {sign}₹{amountText}
                     </h4>
-                    <div className="flex items-center gap-1 justify-end mt-0.5">
-                      <span className={`text-[8px] font-black uppercase tracking-widest ${isDebit ? 'text-red-400' : 'text-emerald-400'}`}>
-                        {isDebit ? 'Debit' : 'Credit'}
-                      </span>
-                      <div className={`w-1.5 h-1.5 rounded-full ${isDebit ? 'bg-red-400' : 'bg-emerald-400'}`} />
-                    </div>
+                    <span className={`text-[8px] font-bold uppercase tracking-wider ${isDebit ? 'text-slate-400' : 'text-emerald-400'}`}>
+                      {isDebit ? 'Debit' : 'Credit'}
+                    </span>
                   </div>
                 </div>
               );
             })
           ) : (
-            <div className="p-6 text-center text-[12px] font-bold text-gray-400">No transactions yet</div>
+            <div className="p-8 text-center text-xs font-bold text-slate-400">No transactions yet</div>
           )}
         </div>
       </div>

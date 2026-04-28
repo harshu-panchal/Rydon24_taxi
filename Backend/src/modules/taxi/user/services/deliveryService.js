@@ -1,5 +1,7 @@
 import { ApiError } from '../../../../utils/ApiError.js';
 import { normalizePoint } from '../../../../utils/geo.js';
+import { GoodsType } from '../../admin/models/GoodsType.js';
+import { Vehicle } from '../../admin/models/Vehicle.js';
 import { startDispatchFlow } from '../../services/dispatchService.js';
 import { Delivery } from '../models/Delivery.js';
 import {
@@ -18,6 +20,63 @@ const ensureParcelRide = (ride) => {
   }
 
   return ride;
+};
+
+const normalizeVehicleLabel = (value = '') =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ');
+
+const getVehicleTokens = (vehicle = {}) =>
+  [
+    vehicle?.name,
+    vehicle?.vehicle_type,
+    vehicle?.icon_types,
+    String(vehicle?.name || '').replace(/\s+/g, '_'),
+  ]
+    .map(normalizeVehicleLabel)
+    .filter(Boolean);
+
+const goodsTypeAllowsVehicle = (goodsType, vehicle) => {
+  const allowedLabels = String(goodsType?.goods_types_for || goodsType?.goods_type_for || 'both')
+    .split(',')
+    .map(normalizeVehicleLabel)
+    .filter(Boolean);
+
+  if (!allowedLabels.length || allowedLabels.includes('both') || allowedLabels.includes('all')) {
+    return true;
+  }
+
+  const tokens = getVehicleTokens(vehicle);
+  return allowedLabels.some((label) => tokens.some((token) => token.includes(label) || label.includes(token)));
+};
+
+const ensureDeliveryVehicleAllowed = async ({ vehicleTypeId, parcel }) => {
+  const category = String(parcel?.category || '').trim();
+
+  if (!vehicleTypeId || !category) {
+    return;
+  }
+
+  const [goodsType, vehicle] = await Promise.all([
+    GoodsType.findOne({
+      goods_type_name: { $regex: `^${category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
+      active: 1,
+    })
+      .select('goods_type_name goods_types_for goods_type_for')
+      .lean(),
+    Vehicle.findById(vehicleTypeId).select('name vehicle_type icon_types').lean(),
+  ]);
+
+  if (!goodsType || !vehicle) {
+    return;
+  }
+
+  if (!goodsTypeAllowsVehicle(goodsType, vehicle)) {
+    throw new ApiError(400, `${goodsType.goods_type_name || category} is not allowed for the selected vehicle type`);
+  }
 };
 
 export const serializeDeliveryRealtime = (ride) => {
@@ -47,6 +106,8 @@ export const createDeliveryRecord = async ({
   paymentMethod,
   parcel,
 }) => {
+  await ensureDeliveryVehicleAllowed({ vehicleTypeId, parcel });
+
   const ride = await createRideRecord({
     userId,
     pickupCoords: normalizePoint(pickup, 'pickup'),
@@ -59,6 +120,7 @@ export const createDeliveryRecord = async ({
     vehicleIconType,
     vehicleIconUrl,
     paymentMethod,
+    transport_type: 'delivery',
     serviceType: 'parcel',
     parcel,
   });

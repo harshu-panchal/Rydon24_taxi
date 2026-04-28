@@ -12,6 +12,10 @@ import {
 } from '../../services/registrationService';
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
+const syncPushTokens = () => {
+    window.__flushNativeFcmToken?.().catch?.(() => {});
+    window.__registerBrowserFcmToken?.({ interactive: true }).catch?.(() => {});
+};
 
 const OTPVerification = () => {
     const navigate = useNavigate();
@@ -85,6 +89,7 @@ const OTPVerification = () => {
                     localStorage.setItem('driverToken', token);
                     const normalizedRole = String(role || 'driver').toLowerCase() === 'owner' ? 'owner' : 'driver';
                     localStorage.setItem('role', normalizedRole);
+                    syncPushTokens();
                 }
 
                 clearDriverRegistrationSession();

@@ -37,9 +37,9 @@ const AMENITY_OPTIONS = [
 ];
 
 const fieldClassName =
-  'w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10';
+  'w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 shadow-sm outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-400/5';
 
-const labelClassName = 'mb-2 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-400';
+const labelClassName = 'mb-2 block text-[10px] font-bold uppercase tracking-wider text-slate-400';
 
 const statusTone = {
   active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -95,10 +95,10 @@ const SeatDeckPreview = ({ title, deckRows, onToggleSeat }) => {
     <div className="rounded-[28px] border border-slate-200 bg-slate-50/70 p-4 shadow-inner">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h4 className="text-sm font-black text-slate-900">{title}</h4>
-          <p className="text-[11px] font-semibold text-slate-500">Click any seat to block or reopen it.</p>
+          <h4 className="text-sm font-bold text-slate-900">{title}</h4>
+          <p className="text-[10px] font-medium text-slate-500">Click any seat to block or reopen it.</p>
         </div>
-        <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-400">
+        <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">
           Coach View
         </div>
       </div>
@@ -376,17 +376,16 @@ const BusServiceManager = () => {
 
   return (
     <div className="space-y-8">
-      <section className="rounded-[32px] bg-[radial-gradient(circle_at_top_left,_rgba(79,70,229,0.22),_transparent_35%),linear-gradient(135deg,#0f172a_0%,#111827_60%,#172554_100%)] p-6 text-white shadow-[0_20px_60px_rgba(15,23,42,0.18)]">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+      <section className="rounded-3xl bg-slate-900 p-8 text-white shadow-xl shadow-slate-200">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-3xl">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.25em] text-indigo-100">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-300">
               <Bus size={14} />
               Bus Service Control
             </div>
-            <h1 className="text-3xl font-black tracking-tight">Build buses, seat blueprints, stops and schedules from one admin flow</h1>
-            <p className="mt-3 max-w-2xl text-sm font-medium leading-6 text-slate-200">
-              This module gives you a RedBus-style operational setup inside the admin panel: define the coach, preview the
-              seating blueprint, block seats, assign multi-stop pickup and drop points, and publish recurring departures.
+            <h1 className="text-3xl font-bold tracking-tight">Manage Bus Fleet & Schedules</h1>
+            <p className="mt-4 max-w-2xl text-sm font-medium leading-relaxed text-slate-400">
+              Define coaches, preview seat blueprints, manage inventory, and publish recurring departures with multi-stop routes.
             </p>
           </div>
 
@@ -410,26 +409,26 @@ const BusServiceManager = () => {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
-          <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
-            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-indigo-100">Total Capacity</p>
+        <div className="mt-8 grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl bg-white/5 p-4 backdrop-blur-sm border border-white/10">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Capacity</p>
             <div className="mt-3 flex items-end justify-between">
-              <p className="text-3xl font-black">{totalSeats}</p>
-              <Armchair className="text-indigo-200" size={24} />
+              <p className="text-3xl font-bold">{totalSeats}</p>
+              <Armchair className="text-slate-500" size={24} />
             </div>
           </div>
-          <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
-            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-indigo-100">Stops Configured</p>
+          <div className="rounded-2xl bg-white/5 p-4 backdrop-blur-sm border border-white/10">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Stops Configured</p>
             <div className="mt-3 flex items-end justify-between">
-              <p className="text-3xl font-black">{totalStops}</p>
-              <Route className="text-indigo-200" size={24} />
+              <p className="text-3xl font-bold">{totalStops}</p>
+              <Route className="text-slate-500" size={24} />
             </div>
           </div>
-          <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
-            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-indigo-100">Schedules</p>
+          <div className="rounded-2xl bg-white/5 p-4 backdrop-blur-sm border border-white/10">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Schedules</p>
             <div className="mt-3 flex items-end justify-between">
-              <p className="text-3xl font-black">{totalSchedules}</p>
-              <CalendarDays className="text-indigo-200" size={24} />
+              <p className="text-3xl font-bold">{totalSchedules}</p>
+              <CalendarDays className="text-slate-500" size={24} />
             </div>
           </div>
         </div>
@@ -437,27 +436,27 @@ const BusServiceManager = () => {
 
       <section className="grid gap-8 xl:grid-cols-[360px_minmax(0,1fr)]">
         <div className="space-y-4">
-          <div className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
+          <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
+            <div className="mb-6 flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-black text-slate-900">Bus Catalog</h2>
-                <p className="text-sm font-medium text-slate-500">Choose a coach to edit or publish.</p>
+                <h2 className="text-lg font-bold text-slate-900">Bus Catalog</h2>
+                <p className="text-xs font-medium text-slate-500">Choose a coach to edit or publish.</p>
               </div>
-              <div className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
-                {catalog.length} Active Drafts
+              <div className="rounded-full bg-slate-50 px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                {catalog.length} Active
               </div>
             </div>
 
             <div className="space-y-3">
               {isLoadingCatalog && (
-                <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm font-semibold text-slate-500">
-                  Loading bus services...
+                <div className="rounded-2xl border border-dashed border-slate-100 bg-slate-50 px-4 py-8 text-center text-sm font-bold text-slate-400">
+                  Loading catalog...
                 </div>
               )}
 
               {!isLoadingCatalog && catalog.length === 0 && (
-                <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm font-semibold text-slate-500">
-                  No buses saved yet. Start with a fresh bus draft.
+                <div className="rounded-2xl border border-dashed border-slate-100 bg-slate-50 px-4 py-8 text-center text-sm font-bold text-slate-400">
+                  No buses found.
                 </div>
               )}
 
@@ -466,38 +465,42 @@ const BusServiceManager = () => {
                   key={bus.id}
                   type="button"
                   onClick={() => setSelectedBusId(bus.id)}
-                  className={`w-full rounded-[24px] border p-4 text-left transition ${
+                  className={`w-full rounded-2xl border p-4 text-left transition-all ${
                     selectedBusId === bus.id
-                      ? 'border-indigo-500 bg-indigo-50 shadow-[0_18px_30px_rgba(79,70,229,0.12)]'
-                      : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-md'
+                      ? 'border-slate-900 bg-slate-900 text-white shadow-lg'
+                      : 'border-slate-100 bg-white hover:border-slate-200'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">{bus.operatorName}</p>
-                      <h3 className="mt-1 text-[15px] font-black text-slate-900">{bus.busName}</h3>
-                      <p className="mt-1 text-sm font-semibold text-slate-500">
-                        {bus.route.originCity} to {bus.route.destinationCity}
+                    <div className="min-w-0">
+                      <p className={`text-[9px] font-bold uppercase tracking-wider ${selectedBusId === bus.id ? 'text-slate-400' : 'text-slate-400'}`}>
+                        {bus.operatorName}
                       </p>
+                      <h3 className={`mt-1 text-sm font-bold truncate ${selectedBusId === bus.id ? 'text-white' : 'text-slate-900'}`}>
+                        {bus.busName}
+                      </h3>
                     </div>
-                    <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest ${statusTone[bus.status] || statusTone.draft}`}>
+                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                      selectedBusId === bus.id 
+                        ? 'border-white/20 bg-white/10 text-white' 
+                        : statusTone[bus.status] || statusTone.draft
+                    }`}>
                       {bus.status}
                     </span>
                   </div>
-                  <div className="mt-4 grid grid-cols-3 gap-2 text-xs font-semibold text-slate-500">
-                    <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Seats</p>
-                      <p className="mt-1 text-sm font-black text-slate-900">{countTotalSeats(bus.blueprint)}</p>
+                  
+                  <div className="mt-4 grid grid-cols-3 gap-2">
+                    <div className={`rounded-xl px-2 py-2 ${selectedBusId === bus.id ? 'bg-white/10' : 'bg-slate-50'}`}>
+                      <p className={`text-[8px] font-bold uppercase tracking-wider ${selectedBusId === bus.id ? 'text-slate-400' : 'text-slate-400'}`}>Seats</p>
+                      <p className="mt-0.5 text-xs font-bold">{countTotalSeats(bus.blueprint)}</p>
                     </div>
-                    <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Stops</p>
-                      <p className="mt-1 text-sm font-black text-slate-900">{bus.route.stops.length}</p>
+                    <div className={`rounded-xl px-2 py-2 ${selectedBusId === bus.id ? 'bg-white/10' : 'bg-slate-50'}`}>
+                      <p className={`text-[8px] font-bold uppercase tracking-wider ${selectedBusId === bus.id ? 'text-slate-400' : 'text-slate-400'}`}>Stops</p>
+                      <p className="mt-0.5 text-xs font-bold">{bus.route.stops.length}</p>
                     </div>
-                    <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Fare</p>
-                      <p className="mt-1 text-sm font-black text-slate-900">
-                        {bus.fareCurrency || 'INR'} {bus.seatPrice}
-                      </p>
+                    <div className={`rounded-xl px-2 py-2 ${selectedBusId === bus.id ? 'bg-white/10' : 'bg-slate-50'}`}>
+                      <p className={`text-[8px] font-bold uppercase tracking-wider ${selectedBusId === bus.id ? 'text-slate-400' : 'text-slate-400'}`}>Fare</p>
+                      <p className="mt-0.5 text-xs font-bold">₹{bus.seatPrice}</p>
                     </div>
                   </div>
                 </button>
@@ -505,31 +508,31 @@ const BusServiceManager = () => {
             </div>
           </div>
 
-          <div className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-lg font-black text-slate-900">What this covers</h3>
-            <div className="mt-4 space-y-3 text-sm font-medium text-slate-600">
+          <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-900">Module Overview</h3>
+            <div className="mt-4 space-y-4 text-xs font-medium text-slate-500">
               <div className="flex items-start gap-3">
-                <CheckCircle2 size={16} className="mt-0.5 text-emerald-500" />
-                <p>Coach specification setup with operator, service number, policy text and amenities.</p>
+                <CheckCircle2 size={14} className="mt-0.5 text-emerald-500" />
+                <p>Define vehicle specifications and policies.</p>
               </div>
               <div className="flex items-start gap-3">
-                <CheckCircle2 size={16} className="mt-0.5 text-emerald-500" />
-                <p>Seat blueprint preview with lower and upper deck, including seat blocking for inventory control.</p>
+                <CheckCircle2 size={14} className="mt-0.5 text-emerald-500" />
+                <p>Configure and preview seat blueprints.</p>
               </div>
               <div className="flex items-start gap-3">
-                <CheckCircle2 size={16} className="mt-0.5 text-emerald-500" />
-                <p>Route assignment with multiple pickup and drop points plus timings and recurring schedules.</p>
+                <CheckCircle2 size={14} className="mt-0.5 text-emerald-500" />
+                <p>Manage routes, stops and recurring schedules.</p>
               </div>
             </div>
           </div>
         </div>
 
         <div className="space-y-8">
-          <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <section className="rounded-3xl border border-slate-100 bg-white p-8 shadow-sm">
+            <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <h2 className="text-2xl font-black tracking-tight text-slate-900">Bus Specification</h2>
-                <p className="mt-1 text-sm font-medium text-slate-500">Define the vehicle exactly the way operators list coaches on ticketing apps.</p>
+                <h2 className="text-xl font-bold tracking-tight text-slate-900">Bus Specification</h2>
+                <p className="mt-1 text-xs font-medium text-slate-500">Define vehicle details, operator info and policies.</p>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -538,8 +541,8 @@ const BusServiceManager = () => {
                     key={status}
                     type="button"
                     onClick={() => updateDraft('status', status)}
-                    className={`rounded-full border px-4 py-2 text-[11px] font-black uppercase tracking-widest transition ${
-                      draft.status === status ? statusTone[status] : 'border-slate-200 bg-white text-slate-500'
+                    className={`rounded-full border px-4 py-2 text-[9px] font-bold uppercase tracking-wider transition-all ${
+                      draft.status === status ? statusTone[status] : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200'
                     }`}
                   >
                     {status}
@@ -603,10 +606,10 @@ const BusServiceManager = () => {
                         key={amenity}
                         type="button"
                         onClick={() => toggleAmenity(amenity)}
-                        className={`rounded-full border px-4 py-2 text-xs font-black uppercase tracking-wide transition ${
+                        className={`rounded-full border px-4 py-2 text-[10px] font-bold uppercase tracking-wider transition-all ${
                           active
-                            ? 'border-indigo-500 bg-indigo-600 text-white shadow-lg shadow-indigo-200'
-                            : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                            ? 'border-slate-900 bg-slate-900 text-white shadow-md'
+                            : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200'
                         }`}
                       >
                         {amenity}
@@ -630,36 +633,38 @@ const BusServiceManager = () => {
             </div>
           </section>
 
-          <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <section className="rounded-3xl border border-slate-100 bg-white p-8 shadow-sm">
+            <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <h2 className="text-2xl font-black tracking-tight text-slate-900">Seat Blueprint</h2>
-                <p className="mt-1 text-sm font-medium text-slate-500">Pick a layout template and fine-tune blocked seats the way seat inventory is managed on RedBus.</p>
+                <h2 className="text-xl font-bold tracking-tight text-slate-900">Seat Blueprint</h2>
+                <p className="mt-1 text-xs font-medium text-slate-500">Pick a layout and block seats for inventory control.</p>
               </div>
-              <div className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-black text-slate-700">
-                {totalSeats} total seats
+              <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-900">
+                {totalSeats} Seats
               </div>
             </div>
 
             <div className="mb-5 flex flex-wrap gap-3">
-              {BUS_BLUEPRINT_TEMPLATES.map((template) => {
-                const active = draft.blueprint.templateKey === template.key;
-                return (
-                  <button
-                    key={template.key}
-                    type="button"
-                    onClick={() => switchBlueprintTemplate(template.key)}
-                    className={`rounded-[22px] border px-4 py-3 text-left transition ${
-                      active
-                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-[0_18px_30px_rgba(79,70,229,0.12)]'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                    }`}
-                  >
-                    <p className="text-sm font-black">{template.label}</p>
-                    <p className="text-[11px] font-semibold uppercase tracking-wide opacity-70">{template.category}</p>
-                  </button>
-                );
-              })}
+            {BUS_BLUEPRINT_TEMPLATES.map((template) => {
+              const active = draft.blueprint.templateKey === template.key;
+              return (
+                <button
+                  key={template.key}
+                  type="button"
+                  onClick={() => switchBlueprintTemplate(template.key)}
+                  className={`rounded-2xl border px-4 py-3 text-left transition-all ${
+                    active
+                      ? 'border-slate-900 bg-slate-900 text-white shadow-lg'
+                      : 'border-slate-100 bg-white text-slate-500 hover:border-slate-200'
+                  }`}
+                >
+                  <p className="text-sm font-bold">{template.label}</p>
+                  <p className={`text-[9px] font-bold uppercase tracking-wider ${active ? 'text-slate-400' : 'text-slate-400'}`}>
+                    {template.category}
+                  </p>
+                </button>
+              );
+            })}
             </div>
 
             <div className="grid gap-6 xl:grid-cols-2">
@@ -679,16 +684,16 @@ const BusServiceManager = () => {
             </div>
           </section>
 
-          <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <section className="rounded-3xl border border-slate-100 bg-white p-8 shadow-sm">
+            <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <h2 className="text-2xl font-black tracking-tight text-slate-900">Route Assignment</h2>
-                <p className="mt-1 text-sm font-medium text-slate-500">Attach origin, destination, and every intermediate pickup or drop point.</p>
+                <h2 className="text-xl font-bold tracking-tight text-slate-900">Route Assignment</h2>
+                <p className="mt-1 text-xs font-medium text-slate-500">Manage stops, distance and route timings.</p>
               </div>
               <button
                 type="button"
                 onClick={addStop}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:border-indigo-300 hover:text-indigo-600"
+                className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white shadow-md transition-all active:scale-95"
               >
                 <Plus size={16} />
                 Add Stop
@@ -753,16 +758,16 @@ const BusServiceManager = () => {
             </div>
           </section>
 
-          <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <section className="rounded-3xl border border-slate-100 bg-white p-8 shadow-sm">
+            <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <h2 className="text-2xl font-black tracking-tight text-slate-900">Departure Schedules</h2>
-                <p className="mt-1 text-sm font-medium text-slate-500">Define recurring services, time slots and day availability.</p>
+                <h2 className="text-xl font-bold tracking-tight text-slate-900">Departure Schedules</h2>
+                <p className="mt-1 text-xs font-medium text-slate-500">Manage recurring service slots and availability.</p>
               </div>
               <button
                 type="button"
                 onClick={addSchedule}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:border-indigo-300 hover:text-indigo-600"
+                className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white shadow-md transition-all active:scale-95"
               >
                 <Plus size={16} />
                 Add Schedule
@@ -808,10 +813,10 @@ const BusServiceManager = () => {
                           key={day}
                           type="button"
                           onClick={() => toggleScheduleDay(schedule.id, day)}
-                          className={`rounded-full border px-3 py-2 text-[11px] font-black uppercase tracking-wide transition ${
+                          className={`rounded-full border px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all ${
                             active
-                              ? 'border-slate-900 bg-slate-900 text-white'
-                              : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                              ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
+                              : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200'
                           }`}
                         >
                           {day}
@@ -824,18 +829,18 @@ const BusServiceManager = () => {
             </div>
           </section>
 
-          <section className="sticky bottom-0 z-20 rounded-[30px] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur">
+          <section className="sticky bottom-0 z-20 rounded-3xl border border-slate-100 bg-white/80 p-5 shadow-2xl backdrop-blur-md">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-wrap gap-4">
-                <div className="rounded-2xl bg-slate-100 px-4 py-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Route Snapshot</p>
-                  <p className="mt-1 text-sm font-black text-slate-900">
+                <div className="rounded-2xl bg-slate-50 px-4 py-3 border border-slate-100">
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Route Snapshot</p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">
                     {draft.route.originCity || 'Origin'} to {draft.route.destinationCity || 'Destination'}
                   </p>
                 </div>
-                <div className="rounded-2xl bg-slate-100 px-4 py-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Inventory</p>
-                  <p className="mt-1 text-sm font-black text-slate-900">{totalSeats} seats across {draft.schedules.length} schedule(s)</p>
+                <div className="rounded-2xl bg-slate-50 px-4 py-3 border border-slate-100">
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Inventory</p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">{totalSeats} seats | {draft.schedules.length} schedules</p>
                 </div>
               </div>
 
@@ -844,7 +849,7 @@ const BusServiceManager = () => {
                   type="button"
                   onClick={handleDelete}
                   disabled={isSaving}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-white px-4 py-3 text-sm font-black text-rose-500 transition hover:bg-rose-50"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-slate-50 px-5 py-3 text-sm font-bold text-rose-500 transition-all hover:bg-rose-50 hover:text-rose-600 active:scale-95 border border-slate-100"
                 >
                   <Trash2 size={16} />
                   Delete
@@ -853,7 +858,7 @@ const BusServiceManager = () => {
                   type="button"
                   onClick={handleSave}
                   disabled={isSaving}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white shadow-[0_18px_30px_rgba(15,23,42,0.18)] transition hover:-translate-y-0.5"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-lg transition-all hover:-translate-y-0.5 active:scale-95"
                 >
                   <Save size={16} />
                   {isSaving ? 'Saving...' : 'Save Bus Service'}

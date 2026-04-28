@@ -8,6 +8,10 @@ import { userAuthService } from '../../services/authService';
 const unwrap = (response) => response?.data?.data || response?.data || response;
 const PENDING_SIGNUP_PHONE_KEY = 'pendingUserSignupPhone';
 const PENDING_OTP_PHONE_KEY = 'pendingUserOtpPhone';
+const syncPushTokens = () => {
+  window.__flushNativeFcmToken?.().catch?.(() => {});
+  window.__registerBrowserFcmToken?.({ interactive: true }).catch?.(() => {});
+};
 const maskPhone = (phone) => {
   const digits = String(phone || '').replace(/\D/g, '').slice(-10);
   if (digits.length !== 10) {
@@ -117,6 +121,7 @@ const VerifyOTP = () => {
         localStorage.setItem('userToken', payload.token || '');
         localStorage.setItem('role', 'user');
         localStorage.setItem('userInfo', JSON.stringify(payload.user || {}));
+        syncPushTokens();
         sessionStorage.removeItem(PENDING_OTP_PHONE_KEY);
         sessionStorage.removeItem(PENDING_SIGNUP_PHONE_KEY);
         setTimeout(() => navigate('/taxi/user', { replace: true }), 1200);
@@ -131,6 +136,7 @@ const VerifyOTP = () => {
         localStorage.setItem('userToken', loginPayload.token || '');
         localStorage.setItem('role', 'user');
         localStorage.setItem('userInfo', JSON.stringify(loginPayload.user || {}));
+        syncPushTokens();
         sessionStorage.removeItem(PENDING_OTP_PHONE_KEY);
         sessionStorage.removeItem(PENDING_SIGNUP_PHONE_KEY);
         setTimeout(() => navigate('/taxi/user', { replace: true }), 1200);

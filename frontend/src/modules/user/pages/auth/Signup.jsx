@@ -13,6 +13,10 @@ const fieldInputClassName =
   'w-full bg-transparent border-none text-[16px] font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none';
 
 const PENDING_SIGNUP_PHONE_KEY = 'pendingUserSignupPhone';
+const syncPushTokens = () => {
+  window.__flushNativeFcmToken?.().catch?.(() => {});
+  window.__registerBrowserFcmToken?.({ interactive: true }).catch?.(() => {});
+};
 
 const Signup = () => {
   const location = useLocation();
@@ -136,6 +140,7 @@ const Signup = () => {
       localStorage.setItem('userToken', payload.token || '');
       localStorage.setItem('role', 'user');
       localStorage.setItem('userInfo', JSON.stringify(payload.user || {}));
+      syncPushTokens();
       sessionStorage.removeItem(PENDING_SIGNUP_PHONE_KEY);
       navigate('/taxi/user', { replace: true });
     } catch (err) {

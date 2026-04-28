@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 import {
   AlertCircle,
   Bike,
@@ -14,7 +14,6 @@ import {
   TrendingUp,
   User,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import { getDriverRideHistory } from '../services/registrationService';
 
@@ -107,11 +106,20 @@ const normalizePaymentLabel = (ride = {}) => {
     || ride?.payment_method
     || ride?.paymentType
     || ride?.payment_type
-    || ride?.driverPaymentCollection?.providerMode
     || '';
   const normalized = String(rawValue || '').trim().toLowerCase();
 
   if (!normalized) {
+    const collectionStatus = String(ride?.driverPaymentCollection?.status || '').trim().toLowerCase();
+    const providerMode = String(ride?.driverPaymentCollection?.providerMode || '').trim().toLowerCase();
+
+    if (
+      ['paid', 'captured', 'completed'].includes(collectionStatus)
+      && (providerMode.includes('upi') || providerMode.includes('card') || providerMode.includes('qr') || providerMode.includes('online'))
+    ) {
+      return 'ONLINE';
+    }
+
     return 'CASH';
   }
 
@@ -164,7 +172,6 @@ const statusBadgeClass = (status) => {
 };
 
 const RideRequests = () => {
-  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('all');
   const [rides, setRides] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -349,7 +356,7 @@ const RideRequests = () => {
           </div>
         ) : (
           filteredHistory.map((item) => (
-            <motion.div
+            <Motion.div
               key={item.id}
               layout
               initial={{ opacity: 0, y: 8 }}
@@ -421,7 +428,7 @@ const RideRequests = () => {
                   <span className="flex items-center gap-1"><CheckCircle2 size={12} /> {item.fareLabel}</span>
                 </div>
               </div>
-            </motion.div>
+            </Motion.div>
           ))
         )}
       </div>

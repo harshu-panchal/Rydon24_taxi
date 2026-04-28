@@ -120,34 +120,34 @@ const BusSeats = () => {
   const totalFare = selectedSeats.length * Number(bus?.price || 0);
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#fff7ed_0%,#fffbeb_20%,#f8fafc_100%)] max-w-lg mx-auto font-sans pb-32">
-      <div className="bg-white/90 backdrop-blur-md px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-white/80 shadow-[0_4px_20px_rgba(15,23,42,0.05)]">
+    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-sans pb-32">
+      <div className="bg-white px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-slate-100 shadow-sm">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
-            className="w-9 h-9 rounded-[12px] border border-white/80 bg-white/90 flex items-center justify-center shadow-sm active:scale-95 transition-all"
+            className="w-9 h-9 rounded-xl border border-slate-200 bg-white flex items-center justify-center shadow-sm active:scale-95 transition-all"
           >
-            <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
+            <ArrowLeft size={18} className="text-slate-900" />
           </button>
           <div className="flex-1">
-            <h1 className="text-[17px] font-black tracking-tight text-slate-900 truncate">Select Seats</h1>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+            <h1 className="text-lg font-bold text-slate-900 truncate">Select Seats</h1>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
               {bus?.operator} • {fromCity} to {toCity}
             </p>
           </div>
         </div>
       </div>
 
-      <div className="px-5 pt-5 space-y-4">
+      <div className="px-5 pt-6 space-y-6">
         {loading ? (
-          <div className="bg-white rounded-[24px] border border-slate-100 shadow-[0_8px_30px_rgba(15,23,42,0.06)] p-8 flex flex-col items-center gap-3 text-slate-500">
-            <Loader2 size={28} className="animate-spin text-orange-500" />
-            <p className="text-[12px] font-black uppercase tracking-[0.22em]">Loading coach layout</p>
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-12 flex flex-col items-center gap-4 text-slate-500">
+            <Loader2 size={32} className="animate-spin text-slate-400" />
+            <p className="text-sm font-bold text-slate-400">Loading seat map...</p>
           </div>
         ) : null}
 
         {!loading && error ? (
-          <div className="bg-rose-50 border border-rose-100 rounded-[20px] p-4 text-[12px] font-bold text-rose-600">
+          <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 text-sm font-bold text-rose-600">
             {error}
           </div>
         ) : null}
@@ -167,42 +167,44 @@ const BusSeats = () => {
               onToggle={toggleSeat}
             />
 
-            <div className="rounded-[20px] border border-slate-100 bg-slate-50/80 px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Seat Status</p>
-              <p className="mt-1 text-[12px] font-semibold text-slate-500">
-                Sold out seats stay visible in grey and cannot be selected.
-              </p>
-            </div>
-
-            <div className="bg-white rounded-[20px] border border-slate-100 shadow-[0_4px_14px_rgba(15,23,42,0.04)] px-4 py-3 flex justify-between gap-2">
-              <div className="flex items-center gap-1.5"><div className="w-3.5 h-3.5 rounded border-2 bg-white border-slate-300" /><span className="text-[9px] font-bold text-slate-500 uppercase">Avail</span></div>
-              <div className="flex items-center gap-1.5"><div className="w-3.5 h-3.5 rounded border-2 bg-slate-900 border-slate-900" /><span className="text-[9px] font-bold text-slate-500 uppercase">Selected</span></div>
-              <div className="flex items-center gap-1.5"><div className="w-3.5 h-3.5 rounded border-2 bg-slate-100 border-slate-200 opacity-50" /><span className="text-[9px] font-bold text-slate-500 uppercase">Booked</span></div>
+            <div className="bg-white rounded-2xl border border-slate-100 p-4 flex justify-between gap-2 shadow-sm">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded border-2 bg-white border-slate-200" />
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Available</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-slate-900" />
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Selected</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-slate-200" />
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Booked</span>
+              </div>
             </div>
           </>
         ) : null}
       </div>
 
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 pb-6 pt-3 bg-gradient-to-t from-[#F8FAFC] via-[#F8FAFC]/95 to-transparent z-30">
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 pb-8 pt-4 bg-white border-t border-slate-100 z-30">
         <AnimatePresence>
           {selectedSeats.length > 0 && (
             <motion.div
-              initial={{ opacity: 0, y: 12 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 12 }}
-              className="pointer-events-auto bg-white/90 rounded-[20px] border border-white/80 shadow-[0_4px_14px_rgba(15,23,42,0.06)] px-5 py-4 flex items-center justify-between mb-3"
+              exit={{ opacity: 0, y: 10 }}
+              className="bg-slate-50 rounded-2xl p-4 flex items-center justify-between mb-4 border border-slate-100"
             >
               <div>
-                <p className="text-[11px] font-black text-slate-900 uppercase tracking-widest mb-0.5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                   {selectedSeats.length} Seat{selectedSeats.length > 1 ? 's' : ''} Selected
                 </p>
-                <p className="text-[12px] font-bold text-slate-600 leading-tight">
+                <p className="text-sm font-bold text-slate-900">
                   {selectedSeats.map((seat) => seat.label || seat.id).join(', ')}
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total Amount</p>
-                <p className="text-[20px] font-black text-slate-900 leading-none">₹{totalFare}</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total</p>
+                <p className="text-xl font-bold text-slate-900">₹{totalFare}</p>
               </div>
             </motion.div>
           )}
@@ -210,7 +212,7 @@ const BusSeats = () => {
 
         <motion.button
           disabled={selectedSeats.length === 0 || !!error || loading}
-          whileTap={{ scale: 0.97 }}
+          whileTap={{ scale: 0.98 }}
           onClick={() =>
             navigate(`${routePrefix}/bus/details`, {
               state: {
@@ -221,13 +223,13 @@ const BusSeats = () => {
               },
             })
           }
-          className={`w-full py-4 rounded-[18px] text-[15px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
+          className={`w-full py-4 rounded-2xl text-base font-bold flex items-center justify-center gap-2 transition-all ${
             selectedSeats.length > 0 && !error && !loading
-              ? 'bg-slate-900 text-white shadow-[0_10px_26px_rgba(2,6,23,0.22)] active:scale-95'
-              : 'bg-slate-200 text-slate-400'
+              ? 'bg-slate-900 text-white shadow-lg active:scale-95'
+              : 'bg-slate-100 text-slate-400 cursor-not-allowed'
           }`}
         >
-          Proceed <ChevronRight size={18} strokeWidth={3} className={selectedSeats.length > 0 ? 'opacity-80' : 'opacity-40'} />
+          Proceed to Payment <ChevronRight size={18} />
         </motion.button>
       </div>
     </div>

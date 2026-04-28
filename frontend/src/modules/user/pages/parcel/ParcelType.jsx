@@ -150,12 +150,46 @@ const formatVehicleType = (item, index) => {
   };
 };
 
+const normalizeVehicleLabel = (value = '') =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ');
+
+const getVehicleSearchTokens = (vehicle = {}) =>
+  [
+    vehicle.name,
+    vehicle.description,
+    vehicle.transportType,
+    vehicle.iconType,
+    String(vehicle.name || '').replace(/\s+/g, '_'),
+  ]
+    .map(normalizeVehicleLabel)
+    .filter(Boolean);
+
+const getAllowedVehicleLabels = (category) =>
+  String(category?.goodsTypeFor || 'both')
+    .split(',')
+    .map((entry) => normalizeVehicleLabel(entry))
+    .filter(Boolean);
+
+const isVehicleAllowedForCategory = (vehicle, category) => {
+  const allowedLabels = getAllowedVehicleLabels(category);
+
+  if (!allowedLabels.length || allowedLabels.includes('both') || allowedLabels.includes('all')) {
+    return true;
+  }
+
+  const tokens = getVehicleSearchTokens(vehicle);
+  return allowedLabels.some((label) => tokens.some((token) => token.includes(label) || label.includes(token)));
+};
+
 const ParcelType = () => {
   const [categories, setCategories] = useState(fallbackCategories);
   const [selectedType, setSelectedType] = useState(fallbackCategories[0]?.title || '');
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
   const navigate = useNavigate();
@@ -165,7 +199,6 @@ const ParcelType = () => {
 
     const fetchData = async () => {
       setLoading(true);
-      setLoadError('');
 
       try {
         const [goodsResponse, vehicleResponse] = await Promise.all([
@@ -207,7 +240,6 @@ const ParcelType = () => {
         }
       } catch {
         if (!isMounted) return;
-        setLoadError('Unable to load latest categories.');
         setCategories(fallbackCategories);
         setVehicleTypes([]);
         setSelectedType((current) => current || fallbackCategories[0]?.title || '');
@@ -237,6 +269,46 @@ const ParcelType = () => {
     () => categories.find((category) => category.title === selectedType) || categories[0],
     [categories, selectedType]
   );
+
+  const compatibleVehicles = useMemo(
+    () => vehicleTypes.filter((vehicle) => isVehicleAllowedForCategory(vehicle, selected)),
+    [selected, vehicleTypes],
+  );
+
+  const selectedVehicle = useMemo(
+    () => compatibleVehicles.find((vehicle) => vehicle.id === selectedVehicleId) || compatibleVehicles[0] || null,
+    [compatibleVehicles, selectedVehicleId],
+  );
+
+  const isSelectedVehicleCompatible = useMemo(
+    () => (selectedVehicle ? isVehicleAllowedForCategory(selectedVehicle, selected) : false),
+    [selected, selectedVehicle],
+  );
+
+  const compatibilityMessage = useMemo(() => {
+    if (!selected) return '';
+    const labels = getAllowedVehicleLabels(selected).filter((label) => label !== 'both' && label !== 'all');
+
+    if (!labels.length) return '';
+    if (compatibleVehicles.length === 0) {
+      return `No active fleet is assigned for ${selected.title}. Ask admin to map a vehicle type for this goods category.`;
+    }
+    if (!selectedVehicle || isSelectedVehicleCompatible) return '';
+    return `${selected.title} can continue only with: ${labels.join(', ')}.`;
+  }, [compatibleVehicles.length, isSelectedVehicleCompatible, selected, selectedVehicle]);
+
+  useEffect(() => {
+    if (!selected) return;
+
+    if (!compatibleVehicles.length) {
+      setSelectedVehicleId('');
+      return;
+    }
+
+    if (!compatibleVehicles.some((vehicle) => vehicle.id === selectedVehicleId)) {
+      setSelectedVehicleId(compatibleVehicles[0].id);
+    }
+  }, [compatibleVehicles, selected, selectedVehicleId]);
 
   return (
     <div className="min-h-screen bg-[#FDFDFF] max-w-lg mx-auto flex flex-col font-sans relative overflow-x-hidden">
@@ -321,8 +393,8 @@ const ParcelType = () => {
             </div>
 
             <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-6 px-6">
-              {vehicleTypes.length > 0 ? (
-                vehicleTypes.map((vehicle, idx) => {
+              {compatibleVehicles.length > 0 ? (
+                compatibleVehicles.map((vehicle, idx) => {
                   const isVehicleSelected = selectedVehicleId === vehicle.id;
                   return (
                     <Motion.button 
@@ -351,12 +423,19 @@ const ParcelType = () => {
                     </Motion.button>
                   );
                 })
-              ) : (
+              ) : loading ? (
                 [...Array(3)].map((_, idx) => (
                   <div key={idx} className="min-w-[150px] h-[160px] bg-gray-50/50 rounded-[32px] border border-dashed border-gray-200 flex items-center justify-center">
                     <Loader2 className="w-8 h-8 text-gray-300 animate-spin" />
                   </div>
                 ))
+              ) : (
+                <div className="min-w-full rounded-[28px] border border-dashed border-amber-200 bg-amber-50 px-5 py-6 text-left">
+                  <p className="text-[11px] font-black uppercase tracking-[0.18em] text-amber-700">No assigned fleet</p>
+                  <p className="mt-2 text-sm font-bold text-amber-900">
+                    Admin has not assigned any vehicle for this goods type yet, so the user cannot continue.
+                  </p>
+                </div>
               )}
             </div>
           </Motion.section>
@@ -378,7 +457,7 @@ const ParcelType = () => {
                   <div key={`shimmer-${idx}`} className="h-44 bg-gray-50 rounded-[32px] animate-pulse border border-gray-100" />
                 ))
               ) : (
-                filteredCategories.map((cat, idx) => {
+                filteredCategories.map((cat) => {
                   const isSelected = selectedType === cat.title;
                   return (
                     <Motion.button
@@ -436,11 +515,22 @@ const ParcelType = () => {
         </section>
 
         {/* Info Tip */}
+        {compatibilityMessage ? (
+          <Motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 flex gap-3 items-start"
+          >
+            <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+            <p className="text-[11px] font-semibold text-amber-900/80 leading-relaxed">{compatibilityMessage}</p>
+          </Motion.div>
+        ) : null}
+
         <Motion.div 
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.5 }}
-          className="mt-8 p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100 flex gap-3 items-start"
+          className="mt-4 p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100 flex gap-3 items-start"
         >
           <Info size={16} className="text-indigo-600 shrink-0 mt-0.5" />
           <p className="text-[11px] font-semibold text-indigo-900/70 leading-relaxed">
@@ -458,7 +548,7 @@ const ParcelType = () => {
           <Motion.button
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.98 }}
-            disabled={loading || !selectedType}
+            disabled={loading || !selectedType || !selectedVehicle || !isSelectedVehicleCompatible}
             onClick={() =>
               navigate('/parcel/contacts', {
                 state: {
@@ -466,11 +556,12 @@ const ParcelType = () => {
                   selectedGoodsType: selected,
                   goodsTypeFor: selected?.goodsTypeFor || 'both',
                   selectedVehicleId: selectedVehicleId,
-                  selectedVehicle: vehicleTypes.find(v => v.id === selectedVehicleId),
+                  selectedVehicle,
+                  compatibleVehicleIds: compatibleVehicles.map((vehicle) => vehicle.id),
                 },
               })
             }
-            className="relative w-full group overflow-hidden bg-gray-900 disabled:bg-gray-400 text-white rounded-[24px] py-5 px-8 flex items-center justify-between shadow-[0_20px_40px_rgba(0,0,0,0.15)] transition-all"
+            className="relative w-full group overflow-hidden bg-gray-900 disabled:bg-gray-400 disabled:shadow-none text-white rounded-[24px] py-5 px-8 flex items-center justify-between shadow-[0_20px_40px_rgba(0,0,0,0.15)] transition-all"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-violet-600 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
             
