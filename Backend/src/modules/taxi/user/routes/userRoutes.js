@@ -15,6 +15,7 @@ import {
   getUserNotifications,
   deleteUserNotification,
   endMyActiveRentalRide,
+  getIntercityPackageCatalog,
   clearAllUserNotifications,
   getMyActiveRentalBooking,
   loginUser,
@@ -46,6 +47,7 @@ import { getAppModules, getGoodsTypes, getPublicRentalVehicleCatalog, getPublicV
 export const userRouter = Router();
 
 userRouter.get('/app-modules', asyncHandler(getAppModules));
+userRouter.get('/intercity-packages', asyncHandler(getIntercityPackageCatalog));
 userRouter.get('/goods-types', asyncHandler(getGoodsTypes));
 userRouter.get('/vehicle-types', asyncHandler(getPublicVehicleTypeCatalog));
 userRouter.get('/rental-vehicles', asyncHandler(getPublicRentalVehicleCatalog));

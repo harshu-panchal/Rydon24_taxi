@@ -1891,62 +1891,106 @@ export const updateDriverVehicle = async (req, res) => {
     }
   }
 
-  const update = {};
-
-  if (selectedVehicle) {
-    update.vehicleTypeId = selectedVehicle._id;
-    update.vehicleType = getGenericVehicleType(selectedVehicle);
-    update.vehicleIconType = selectedVehicle.icon_types || update.vehicleType;
-  }
-
-  if (vehicleNumber !== undefined) {
-    update.vehicleNumber = String(vehicleNumber || "")
-      .trim()
-      .toUpperCase();
-  }
-  if (vehicleColor !== undefined) {
-    update.vehicleColor = String(vehicleColor || "").trim();
-  }
-  if (vehicleMake !== undefined) {
-    update.vehicleMake = String(vehicleMake || "").trim();
-  }
-  if (vehicleModel !== undefined) {
-    update.vehicleModel = String(vehicleModel || "").trim();
-  }
-  if (vehicleImage !== undefined) {
-    update.vehicleImage = String(vehicleImage || "").trim();
-  }
-
-  const driver = await Driver.findByIdAndUpdate(req.auth.sub, update, {
-    returnDocument: 'after',
-  });
+  const driver = await Driver.findById(req.auth.sub);
 
   if (!driver) {
     throw new ApiError(404, "Driver not found");
   }
 
-  const vehicleIconUrl = await resolveVehicleMapIcon(driver.vehicleTypeId);
+  const update = {};
+  let vehicleChanged = false;
+
+  if (selectedVehicle) {
+    const nextVehicleType = getGenericVehicleType(selectedVehicle);
+    const nextVehicleIconType = selectedVehicle.icon_types || nextVehicleType;
+
+    update.vehicleTypeId = selectedVehicle._id;
+    update.vehicleType = nextVehicleType;
+    update.vehicleIconType = nextVehicleIconType;
+
+    if (
+      String(driver.vehicleTypeId || "") !== String(selectedVehicle._id || "") ||
+      String(driver.vehicleType || "") !== String(nextVehicleType) ||
+      String(driver.vehicleIconType || "") !== String(nextVehicleIconType)
+    ) {
+      vehicleChanged = true;
+    }
+  }
+
+  if (vehicleNumber !== undefined) {
+    const normalizedVehicleNumber = String(vehicleNumber || "")
+      .trim()
+      .toUpperCase();
+    update.vehicleNumber = normalizedVehicleNumber;
+    if (String(driver.vehicleNumber || "") !== normalizedVehicleNumber) {
+      vehicleChanged = true;
+    }
+  }
+  if (vehicleColor !== undefined) {
+    const normalizedVehicleColor = String(vehicleColor || "").trim();
+    update.vehicleColor = normalizedVehicleColor;
+    if (String(driver.vehicleColor || "") !== normalizedVehicleColor) {
+      vehicleChanged = true;
+    }
+  }
+  if (vehicleMake !== undefined) {
+    const normalizedVehicleMake = String(vehicleMake || "").trim();
+    update.vehicleMake = normalizedVehicleMake;
+    if (String(driver.vehicleMake || "") !== normalizedVehicleMake) {
+      vehicleChanged = true;
+    }
+  }
+  if (vehicleModel !== undefined) {
+    const normalizedVehicleModel = String(vehicleModel || "").trim();
+    update.vehicleModel = normalizedVehicleModel;
+    if (String(driver.vehicleModel || "") !== normalizedVehicleModel) {
+      vehicleChanged = true;
+    }
+  }
+  if (vehicleImage !== undefined) {
+    const normalizedVehicleImage = String(vehicleImage || "").trim();
+    update.vehicleImage = normalizedVehicleImage;
+    if (String(driver.vehicleImage || "") !== normalizedVehicleImage) {
+      vehicleChanged = true;
+    }
+  }
+
+  if (vehicleChanged) {
+    update.approve = false;
+    update.status = "pending";
+    update.isOnline = false;
+  }
+
+  const updatedDriver = await Driver.findByIdAndUpdate(req.auth.sub, update, {
+    returnDocument: 'after',
+  });
+
+  const vehicleIconUrl = await resolveVehicleMapIcon(updatedDriver.vehicleTypeId);
 
   res.json({
     success: true,
+    message: vehicleChanged
+      ? "Vehicle updated and sent to admin for approval"
+      : "Vehicle updated successfully",
     data: {
-      id: driver._id,
-      name: driver.name,
-      phone: driver.phone,
-      vehicleType: driver.vehicleType,
-      vehicleTypeId: driver.vehicleTypeId,
-      vehicleIconType: driver.vehicleIconType,
+      id: updatedDriver._id,
+      name: updatedDriver.name,
+      phone: updatedDriver.phone,
+      vehicleType: updatedDriver.vehicleType,
+      vehicleTypeId: updatedDriver.vehicleTypeId,
+      vehicleIconType: updatedDriver.vehicleIconType,
       vehicleIconUrl,
-      vehicleMake: driver.vehicleMake,
-      vehicleModel: driver.vehicleModel,
-      vehicleNumber: driver.vehicleNumber,
-      vehicleColor: driver.vehicleColor,
-      vehicleImage: driver.vehicleImage || "",
-      registerFor: driver.registerFor,
-      approve: driver.approve,
-      status: driver.status,
-      isOnline: driver.isOnline,
-      isOnRide: driver.isOnRide,
+      vehicleMake: updatedDriver.vehicleMake,
+      vehicleModel: updatedDriver.vehicleModel,
+      vehicleNumber: updatedDriver.vehicleNumber,
+      vehicleColor: updatedDriver.vehicleColor,
+      vehicleImage: updatedDriver.vehicleImage || "",
+      registerFor: updatedDriver.registerFor,
+      approve: updatedDriver.approve,
+      status: updatedDriver.status,
+      isOnline: updatedDriver.isOnline,
+      isOnRide: updatedDriver.isOnRide,
+      vehicleApprovalRequested: vehicleChanged,
     },
   });
 };

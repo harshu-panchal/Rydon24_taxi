@@ -138,6 +138,15 @@ const rentalVehicleTypeSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    coverImage: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    galleryImages: {
+      type: [String],
+      default: [],
+    },
     map_icon: {
       type: String,
       default: '',

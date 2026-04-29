@@ -377,16 +377,19 @@ const ContactDetailsSheet = ({
                 <p className="text-sm font-black text-slate-900">Receiver</p>
               </div>
 
-              <label className="flex cursor-pointer items-center gap-3 rounded-[18px] border border-slate-200 bg-slate-50/80 px-4 py-3">
-                <input
-                  type="checkbox"
-                  checked={useSelfForReceiver}
-                  onChange={(event) => setUseSelfForReceiver(event.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-slate-900"
-                />
-                <div>
-                  <p className="text-sm font-bold text-slate-900">Receiver is self</p>
-                  <p className="text-[11px] font-medium text-slate-500">Auto-fill receiver details with your user details</p>
+              <label className="flex cursor-pointer items-center gap-3 rounded-[24px] border-2 border-dashed border-slate-100 bg-slate-50/30 px-4 py-4 transition-colors hover:bg-blue-50/30 group">
+                <div className="relative flex items-center justify-center">
+                  <input
+                    type="checkbox"
+                    checked={useSelfForReceiver}
+                    onChange={(event) => setUseSelfForReceiver(event.target.checked)}
+                    className="peer h-5 w-5 cursor-pointer appearance-none rounded-lg border-2 border-slate-200 bg-white checked:bg-blue-600 checked:border-blue-600 transition-all"
+                  />
+                  <CheckCircle2 size={12} className="absolute text-white opacity-0 peer-checked:opacity-100 pointer-events-none" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-[13px] font-black text-slate-900 group-hover:text-blue-600 transition-colors">Same as Sender</p>
+                  <p className="text-[11px] font-bold text-slate-400">Use sender's name and mobile for receiver</p>
                 </div>
               </label>
 
@@ -455,6 +458,13 @@ const SenderReceiverDetails = () => {
   const [isLocatingPickup, setIsLocatingPickup] = useState(false);
   const [errors, setErrors] = useState({});
   const autoPickupRequestedRef = useRef(false);
+  const dropInputRef = useRef(null);
+
+  useEffect(() => {
+    if (dropInputRef.current) {
+      dropInputRef.current.focus();
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -756,147 +766,134 @@ const SenderReceiverDetails = () => {
         }}
       />
 
-      <header className="sticky top-0 z-20 flex items-center px-4 py-4">
-        <button onClick={() => navigate(-1)} className="flex h-10 w-10 items-center justify-center rounded-full text-slate-800 transition-colors hover:bg-slate-100">
+      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md px-4 py-4 flex items-center">
+        <button 
+          onClick={() => navigate(-1)} 
+          className="flex h-10 w-10 items-center justify-center rounded-full text-slate-800 hover:bg-slate-50 transition-colors"
+        >
           <ArrowLeft size={24} />
         </button>
       </header>
 
-      <main className="flex-1 px-4 pt-1 pb-28">
-        <div className="rounded-[24px] bg-white p-5 shadow-sm border border-slate-100">
-          <div className="flex gap-4">
-            {/* Visual Route Indicator */}
-            <div className="flex flex-col items-center pt-5">
-              <div className="h-2 w-2 rounded-full bg-emerald-500" />
-              <div className="h-14 border-l border-dashed border-slate-200 my-1" />
-              <div className="h-2 w-2 rounded-full bg-rose-500" />
+      <main className="flex-1 px-4 pt-2 pb-28 z-10">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-[32px] bg-white p-6 shadow-[0_20px_50px_rgba(0,0,0,0.08)] border border-slate-50 relative"
+        >
+          {/* Route dots & line on the left */}
+          <div className="absolute left-6 top-10 flex flex-col items-center gap-1">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+            <div className="w-0.5 h-20 border-l-2 border-dashed border-slate-100" />
+            <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+          </div>
+
+          <div className="pl-8 space-y-6">
+            {/* Sender Card */}
+            <div 
+              className="bg-slate-50/80 rounded-2xl p-4 flex items-center justify-between group cursor-pointer border border-slate-100/50" 
+              onClick={() => setIsContactSheetOpen(true)}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                   <p className="text-[14px] font-black text-slate-900">{senderName || 'Sender Details'}</p>
+                   {senderMobile && (
+                     <>
+                        <div className="w-1 h-1 rounded-full bg-slate-300" />
+                        <p className="text-[12px] font-bold text-slate-500">{senderMobile}</p>
+                     </>
+                   )}
+                </div>
+                <p className="text-[13px] font-medium text-slate-500 truncate mt-1">{pickup || 'Pickup location'}</p>
+              </div>
+              <ChevronRight size={14} className="text-slate-300 group-hover:translate-x-0.5 transition-transform" />
             </div>
 
-            <div className="flex-1 min-w-0 space-y-6">
-              {/* Pickup Section */}
-              <button 
-                type="button" 
-                onClick={() => setActiveMapPicker('pickup')} 
-                className="flex w-full items-center justify-between group text-left min-w-0"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-2">
-                    <p className="text-[13px] font-bold text-slate-900 truncate">
-                      {senderName || 'Sender Details'}
-                    </p>
-                    {senderMobile && (
-                      <span className="shrink-0 text-[11px] font-medium text-slate-400">
-                        {senderMobile}
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-1 text-[13px] font-medium text-slate-500 truncate">
-                    {pickup || (isLocatingPickup ? 'Detecting current location...' : 'Set pickup location')}
-                  </p>
-                </div>
-                <div className="ml-2 shrink-0">
-                  {isLocatingPickup ? (
-                    <Navigation size={16} className="text-blue-500 animate-pulse" />
-                  ) : (
-                    <ChevronRight size={16} className="text-slate-300 transition-transform group-hover:translate-x-0.5" />
-                  )}
-                </div>
-              </button>
-
-              <hr className="border-slate-50" />
-
-              {/* Drop Input Section */}
-              <div className="flex items-center gap-3">
-                <div className={`flex h-12 flex-1 items-center gap-3 rounded-xl border px-3 transition-all ${
-                  errors.drop ? 'border-red-300 bg-red-50/30' : 'border-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500'
-                }`}>
-                  <input
-                    type="text"
-                    value={drop}
-                    onChange={(event) => {
-                      setDrop(event.target.value);
-                      clearError('drop');
-                    }}
-                    placeholder="Where is your Drop ?"
-                    className="flex-1 bg-transparent text-[14px] font-medium text-slate-900 outline-none placeholder:text-slate-400"
-                  />
-                  <Mic size={18} className="text-slate-400" />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setIsContactSheetOpen(true)}
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition-colors ${
-                    receiverName && PHONE_REGEX.test(receiverMobile)
-                      ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
-                      : 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100'
-                  }`}
-                >
-                  <Plus size={20} />
-                </button>
+            {/* Drop Input Area */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 relative">
+                 <input 
+                   ref={dropInputRef}
+                   type="text" 
+                   placeholder="Where is your Drop ?"
+                   value={drop}
+                   onChange={(e) => {
+                     setDrop(e.target.value);
+                     clearError('drop');
+                   }}
+                   className={`w-full h-14 bg-white border-2 rounded-2xl pl-5 pr-12 text-[15px] font-bold text-slate-900 placeholder:text-slate-300 outline-none transition-all ${
+                     errors.drop ? 'border-red-500 bg-red-50' : 'border-blue-600 focus:shadow-[0_0_0_4px_rgba(37,99,235,0.1)]'
+                   }`}
+                 />
+                 <Mic size={20} className="absolute right-5 top-1/2 -translate-y-1/2 text-blue-600" />
               </div>
-
-              {/* Error messages */}
-              {errors.pickup && <p className="text-[11px] font-medium text-red-500">Pickup: {errors.pickup}</p>}
-              {errors.drop && <p className="text-[11px] font-medium text-red-500">Drop: {errors.drop}</p>}
+              <button className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 border border-slate-100 shrink-0">
+                 <Plus size={24} />
+              </button>
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        {/* Action Link */}
-        <div className="mt-6 flex justify-center">
-          <button
-            type="button"
-            onClick={() => setActiveMapPicker(pickup ? 'drop' : 'pickup')}
-            className="flex items-center gap-2 text-[13px] font-bold text-blue-600 hover:text-blue-700"
-          >
-            <MapPin size={16} />
-            <span>Select on map</span>
-          </button>
-        </div>
+        <button 
+          onClick={() => setActiveMapPicker('drop')} 
+          className="mt-8 mx-auto flex items-center gap-2 text-blue-600 font-black text-[13px] uppercase tracking-widest hover:bg-blue-50/50 px-4 py-2 rounded-full transition-colors"
+        >
+           <MapPin size={18} fill="currentColor" className="text-blue-600/20" />
+           Select on map
+        </button>
 
-        {/* Suggestions */}
-        {(pickupSuggestions.length > 0 && !pickup) || (dropSuggestions.length > 0 && drop) ? (
-          <div className="mt-6 space-y-3">
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest px-1">Quick Suggestions</p>
-            <div className="flex flex-wrap gap-2">
-              {((!pickup ? pickupSuggestions : dropSuggestions) || []).map((item) => (
+        {/* Quick Suggestions for Drop */}
+        {dropSuggestions.length > 0 && !drop && (
+          <div className="mt-8 space-y-3 px-2">
+            <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Suggestions</p>
+            <div className="grid grid-cols-2 gap-2">
+              {dropSuggestions.map((item) => (
                 <button
                   key={item}
-                  type="button"
-                  onClick={() => applySuggestion(!pickup ? 'pickup' : 'drop', item)}
-                  className="rounded-full border border-slate-100 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600 shadow-sm"
+                  onClick={() => applySuggestion('drop', item)}
+                  className="flex items-center gap-2 rounded-xl border border-slate-100 bg-white p-3 text-left shadow-sm hover:border-blue-200"
                 >
-                  {item}
+                  <Navigation size={12} className="text-blue-500 shrink-0" />
+                  <span className="text-[12px] font-bold text-slate-700 truncate">{item}</span>
                 </button>
               ))}
             </div>
           </div>
-        ) : null}
+        )}
 
-        <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.12 }} className="mt-8 rounded-[24px] bg-slate-900 px-4 py-4 text-white shadow-xl">
-          <div className="flex items-center justify-between gap-3">
+        <motion.section 
+          initial={{ opacity: 0 }} 
+          animate={{ opacity: 1 }} 
+          transition={{ delay: 0.12 }} 
+          className="mt-8 rounded-[28px] bg-slate-900 px-6 py-5 text-white shadow-xl relative overflow-hidden"
+        >
+          <div className="absolute right-0 top-0 w-24 h-24 bg-white/5 rounded-full -mr-12 -mt-12" />
+          <div className="relative z-10 flex items-center justify-between gap-3">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Approx. Delivery Fare</p>
-              <p className="mt-1 text-lg font-black">Rs {parcelState.estimatedFare?.min || 45} - Rs {parcelState.estimatedFare?.max || 80}</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">Approx. Delivery Fare</p>
+              <p className="mt-1 text-2xl font-black">Rs {parcelState.estimatedFare?.min || 45} - {parcelState.estimatedFare?.max || 80}</p>
             </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10">
-              <PackageCheck size={22} className="text-emerald-300" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-md">
+              <PackageCheck size={24} className="text-emerald-400" />
             </div>
           </div>
         </motion.section>
       </main>
 
-      <div className="fixed bottom-0 left-0 right-0 z-30 p-4">
-        <div className="mx-auto max-w-lg">
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-[#F8FBFF] via-[#F8FBFF]/92 to-transparent" />
+      <div className="fixed bottom-0 left-0 right-0 z-30 p-6">
+        <div className="mx-auto max-w-lg relative">
+          <div className="absolute inset-x-0 bottom-0 -mb-6 h-32 bg-gradient-to-t from-white via-white/80 to-transparent pointer-events-none" />
           <motion.button
+            whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={handleProceed}
-            className="relative flex h-14 w-full items-center justify-center gap-2 rounded-[18px] bg-slate-900 text-[15px] font-black text-white shadow-[0_16px_30px_rgba(15,23,42,0.18)]"
+            className="relative flex h-16 w-full items-center justify-center gap-3 rounded-[24px] bg-slate-900 text-[15px] font-black text-white shadow-[0_20px_40px_rgba(15,23,42,0.2)] group overflow-hidden"
           >
-            Find Delivery Agent
-            <ChevronRight size={18} />
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+            <span className="relative z-10">
+               {drop ? 'Confirm Receiver Details' : 'Select Drop Location'}
+            </span>
+            <ChevronRight size={20} className="relative z-10 group-hover:translate-x-1 transition-transform" />
           </motion.button>
         </div>
       </div>

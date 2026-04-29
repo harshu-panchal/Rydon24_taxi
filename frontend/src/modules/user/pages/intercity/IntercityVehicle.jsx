@@ -1,168 +1,124 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, ChevronRight, LoaderCircle, Users } from 'lucide-react';
-import api from '../../../../shared/api/axiosInstance';
-
-const getVehicleTypes = (response) => {
-  const payload = response?.data?.data || response?.data || response;
-  return payload?.vehicle_types || payload?.results || (Array.isArray(payload) ? payload : []);
-};
-
-const getIconValue = (type = {}) => String(type.icon_types || type.vehicleIconType || type.name || '').toLowerCase();
-const getTypeLabel = (type = {}) => type.name || type.vehicle_type || type.label || 'Vehicle';
+import { ArrowLeft, Calendar, ChevronRight, Clock3, Info, MapPin, Users } from 'lucide-react';
 
 const getVehicleIcon = (type = {}) => {
-  const customIcon = String(type.map_icon || type.icon || type.image || '').trim();
+  const customIcon = String(type.icon || '').trim();
   if (customIcon) return customIcon;
 
-  const iconValue = getIconValue(type);
-
+  const iconValue = String(type.iconType || type.vehicleName || '').toLowerCase();
   if (iconValue.includes('bike')) return '/1_Bike.png';
   if (iconValue.includes('auto')) return '/2_AutoRickshaw.png';
   return '/4_Taxi.png';
 };
 
-const getVehicleSeats = (type = {}) => {
-  if (Number.isFinite(Number(type.capacity)) && Number(type.capacity) > 0) {
-    return Number(type.capacity);
-  }
+const normalizeVehicleEntry = (pkg, vehicle, index) => ({
+  id: vehicle.id || `${pkg.id}:${vehicle.vehicleTypeId || index}`,
+  packageId: pkg.id,
+  packageTypeName: pkg.packageTypeName || 'Intercity',
+  destination: pkg.destination || '',
+  vehicleTypeId: vehicle.vehicleTypeId || '',
+  name: vehicle.vehicleName || 'Vehicle',
+  desc: `${pkg.packageTypeName || 'Intercity'} · ${pkg.destination || 'Destination'}`,
+  seats: Number(vehicle.capacity || 4) || 4,
+  icon: getVehicleIcon(vehicle),
+  vehicleIconUrl: getVehicleIcon(vehicle),
+  iconType: vehicle.iconType || vehicle.vehicleName || 'car',
+  baseFare: Number(vehicle.basePrice || 0),
+  freeDistance: Number(vehicle.freeDistance || 0),
+  pricePerKm: Number(vehicle.distancePrice || 0),
+  freeTime: Number(vehicle.freeTime || 0),
+  timePrice: Number(vehicle.timePrice || 0),
+  serviceTax: Number(vehicle.serviceTax || 0),
+  cancellationFee: Number(vehicle.cancellationFee || 0),
+});
 
-  const iconValue = getIconValue(type);
-  if (iconValue.includes('bike')) return 1;
-  if (iconValue.includes('auto')) return 3;
-  if (iconValue.includes('suv')) return 6;
-  return 4;
+const calculateFare = (vehicle, tripType) => {
+  const baseFare = Number(vehicle.baseFare || 0);
+  return tripType === 'Round Trip' ? Math.round(baseFare * 1.8) : Math.round(baseFare);
 };
 
-const getBaseFare = (type = {}) => {
-  const iconValue = getIconValue(type);
-  const name = getTypeLabel(type).toLowerCase();
-
-  if (iconValue.includes('bike') || name.includes('bike')) return 220;
-  if (iconValue.includes('auto') || name.includes('auto')) return 420;
-  if (iconValue.includes('suv') || name.includes('suv')) return 999;
-  if (iconValue.includes('premium') || name.includes('premium') || name.includes('lux')) return 1199;
-  return 699;
-};
-
-const getPricePerKm = (type = {}) => {
-  const iconValue = getIconValue(type);
-  const name = getTypeLabel(type).toLowerCase();
-
-  if (iconValue.includes('bike') || name.includes('bike')) return 8;
-  if (iconValue.includes('auto') || name.includes('auto')) return 11;
-  if (iconValue.includes('suv') || name.includes('suv')) return 18;
-  if (iconValue.includes('premium') || name.includes('premium') || name.includes('lux')) return 22;
-  return 14;
-};
-
-const normalizeVehicleType = (type, index) => {
-  const id = String(type?._id || type?.id || type?.name || index);
-  const seats = getVehicleSeats(type);
-
-  return {
-    id,
-    vehicleTypeId: type?._id || type?.id || '',
-    name: getTypeLabel(type),
-    desc: type?.short_description || type?.description || 'Available for your trip',
-    seats,
-    icon: getVehicleIcon(type),
-    vehicleIconUrl: getVehicleIcon(type),
-    baseFare: getBaseFare(type),
-    pricePerKm: getPricePerKm(type),
-    raw: type,
-  };
-};
+const getDisplayDate = (rideMode, travelDate) => (rideMode === 'schedule' ? travelDate : 'Ride Now');
 
 const IntercityVehicle = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { fromCity, toCity, tripType, date, distance = 0 } = location.state || {};
+  const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
+  const {
+    fromCity,
+    toCity,
+    tripType: initialTripType,
+    date: initialDate,
+    rideMode: initialRideMode,
+    selectedPackages = [],
+    pickupAddress = '',
+    pickupCoords = null,
+  } = location.state || {};
 
+  const [tripType, setTripType] = useState(initialTripType || 'One Way');
+  const [rideMode, setRideMode] = useState(initialRideMode || 'now');
+  const [travelDate, setTravelDate] = useState(
+    initialRideMode === 'schedule' && initialDate && initialDate !== 'Ride Now'
+      ? initialDate
+      : new Date().toISOString().split('T')[0]
+  );
   const [passengers, setPassengers] = useState(1);
-  const [vehicles, setVehicles] = useState([]);
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
-  const [isLoadingVehicles, setIsLoadingVehicles] = useState(true);
-  const [vehicleLoadError, setVehicleLoadError] = useState('');
 
-  if (!fromCity || !toCity) {
-    navigate('/intercity');
-    return null;
-  }
+  const vehicles = useMemo(
+    () =>
+      selectedPackages.flatMap((pkg) =>
+        (Array.isArray(pkg.vehicles) ? pkg.vehicles : []).map((vehicle, index) =>
+          normalizeVehicleEntry(pkg, vehicle, index)
+        )
+      ),
+    [selectedPackages]
+  );
 
   useEffect(() => {
-    let active = true;
-
-    const loadVehicles = async () => {
-      setIsLoadingVehicles(true);
-      setVehicleLoadError('');
-
-      try {
-        const response = await api.get('/users/vehicle-types');
-        if (!active) {
-          return;
-        }
-
-        const nextVehicles = getVehicleTypes(response)
-          .filter((type) => type.active !== false && Number(type.status ?? 1) !== 0)
-          .filter((type) => {
-            const transportType = String(type.transport_type || 'taxi').toLowerCase();
-            return transportType === 'taxi' || transportType === 'both';
-          })
-          .map(normalizeVehicleType);
-
-        setVehicles(nextVehicles);
-        setSelectedVehicleId((current) => current || nextVehicles[0]?.id || '');
-      } catch (error) {
-        if (active) {
-          setVehicleLoadError(error.message || 'Could not load available vehicle types.');
-          setVehicles([]);
-        }
-      } finally {
-        if (active) {
-          setIsLoadingVehicles(false);
-        }
-      }
-    };
-
-    loadVehicles();
-
-    return () => {
-      active = false;
-    };
-  }, []);
+    if (!selectedVehicleId && vehicles.length) {
+      setSelectedVehicleId(vehicles[0].id);
+    }
+  }, [selectedVehicleId, vehicles]);
 
   const selectedVehicle = useMemo(
     () => vehicles.find((vehicle) => vehicle.id === selectedVehicleId) || vehicles[0] || null,
-    [selectedVehicleId, vehicles],
+    [selectedVehicleId, vehicles]
   );
 
-  const safeDistance = Number(distance || 0);
-  const estimatedFare = selectedVehicle ? Math.round(selectedVehicle.baseFare + (selectedVehicle.pricePerKm * safeDistance)) : 0;
-  const roundTripFare = Math.round(estimatedFare * 1.8);
-  const finalFare = tripType === 'Round Trip' ? roundTripFare : estimatedFare;
+  useEffect(() => {
+    if (!fromCity || !toCity) {
+      navigate(`${routePrefix}/intercity`, { replace: true });
+    }
+  }, [fromCity, navigate, routePrefix, toCity]);
 
   useEffect(() => {
-    if (!selectedVehicle) {
-      return;
-    }
-
+    if (!selectedVehicle) return;
     setPassengers((current) => Math.min(Math.max(current, 1), selectedVehicle.seats));
   }, [selectedVehicle]);
 
-  const handleContinue = () => {
-    if (!selectedVehicle) {
-      return;
-    }
+  if (!fromCity || !toCity) {
+    return null;
+  }
 
-    navigate('/intercity/details', {
+  const finalFare = selectedVehicle ? calculateFare(selectedVehicle, tripType) : 0;
+
+  const handleContinue = () => {
+    if (!selectedVehicle) return;
+
+    navigate(`${routePrefix}/intercity/details`, {
       state: {
         fromCity,
         toCity,
         tripType,
-        date,
-        distance: safeDistance,
+        rideMode,
+        date: getDisplayDate(rideMode, travelDate),
+        travelDate,
+        selectedPackages,
+        pickupAddress,
+        pickupCoords,
+        distance: 0,
         vehicle: selectedVehicle,
         passengers,
         fare: finalFare,
@@ -171,127 +127,214 @@ const IntercityVehicle = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FB] max-w-lg mx-auto font-sans pb-32">
-      <div className="bg-white px-5 pt-10 pb-6 sticky top-0 z-20 shadow-sm border-b border-gray-50 flex items-center gap-4">
-        <button onClick={() => navigate(-1)} className="p-2 -ml-2 active:scale-90 transition-all">
-          <ArrowLeft size={24} className="text-gray-900" strokeWidth={2.5} />
-        </button>
-        <div>
-          <h1 className="text-[22px] font-black text-gray-900 leading-none tracking-tight">Vehicle & Passengers</h1>
-          <p className="text-[12px] font-bold text-gray-400 mt-0.5 uppercase tracking-widest">{fromCity} to {toCity}</p>
+    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto pb-32">
+      <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur px-5 pt-10 pb-4">
+        <div className="flex items-center gap-3">
+          <motion.button
+            whileTap={{ scale: 0.96 }}
+            onClick={() => navigate(-1)}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700"
+          >
+            <ArrowLeft size={18} />
+          </motion.button>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-slate-500">Intercity booking</p>
+            <h1 className="truncate text-lg font-semibold text-slate-900">{toCity}</h1>
+          </div>
         </div>
       </div>
 
-      <div className="px-5 pt-5 space-y-5">
-        <div className="bg-white rounded-[24px] p-5 border border-gray-50 shadow-sm flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center">
-              <Users size={18} className="text-gray-500" strokeWidth={2.5} />
-            </div>
+      <div className="space-y-5 px-5 py-5">
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[14px] font-black text-gray-900 leading-tight">Total Passengers</p>
-              <p className="text-[11px] font-bold text-gray-400">
-                Max {selectedVehicle?.seats || 1} for {selectedVehicle?.name || 'selected vehicle'}
-              </p>
+              <p className="text-sm font-medium text-slate-500">Route</p>
+              <h2 className="mt-1 text-xl font-semibold text-slate-900">{fromCity} to {toCity}</h2>
+            </div>
+            <div className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+              {selectedPackages.length} package{selectedPackages.length === 1 ? '' : 's'}
             </div>
           </div>
-          <div className="flex items-center gap-3 bg-gray-50 rounded-full p-1 border border-gray-100">
+          {pickupAddress ? (
+            <div className="mt-4 flex items-start gap-2 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              <MapPin size={16} className="mt-0.5 shrink-0 text-blue-600" />
+              <span className="line-clamp-2">{pickupAddress}</span>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-semibold text-slate-900">Trip details</h3>
+              <p className="mt-1 text-sm text-slate-500">Choose how and when this trip should run.</p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            {['One Way', 'Round Trip'].map((type) => {
+              const active = tripType === type;
+              return (
+                <button
+                  type="button"
+                  key={type}
+                  onClick={() => setTripType(type)}
+                  className={`rounded-2xl border px-4 py-3 text-sm font-medium transition ${
+                    active
+                      ? 'border-blue-600 bg-blue-50 text-blue-700'
+                      : 'border-slate-200 bg-white text-slate-700'
+                  }`}
+                >
+                  {type}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-3">
             <button
-              onClick={() => setPassengers((current) => Math.max(1, current - 1))}
-              className="w-8 h-8 bg-white rounded-full text-gray-600 font-black flex items-center justify-center active:scale-90 transition-all shadow-sm"
+              type="button"
+              onClick={() => setRideMode('now')}
+              className={`flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-medium transition ${
+                rideMode === 'now'
+                  ? 'border-blue-600 bg-blue-50 text-blue-700'
+                  : 'border-slate-200 bg-white text-slate-700'
+              }`}
             >
-              -
+              <Clock3 size={16} />
+              Ride now
             </button>
-            <span className="text-[16px] font-black text-gray-900 w-5 text-center">{passengers}</span>
             <button
-              onClick={() => setPassengers((current) => Math.min(selectedVehicle?.seats || 1, current + 1))}
-              className="w-8 h-8 bg-white rounded-full text-gray-600 font-black flex items-center justify-center active:scale-90 transition-all shadow-sm"
+              type="button"
+              onClick={() => setRideMode('schedule')}
+              className={`flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-medium transition ${
+                rideMode === 'schedule'
+                  ? 'border-blue-600 bg-blue-50 text-blue-700'
+                  : 'border-slate-200 bg-white text-slate-700'
+              }`}
             >
-              +
+              <Calendar size={16} />
+              Schedule
             </button>
           </div>
-        </div>
 
-        <div className="space-y-3">
-          <h3 className="text-[16px] font-black text-gray-900 ml-1">Available Vehicles</h3>
+          {rideMode === 'schedule' ? (
+            <div className="mt-4">
+              <label className="mb-2 block text-sm font-medium text-slate-700">Travel date</label>
+              <input
+                type="date"
+                min={new Date().toISOString().split('T')[0]}
+                value={travelDate}
+                onChange={(event) => setTravelDate(event.target.value)}
+                className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none focus:border-blue-500"
+              />
+            </div>
+          ) : null}
 
-          {isLoadingVehicles ? (
-            <div className="rounded-[22px] border border-gray-100 bg-white px-4 py-8 shadow-sm flex items-center justify-center gap-3">
-              <LoaderCircle size={18} className="animate-spin text-gray-400" />
-              <span className="text-[12px] font-black text-gray-500 uppercase tracking-wider">Loading vehicles</span>
+          <div className="mt-4 flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <Users size={16} className="text-slate-500" />
+              <div>
+                <p className="text-sm font-medium text-slate-900">Passengers</p>
+                <p className="text-xs text-slate-500">Up to {selectedVehicle?.seats || 1} seats</p>
+              </div>
             </div>
-          ) : vehicleLoadError ? (
-            <div className="rounded-[22px] border border-red-100 bg-white px-4 py-5 shadow-sm">
-              <p className="text-[13px] font-black text-gray-900">Could not load vehicles</p>
-              <p className="mt-1 text-[11px] font-bold text-red-400">{vehicleLoadError}</p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPassengers((current) => Math.max(1, current - 1))}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-lg text-slate-700"
+              >
+                -
+              </button>
+              <span className="w-8 text-center text-base font-semibold text-slate-900">{passengers}</span>
+              <button
+                type="button"
+                onClick={() => setPassengers((current) => Math.min(selectedVehicle?.seats || 1, current + 1))}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-lg text-slate-700"
+              >
+                +
+              </button>
             </div>
-          ) : vehicles.length === 0 ? (
-            <div className="rounded-[22px] border border-gray-100 bg-white px-4 py-5 shadow-sm">
-              <p className="text-[13px] font-black text-gray-900">No vehicle types available</p>
-              <p className="mt-1 text-[11px] font-bold text-gray-400">Add active taxi vehicle types in the admin catalog to show them here.</p>
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-semibold text-slate-900">Choose vehicle</h3>
+              <p className="mt-1 text-sm text-slate-500">Only vehicles mapped to this package are shown.</p>
+            </div>
+          </div>
+
+          {vehicles.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                <Info size={20} />
+              </div>
+              <p className="text-sm font-medium text-slate-900">No vehicles available</p>
+              <p className="mt-1 text-sm text-slate-500">Try another destination or package.</p>
             </div>
           ) : (
             vehicles.map((vehicle) => {
-              const vehicleFare = tripType === 'Round Trip'
-                ? Math.round((vehicle.baseFare + vehicle.pricePerKm * safeDistance) * 1.8)
-                : Math.round(vehicle.baseFare + vehicle.pricePerKm * safeDistance);
+              const vehicleFare = calculateFare(vehicle, tripType);
+              const isActive = selectedVehicleId === vehicle.id;
 
               return (
-                <motion.button
+                <button
+                  type="button"
                   key={vehicle.id}
-                  whileTap={{ scale: 0.98 }}
                   onClick={() => {
                     setSelectedVehicleId(vehicle.id);
                     if (passengers > vehicle.seats) {
                       setPassengers(vehicle.seats);
                     }
                   }}
-                  className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-all text-left ${
-                    selectedVehicleId === vehicle.id
-                      ? 'border-yellow-400 bg-yellow-50/30 shadow-md shadow-yellow-100/30'
-                      : 'border-gray-100 bg-white'
+                  className={`w-full rounded-3xl border p-4 text-left transition ${
+                    isActive
+                      ? 'border-blue-600 bg-blue-50/60 shadow-sm'
+                      : 'border-slate-200 bg-white'
                   }`}
                 >
-                  <div className="w-16 h-14 rounded-[16px] bg-gray-50 border border-gray-100 overflow-hidden flex items-center justify-center shrink-0">
-                    <img src={vehicle.icon} alt={vehicle.name} className="h-full w-full object-contain" draggable={false} />
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white">
+                      <img src={vehicle.icon} alt={vehicle.name} className="h-10 w-10 object-contain" draggable={false} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <h4 className="truncate text-base font-semibold text-slate-900">{vehicle.name}</h4>
+                          <p className="mt-1 text-sm text-slate-500">{vehicle.seats} seats · {vehicle.packageTypeName}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-semibold text-slate-900">Rs {vehicleFare.toLocaleString()}</p>
+                          <p className="text-xs text-slate-500">estimated</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-[15px] font-black text-gray-900 leading-none">{vehicle.name}</h4>
-                    <p className="text-[12px] font-bold text-gray-400 mt-1 truncate">{vehicle.desc}</p>
-                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-wider mt-1">{vehicle.seats} seats</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className={`text-[16px] font-black ${selectedVehicleId === vehicle.id ? 'text-yellow-600' : 'text-gray-900'}`}>
-                      Rs {vehicleFare.toLocaleString()}
-                    </p>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase">{tripType}</p>
-                  </div>
-                </motion.button>
+                </button>
               );
             })
           )}
-        </div>
+        </section>
       </div>
 
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 pb-6 pt-3 bg-gradient-to-t from-[#F8F9FB] via-[#F8F9FB]/95 to-transparent z-30">
-        <div className="bg-[#1C2833] rounded-[32px] p-6 text-white space-y-4 shadow-2xl">
-          <div className="flex justify-between items-center">
-            <div>
-              <p className="text-[11px] font-black text-white/40 uppercase tracking-widest">Estimated Fare</p>
-              <p className="text-[28px] font-black tracking-tight mt-1 text-yellow-400">Rs {finalFare.toLocaleString()}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-[11px] font-black text-white/40 uppercase tracking-widest">Base Distance</p>
-              <p className="text-[15px] font-black">{safeDistance} km</p>
-            </div>
+      <div className="fixed bottom-0 left-1/2 w-full max-w-lg -translate-x-1/2 border-t border-slate-200 bg-white px-5 py-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-medium text-slate-500">{tripType} · {getDisplayDate(rideMode, travelDate)}</p>
+            <p className="mt-1 text-xl font-semibold text-slate-900">Rs {finalFare.toLocaleString()}</p>
           </div>
           <motion.button
-            whileTap={{ scale: 0.97 }}
+            type="button"
+            whileTap={{ scale: 0.98 }}
             onClick={handleContinue}
             disabled={!selectedVehicle}
-            className="w-full bg-yellow-400 text-[#1C2833] py-4 rounded-2xl text-[16px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all disabled:opacity-60"
+            className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 text-sm font-medium text-white disabled:opacity-50"
           >
-            Enter Exact Details <ChevronRight size={18} strokeWidth={3} />
+            Continue
+            <ChevronRight size={16} />
           </motion.button>
         </div>
       </div>

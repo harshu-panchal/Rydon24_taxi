@@ -1219,6 +1219,18 @@ function App() {
                     element={<AdminCreatePackagePrice mode="edit" />}
                   />
                   <Route
+                    path="package-pricing"
+                    element={<AdminSetPackagePrices />}
+                  />
+                  <Route
+                    path="package-pricing/create"
+                    element={<AdminCreatePackagePrice mode="create" />}
+                  />
+                  <Route
+                    path="package-pricing/edit/:packageId"
+                    element={<AdminCreatePackagePrice mode="edit" />}
+                  />
+                  <Route
                     path="set-price/incentive/:id"
                     element={<AdminDriverIncentive />}
                   />

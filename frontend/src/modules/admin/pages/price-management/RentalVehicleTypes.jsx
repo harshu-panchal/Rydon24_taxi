@@ -167,10 +167,19 @@ const fileToDataUrl = (file) =>
     reader.readAsDataURL(file);
   });
 
-const getCoverImage = (item = {}) => item.coverImage || item.image || '';
+const normalizeMediaValue = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    return value.url || value.image || value.src || value.path || '';
+  }
+  return '';
+};
+
+const getCoverImage = (item = {}) => normalizeMediaValue(item.coverImage) || normalizeMediaValue(item.image) || '';
 const getGalleryImages = (item = {}) => {
-  if (Array.isArray(item.galleryImages)) return item.galleryImages.filter(Boolean);
-  if (Array.isArray(item.gallery)) return item.gallery.filter(Boolean);
+  if (Array.isArray(item.galleryImages)) return item.galleryImages.map(normalizeMediaValue).filter(Boolean);
+  if (Array.isArray(item.gallery)) return item.gallery.map(normalizeMediaValue).filter(Boolean);
   return [];
 };
 

@@ -573,8 +573,8 @@ export const toggleZoneStatus = asyncHandler(async (req, res) =>
   ok(res, await adminService.toggleZoneStatus(req.params.id)),
 );
 
-export const getSetPrices = asyncHandler(async (_req, res) => {
-  const data = await adminService.listSetPrices();
+export const getSetPrices = asyncHandler(async (req, res) => {
+  const data = await adminService.listSetPrices(req.query || {});
   res.json({ success: true, ...data });
 });
 export const createSetPrice = asyncHandler(async (req, res) =>

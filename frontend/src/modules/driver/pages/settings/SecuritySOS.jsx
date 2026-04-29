@@ -249,7 +249,7 @@ const SecuritySOS = () => {
           <div className="relative z-10 space-y-4">
             <div className="flex items-start justify-between">
               <div className="space-y-1">
-                <h3 className="text-[14px] font-black uppercase tracking-widest text-rose-500">Panic SOS</h3>
+                <h3 className="text-[14px] font-black uppercase tracking-widest text-rose-500"> SOS</h3>
                 <p className="text-[20px] font-black tracking-tighter">Emergency Contacts</p>
               </div>
               <div className="w-12 h-12 bg-rose-500 text-white rounded-2xl flex items-center justify-center shadow-xl shadow-rose-500/5 transition-transform group-hover:scale-110">

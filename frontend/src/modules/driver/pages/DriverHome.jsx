@@ -334,6 +334,7 @@ const isExpiredDateValue = (value) => {
 
 const DRIVER_ROUTE_BOOKING_STORAGE_KEY = 'driver_route_booking_preferences';
 const DRIVER_VEHICLE_REAPPROVAL_PENDING_KEY = 'driver_vehicle_reapproval_pending';
+const getTodaySelfieKey = () => new Date().toISOString().slice(0, 10);
 
 const readRouteBookingPreferences = () => {
     try {
@@ -343,6 +344,13 @@ const readRouteBookingPreferences = () => {
         return { enabled: false, coordinates: null };
     }
 };
+
+const isDriverVehicleApprovalPending = (driver = {}) =>
+    driver?.approve === false || String(driver?.status || '').toLowerCase() === 'pending';
+
+const hasSelfieForToday = (onlineSelfie = null) =>
+    String(onlineSelfie?.forDate || '').trim() === getTodaySelfieKey() &&
+    Boolean(String(onlineSelfie?.imageUrl || '').trim());
 
 const mapStyles = [
   { "elementType": "geometry", "stylers": [{ "color": "#f5f5f5" }] },
@@ -417,6 +425,7 @@ const DriverHome = () => {
     const currentRequestRef = useRef(null);
     const recoveryTimeoutsRef = useRef([]);
     const recoveryInFlightRef = useRef(false);
+    const lastDutyToggleAtRef = useRef(0);
     const driverPosition = useMemo(() => toLatLng(driverCoords || DEFAULT_MAP_COORDS), [driverCoords]);
     const mapVehicleIcon = useMemo(
         () => getMapIconForVehicle(vehicleIconUrl || vehicleIconType),
@@ -642,6 +651,13 @@ const DriverHome = () => {
         }
         setOnlineSelfie(driver?.onlineSelfie || null);
         setDriverDocuments(driver?.documents || {});
+        const nextVehicleApprovalPending = isDriverVehicleApprovalPending(driver);
+        setVehicleReapprovalPending(nextVehicleApprovalPending);
+        if (nextVehicleApprovalPending) {
+            localStorage.setItem(DRIVER_VEHICLE_REAPPROVAL_PENDING_KEY, 'true');
+        } else {
+            localStorage.removeItem(DRIVER_VEHICLE_REAPPROVAL_PENDING_KEY);
+        }
         const templateResults = templateResponse?.data?.data?.results || templateResponse?.data?.results || [];
         setDocumentTemplates(Array.isArray(templateResults) ? templateResults : []);
 
@@ -881,12 +897,25 @@ const DriverHome = () => {
     }, []);
 
     const handleDutyToggle = useCallback(() => {
-        if (isHydratingDriver || isTogglingDuty) {
+        const now = Date.now();
+        if (now - lastDutyToggleAtRef.current < 600) {
+            return;
+        }
+        lastDutyToggleAtRef.current = now;
+
+        if (isTogglingDuty) {
             return;
         }
 
+        setStatusMessage(isOnline ? 'Preparing to go offline...' : 'Checking online requirements...');
+
         if (isOnline) {
             setShowOfflineConfirm(true);
+            return;
+        }
+
+        if (hasSelfieForToday(onlineSelfie)) {
+            goOnline();
             return;
         }
 
@@ -894,7 +923,7 @@ const DriverHome = () => {
         setShowSelfieCameraCapture(false);
         stopSelfieCameraStream();
         setShowOnlineSelfiePrompt(true);
-    }, [isHydratingDriver, isOnline, isTogglingDuty, stopSelfieCameraStream]);
+    }, [goOnline, isOnline, isTogglingDuty, onlineSelfie, stopSelfieCameraStream]);
 
     const uploadSelfieDataUrl = useCallback(async (sourceDataUrl) => {
         setSelfieUploading(true);
@@ -1634,13 +1663,25 @@ const DriverHome = () => {
             </div>
 
             {/* --- BOTTOM FLOATING UI --- */}
-            <div className="fixed bottom-20 left-0 right-0 p-6 pb-4 z-40 flex flex-col pointer-events-none max-w-md mx-auto">
+            <div className="fixed bottom-20 left-0 right-0 p-6 pb-4 z-[60] flex flex-col max-w-md mx-auto">
+                <AnimatePresence>
+                    {statusMessage ? (
+                        <motion.div
+                            initial={{ opacity: 0, y: 10, scale: 0.96 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 10, scale: 0.96 }}
+                            className="mb-4 self-center max-w-[280px] rounded-2xl bg-slate-900/92 px-4 py-3 text-center shadow-2xl backdrop-blur"
+                        >
+                            <p className="text-[12px] font-bold leading-relaxed text-white">{statusMessage}</p>
+                        </motion.div>
+                    ) : null}
+                </AnimatePresence>
                 
                 <div className="flex items-end justify-center w-full">
                     {/* MAIN "GO" BUTTON */}
                     <motion.div 
                         layout
-                        className="relative pointer-events-auto"
+                        className="relative"
                     >
                         <AnimatePresence>
                             {isOnline && (
@@ -1662,29 +1703,45 @@ const DriverHome = () => {
                         </AnimatePresence>
                         
                         <motion.button 
+                            type="button"
                             whileTap={{ scale: 0.9 }}
-                            disabled={isHydratingDriver || isTogglingDuty}
+                            disabled={isTogglingDuty}
                             onClick={handleDutyToggle}
+                            onPointerUp={(event) => {
+                                if (!isTogglingDuty) {
+                                    event.preventDefault();
+                                    handleDutyToggle();
+                                }
+                            }}
+                            onTouchEnd={(event) => {
+                                if (!isTogglingDuty) {
+                                    event.preventDefault();
+                                    handleDutyToggle();
+                                }
+                            }}
+                            onMouseUp={() => {
+                                if (!isTogglingDuty) {
+                                    handleDutyToggle();
+                                }
+                            }}
+                            onKeyUp={(event) => {
+                                if ((event.key === 'Enter' || event.key === ' ') && !isTogglingDuty) {
+                                    handleDutyToggle();
+                                }
+                            }}
                             className={`
                                 relative w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transition-all duration-500 z-10
                                 ${isOnline 
                                     ? 'bg-rose-500 hover:bg-rose-600 ring-8 ring-rose-500/10 shadow-rose-200' 
                                     : 'bg-blue-600 hover:bg-blue-700 ring-8 ring-blue-600/10 shadow-blue-200'}
                                 overflow-hidden
-                                ${(isHydratingDriver || isTogglingDuty) ? 'opacity-90' : ''}
+                                cursor-pointer pointer-events-auto
+                                ${isTogglingDuty ? 'opacity-90' : ''}
                             `}
+                            style={{ touchAction: 'manipulation' }}
                         >
                             <AnimatePresence mode="wait">
-                                {isHydratingDriver ? (
-                                    <motion.div
-                                        key="loader"
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        exit={{ opacity: 0 }}
-                                    >
-                                        <Zap className="text-white animate-pulse" size={32} />
-                                    </motion.div>
-                                ) : isOnline ? (
+                                {isOnline ? (
                                     <motion.span 
                                         key="off-text"
                                         initial={{ opacity: 0, y: 10 }}

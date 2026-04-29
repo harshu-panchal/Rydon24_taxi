@@ -1,9 +1,10 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, MapPin, Navigation, ChevronRight, Map as MapIcon, LoaderCircle, AlertTriangle, X, Check } from 'lucide-react';
-import { GoogleMap } from '@react-google-maps/api';
+import { ArrowLeft, MapPin, Navigation, ChevronRight, Map as MapIcon, LoaderCircle, AlertTriangle, X, Check, ShieldCheck, MapPinned } from 'lucide-react';
+import { GoogleMap, Autocomplete } from '@react-google-maps/api';
 import { HAS_VALID_GOOGLE_MAPS_KEY, INDIA_CENTER, useAppGoogleMapsLoader } from '../../../admin/utils/googleMaps';
+import api from '../../../../shared/api/axiosInstance';
 
 const CITY_CENTERS = {
   Indore: { lat: 22.7196, lng: 75.8577 },
@@ -22,16 +23,24 @@ const getCityCoords = (city) => {
   const center = getCityCenter(city);
   return [center.lng, center.lat];
 };
+const unwrapApiPayload = (response) => response?.data?.data || response?.data || response || {};
+
+const generateIntercityBookingId = () =>
+  'IC-' + Math.random().toString(36).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6).padEnd(6, '0');
+
+const generateSearchNonce = () =>
+  `intercity-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
 const IntercityDetails = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
   const state = location.state || {};
   const { fromCity, toCity, vehicle } = state;
 
-  const [pickup, setPickup] = useState('');
+  const [pickup, setPickup] = useState(state.pickupAddress || '');
   const [drop, setDrop] = useState('');
-  const [pickupCoords, setPickupCoords] = useState(null);
+  const [pickupCoords, setPickupCoords] = useState(state.pickupCoords || null);
   const [dropCoords, setDropCoords] = useState(null);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [activeMapField, setActiveMapField] = useState('pickup');
@@ -44,25 +53,186 @@ const IntercityDetails = () => {
   const lastCenterRef = useRef(INDIA_CENTER);
   const { isLoaded, loadError } = useAppGoogleMapsLoader();
 
+  const [autocompletePickup, setAutocompletePickup] = useState(null);
+  const [autocompleteDrop, setAutocompleteDrop] = useState(null);
+  const [liveDriverCount, setLiveDriverCount] = useState(0);
+  const [isFetchingDrivers, setIsFetchingDrivers] = useState(false);
+  const [driverFetchError, setDriverFetchError] = useState('');
+  const [isProceeding, setIsProceeding] = useState(false);
+  const serviceLocationId = useMemo(
+    () => state.serviceLocationId || state.selectedPackages?.[0]?.serviceLocationId || '',
+    [state.serviceLocationId, state.selectedPackages]
+  );
+
+  const effectivePickupCoords = useMemo(
+    () => pickupCoords || state.pickupCoords || getCityCoords(fromCity),
+    [fromCity, pickupCoords, state.pickupCoords]
+  );
+
+  useEffect(() => {
+    if (!fromCity || !vehicle) {
+      navigate(`${routePrefix}/intercity`, { replace: true });
+    }
+  }, [fromCity, navigate, routePrefix, vehicle]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadNearbyDrivers = async () => {
+      if (!vehicle?.vehicleTypeId || !Array.isArray(effectivePickupCoords)) {
+        if (active) {
+          setLiveDriverCount(0);
+          setDriverFetchError('');
+          setIsFetchingDrivers(false);
+        }
+        return;
+      }
+
+      try {
+        if (active) {
+          setIsFetchingDrivers(true);
+          setDriverFetchError('');
+        }
+
+        const response = await api.get('/rides/available-drivers', {
+          params: {
+            vehicleTypeId: vehicle.vehicleTypeId,
+            vehicleIconType: vehicle.iconType || vehicle.name || 'car',
+            lng: effectivePickupCoords[0],
+            lat: effectivePickupCoords[1],
+            service_location_id: serviceLocationId,
+            transport_type: 'intercity',
+          },
+        });
+
+        if (!active) {
+          return;
+        }
+
+        const availability = unwrapApiPayload(response);
+        setLiveDriverCount(Number(availability?.totalDrivers || 0));
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        setLiveDriverCount(0);
+        setDriverFetchError(error?.message || 'Could not fetch live driver availability.');
+      } finally {
+        if (active) {
+          setIsFetchingDrivers(false);
+        }
+      }
+    };
+
+    loadNearbyDrivers();
+
+    return () => {
+      active = false;
+    };
+  }, [effectivePickupCoords, serviceLocationId, vehicle]);
+
   if (!fromCity || !vehicle) {
-    navigate('/intercity');
     return null;
   }
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!pickup.trim() || !drop.trim()) {
       alert("Please enter both exact pickup and drop locations within the selected cities.");
       return;
     }
-    navigate('/intercity/confirm', {
+
+    const nextPickupCoords = pickupCoords || getCityCoords(fromCity);
+    const nextDropCoords = dropCoords || getCityCoords(toCity);
+    const bookingId = state.bookingId || generateIntercityBookingId();
+    let availabilitySnapshot = {
+      totalDrivers: liveDriverCount,
+      fetchedAt: new Date().toISOString(),
+    };
+
+    if (vehicle?.vehicleTypeId && Array.isArray(nextPickupCoords)) {
+      try {
+        setIsProceeding(true);
+        setDriverFetchError('');
+        const response = await api.get('/rides/available-drivers', {
+          params: {
+            vehicleTypeId: vehicle.vehicleTypeId,
+            vehicleIconType: vehicle.iconType || vehicle.name || 'car',
+            lng: nextPickupCoords[0],
+            lat: nextPickupCoords[1],
+            service_location_id: serviceLocationId,
+            transport_type: 'intercity',
+          },
+        });
+        const availability = unwrapApiPayload(response);
+
+        availabilitySnapshot = {
+          ...availability,
+          totalDrivers: Number(availability?.totalDrivers || 0),
+          fetchedAt: new Date().toISOString(),
+        };
+        setLiveDriverCount(Number(availability?.totalDrivers || 0));
+      } catch (error) {
+        setDriverFetchError(error?.message || 'Could not fetch live driver availability.');
+      } finally {
+        setIsProceeding(false);
+      }
+    }
+
+    navigate(`${routePrefix}/ride/searching`, {
       state: {
         ...state,
+        bookingId,
         pickup,
         drop,
-        pickupCoords: pickupCoords || getCityCoords(fromCity),
-        dropCoords: dropCoords || getCityCoords(toCity),
+        pickupCoords: nextPickupCoords,
+        dropCoords: nextDropCoords,
+        searchNonce: generateSearchNonce(),
+        vehicleTypeId: vehicle.vehicleTypeId || '',
+        vehicleIconType: vehicle.iconType || vehicle.name || 'car',
+        vehicleIconUrl: vehicle.vehicleIconUrl || vehicle.icon || '',
+        paymentMethod: 'Cash',
+        serviceType: 'intercity',
+        transport_type: 'intercity',
+        intercity: {
+          bookingId,
+          fromCity,
+          toCity,
+          tripType: state.tripType || 'One Way',
+          travelDate: state.date || 'Ride Now',
+          passengers: state.passengers || 1,
+          distance: Number(state.distance || 0),
+          vehicleName: vehicle.name || vehicle.id || 'Intercity Cab',
+          packageId: vehicle.packageId || '',
+          packageTypeName: vehicle.packageTypeName || 'Intercity',
+        },
+        driverAvailability: availabilitySnapshot,
       }
     });
+  };
+
+  const handlePickupPlaceChanged = () => {
+    if (autocompletePickup) {
+      const place = autocompletePickup.getPlace();
+      if (place && place.formatted_address) {
+        setPickup(place.formatted_address);
+        if (place.geometry) {
+          setPickupCoords([place.geometry.location.lng(), place.geometry.location.lat()]);
+        }
+      }
+    }
+  };
+
+  const handleDropPlaceChanged = () => {
+    if (autocompleteDrop) {
+      const place = autocompleteDrop.getPlace();
+      if (place && place.formatted_address) {
+        setDrop(place.formatted_address);
+        if (place.geometry) {
+          setDropCoords([place.geometry.location.lng(), place.geometry.location.lat()]);
+        }
+      }
+    }
   };
 
   const openMapPicker = (field) => {
@@ -76,7 +246,7 @@ const IntercityDetails = () => {
     setActiveMapField(field);
     setMapCenter(center);
     lastCenterRef.current = center;
-    setPickedAddress(savedAddress || `${field === 'pickup' ? fromCity : toCity} location`);
+    setPickedAddress(savedAddress || (field === 'pickup' ? `${fromCity} location` : toCity));
     setShowMapPicker(true);
   };
 
@@ -144,7 +314,7 @@ const IntercityDetails = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FB] max-w-lg mx-auto font-sans pb-32">
+    <div className="min-h-screen bg-[#FAFBFF] max-w-lg mx-auto font-sans pb-32 relative overflow-x-hidden">
       <AnimatePresence>
         {showMapPicker && (
           <motion.div
@@ -153,33 +323,41 @@ const IntercityDetails = () => {
             exit={{ opacity: 0, y: '100%' }}
             className="fixed inset-0 z-[100] bg-white flex flex-col max-w-lg mx-auto"
           >
-            <div className="absolute top-0 left-0 right-0 z-20 px-5 pt-10 pb-4 bg-gradient-to-b from-white via-white/85 to-transparent">
+            <div className="absolute top-0 left-0 right-0 z-20 px-6 pt-12 pb-6 bg-gradient-to-b from-white via-white/95 to-transparent">
               <div className="flex items-center gap-3">
-                <button
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
                   onClick={() => setShowMapPicker(false)}
-                  className="w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center border border-slate-100 active:scale-95 transition-all"
+                  className="w-10 h-10 bg-white rounded-2xl shadow-sm flex items-center justify-center border border-slate-100 active:scale-95 transition-all"
                 >
                   <ArrowLeft size={20} className="text-slate-900" strokeWidth={2.5} />
-                </button>
-                <div className="flex-1 bg-white rounded-2xl shadow-lg border border-slate-100 px-4 py-3 min-w-0">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">
+                </motion.button>
+                <div className="flex-1 bg-white rounded-[24px] shadow-lg border border-indigo-50 px-5 py-4 min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 mb-1">
                     {activeMapField === 'pickup' ? `Pickup in ${fromCity}` : `Drop in ${toCity}`}
                   </p>
                   <p className="text-[14px] font-bold text-slate-900 truncate leading-tight">
-                    {isGeocoding ? 'Finding address...' : pickedAddress}
+                    {isGeocoding ? 'Finding exact address...' : pickedAddress}
                   </p>
                 </div>
               </div>
+              {activeMapField === 'drop' && (
+                <div className="mt-3 ml-[52px] rounded-2xl border border-indigo-100 bg-white/95 px-4 py-3 shadow-sm">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600">Initial Destination</p>
+                  <p className="mt-1 text-[13px] font-bold text-slate-900 truncate">{toCity}</p>
+                </div>
+              )}
             </div>
 
-            <div className="flex-1 relative bg-slate-200">
+            <div className="flex-1 relative bg-slate-100">
+              {/* Map Logic (same as before) */}
               {!HAS_VALID_GOOGLE_MAPS_KEY ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 px-6 text-center">
-                  <div className="rounded-3xl bg-white px-8 py-10 shadow-xl border border-slate-100">
+                  <div className="rounded-[32px] bg-white px-8 py-10 shadow-xl border border-slate-100 max-w-[300px]">
                     <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
                       <X size={32} className="text-rose-400" />
                     </div>
-                    <p className="text-[16px] font-black text-slate-900">Google Maps key missing</p>
+                    <p className="text-[16px] font-black text-slate-900">Map Key Missing</p>
                     <p className="mt-2 text-[13px] font-bold text-slate-500">
                       Add a valid maps key to select locations on the map.
                     </p>
@@ -187,11 +365,11 @@ const IntercityDetails = () => {
                 </div>
               ) : loadError ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 px-6 text-center">
-                  <div className="rounded-3xl bg-white px-8 py-10 shadow-xl border border-slate-100">
+                   <div className="rounded-[32px] bg-white px-8 py-10 shadow-xl border border-slate-100 max-w-[300px]">
                     <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
                       <AlertTriangle size={32} className="text-rose-400" />
                     </div>
-                    <p className="text-[16px] font-black text-slate-900">Map load failed</p>
+                    <p className="text-[16px] font-black text-slate-900">Map Load Failed</p>
                     <p className="mt-2 text-[13px] font-bold text-slate-500">
                       Please check the map API key and network connection.
                     </p>
@@ -213,160 +391,230 @@ const IntercityDetails = () => {
                 />
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-slate-50">
-                  <LoaderCircle size={44} className="animate-spin text-slate-300" />
-                  <p className="text-[12px] font-black uppercase tracking-[0.2em] text-slate-400 animate-pulse">Loading map</p>
+                  <LoaderCircle size={44} className="animate-spin text-blue-300" />
+                  <p className="text-[12px] font-black uppercase tracking-[0.2em] text-slate-400 animate-pulse">Syncing Map</p>
                 </div>
               )}
 
+              {/* Pin Overlay */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[100%] pointer-events-none z-10">
                 <motion.div
-                  animate={isDragging || isGeocoding ? { y: -12 } : { y: 0 }}
+                  animate={isDragging || isGeocoding ? { y: -15 } : { y: 0 }}
                   transition={{ type: 'spring', stiffness: 300, damping: 20 }}
                   className="flex flex-col items-center"
                 >
-                  <div className="w-10 h-10 bg-[#1C2833] rounded-2xl flex items-center justify-center shadow-2xl rotate-45 border-2 border-white">
-                    <div className="-rotate-45">
-                      <MapIcon size={18} className="text-yellow-400" />
-                    </div>
+                  <div className="w-12 h-12 bg-blue-600 rounded-[18px] flex items-center justify-center shadow-2xl border-4 border-white">
+                    <MapPinned size={20} className="text-white" />
                   </div>
-                  <div className="w-1 h-5 bg-[#1C2833] -mt-2 shadow-2xl" />
+                  <div className="w-1 h-6 bg-blue-600 -mt-2 shadow-2xl" />
                 </motion.div>
-                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-1 bg-black/30 rounded-full blur-sm" />
+                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-black/20 rounded-full blur-md" />
               </div>
 
               <button
                 onClick={handleUseCurrentLocation}
                 disabled={isLocating}
-                className="absolute bottom-6 right-5 w-12 h-12 bg-white rounded-2xl shadow-xl flex items-center justify-center border border-slate-100 active:scale-90 transition-all z-20 disabled:opacity-70"
+                className="absolute bottom-10 right-6 w-14 h-14 bg-white rounded-2xl shadow-xl flex items-center justify-center border border-slate-100 active:scale-90 transition-all z-20 disabled:opacity-70"
               >
                 {isLocating ? (
-                  <LoaderCircle size={20} className="animate-spin text-slate-400" />
+                  <LoaderCircle size={24} className="animate-spin text-blue-500" />
                 ) : (
-                  <Navigation size={20} className="text-[#1C2833]" />
+                  <Navigation size={24} className="text-slate-900" />
                 )}
               </button>
             </div>
 
-            <div className="px-5 pt-4 pb-10 bg-white border-t border-slate-50 space-y-4">
-              <div className="flex items-center gap-3 py-1 px-1">
-                <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
-                  <MapPin size={20} className="text-slate-400" />
+            <div className="px-6 pt-6 pb-12 bg-white border-t border-indigo-50 space-y-5">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center shrink-0 border border-blue-100">
+                  <MapPin size={24} className="text-blue-600" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h4 className="text-[15px] font-black text-slate-900 leading-none">Confirm Exact Spot</h4>
-                  <p className="text-[12px] font-bold text-slate-400 mt-1 line-clamp-1">{pickedAddress}</p>
+                  <h4 className="text-[16px] font-black text-slate-900 leading-none">Confirm Spot</h4>
+                  <p className="text-[13px] font-bold text-slate-400 mt-1.5 line-clamp-1">{pickedAddress}</p>
                 </div>
               </div>
-              <button
+              <motion.button
+                whileTap={{ scale: 0.98 }}
                 onClick={handleConfirmMapLocation}
                 disabled={isGeocoding}
-                className="w-full bg-yellow-400 py-4 rounded-3xl text-[#1C2833] font-black text-[15px] shadow-xl shadow-yellow-100 flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-60"
+                className="w-full h-16 bg-blue-600 rounded-[22px] text-white font-black text-[16px] uppercase tracking-widest shadow-xl shadow-blue-500/20 flex items-center justify-center gap-3 active:scale-95 transition-all disabled:opacity-40"
               >
-                <Check size={18} strokeWidth={3} />
-                Use This Location
-              </button>
+                <Check size={20} strokeWidth={3} />
+                Confirm Location
+              </motion.button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-       {/* Header */}
-       <div className="bg-white px-5 pt-10 pb-6 sticky top-0 z-20 shadow-sm border-b border-gray-50 flex items-center gap-4">
-        <button onClick={() => navigate(-1)} className="p-2 -ml-2 active:scale-90 transition-all">
-          <ArrowLeft size={24} className="text-gray-900" strokeWidth={2.5} />
-        </button>
-        <div>
-          <h1 className="text-[22px] font-black text-gray-900 leading-none tracking-tight">Exact Addresses</h1>
-          <p className="text-[12px] font-bold text-gray-400 mt-0.5 uppercase tracking-widest">{fromCity} to {toCity}</p>
+      {/* Main UI */}
+      <header className="bg-white/80 backdrop-blur-lg px-6 pt-12 pb-6 sticky top-0 z-30 border-b border-indigo-50 flex items-center gap-4">
+        <motion.button 
+          whileTap={{ scale: 0.9 }}
+          onClick={() => navigate(-1)} 
+          className="w-10 h-10 rounded-2xl bg-white shadow-sm flex items-center justify-center border border-gray-100"
+        >
+          <ArrowLeft size={20} className="text-slate-900" strokeWidth={2.5} />
+        </motion.button>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-[20px] font-black text-slate-900 leading-none tracking-tight">Location Details</h1>
+          <p className="text-[12px] font-bold text-slate-400 mt-1 uppercase tracking-widest truncate">{fromCity} → {toCity}</p>
+        </div>
+      </header>
+
+      <div className="px-6 pt-6 space-y-6">
+        {/* Address Entry Card */}
+        <div className="bg-white rounded-[32px] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.03)] border border-indigo-50 relative">
+          {/* Vertical dash line */}
+          <div className="absolute left-[39px] top-[74px] bottom-[74px] w-[2px] bg-slate-100 border-l border-dashed border-slate-200" />
+          
+          {/* Pickup Section */}
+          <div className="relative mb-10">
+            <label className="text-[11px] font-black text-blue-600 uppercase tracking-[0.15em] ml-11 block mb-2">Pickup in {fromCity}</label>
+            <div className="flex items-center gap-4">
+              <div className="w-8 h-8 rounded-full bg-blue-50 border-2 border-blue-100 flex items-center justify-center shrink-0 z-10">
+                <div className="w-2.5 h-2.5 bg-blue-500 rounded-full" />
+              </div>
+              {isLoaded && HAS_VALID_GOOGLE_MAPS_KEY ? (
+                <Autocomplete
+                  onLoad={setAutocompletePickup}
+                  onPlaceChanged={handlePickupPlaceChanged}
+                  options={{ componentRestrictions: { country: 'in' } }}
+                >
+                  <input 
+                    type="text" 
+                    placeholder="Building, street name, etc."
+                    value={pickup}
+                    onChange={e => {
+                      setPickup(e.target.value);
+                      setPickupCoords(null);
+                    }}
+                    className="w-full h-14 bg-slate-50 border-2 border-transparent rounded-2xl px-5 text-[15px] font-bold text-slate-900 focus:outline-none focus:border-blue-100 focus:bg-white transition-all"
+                  />
+                </Autocomplete>
+              ) : (
+                <input 
+                  type="text" 
+                  placeholder="Building, street name, etc."
+                  value={pickup}
+                  onChange={e => {
+                    setPickup(e.target.value);
+                    setPickupCoords(null);
+                  }}
+                  className="flex-1 h-14 bg-slate-50 border-2 border-transparent rounded-2xl px-5 text-[15px] font-bold text-slate-900 focus:outline-none focus:border-blue-100 focus:bg-white transition-all"
+                />
+              )}
+            </div>
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={() => openMapPicker('pickup')}
+              className="ml-12 mt-3 flex items-center gap-2 rounded-xl bg-blue-50 px-4 py-2 text-[12px] font-black text-blue-700 border border-blue-100/50"
+            >
+              <MapPinned size={14} /> Map Selection
+            </motion.button>
+          </div>
+
+          {/* Drop Section */}
+          <div className="relative">
+            <label className="text-[11px] font-black text-indigo-600 uppercase tracking-[0.15em] ml-11 block mb-2">Drop in {toCity}</label>
+            <div className="flex items-center gap-4">
+              <div className="w-8 h-8 rounded-full bg-indigo-50 border-2 border-indigo-100 flex items-center justify-center shrink-0 z-10">
+                <MapPin size={14} className="text-indigo-600" strokeWidth={3} />
+              </div>
+              {isLoaded && HAS_VALID_GOOGLE_MAPS_KEY ? (
+                <Autocomplete
+                  onLoad={setAutocompleteDrop}
+                  onPlaceChanged={handleDropPlaceChanged}
+                  options={{ componentRestrictions: { country: 'in' } }}
+                >
+                  <input 
+                    type="text" 
+                    placeholder="Station, mall, hotel name..."
+                    value={drop}
+                    onChange={e => {
+                      setDrop(e.target.value);
+                      setDropCoords(null);
+                    }}
+                    className="w-full h-14 bg-slate-50 border-2 border-transparent rounded-2xl px-5 text-[15px] font-bold text-slate-900 focus:outline-none focus:border-indigo-100 focus:bg-white transition-all"
+                  />
+                </Autocomplete>
+              ) : (
+                <input 
+                  type="text" 
+                  placeholder="Station, mall, hotel name..."
+                  value={drop}
+                  onChange={e => {
+                    setDrop(e.target.value);
+                    setDropCoords(null);
+                  }}
+                  className="flex-1 h-14 bg-slate-50 border-2 border-transparent rounded-2xl px-5 text-[15px] font-bold text-slate-900 focus:outline-none focus:border-indigo-100 focus:bg-white transition-all"
+                />
+              )}
+            </div>
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={() => openMapPicker('drop')}
+              className="ml-12 mt-3 flex items-center gap-2 rounded-xl bg-indigo-50 px-4 py-2 text-[12px] font-black text-indigo-700 border border-indigo-100/50"
+            >
+              <MapPinned size={14} /> Map Selection
+            </motion.button>
+
+          </div>
+        </div>
+
+        {/* Feature Tip */}
+        <div className="bg-slate-900 rounded-[32px] p-6 text-white flex items-center gap-5 shadow-xl shadow-slate-200">
+          <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center shrink-0 border border-white/5">
+            <ShieldCheck size={28} className="text-blue-400" />
+          </div>
+          <div>
+            <h4 className="text-[15px] font-black leading-tight">Doorstep Service</h4>
+            <p className="text-[11px] font-bold text-white/50 mt-1 uppercase tracking-widest leading-relaxed">Exact locations help drivers navigate directly to you.</p>
+          </div>
         </div>
       </div>
 
-      <div className="px-5 pt-5 space-y-5">
-         
-         <div className="bg-white rounded-[24px] p-5 shadow-sm border border-gray-50 flex flex-col gap-6 relative">
-            {/* Connecting line */}
-            <div className="absolute left-[33px] top-[48px] bottom-[48px] w-0.5 bg-gray-100 border-l border-dashed border-gray-300" />
-            
-            {/* Pickup */}
-            <div className="relative">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 pl-8">Pickup in {fromCity}</label>
-                <div className="mt-1.5 flex items-center gap-3">
-                   <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center shrink-0 border border-green-200 z-10">
-                      <div className="w-2 h-2 bg-green-500 rounded-full" />
-                   </div>
-                   <input 
-                      type="text" 
-                      placeholder="e.g. 102 Apollo Tower, MG Road"
-                      value={pickup}
-                      onChange={e => {
-                        setPickup(e.target.value);
-                        setPickupCoords(null);
-                      }}
-                      className="flex-1 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3.5 text-[14px] font-bold text-gray-900 focus:outline-none focus:border-yellow-400 transition-colors"
-                   />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => openMapPicker('pickup')}
-                  className="ml-9 mt-3 inline-flex items-center gap-2 rounded-2xl border border-green-100 bg-green-50 px-4 py-2 text-[12px] font-black text-green-700 active:scale-95 transition-all"
-                >
-                  <MapIcon size={15} strokeWidth={2.8} />
-                  Select pickup on map
-                </button>
-            </div>
-
-            {/* Drop */}
-            <div className="relative">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 pl-8">Drop in {toCity}</label>
-                <div className="mt-1.5 flex items-center gap-3">
-                   <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center shrink-0 border border-red-200 z-10">
-                      <MapPin size={12} className="text-red-500" strokeWidth={3} />
-                   </div>
-                   <input 
-                      type="text" 
-                      placeholder="e.g. Railway Station Main Gate, Platform 1"
-                      value={drop}
-                      onChange={e => {
-                        setDrop(e.target.value);
-                        setDropCoords(null);
-                      }}
-                      className="flex-1 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3.5 text-[14px] font-bold text-gray-900 focus:outline-none focus:border-yellow-400 transition-colors"
-                   />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => openMapPicker('drop')}
-                  className="ml-9 mt-3 inline-flex items-center gap-2 rounded-2xl border border-red-100 bg-red-50 px-4 py-2 text-[12px] font-black text-red-600 active:scale-95 transition-all"
-                >
-                  <MapIcon size={15} strokeWidth={2.8} />
-                  Select drop on map
-                </button>
-            </div>
-
-         </div>
-
-         <div className="bg-[#1C2833] rounded-[24px] p-4 flex items-center gap-4 text-white shadow-md">
-            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center shrink-0">
-               <Navigation size={20} className="text-yellow-400" />
-            </div>
-            <div>
-               <p className="text-[13px] font-black leading-tight">Door-to-Door Service</p>
-               <p className="text-[10px] font-bold text-white/50 mt-0.5">Your driver will pick you up and drop you exactly at these locations.</p>
-            </div>
-         </div>
-      </div>
-
       {/* Book CTA */}
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 pb-6 pt-3 bg-gradient-to-t from-[#F8F9FB] via-[#F8F9FB]/95 to-transparent z-30">
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-6 pb-10 pt-4 bg-gradient-to-t from-[#FAFBFF] via-[#FAFBFF]/95 to-transparent z-40">
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl bg-white/95 px-4 py-3 shadow-lg shadow-slate-200/60 border border-slate-100">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Live Fetching</p>
+            <p className="mt-1 text-[15px] font-black text-slate-900">
+              {isFetchingDrivers ? 'Checking nearby drivers...' : `${liveDriverCount} drivers nearby`}
+            </p>
+          </div>
+          {isFetchingDrivers ? (
+            <LoaderCircle size={20} className="animate-spin text-blue-500 shrink-0" />
+          ) : (
+            <div className="rounded-full bg-blue-50 px-3 py-1 text-[11px] font-black text-blue-700 shrink-0">
+              Live
+            </div>
+          )}
+        </div>
+        {driverFetchError ? (
+          <div className="mb-3 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-[11px] font-bold text-rose-500">
+            {driverFetchError}
+          </div>
+        ) : null}
         <motion.button
-            whileTap={{ scale: 0.97 }}
-            onClick={handleContinue}
-            className="w-full bg-yellow-400 text-[#1C2833] py-4 rounded-2xl text-[16px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all"
+          whileTap={{ scale: 0.97 }}
+          onClick={handleContinue}
+          disabled={isProceeding}
+          className="w-full h-16 bg-blue-600 text-white rounded-[22px] text-[16px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-3 shadow-2xl shadow-blue-500/20 active:scale-95 transition-all"
         >
-          Confirm Details <ChevronRight size={18} strokeWidth={3} />
+          {isProceeding ? (
+            <>
+              <LoaderCircle size={20} className="animate-spin" strokeWidth={3} />
+              Fetching Drivers...
+            </>
+          ) : (
+            <>
+              Proceed to Live Tracking <ChevronRight size={20} strokeWidth={3} />
+            </>
+          )}
         </motion.button>
       </div>
-
     </div>
   );
 };

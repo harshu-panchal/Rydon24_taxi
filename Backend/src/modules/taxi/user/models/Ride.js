@@ -253,7 +253,7 @@ const rideSchema = new mongoose.Schema(
     },
     transport_type: {
       type: String,
-      enum: ['taxi', 'delivery', 'all'],
+      enum: ['taxi', 'delivery', 'intercity', 'all'],
       default: 'taxi',
       trim: true,
     },
@@ -391,7 +391,7 @@ const rideSchema = new mongoose.Schema(
       },
       transport_type: {
         type: String,
-        enum: ['taxi', 'delivery', 'all'],
+        enum: ['taxi', 'delivery', 'intercity', 'all'],
         default: 'taxi',
         trim: true,
       },

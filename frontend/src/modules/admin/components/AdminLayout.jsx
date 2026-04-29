@@ -459,6 +459,7 @@ const AdminLayout = () => {
               { label: 'Rental Requests', path: '/admin/pricing/rental-requests' },
               { label: 'Rental Quote Requests', path: '/admin/pricing/rental-quotes' },
               { label: 'Rental Package Types', path: '/admin/pricing/rental-packages' },
+              { label: 'Package Pricing', path: '/admin/pricing/package-pricing' },
               { label: 'Set Price', path: '/admin/pricing/set-price' },
               { label: 'Goods Types', path: '/admin/pricing/goods-types' },
             ],

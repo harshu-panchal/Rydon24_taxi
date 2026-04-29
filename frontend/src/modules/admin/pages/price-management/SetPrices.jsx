@@ -176,7 +176,7 @@ const SetPrices = ({ mode }) => {
     try {
       const auth = { 'Authorization': `Bearer ${token}` };
       const [prizesRes, zonesRes, vehiclesRes] = await Promise.all([
-        fetch(`${baseUrl}/types/set-prices`, { headers: auth }),
+        fetch(`${baseUrl}/types/set-prices?scope=ride`, { headers: auth }),
         fetch(`${baseUrl}/zones`, { headers: auth }),
         fetch(`${baseUrl}/types/vehicle-types`, { headers: auth })
       ]);
@@ -216,6 +216,7 @@ const SetPrices = ({ mode }) => {
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          pricing_scope: 'ride',
           payment_type: normalizePaymentTypes(formData.payment_type).length ? normalizePaymentTypes(formData.payment_type) : ['cash']
         })
       });
@@ -316,7 +317,7 @@ const SetPrices = ({ mode }) => {
                                 <button onClick={() => navigate(`/admin/pricing/set-price/edit/${prize.id || prize._id}`)} className="w-8 h-8 flex items-center justify-center bg-[#FFF7ED] text-[#F97316] rounded transition-colors hover:bg-orange-100"><Edit2 size={14} /></button>
                                  <button 
                                    title="set package prices"
-                                   onClick={() => navigate(`/admin/pricing/set-price/packages/${prize.id || prize._id}`)}
+                                   onClick={() => navigate('/admin/pricing/package-pricing')}
                                    className="w-8 h-8 flex items-center justify-center bg-[#F0FDFA] text-[#14B8A6] rounded transition-colors hover:bg-emerald-100"
                                  >
                                     <Gift size={14} />

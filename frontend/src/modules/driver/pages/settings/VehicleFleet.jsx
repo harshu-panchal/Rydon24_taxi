@@ -106,6 +106,15 @@ const buildForm = (driver) => ({
     vehicleImage: driver?.vehicleImage || '',
 });
 
+const buildComparableVehicleSnapshot = (value = {}) => ({
+    vehicleTypeId: String(value?.vehicleTypeId || ''),
+    vehicleMake: String(value?.vehicleMake || '').trim(),
+    vehicleModel: String(value?.vehicleModel || '').trim(),
+    vehicleNumber: String(value?.vehicleNumber || '').trim().toUpperCase(),
+    vehicleColor: String(value?.vehicleColor || '').trim(),
+    vehicleImage: String(value?.vehicleImage || '').trim(),
+});
+
 const readVehicleFleetDraft = () => {
     try {
         const raw = sessionStorage.getItem(VEHICLE_FLEET_DRAFT_KEY);
@@ -268,7 +277,9 @@ const VehicleFleet = () => {
             return;
         }
 
-        const requiresReapproval = JSON.stringify(buildForm(driver)) !== JSON.stringify(formData);
+        const requiresReapproval =
+            JSON.stringify(buildComparableVehicleSnapshot(buildForm(driver))) !==
+            JSON.stringify(buildComparableVehicleSnapshot(formData));
 
         setIsSaving(true);
         setMessage('');
@@ -280,11 +291,22 @@ const VehicleFleet = () => {
             setFormData(buildForm(nextDriver));
             setVehicleImagePreview(nextDriver?.vehicleImage || null);
             setIsEditing(false);
-            if (requiresReapproval) {
+            if (nextDriver?.status === 'pending' || nextDriver?.approve === false || nextDriver?.vehicleApprovalRequested || requiresReapproval) {
                 localStorage.setItem(DRIVER_VEHICLE_REAPPROVAL_PENDING_KEY, 'true');
-                setMessage('Vehicle updated and sent for approval again. Go online after admin approval.');
+                setMessage(response?.data?.message || 'Vehicle updated and sent to admin for approval. Driver status is now pending.');
+                sessionStorage.removeItem(VEHICLE_FLEET_DRAFT_KEY);
+                sessionStorage.setItem(VEHICLE_FLEET_EDITING_KEY, 'false');
+                navigate('/taxi/driver/registration-status', {
+                    replace: true,
+                    state: {
+                        role: 'driver',
+                        statusReason: 'vehicle-update',
+                    },
+                });
+                return;
             } else {
-                setMessage('Vehicle updated successfully.');
+                localStorage.removeItem(DRIVER_VEHICLE_REAPPROVAL_PENDING_KEY);
+                setMessage(response?.data?.message || 'Vehicle updated successfully.');
             }
             sessionStorage.removeItem(VEHICLE_FLEET_DRAFT_KEY);
             sessionStorage.setItem(VEHICLE_FLEET_EDITING_KEY, 'false');

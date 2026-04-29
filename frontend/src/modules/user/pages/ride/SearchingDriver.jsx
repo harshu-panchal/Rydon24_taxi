@@ -464,9 +464,12 @@ const SearchingDriver = () => {
           estimatedDistanceMeters: routeState.estimatedDistanceMeters || 0,
           estimatedDurationMinutes: routeState.estimatedDurationMinutes || 0,
           vehicleTypeId: selectedVehicleTypeId,
+          vehicleTypeIds: selectedVehicleTypeId ? [selectedVehicleTypeId] : [],
           vehicleIconType: routeState.vehicleIconType || routeState.vehicle?.iconType,
           vehicleIconUrl: routeState.vehicleIconUrl || routeState.vehicle?.vehicleIconUrl || routeState.vehicle?.icon || '',
           paymentMethod: routeState.paymentMethod || 'Cash',
+          serviceType: routeState.serviceType || 'ride',
+          intercity: routeState.intercity || undefined,
           service_location_id: routeState.service_location_id || routeState.serviceLocationId || '',
           transport_type: routeState.transport_type || routeState.transportType || routeState.vehicle?.transportType || 'taxi',
         }, rideRequestConfig);

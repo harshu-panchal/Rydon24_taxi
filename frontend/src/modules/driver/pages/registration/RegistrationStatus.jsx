@@ -54,6 +54,7 @@ const RegistrationStatus = () => {
 
   const appName = settings.general?.app_name || "App";
   const appLogo = settings.general?.logo || settings.customization?.logo;
+  const isVehicleReapproval = location.state?.statusReason === "vehicle-update";
 
   useEffect(() => {
     if (location.state?.role) {
@@ -200,13 +201,15 @@ const RegistrationStatus = () => {
 
             <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9a7b50]">
-                    Registration complete
+                    {isVehicleReapproval ? "Vehicle update submitted" : "Registration complete"}
                 </p>
                 <h1 className="text-[32px] font-semibold leading-[1.05] tracking-[-0.04em] text-slate-950">
                     Review Pending
                 </h1>
                 <p className="mx-auto max-w-[28ch] text-sm leading-6 text-slate-600">
-                    We've received your documents. Our team is currently performing a manual audit.
+                    {isVehicleReapproval
+                      ? "Your updated vehicle details were sent to admin. The profile will stay pending until the new vehicle is approved."
+                      : "We've received your documents. Our team is currently performing a manual audit."}
                 </p>
             </div>
         </section>
@@ -241,7 +244,9 @@ const RegistrationStatus = () => {
 
         <div className="rounded-2xl bg-amber-50/50 border border-amber-100 p-4">
             <p className="text-xs font-medium text-amber-900 leading-relaxed italic">
-                You will receive a notification once your account is activated. Usually takes 24-48 hours.
+                {isVehicleReapproval
+                  ? "You will receive a notification once the updated vehicle is approved. Until then, going online stays blocked."
+                  : "You will receive a notification once your account is activated. Usually takes 24-48 hours."}
             </p>
         </div>
       </main>

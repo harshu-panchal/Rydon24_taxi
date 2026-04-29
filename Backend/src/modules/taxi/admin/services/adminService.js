@@ -96,7 +96,20 @@ const buildPaginator = (items, page = 1, limit = 50) => {
 };
 
 const nextId = () => new mongoose.Types.ObjectId().toString();
-const toObjectId = (value) => new mongoose.Types.ObjectId(String(value));
+const toObjectId = (value) => {
+  if (value === null || value === undefined) return null;
+
+  const normalized =
+    typeof value === 'string'
+      ? value.trim()
+      : String(value).trim();
+
+  if (!normalized || !mongoose.isValidObjectId(normalized)) {
+    return null;
+  }
+
+  return new mongoose.Types.ObjectId(normalized);
+};
 
 const normalizeBoolean = (value) => {
   if (typeof value === 'boolean') return value;
@@ -474,6 +487,15 @@ const normalizeRentalVehiclePayload = (payload = {}, existing = {}) => {
     description: sanitizeBusText(payload.description, existing.description || ''),
     vehicleCategory: sanitizeBusText(payload.vehicleCategory, existing.vehicleCategory || 'Car'),
     image: sanitizeBusText(payload.image, existing.image || ''),
+    coverImage: sanitizeBusText(
+      payload.coverImage,
+      payload.image || existing.coverImage || existing.image || '',
+    ),
+    galleryImages: Array.isArray(payload.galleryImages)
+      ? payload.galleryImages.map((item) => sanitizeBusText(item)).filter(Boolean)
+      : Array.isArray(existing.galleryImages)
+        ? existing.galleryImages.map((item) => sanitizeBusText(item)).filter(Boolean)
+        : [],
     map_icon: sanitizeBusText(payload.map_icon, existing.map_icon || ''),
     capacity:
       payload.capacity !== undefined
@@ -645,6 +667,8 @@ const serializeRentalVehicleType = (item = {}) => ({
   description: item.description || '',
   vehicleCategory: item.vehicleCategory || 'Car',
   image: item.image || '',
+  coverImage: item.coverImage || item.image || '',
+  galleryImages: Array.isArray(item.galleryImages) ? item.galleryImages.filter(Boolean) : [],
   map_icon: item.map_icon || '',
   capacity: Math.max(
     1,
@@ -1140,6 +1164,24 @@ const serializeRentalPackageType = (item) => ({
   active: item.active !== false,
   createdAt: item.createdAt,
   updatedAt: item.updatedAt,
+});
+
+const normalizePackageVehiclePriceItem = (item = {}) => ({
+  vehicle_type: toObjectId(item.vehicle_type?._id || item.vehicle_type?.id || item.vehicle_type || item.type_id),
+  base_price: Number(item.base_price ?? 0),
+  free_distance: Number(item.free_distance ?? item.base_distance ?? 0),
+  distance_price: Number(item.distance_price ?? item.price_per_distance ?? 0),
+  free_time: Number(item.free_time ?? 0),
+  time_price: Number(item.time_price ?? 0),
+  admin_commision_type: Number(item.admin_commision_type ?? 1),
+  admin_commision: Number(item.admin_commision ?? 0),
+  admin_commission_type_from_driver: Number(item.admin_commission_type_from_driver ?? 1),
+  admin_commission_from_driver: Number(item.admin_commission_from_driver ?? 0),
+  admin_commission_type_for_owner: Number(item.admin_commission_type_for_owner ?? 1),
+  admin_commission_for_owner: Number(item.admin_commission_for_owner ?? 0),
+  service_tax: Number(item.service_tax ?? 0),
+  cancellation_fee: Number(item.cancellation_fee ?? item.user_cancellation_fee ?? 0),
+  active: Number(item.active ?? 1),
 });
 
 const serializeOwnerNeededDocument = (item) => ({
@@ -4662,216 +4704,289 @@ export const deleteVehicleType = async (id) => {
   return true;
 };
 
-  export const listSetPrices = async () => {
-    const items = await SetPrice.find()
-      .populate('vehicle_type')
-      .populate({
-        path: 'zone_id',
-        populate: { path: 'service_location_id' }
-      })
-      .sort({ createdAt: -1 })
-      .lean();
+export const listSetPrices = async (queryArgs = {}) => {
+  const scope = String(queryArgs.scope || '').trim();
+  const query = scope ? { pricing_scope: scope } : {};
 
-    const results = items.map((item) => {
-      const vType = item.vehicle_type || {};
-      const zone = item.zone_id || {};
-      const sl = zone.service_location_id || {};
+  const items = await SetPrice.find(query)
+    .populate('vehicle_type')
+    .populate('service_location_id')
+    .populate('package_type_id')
+    .populate('package_vehicle_prices.vehicle_type')
+    .populate({
+      path: 'zone_id',
+      populate: { path: 'service_location_id' }
+    })
+    .sort({ createdAt: -1 })
+    .lean();
 
-      return {
-        id: String(item._id),
-        type_id: vType._id ? String(vType._id) : null,
-        name: vType.name || '',
-        icon: vType.icon || '',
-        capacity: vType.capacity || item.capacity || 0,
-        is_accept_share_ride: item.enable_shared_ride || 0,
-        active: item.active || 0,
-        currency: sl.currency_symbol || '₹',
-        unit: Number(zone.unit || 1),
-        unit_in_words: 'Km',
-        zone_name: zone.name || '',
-        vehicle_type_name: vType.name || '',
-        drop_zone_name: null,
-        transport_type: item.transport_type || 'both',
-        payment_type: Array.isArray(item.payment_type) ? item.payment_type : (item.payment_type ? String(item.payment_type).split(',') : ['cash', 'online', 'wallet']),
-      };
-    });
-
-    const paginatorData = items.map((item) => {
-      const vType = item.vehicle_type || {};
-      const zone = item.zone_id || {};
-      const sl = zone.service_location_id || {};
-
-      return {
-        ...item,
-        id: String(item._id),
-        vehicle_type_name: vType.name || '',
-        icon: vType.icon || '',
-        zone_name: zone.name || '',
-        drop_zone_name: null,
-        vehicle_type: vType ? {
-          ...vType,
-          id: String(vType._id),
-          icon_types_for: vType.icon_types,
-          trip_dispatch_type: vType.dispatch_type,
-        } : null,
-        zone: zone ? {
-          ...zone,
-          id: String(zone._id),
-          service_location: sl ? {
-            ...sl,
-            id: String(sl._id),
-          } : null,
-        } : null,
-      };
-    });
+  const results = items.map((item) => {
+    const vType = item.vehicle_type || {};
+    const zone = item.zone_id || {};
+    const sl = zone.service_location_id || {};
+    const directServiceLocation = item.service_location_id || {};
+    const effectiveServiceLocation = directServiceLocation._id ? directServiceLocation : sl;
+    const packageType = item.package_type_id || {};
 
     return {
-      results,
-      paginator: {
-        current_page: 1,
-        data: paginatorData,
-        from: 1,
-        to: paginatorData.length,
-        total: paginatorData.length,
-        last_page: 1,
-        per_page: 10,
-      }
+      id: String(item._id),
+      pricing_scope: item.pricing_scope || 'ride',
+      type_id: vType._id ? String(vType._id) : null,
+      name: vType.name || '',
+      icon: vType.icon || '',
+      capacity: vType.capacity || item.capacity || 0,
+      is_accept_share_ride: item.enable_shared_ride || 0,
+      active: item.active || 0,
+      currency: effectiveServiceLocation.currency_symbol || '?',
+      unit: Number(zone.unit || 1),
+      unit_in_words: 'Km',
+      zone_name: zone.name || '',
+      service_location_name: effectiveServiceLocation.name || effectiveServiceLocation.service_location_name || '',
+      vehicle_type_name: vType.name || '',
+      drop_zone_name: null,
+      transport_type: item.transport_type || 'both',
+      package_type_id: packageType._id ? String(packageType._id) : null,
+      package_type_name: packageType.name || '',
+      package_destination: item.package_destination || '',
+      package_availability: item.package_availability || 'available',
+      package_vehicle_prices: Array.isArray(item.package_vehicle_prices)
+        ? item.package_vehicle_prices.map((price) => ({
+            vehicle_type: price.vehicle_type?._id ? String(price.vehicle_type._id) : null,
+            vehicle_type_name: price.vehicle_type?.name || '',
+            base_price: Number(price.base_price ?? 0),
+            free_distance: Number(price.free_distance ?? 0),
+            distance_price: Number(price.distance_price ?? 0),
+            free_time: Number(price.free_time ?? 0),
+            time_price: Number(price.time_price ?? 0),
+            active: Number(price.active ?? 1),
+          }))
+        : [],
+      payment_type: Array.isArray(item.payment_type)
+        ? item.payment_type
+        : (item.payment_type ? String(item.payment_type).split(',') : ['cash', 'online', 'wallet']),
     };
+  });
+
+  const paginatorData = items.map((item) => {
+    const vType = item.vehicle_type || {};
+    const zone = item.zone_id || {};
+    const sl = zone.service_location_id || {};
+    const directServiceLocation = item.service_location_id || {};
+    const effectiveServiceLocation = directServiceLocation._id ? directServiceLocation : sl;
+    const packageType = item.package_type_id || {};
+
+    return {
+      ...item,
+      id: String(item._id),
+      pricing_scope: item.pricing_scope || 'ride',
+      vehicle_type_name: vType.name || '',
+      icon: vType.icon || '',
+      zone_name: zone.name || '',
+      drop_zone_name: null,
+      package_type_name: packageType.name || '',
+      service_location_name: effectiveServiceLocation.name || effectiveServiceLocation.service_location_name || '',
+      vehicle_type: vType
+        ? {
+            ...vType,
+            id: String(vType._id),
+            icon_types_for: vType.icon_types,
+            trip_dispatch_type: vType.dispatch_type,
+          }
+        : null,
+      service_location: effectiveServiceLocation
+        ? {
+            ...effectiveServiceLocation,
+            id: String(effectiveServiceLocation._id || effectiveServiceLocation.id || ''),
+          }
+        : null,
+      package_type: packageType
+        ? {
+            ...packageType,
+            id: String(packageType._id || packageType.id || ''),
+          }
+        : null,
+      package_vehicle_prices: Array.isArray(item.package_vehicle_prices)
+        ? item.package_vehicle_prices.map((price, index) => ({
+            ...price,
+            id: String(price._id || index),
+            vehicle_type: price.vehicle_type
+              ? {
+                  ...price.vehicle_type,
+                  id: String(price.vehicle_type._id || price.vehicle_type.id || ''),
+                }
+              : null,
+          }))
+        : [],
+      zone: zone
+        ? {
+            ...zone,
+            id: String(zone._id),
+            service_location: sl
+              ? {
+                  ...sl,
+                  id: String(sl._id),
+                }
+              : null,
+          }
+        : null,
+    };
+  });
+
+  return {
+    results,
+    paginator: {
+      current_page: 1,
+      data: paginatorData,
+      from: 1,
+      to: paginatorData.length,
+      total: paginatorData.length,
+      last_page: 1,
+      per_page: 10,
+    }
   };
+};
 
-  export const createSetPrice = async (payload) => {
-    const payment_type = Array.isArray(payload.payment_type)
-      ? payload.payment_type
-      : typeof payload.payment_type === 'string'
-        ? payload.payment_type.split(',').map(s => s.trim())
-        : ['cash', 'online', 'wallet'];
+export const createSetPrice = async (payload) => {
+  const payment_type = Array.isArray(payload.payment_type)
+    ? payload.payment_type
+    : typeof payload.payment_type === 'string'
+      ? payload.payment_type.split(',').map(s => s.trim())
+      : ['cash', 'online', 'wallet'];
 
-    const zone_id = toObjectId(payload.zone_id?._id || payload.zone_id?.id || payload.zone_id);
-    const vehicle_type = toObjectId(payload.vehicle_type?._id || payload.vehicle_type?.id || payload.vehicle_type || payload.type_id);
-    const service_location_id = toObjectId(payload.service_location_id?._id || payload.service_location_id?.id || payload.service_location_id || payload.zone?._id || payload.zone?.service_location_id);
+  const zone_id = toObjectId(payload.zone_id?._id || payload.zone_id?.id || payload.zone_id);
+  const vehicle_type = toObjectId(payload.vehicle_type?._id || payload.vehicle_type?.id || payload.vehicle_type || payload.type_id);
+  const service_location_id = toObjectId(payload.service_location_id?._id || payload.service_location_id?.id || payload.service_location_id || payload.zone?._id || payload.zone?.service_location_id);
 
-    const setPrice = await SetPrice.create({
-      zone_id,
-      vehicle_type,
-      service_location_id,
-      transport_type: payload.transport_type || 'taxi',
-      payment_type,
-      active: Number(payload.active ?? 1),
+  const setPrice = await SetPrice.create({
+    zone_id,
+    vehicle_type,
+    service_location_id,
+    pricing_scope: payload.pricing_scope || 'ride',
+    transport_type: payload.transport_type || 'taxi',
+    package_type_id: toObjectId(payload.package_type_id?._id || payload.package_type_id?.id || payload.package_type_id),
+    package_destination: String(payload.package_destination || '').trim(),
+    package_availability: payload.package_availability || 'available',
+    package_vehicle_prices: Array.isArray(payload.package_vehicle_prices)
+      ? payload.package_vehicle_prices.map((item) => normalizePackageVehiclePriceItem(item))
+      : [],
+    payment_type,
+    active: Number(payload.active ?? 1),
 
-      // Commission Structure
-      admin_commision_type: Number(payload.admin_commision_type ?? (payload.customer_commission_type === 'percentage' ? 1 : 0)),
-      admin_commision: Number(payload.admin_commision ?? payload.customer_commission ?? 0),
-      admin_commission_type_for_owner: Number(payload.admin_commission_type_for_owner ?? 1),
-      admin_commission_for_owner: Number(payload.admin_commission_for_owner ?? 0),
-      admin_commission_type_from_driver: Number(payload.admin_commission_type_from_driver ?? 1),
-      admin_commission_from_driver: Number(payload.admin_commission_from_driver ?? 0),
+    admin_commision_type: Number(payload.admin_commision_type ?? (payload.customer_commission_type === 'percentage' ? 1 : 0)),
+    admin_commision: Number(payload.admin_commision ?? payload.customer_commission ?? 0),
+    admin_commission_type_for_owner: Number(payload.admin_commission_type_for_owner ?? 1),
+    admin_commission_for_owner: Number(payload.admin_commission_for_owner ?? 0),
+    admin_commission_type_from_driver: Number(payload.admin_commission_type_from_driver ?? 1),
+    admin_commission_from_driver: Number(payload.admin_commission_from_driver ?? 0),
 
-      // Tax & Surgers
-      service_tax: Number(payload.service_tax ?? 0),
-      airport_surge: Number(payload.airport_surge ?? 0),
-      support_airport_fee: Number(payload.support_airport_fee ?? 0),
-      support_outstation: Number(payload.support_outstation ?? 0),
-      enable_airport_ride: payload.enable_airport_ride ?? !!payload.support_airport_fee,
-      enable_outstation_ride: payload.enable_outstation_ride ?? !!payload.support_outstation,
+    service_tax: Number(payload.service_tax ?? 0),
+    airport_surge: Number(payload.airport_surge ?? 0),
+    support_airport_fee: Number(payload.support_airport_fee ?? 0),
+    support_outstation: Number(payload.support_outstation ?? 0),
+    enable_airport_ride: payload.enable_airport_ride ?? !!payload.support_airport_fee,
+    enable_outstation_ride: payload.enable_outstation_ride ?? !!payload.support_outstation,
 
-      // Core Pricing
-      base_price: Number(payload.base_price ?? 0),
-      base_distance: Number(payload.base_distance ?? 0),
-      price_per_distance: Number(payload.price_per_distance ?? 0),
-      time_price: Number(payload.time_price ?? 0),
-      waiting_charge: Number(payload.waiting_charge ?? 0),
-      outstation_base_price: Number(payload.outstation_base_price ?? 0),
-      outstation_base_distance: Number(payload.outstation_base_distance ?? 0),
-      outstation_price_per_distance: Number(payload.outstation_price_per_distance ?? 0),
-      outstation_time_price: Number(payload.outstation_time_price ?? 0),
-      free_waiting_before: Number(payload.free_waiting_before ?? 0),
-      free_waiting_after: Number(payload.free_waiting_after ?? 0),
+    base_price: Number(payload.base_price ?? 0),
+    base_distance: Number(payload.base_distance ?? 0),
+    price_per_distance: Number(payload.price_per_distance ?? 0),
+    time_price: Number(payload.time_price ?? 0),
+    waiting_charge: Number(payload.waiting_charge ?? 0),
+    outstation_base_price: Number(payload.outstation_base_price ?? 0),
+    outstation_base_distance: Number(payload.outstation_base_distance ?? 0),
+    outstation_price_per_distance: Number(payload.outstation_price_per_distance ?? 0),
+    outstation_time_price: Number(payload.outstation_time_price ?? 0),
+    free_waiting_before: Number(payload.free_waiting_before ?? 0),
+    free_waiting_after: Number(payload.free_waiting_after ?? 0),
 
-      // Ride Sharing
-      enable_shared_ride: Number(payload.enable_shared_ride ?? (payload.enable_ride_sharing ? 1 : 0)),
-      enable_ride_sharing: payload.enable_ride_sharing ?? !!payload.enable_shared_ride,
-      price_per_seat: Number(payload.price_per_seat ?? 0),
-      shared_price_per_distance: Number(payload.shared_price_per_distance ?? 0),
-      shared_cancel_fee: Number(payload.shared_cancel_fee ?? 0),
+    enable_shared_ride: Number(payload.enable_shared_ride ?? (payload.enable_ride_sharing ? 1 : 0)),
+    enable_ride_sharing: payload.enable_ride_sharing ?? !!payload.enable_shared_ride,
+    price_per_seat: Number(payload.price_per_seat ?? 0),
+    shared_price_per_distance: Number(payload.shared_price_per_distance ?? 0),
+    shared_cancel_fee: Number(payload.shared_cancel_fee ?? 0),
 
-      // Cancellation Fee
-      user_cancellation_fee: Number(payload.user_cancellation_fee ?? payload.cancellation_fee_for_user ?? 0),
-      driver_cancellation_fee: Number(payload.driver_cancellation_fee ?? payload.cancellation_fee_for_driver ?? 0),
-      cancellation_fee_goes_to: payload.cancellation_fee_goes_to ?? payload.fee_goes_to ?? 'admin',
-      user_cancellation_fee_type: payload.user_cancellation_fee_type || 'percentage',
-      driver_cancellation_fee_type: payload.driver_cancellation_fee_type || 'percentage',
+    user_cancellation_fee: Number(payload.user_cancellation_fee ?? payload.cancellation_fee_for_user ?? 0),
+    driver_cancellation_fee: Number(payload.driver_cancellation_fee ?? payload.cancellation_fee_for_driver ?? 0),
+    cancellation_fee_goes_to: payload.cancellation_fee_goes_to ?? payload.fee_goes_to ?? 'admin',
+    user_cancellation_fee_type: payload.user_cancellation_fee_type || 'percentage',
+    driver_cancellation_fee_type: payload.driver_cancellation_fee_type || 'percentage',
 
-      // Meta
-      order_number: Number(payload.order_number ?? payload.eta_sequence ?? 1),
-      bill_status: Number(payload.bill_status ?? 1),
-      status: payload.status || 'active',
-    });
+    order_number: Number(payload.order_number ?? payload.eta_sequence ?? 1),
+    bill_status: Number(payload.bill_status ?? 1),
+    status: payload.status || 'active',
+  });
 
-    return setPrice.toObject();
-  };
+  return setPrice.toObject();
+};
 
-  export const updateSetPrice = async (id, payload) => {
-    const setPrice = await SetPrice.findById(id);
-    if (!setPrice) throw new ApiError(404, 'Set Price not found');
+export const updateSetPrice = async (id, payload) => {
+  const setPrice = await SetPrice.findById(id);
+  if (!setPrice) throw new ApiError(404, 'Set Price not found');
 
-    const fields = [
-      'zone_id', 'vehicle_type', 'service_location_id', 'transport_type',
-      'payment_type', 'active', 'admin_commision_type', 'admin_commision',
-      'admin_commission_type_for_owner', 'admin_commission_for_owner',
-      'admin_commission_type_from_driver', 'admin_commission_from_driver',
-      'service_tax', 'airport_surge', 'support_airport_fee', 'support_outstation',
-      'enable_airport_ride', 'enable_outstation_ride',
-      'base_price', 'base_distance', 'price_per_distance', 'time_price',
-      'waiting_charge', 'outstation_base_price', 'outstation_base_distance',
-      'outstation_price_per_distance', 'outstation_time_price',
-      'free_waiting_before', 'free_waiting_after',
-      'enable_shared_ride', 'enable_ride_sharing', 'price_per_seat',
-      'shared_price_per_distance', 'shared_cancel_fee',
-      'user_cancellation_fee', 'driver_cancellation_fee', 'cancellation_fee_goes_to',
-      'user_cancellation_fee_type', 'driver_cancellation_fee_type',
-      'order_number', 'bill_status', 'status'
-    ];
+  const fields = [
+    'zone_id', 'vehicle_type', 'service_location_id', 'transport_type',
+    'pricing_scope', 'package_type_id', 'package_destination', 'package_availability',
+    'payment_type', 'active', 'admin_commision_type', 'admin_commision',
+    'admin_commission_type_for_owner', 'admin_commission_for_owner',
+    'admin_commission_type_from_driver', 'admin_commission_from_driver',
+    'service_tax', 'airport_surge', 'support_airport_fee', 'support_outstation',
+    'enable_airport_ride', 'enable_outstation_ride',
+    'base_price', 'base_distance', 'price_per_distance', 'time_price',
+    'waiting_charge', 'outstation_base_price', 'outstation_base_distance',
+    'outstation_price_per_distance', 'outstation_time_price',
+    'free_waiting_before', 'free_waiting_after',
+    'enable_shared_ride', 'enable_ride_sharing', 'price_per_seat',
+    'shared_price_per_distance', 'shared_cancel_fee',
+    'user_cancellation_fee', 'driver_cancellation_fee', 'cancellation_fee_goes_to',
+    'user_cancellation_fee_type', 'driver_cancellation_fee_type',
+    'order_number', 'bill_status', 'status'
+  ];
 
-    fields.forEach(field => {
-      let value = payload[field];
+  fields.forEach(field => {
+    let value = payload[field];
 
-      // Aliases & Nested Object Handling
-      if (field === 'zone_id') value = payload.zone_id?._id || payload.zone_id?.id || payload.zone_id;
-      if (field === 'vehicle_type') value = payload.vehicle_type?._id || payload.vehicle_type?.id || payload.vehicle_type || payload.type_id;
-      if (field === 'service_location_id') value = payload.service_location_id?._id || payload.service_location_id?.id || payload.service_location_id || payload.zone?._id || payload.zone?.service_location_id;
+    if (field === 'zone_id') value = payload.zone_id?._id || payload.zone_id?.id || payload.zone_id;
+    if (field === 'vehicle_type') value = payload.vehicle_type?._id || payload.vehicle_type?.id || payload.vehicle_type || payload.type_id;
+    if (field === 'service_location_id') value = payload.service_location_id?._id || payload.service_location_id?.id || payload.service_location_id || payload.zone?._id || payload.zone?.service_location_id;
+    if (field === 'package_type_id') value = payload.package_type_id?._id || payload.package_type_id?.id || payload.package_type_id;
 
-      if (value === undefined) {
-        if (field === 'admin_commision') value = payload.customer_commission;
-        if (field === 'admin_commision_type') value = payload.customer_commission_type === 'percentage' ? 1 : (payload.customer_commission_type === 'fixed' ? 0 : undefined);
-        if (field === 'order_number') value = payload.eta_sequence;
-        if (field === 'user_cancellation_fee') value = payload.cancellation_fee_for_user;
-        if (field === 'driver_cancellation_fee') value = payload.cancellation_fee_for_driver;
-        if (field === 'cancellation_fee_goes_to') value = payload.fee_goes_to;
-        if (field === 'enable_ride_sharing') value = payload.enable_shared_ride !== undefined ? !!payload.enable_shared_ride : undefined;
+    if (value === undefined) {
+      if (field === 'admin_commision') value = payload.customer_commission;
+      if (field === 'admin_commision_type') value = payload.customer_commission_type === 'percentage' ? 1 : (payload.customer_commission_type === 'fixed' ? 0 : undefined);
+      if (field === 'order_number') value = payload.eta_sequence;
+      if (field === 'user_cancellation_fee') value = payload.cancellation_fee_for_user;
+      if (field === 'driver_cancellation_fee') value = payload.cancellation_fee_for_driver;
+      if (field === 'cancellation_fee_goes_to') value = payload.fee_goes_to;
+      if (field === 'enable_ride_sharing') value = payload.enable_shared_ride !== undefined ? !!payload.enable_shared_ride : undefined;
+    }
+
+    if (value !== undefined) {
+      if (field.includes('_id') || field === 'vehicle_type') {
+        setPrice[field] = value ? toObjectId(value) : null;
+      } else if (field === 'payment_type') {
+        setPrice[field] = Array.isArray(value) ? value : (typeof value === 'string' ? value.split(',').map(s => s.trim()) : value);
+      } else if (typeof setPrice[field] === 'number' || ['admin_commision', 'service_tax', 'base_price', 'base_distance', 'price_per_distance', 'time_price', 'order_number'].includes(field)) {
+        setPrice[field] = Number(value);
+      } else {
+        setPrice[field] = value;
       }
+    }
+  });
 
-      if (value !== undefined) {
-        if (field.includes('_id') || field === 'vehicle_type') {
-          if (value) setPrice[field] = toObjectId(value);
-        } else if (field === 'payment_type') {
-          setPrice[field] = Array.isArray(value) ? value : (typeof value === 'string' ? value.split(',').map(s => s.trim()) : value);
-        } else if (typeof setPrice[field] === 'number' || ['admin_commision', 'service_tax', 'base_price', 'base_distance', 'price_per_distance', 'time_price', 'order_number'].includes(field)) {
-          setPrice[field] = Number(value);
-        } else {
-          setPrice[field] = value;
-        }
-      }
-    });
+  if (payload.package_vehicle_prices !== undefined) {
+    setPrice.package_vehicle_prices = Array.isArray(payload.package_vehicle_prices)
+      ? payload.package_vehicle_prices.map((item) => normalizePackageVehiclePriceItem(item))
+      : [];
+  }
 
-    await setPrice.save();
-    return setPrice.toObject();
-  };
+  await setPrice.save();
+  return setPrice.toObject();
+};
 
-  export const deleteSetPrice = async (id) => {
-    const deleted = await SetPrice.findByIdAndDelete(id);
-    if (!deleted) throw new ApiError(404, 'Set Price not found');
-    return true;
-  };
+export const deleteSetPrice = async (id) => {
+  const deleted = await SetPrice.findByIdAndDelete(id);
+  if (!deleted) throw new ApiError(404, 'Set Price not found');
+  return true;
+};
 
 export const listOwners = async (queryArgs = {}) => {
   await ensureFleetOwnersSeeded();
