@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion as Motion } from 'framer-motion';
 import {
     AlertCircle,
+    ArrowLeft,
     ArrowDownLeft,
     ArrowUpRight,
     CheckCircle2,
@@ -11,6 +12,7 @@ import {
     Wallet,
     X,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import api from '../../../shared/api/axiosInstance';
 import { socketService } from '../../../shared/api/socket';
@@ -95,6 +97,17 @@ const transactionHint = (tx = {}) => {
     return tx.description || 'Updated by wallet activity';
 };
 
+const shortenText = (value, maxLength = 88) => {
+    const normalized = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!normalized) {
+        return 'Updated by wallet activity';
+    }
+
+    return normalized.length > maxLength
+        ? `${normalized.slice(0, maxLength - 3).trimEnd()}...`
+        : normalized;
+};
+
 const formatDate = (value) => {
     const date = value ? new Date(value) : null;
     if (!date || Number.isNaN(date.getTime())) return 'Just now';
@@ -138,6 +151,7 @@ const StatPill = ({ label, value, tone = 'dark' }) => {
 };
 
 const DriverWallet = () => {
+    const navigate = useNavigate();
     const { settings: appSettings } = useSettings();
     const appName = appSettings.general?.app_name || 'App';
     const [wallet, setWallet] = useState(emptyWallet);
@@ -236,13 +250,13 @@ const DriverWallet = () => {
             .filter((tx) => ['ride_earning', 'adjustment'].includes(tx.type))
             .reduce((sum, tx) => {
                 const amount = Number(tx.amount || 0);
-                const source = String(tx.metadata?.source || '').toLowerCase();
+                const source = String(tx.metadata?.source || tx.metadata?.category || '').toLowerCase();
 
                 if (tx.type === 'ride_earning') {
                     return sum + Math.max(amount, 0);
                 }
 
-                return source === 'user_wallet_transfer' ? sum + Math.max(amount, 0) : sum;
+                return source === 'driver_incentive' ? sum + Math.max(amount, 0) : sum;
             }, 0);
 
         return {
@@ -445,7 +459,14 @@ const DriverWallet = () => {
         <div className="min-h-screen bg-[#f5f1e8] px-4 pb-28 pt-4 text-slate-950">
             <div className="mx-auto max-w-md">
                 <header className="mb-4 flex items-center justify-between">
-                    <div className="h-11 w-11" />
+                    <button
+                        type="button"
+                        onClick={() => navigate(-1)}
+                        className="grid h-11 w-11 place-items-center rounded-full bg-white text-slate-900 shadow-sm"
+                        aria-label="Go back"
+                    >
+                        <ArrowLeft size={18} />
+                    </button>
                     <div className="text-center">
                         <h1 className="text-lg font-black tracking-tight">Driver wallet</h1>
                         <p className="text-xs font-bold text-slate-500">Cash commission and online earnings</p>
@@ -625,8 +646,10 @@ const DriverWallet = () => {
                                                     {isDebit ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}
                                                 </div>
                                                 <div className="min-w-0">
-                                                    <p className="truncate text-sm font-black text-slate-950">{transactionLabel(tx.type)}</p>
-                                                    <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{transactionHint(tx)}</p>
+                                                    <p className="text-sm font-black text-slate-950">{transactionLabel(tx.type)}</p>
+                                                    <p className="mt-0.5 text-xs font-bold leading-5 text-slate-500 break-words" title={transactionHint(tx)}>
+                                                        {shortenText(transactionHint(tx))}
+                                                    </p>
                                                     <p className="mt-1 text-[11px] font-bold text-slate-400">{formatDate(tx.createdAt)}</p>
                                                 </div>
                                             </div>

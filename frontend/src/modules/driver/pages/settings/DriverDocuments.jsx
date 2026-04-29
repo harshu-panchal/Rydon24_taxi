@@ -28,6 +28,29 @@ const getDocumentReviewStatus = (document = {}) =>
     '',
   ).trim().toLowerCase();
 
+const getDocumentExpiryValue = (document = {}) =>
+  document?.expiryDate ||
+  document?.expiry_date ||
+  document?.expiry ||
+  document?.expiresAt ||
+  null;
+
+const isDocumentExpired = (document = {}) => {
+  const value = getDocumentExpiryValue(document);
+  if (!value) return false;
+  const date = new Date(value);
+  return !Number.isNaN(date.getTime()) && date.getTime() < Date.now();
+};
+
+const formatExpiryDate = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+const unwrapDriver = (response) => response?.data?.data || response?.data || response || null;
+
 const DriverDocuments = () => {
   const navigate = useNavigate();
   const [isSyncing, setIsSyncing] = useState(false);
@@ -90,7 +113,7 @@ const DriverDocuments = () => {
         getDriverDocumentTemplates(),
       ]);
 
-      setDriver(driverResponse?.data || null);
+      setDriver(unwrapDriver(driverResponse));
       setTemplates(normalizeDriverDocumentTemplates(templateResponse?.data?.data?.results || templateResponse?.data?.results || []));
     } catch (err) {
       setError(err?.message || 'Unable to load driver documents');
@@ -112,17 +135,23 @@ const DriverDocuments = () => {
       const previewUrl = getDocumentPreviewUrl(doc);
       const uploadedAt = doc?.uploadedAt || doc?.createdAt || doc?.updatedAt || '';
       const hasDoc = Boolean(previewUrl || doc);
+      const expiryDate = getDocumentExpiryValue(doc);
+      const expired = isDocumentExpired(doc);
+      const verified = ['verified', 'approved'].includes(getDocumentReviewStatus(doc));
 
       return {
         id: field.key,
         name: field.label,
         templateName: field.templateName,
         reviewStatus: getDocumentReviewStatus(doc),
-        status: hasDoc ? 'Uploaded' : 'Missing',
+        status: verified ? 'Verified' : expired ? 'Expired' : hasDoc ? 'Uploaded' : 'Missing',
         date: hasDoc ? formatDate(uploadedAt) : 'Not uploaded',
         previewUrl,
         fileName: doc?.fileName || field.label,
         uploadedAt,
+        expiryDate,
+        expired,
+        verified,
         order: index,
       };
     });
@@ -134,7 +163,7 @@ const DriverDocuments = () => {
         <button onClick={() => navigate('/taxi/driver/profile')} className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center">
           <ArrowLeft size={18} />
         </button>
-        <h1 className="text-lg font-black tracking-tight tracking-tighter uppercase underline decoration-emerald-500/20">KYC Portfolio</h1>
+        <h1 className="text-lg font-black tracking-tight tracking-tighter uppercase underline decoration-emerald-500/20">Documents</h1>
       </header>
 
       <AnimatePresence>
@@ -225,11 +254,24 @@ const DriverDocuments = () => {
                     <div className="space-y-0.5">
                       <h4 className="text-[14px] font-black text-slate-900 leading-tight uppercase tracking-tight">{doc.name}</h4>
                       <p className="text-[11px] font-bold text-slate-400 opacity-60 leading-tight uppercase tracking-widest">{doc.date}</p>
+                      {doc.expiryDate ? (
+                        <p className={`text-[10px] font-bold uppercase tracking-widest ${doc.expired ? 'text-rose-500' : 'text-slate-400'}`}>
+                          {doc.expired ? 'Expired' : 'Expires'} {formatExpiryDate(doc.expiryDate)}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className={`text-[8px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border shadow-sm ${doc.status === 'Uploaded' ? 'bg-emerald-50 text-emerald-500 border-emerald-500/10' : 'bg-rose-50 text-rose-500 border-rose-500/10 animate-pulse'}`}>
-                      {doc.reviewStatus === 'verified' || doc.reviewStatus === 'approved' ? 'Verified' : doc.status}
+                    <span className={`text-[8px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border shadow-sm ${
+                      doc.verified
+                        ? 'bg-emerald-50 text-emerald-500 border-emerald-500/10'
+                        : doc.expired
+                          ? 'bg-rose-50 text-rose-500 border-rose-500/10'
+                          : doc.status === 'Uploaded'
+                            ? 'bg-blue-50 text-blue-500 border-blue-500/10'
+                            : 'bg-rose-50 text-rose-500 border-rose-500/10 animate-pulse'
+                    }`}>
+                      {doc.status}
                     </span>
                     <label
                       onClick={(event) => event.stopPropagation()}

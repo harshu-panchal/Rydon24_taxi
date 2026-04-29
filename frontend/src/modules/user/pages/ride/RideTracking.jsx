@@ -476,6 +476,7 @@ const RideTracking = () => {
         rideId,
         fare,
         paymentMethod,
+        driverPaymentCollection: rideRealtime?.driverPaymentCollection || state.driverPaymentCollection || null,
         pickup: pickupLabel,
         drop: dropLabel,
         driver,
@@ -545,6 +546,7 @@ const RideTracking = () => {
               otp: payload?.otp || latestStateRef.current.otp || latestStateRef.current.ride_otp || '',
               arrivedAt: payload?.arrivedAt || latestStateRef.current.arrivedAt || '',
               pricingSnapshot: payload?.pricingSnapshot || latestStateRef.current.pricingSnapshot || null,
+              driverPaymentCollection: payload?.driverPaymentCollection || latestStateRef.current.driverPaymentCollection || null,
               completedAt: payload?.completedAt || null,
               feedback: payload?.feedback || null,
               driver: mergedDriver,
@@ -581,6 +583,7 @@ const RideTracking = () => {
           otp: payload?.otp || latestStateRef.current.otp || latestStateRef.current.ride_otp || '',
           arrivedAt: payload?.arrivedAt || latestStateRef.current.arrivedAt || '',
           pricingSnapshot: payload?.pricingSnapshot || latestStateRef.current.pricingSnapshot || null,
+          driverPaymentCollection: payload?.driverPaymentCollection || latestStateRef.current.driverPaymentCollection || null,
           completedAt: payload?.completedAt || null,
           feedback: payload?.feedback || null,
           driver: mergedDriver,
@@ -594,6 +597,7 @@ const RideTracking = () => {
           liveStatus: payload?.liveStatus || payload?.status || latestStateRef.current.liveStatus || latestStateRef.current.status || 'accepted',
           arrivedAt: payload?.arrivedAt || latestStateRef.current.arrivedAt || '',
           pricingSnapshot: payload?.pricingSnapshot || latestStateRef.current.pricingSnapshot || null,
+          driverPaymentCollection: payload?.driverPaymentCollection || latestStateRef.current.driverPaymentCollection || null,
         });
       } catch {
         // Let the active-ride validator decide whether the ride ended or the fetch was transient.
@@ -706,6 +710,7 @@ const RideTracking = () => {
         otp: payload.otp || prev?.otp || latestState.otp || latestState.ride_otp || '',
         arrivedAt: payload.arrivedAt || prev?.arrivedAt || latestState.arrivedAt || '',
         pricingSnapshot: payload.pricingSnapshot || prev?.pricingSnapshot || latestState.pricingSnapshot || null,
+        driverPaymentCollection: payload.driverPaymentCollection || prev?.driverPaymentCollection || latestState.driverPaymentCollection || null,
         completedAt: payload.completedAt || null,
         feedback: payload.feedback || null,
         driver: mergeDriverSnapshot(prev?.driver || latestFallbackDriver, payload.driver || {}),
@@ -747,6 +752,7 @@ const RideTracking = () => {
         setRideRealtime((prev) => ({
           ...(prev || {}),
           status: normalizedStatus,
+          driverPaymentCollection: payload.driverPaymentCollection || prev?.driverPaymentCollection || null,
           completedAt: payload.completedAt || prev?.completedAt || null,
         }));
         latestCompleteTrackingRef.current(normalizedStatus);
@@ -764,6 +770,7 @@ const RideTracking = () => {
           status: nextStatus,
           arrivedAt: payload.arrivedAt || latestState.arrivedAt || '',
           pricingSnapshot: payload.pricingSnapshot || latestState.pricingSnapshot || null,
+          driverPaymentCollection: payload.driverPaymentCollection || latestState.driverPaymentCollection || null,
         });
       }
 
@@ -772,6 +779,7 @@ const RideTracking = () => {
         status: nextStatus,
         arrivedAt: payload.arrivedAt || prev?.arrivedAt || '',
         pricingSnapshot: payload.pricingSnapshot || prev?.pricingSnapshot || null,
+        driverPaymentCollection: payload.driverPaymentCollection || prev?.driverPaymentCollection || null,
         completedAt: payload.completedAt || prev?.completedAt || null,
       }));
     };

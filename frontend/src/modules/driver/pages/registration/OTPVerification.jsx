@@ -22,6 +22,7 @@ const OTPVerification = () => {
     const location = useLocation();
     const [otp, setOtp] = useState(['', '', '', '']);
     const inputs = useRef([]);
+    const otpCardRef = useRef(null);
     const [timer, setTimer] = useState(30);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -48,6 +49,25 @@ const OTPVerification = () => {
         }, 1000);
         return () => clearInterval(interval);
     }, [navigate, phone, isLoginFlow]);
+
+    useEffect(() => {
+        const scrollOtpIntoView = () => {
+            otpCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        };
+
+        const focusTimer = window.setTimeout(() => {
+            inputs.current[0]?.focus();
+            scrollOtpIntoView();
+        }, 180);
+
+        const viewport = window.visualViewport;
+        viewport?.addEventListener('resize', scrollOtpIntoView);
+
+        return () => {
+            window.clearTimeout(focusTimer);
+            viewport?.removeEventListener('resize', scrollOtpIntoView);
+        };
+    }, []);
 
     const handleChange = (index, value) => {
         if (!/^\d*$/.test(value)) return;
@@ -197,7 +217,11 @@ const OTPVerification = () => {
                     </section>
                 </header>
 
-                <section className="space-y-8 rounded-[30px] border border-slate-200/70 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
+                <section
+                    ref={otpCardRef}
+                    className="space-y-8 rounded-[30px] border border-slate-200/70 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)]"
+                    style={{ scrollMarginTop: '24vh' }}
+                >
                     <div className="flex justify-between gap-3">
                         {otp.map((digit, index) => (
                             <input
@@ -212,6 +236,7 @@ const OTPVerification = () => {
                                 value={digit}
                                 onChange={e => handleChange(index, e.target.value)}
                                 onKeyDown={e => handleKeyDown(index, e)}
+                                onFocus={() => otpCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
                                 className={`h-16 w-full rounded-[22px] border-2 text-center text-2xl font-bold transition-all outline-none ${
                                     digit 
                                         ? 'border-slate-900 bg-white shadow-lg' 

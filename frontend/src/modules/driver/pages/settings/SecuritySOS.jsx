@@ -215,15 +215,18 @@ const SecuritySOS = () => {
 
   const triggerSOS = () => {
     setShowToast(true);
+    window.setTimeout(() => {
+      window.open('tel:112', '_self');
+    }, 250);
   };
 
   return (
     <div className="min-h-screen bg-[#f8f9fb] font-sans p-6 pt-10 pb-32">
       <header className="flex items-center gap-4 mb-8 text-slate-900 uppercase">
-        <button onClick={() => navigate('/taxi/driver/home')} className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center">
+        <button onClick={() => navigate('/taxi/driver/profile')} className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center">
           <ArrowLeft size={18} />
         </button>
-        <h1 className="text-lg font-black tracking-tight">Security & SOS</h1>
+        <h1 className="text-lg font-black tracking-tight">SOS</h1>
       </header>
 
       <AnimatePresence>
@@ -261,7 +264,7 @@ const SecuritySOS = () => {
               onClick={triggerSOS}
               className="h-12 w-full bg-white/10 hover:bg-rose-500 hover:text-white border border-white/10 rounded-xl text-[12px] font-black uppercase tracking-widest transition-all"
             >
-              Test Panic Mode
+              Trigger SOS
             </button>
           </div>
         </div>

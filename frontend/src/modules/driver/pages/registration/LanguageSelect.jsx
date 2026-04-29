@@ -30,7 +30,7 @@ const LanguageSelect = () => {
     };
 
     return (
-        <div className="min-h-screen bg-[#F8F9FA] font-sans select-none overflow-x-hidden flex flex-col p-6 pt-12 pb-10">
+        <div className="min-h-screen bg-[#F8F9FA] font-sans select-none overflow-x-hidden flex flex-col p-6 pt-12 pb-28">
             {/* Branding */}
             <div className="mb-12 flex flex-col items-center text-center space-y-4">
                 {appLogo ? (
@@ -92,7 +92,7 @@ const LanguageSelect = () => {
             </main>
 
             {/* Footer Action */}
-            <div className="mt-8">
+            <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200/70 bg-[#F8F9FA]/95 px-6 pb-6 pt-4 backdrop-blur-sm">
                 <motion.button
                     whileTap={{ scale: 0.98 }}
                     onClick={handleConfirm}

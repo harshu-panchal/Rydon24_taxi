@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { motion as Motion } from 'framer-motion';
 import {
   AlertCircle,
+  ArrowLeft,
   Bike,
   Calendar,
   CheckCircle2,
@@ -14,6 +15,7 @@ import {
   TrendingUp,
   User,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import { getDriverRideHistory } from '../services/registrationService';
 
@@ -32,7 +34,10 @@ const STATUS_FILTERS = [
 
 const unwrap = (response) => response?.data?.results || response?.results || response?.data?.data?.results || [];
 
-const formatCurrency = (value) => `Rs ${Number(value || 0).toFixed(0)}`;
+const formatCurrency = (value) => `Rs ${Number(value || 0).toLocaleString('en-IN', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})}`;
 
 const formatDateLabel = (value) => {
   if (!value) {
@@ -172,6 +177,7 @@ const statusBadgeClass = (status) => {
 };
 
 const RideRequests = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('all');
   const [rides, setRides] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -237,22 +243,33 @@ const RideRequests = () => {
     [activeTab, rides, statusFilter],
   );
 
+  const categoryHistory = useMemo(
+    () => (activeTab === 'all' ? rides : rides.filter((item) => item.type === activeTab)),
+    [activeTab, rides],
+  );
+
   const stats = useMemo(() => {
-    const completedTrips = rides.filter((item) => ['Completed', 'Delivered'].includes(item.status));
+    const completedTrips = categoryHistory.filter((item) => ['Completed', 'Delivered'].includes(item.status));
     const totalEarnings = completedTrips.reduce((sum, item) => sum + item.earnings, 0);
-    const completionRate = rides.length ? Math.round((completedTrips.length / rides.length) * 100) : 0;
+    const completionRate = categoryHistory.length ? Math.round((completedTrips.length / categoryHistory.length) * 100) : 0;
 
     return {
       totalEarnings: formatCurrency(totalEarnings),
       completionRate: `${completionRate}%`,
-      totalTrips: rides.length,
+      totalTrips: categoryHistory.length,
     };
-  }, [rides]);
+  }, [categoryHistory]);
 
   return (
     <div className="min-h-screen bg-[#f8f9fb] font-sans select-none overflow-x-hidden p-5 pb-32">
       <header className="flex items-center justify-between mb-6 pt-2">
-        <div className="w-10 h-10" />
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center"
+        >
+          <ArrowLeft size={16} />
+        </button>
         <div className="text-center">
           <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.22em]">Driver log</p>
           <h1 className="text-lg font-black text-slate-900 tracking-tight uppercase">History</h1>

@@ -49,7 +49,7 @@ const DriverBottomNav = () => {
         },
         {
           icon: <IndianRupee size={22} />,
-          label: "Earnings",
+          label: "Wallet",
           path: "/taxi/driver/wallet",
         },
         {

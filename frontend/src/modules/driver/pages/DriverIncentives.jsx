@@ -11,7 +11,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
-import { claimDriverIncentiveReward, getDriverIncentives } from '../services/registrationService';
+import { claimDriverIncentiveReward, getCurrentDriver, getDriverIncentives } from '../services/registrationService';
 
 const unwrap = (response) => response?.data?.data || response?.data || response || {};
 
@@ -29,14 +29,19 @@ const DriverIncentives = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [claimingKey, setClaimingKey] = useState('');
+  const [driverRating, setDriverRating] = useState(0);
 
   const fetchIncentives = async ({ quiet = false } = {}) => {
     if (!quiet) setLoading(true);
     setError('');
 
     try {
-      const response = await getDriverIncentives();
-      setData(unwrap(response));
+      const [incentiveResponse, driverResponse] = await Promise.all([
+        getDriverIncentives(),
+        getCurrentDriver(),
+      ]);
+      setData(unwrap(incentiveResponse));
+      setDriverRating(Number(unwrap(driverResponse)?.rating || 0));
     } catch (requestError) {
       setError(requestError?.response?.data?.message || requestError?.message || 'Unable to load milestone progress');
     } finally {
@@ -65,7 +70,11 @@ const DriverIncentives = () => {
   const summary = useMemo(() => data?.summary || {}, [data]);
   const milestones = useMemo(() => data?.milestones || [], [data]);
   const features = useMemo(() => data?.features || [], [data]);
-  const walletBalance = Number(data?.walletBalance || 0);
+  const claimedRewards = useMemo(() => data?.claimedRewards || [], [data]);
+  const bonusEarnings = useMemo(
+    () => claimedRewards.reduce((sum, item) => sum + Number(item?.amount || 0), 0),
+    [claimedRewards],
+  );
 
   // Simple Level System
   const levelData = useMemo(() => {
@@ -103,13 +112,15 @@ const DriverIncentives = () => {
     <div className="min-h-screen bg-white font-sans pb-32">
       {/* Clean Header */}
       <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md px-6 pt-10 pb-6 border-b border-gray-100">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
             <button
+              type="button"
               onClick={() => navigate('/taxi/driver/profile')}
-              className="h-10 w-10 rounded-full border border-gray-100 flex items-center justify-center text-black"
+              className="flex h-10 w-10 items-center justify-center rounded-2xl border border-gray-100 bg-white shadow-sm"
+              aria-label="Back to account"
             >
-              <ArrowLeft size={20} />
+              <ArrowLeft size={18} />
             </button>
             <div>
               <h1 className="text-xl font-bold text-gray-900">Incentives</h1>
@@ -117,8 +128,8 @@ const DriverIncentives = () => {
             </div>
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Pocket</p>
-            <p className="text-lg font-bold text-black">{formatCurrency(walletBalance)}</p>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Bonus earned</p>
+            <p className="text-lg font-bold text-black">{formatCurrency(bonusEarnings)}</p>
           </div>
         </div>
       </header>
@@ -163,7 +174,7 @@ const DriverIncentives = () => {
             <div>
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Rating</p>
               <p className="text-base font-bold text-gray-900 flex items-center gap-1">
-                4.9 <Star size={14} className="text-yellow-500 fill-yellow-500" />
+                {driverRating.toFixed(1)} <Star size={14} className="text-yellow-500 fill-yellow-500" />
               </p>
             </div>
           </div>

@@ -48,7 +48,7 @@ import SuvIcon from '@/assets/icons/SUV.png';
 
 import { socketService } from '../../../shared/api/socket';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../admin/utils/googleMaps';
-import { getCurrentDriver, getDriverNotifications, getLocalDriverToken } from '../services/registrationService';
+import { getCurrentDriver, getDriverDocumentTemplates, getDriverNotifications, getLocalDriverToken } from '../services/registrationService';
 import { addLocalDriverNotification, getUnreadDriverNotificationCount, getVisibleDriverNotifications } from '../utils/notificationState';
 import {
     playRideRequestAlertSound,
@@ -315,6 +315,35 @@ const readStoredDriverCoords = () => {
     return null;
 };
 
+const getDocumentExpiryValue = (document = {}) => (
+    document?.expiryDate
+    || document?.expiry_date
+    || document?.expiry
+    || document?.expiresAt
+    || null
+);
+
+const isExpiredDateValue = (value) => {
+    if (!value) {
+        return false;
+    }
+
+    const date = new Date(value);
+    return !Number.isNaN(date.getTime()) && date.getTime() < Date.now();
+};
+
+const DRIVER_ROUTE_BOOKING_STORAGE_KEY = 'driver_route_booking_preferences';
+const DRIVER_VEHICLE_REAPPROVAL_PENDING_KEY = 'driver_vehicle_reapproval_pending';
+
+const readRouteBookingPreferences = () => {
+    try {
+        const raw = localStorage.getItem(DRIVER_ROUTE_BOOKING_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : { enabled: false, coordinates: null };
+    } catch {
+        return { enabled: false, coordinates: null };
+    }
+};
+
 const mapStyles = [
   { "elementType": "geometry", "stylers": [{ "color": "#f5f5f5" }] },
   { "elementType": "labels.icon", "stylers": [{ "visibility": "off" }] },
@@ -363,6 +392,10 @@ const DriverHome = () => {
     const [selfieUploading, setSelfieUploading] = useState(false);
     const [selfieError, setSelfieError] = useState('');
     const [onlineSelfie, setOnlineSelfie] = useState(null);
+    const [routeBookingPreferences, setRouteBookingPreferences] = useState(() => readRouteBookingPreferences());
+    const [vehicleReapprovalPending, setVehicleReapprovalPending] = useState(() => localStorage.getItem(DRIVER_VEHICLE_REAPPROVAL_PENDING_KEY) === 'true');
+    const [driverDocuments, setDriverDocuments] = useState({});
+    const [documentTemplates, setDocumentTemplates] = useState([]);
     const [vehicleIconType, setVehicleIconType] = useState(
         () => storedDriverInfo?.vehicleIconType || storedDriverInfo?.vehicleType || 'car',
     );
@@ -461,6 +494,18 @@ const DriverHome = () => {
     useEffect(() => {
         currentRequestRef.current = currentRequest;
     }, [currentRequest]);
+
+    useEffect(() => {
+        const syncLocalDriverPreferences = () => {
+            setRouteBookingPreferences(readRouteBookingPreferences());
+            setVehicleReapprovalPending(localStorage.getItem(DRIVER_VEHICLE_REAPPROVAL_PENDING_KEY) === 'true');
+        };
+
+        window.addEventListener('focus', syncLocalDriverPreferences);
+        return () => {
+            window.removeEventListener('focus', syncLocalDriverPreferences);
+        };
+    }, []);
 
     useEffect(() => {
         if (!isOnline || !showRequest || !currentRequest?.rideId) {
@@ -582,7 +627,10 @@ const DriverHome = () => {
     }, [updateDriverLocation]);
 
     const hydrateDriverState = useCallback(async () => {
-        const response = await getCurrentDriver();
+        const [response, templateResponse] = await Promise.all([
+            getCurrentDriver(),
+            getDriverDocumentTemplates().catch(() => null),
+        ]);
         const driver = response?.data?.data || response?.data || response;
         const savedCoords = driver?.location?.coordinates;
 
@@ -593,6 +641,9 @@ const DriverHome = () => {
             setWalletSummary(driver.wallet);
         }
         setOnlineSelfie(driver?.onlineSelfie || null);
+        setDriverDocuments(driver?.documents || {});
+        const templateResults = templateResponse?.data?.data?.results || templateResponse?.data?.results || [];
+        setDocumentTemplates(Array.isArray(templateResults) ? templateResults : []);
 
         const storedDriverInfoSnapshot = readStoredDriverInfo();
         persistStoredDriverInfo({
@@ -614,6 +665,25 @@ const DriverHome = () => {
 
         return driver;
     }, []);
+
+    const expiredDocumentNames = useMemo(() => {
+        const flattenedTemplates = Array.isArray(documentTemplates)
+            ? documentTemplates.flatMap((template) =>
+                Array.isArray(template?.fields)
+                    ? template.fields.map((field) => ({
+                        key: field?.key,
+                        label: field?.label || field?.name || field?.key || 'Document',
+                        hasExpiryDate: Boolean(template?.has_expiry_date),
+                    }))
+                    : [],
+            )
+            : [];
+
+        return flattenedTemplates
+            .filter((field) => field.key && field.hasExpiryDate)
+            .filter((field) => isExpiredDateValue(getDocumentExpiryValue(driverDocuments?.[field.key])))
+            .map((field) => field.label);
+    }, [documentTemplates, driverDocuments]);
 
     useEffect(() => {
         let active = true;
@@ -688,9 +758,19 @@ const DriverHome = () => {
     }, [updateDriverLocation]);
 
     const goOnline = useCallback(async (selfieImageUrl = '') => {
+        if (vehicleReapprovalPending) {
+            setStatusMessage('Vehicle update is pending admin approval. Please wait before going online.');
+            return;
+        }
+
         if (walletAlertState.isBlocked) {
             setShowLowBalanceModal(true);
             setStatusMessage('Please top up your wallet to go online.');
+            return;
+        }
+
+        if (expiredDocumentNames.length > 0) {
+            setStatusMessage(`Please reupload expired documents: ${expiredDocumentNames.join(', ')}.`);
             return;
         }
 
@@ -701,12 +781,14 @@ const DriverHome = () => {
             
             // OPTIMIZATION: Use last known coords to speed up the transition
             // instead of waiting for a fresh GPS lock (which can take 2-6 seconds)
-            let coordinates = driverCoordsRef.current;
+            let coordinates = Array.isArray(routeBookingPreferences.coordinates) && routeBookingPreferences.enabled
+                ? routeBookingPreferences.coordinates
+                : driverCoordsRef.current;
             
             if (!coordinates) {
                 // If we really don't have any coords yet, we MUST wait for them once
                 coordinates = await updateDriverLocation({ quiet: true });
-            } else {
+            } else if (!routeBookingPreferences.enabled) {
                 // Refresh location in background for better accuracy without blocking the UI
                 updateDriverLocation({ quiet: true }).catch(() => {});
             }
@@ -751,7 +833,11 @@ const DriverHome = () => {
             });
             socketService.emit('locationUpdate', { coordinates: finalCoords });
             
-            setStatusMessage('You are online. Waiting for nearby bookings.');
+            setStatusMessage(
+                routeBookingPreferences.enabled
+                    ? 'You are online. Matching rides from your selected route area.'
+                    : 'You are online. Waiting for nearby bookings.',
+            );
         } catch (error) {
             console.error('[driver-home] goOnline failed', error);
             setIsOnline(false);
@@ -764,7 +850,7 @@ const DriverHome = () => {
         } finally {
             setIsTogglingDuty(false);
         }
-    }, [updateDriverLocation, walletAlertState.isBlocked]);
+    }, [expiredDocumentNames, routeBookingPreferences.coordinates, routeBookingPreferences.enabled, updateDriverLocation, vehicleReapprovalPending, walletAlertState.isBlocked]);
 
     const goOffline = useCallback(async () => {
         setIsTogglingDuty(true);
@@ -787,6 +873,13 @@ const DriverHome = () => {
         }
     }, []);
 
+    const stopSelfieCameraStream = useCallback(() => {
+        if (selfieStreamRef.current) {
+            selfieStreamRef.current.getTracks().forEach((track) => track.stop());
+            selfieStreamRef.current = null;
+        }
+    }, []);
+
     const handleDutyToggle = useCallback(() => {
         if (isHydratingDriver || isTogglingDuty) {
             return;
@@ -797,26 +890,11 @@ const DriverHome = () => {
             return;
         }
 
-        const todayKey = new Date().toISOString().slice(0, 10);
-        const hasTodaySelfie =
-            String(onlineSelfie?.forDate || '') === todayKey &&
-            String(onlineSelfie?.imageUrl || '').trim();
-
-        if (hasTodaySelfie) {
-            goOnline();
-            return;
-        }
-
         setSelfieError('');
+        setShowSelfieCameraCapture(false);
+        stopSelfieCameraStream();
         setShowOnlineSelfiePrompt(true);
-    }, [goOnline, isHydratingDriver, isOnline, isTogglingDuty, onlineSelfie]);
-
-    const stopSelfieCameraStream = useCallback(() => {
-        if (selfieStreamRef.current) {
-            selfieStreamRef.current.getTracks().forEach((track) => track.stop());
-            selfieStreamRef.current = null;
-        }
-    }, []);
+    }, [isHydratingDriver, isOnline, isTogglingDuty, stopSelfieCameraStream]);
 
     const uploadSelfieDataUrl = useCallback(async (sourceDataUrl) => {
         setSelfieUploading(true);
@@ -1419,12 +1497,6 @@ const DriverHome = () => {
                                 Before going online, submit a fresh selfie for today. This helps verify the driver account like Rapido-style daily check-in.
                             </p>
 
-                            {onlineSelfie?.imageUrl ? (
-                                <div className="mt-4 overflow-hidden rounded-[20px] border border-slate-200 bg-slate-50">
-                                    <img src={onlineSelfie.imageUrl} alt="Daily selfie preview" className="h-48 w-full object-cover" />
-                                </div>
-                            ) : null}
-
                             {selfieError ? (
                                 <p className="mt-3 rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-[12px] font-bold text-rose-600">
                                     {selfieError}
@@ -1474,7 +1546,7 @@ const DriverHome = () => {
                                     >
                                         <span className="flex items-center justify-center gap-2">
                                             <Camera size={14} />
-                                            Open Camera
+                                            Take New Selfie
                                         </span>
                                         <input
                                             ref={selfieCameraInputRef}

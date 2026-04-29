@@ -431,6 +431,39 @@ const buildPersistedTripState = (job = {}, overrides = {}) => {
     };
 };
 
+const buildDriverPaymentCollection = ({ mode = '', status = '', paymentQr = null } = {}) => {
+    const normalizedMode = String(mode || '').trim().toLowerCase();
+
+    if (!normalizedMode) {
+        return null;
+    }
+
+    if (normalizedMode === 'online') {
+        return {
+            method: 'online',
+            source: 'driver_qr',
+            qrId: paymentQr?.id || '',
+            status: status === 'success' ? 'paid' : 'pending',
+            paidAt: status === 'success' ? new Date().toISOString() : null,
+        };
+    }
+
+    if (normalizedMode === 'cash') {
+        return {
+            method: 'cash',
+            source: 'driver_cash',
+            status: 'paid',
+            paidAt: new Date().toISOString(),
+        };
+    }
+
+    return {
+        method: normalizedMode,
+        status: status === 'success' ? 'paid' : 'pending',
+        paidAt: status === 'success' ? new Date().toISOString() : null,
+    };
+};
+
 const ActiveTrip = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -913,10 +946,19 @@ const ActiveTrip = () => {
             return;
         }
 
+        const driverPaymentCollection = nextStatus === 'completed'
+            ? buildDriverPaymentCollection({
+                mode: paymentMode || selectedPaymentMode,
+                status: driverPaymentStatus,
+                paymentQr,
+            })
+            : null;
+
         socketService.emit('ride:status:update', {
             rideId,
             status: nextStatus,
             paymentMethod: paymentMode || undefined,
+            ...(driverPaymentCollection ? { driverPaymentCollection } : {}),
         });
     };
 
@@ -931,6 +973,11 @@ const ActiveTrip = () => {
                     {
                         status: 'completed',
                         paymentMethod: paymentMode || undefined,
+                        driverPaymentCollection: buildDriverPaymentCollection({
+                            mode: paymentMode,
+                            status: driverPaymentStatus,
+                            paymentQr,
+                        }) || undefined,
                     },
                     withDriverAuthorization(driverToken),
                 );
@@ -957,6 +1004,11 @@ const ActiveTrip = () => {
                 {
                     status: 'completed',
                     paymentMethod: paymentMode || undefined,
+                    driverPaymentCollection: buildDriverPaymentCollection({
+                        mode: paymentMode,
+                        status: driverPaymentStatus,
+                        paymentQr,
+                    }) || undefined,
                 },
                 withDriverAuthorization(driverToken),
             );

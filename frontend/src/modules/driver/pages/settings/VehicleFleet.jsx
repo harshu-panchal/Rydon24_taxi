@@ -9,15 +9,71 @@ import {
 } from '../../services/registrationService';
 import { useImageUpload } from '../../../../shared/hooks/useImageUpload';
 import OwnerVehicleFleet from './OwnerVehicleFleet';
+import CarIcon from '../../../../assets/icons/car.png';
+import BikeIcon from '../../../../assets/icons/bike.png';
+import AutoIcon from '../../../../assets/icons/auto.png';
+import TruckIcon from '../../../../assets/icons/truck.png';
+import EhcvIcon from '../../../../assets/icons/ehcv.png';
+import HcvIcon from '../../../../assets/icons/hcv.png';
+import LcvIcon from '../../../../assets/icons/LCV.png';
+import McvIcon from '../../../../assets/icons/mcv.png';
+import LuxuryIcon from '../../../../assets/icons/Luxury.png';
+import PremiumIcon from '../../../../assets/icons/Premium.png';
+import SuvIcon from '../../../../assets/icons/SUV.png';
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
+const VEHICLE_FLEET_DRAFT_KEY = 'driver_vehicle_fleet_draft';
+const VEHICLE_FLEET_EDITING_KEY = 'driver_vehicle_fleet_editing';
+const DRIVER_VEHICLE_REAPPROVAL_PENDING_KEY = 'driver_vehicle_reapproval_pending';
+
+const iconMap = {
+    car: CarIcon,
+    bike: BikeIcon,
+    auto: AutoIcon,
+    truck: TruckIcon,
+    ehcb: EhcvIcon,
+    HCV: HcvIcon,
+    LCV: LcvIcon,
+    MCV: McvIcon,
+    Luxary: LuxuryIcon,
+    premium: PremiumIcon,
+    suv: SuvIcon,
+};
+
+const ICON_TYPE_ALIASES = {
+    motor_bike: 'bike',
+    motorbike: 'bike',
+    hcv: 'HCV',
+    lcv: 'LCV',
+    mcv: 'MCV',
+    luxary: 'Luxary',
+    luxury: 'Luxary',
+    mini_truck: 'truck',
+};
 
 const getVehicleTypes = (response) => {
     const data = unwrap(response);
-    return data?.vehicle_types || data?.results || (Array.isArray(data) ? data : []);
+    return data?.vehicle_types || data?.results || data?.data?.results || (Array.isArray(data) ? data : []);
 };
 
 const getTypeLabel = (type) => type?.name || type?.vehicle_type || type?.label || 'Vehicle';
+
+const normalizeIconType = (value = '') => {
+    const raw = String(value || '').trim();
+    if (!raw) return 'car';
+    const lower = raw.toLowerCase();
+    if (ICON_TYPE_ALIASES[lower]) return ICON_TYPE_ALIASES[lower];
+    const exactKey = Object.keys(iconMap).find((key) => key.toLowerCase() === lower);
+    return exactKey || 'car';
+};
+
+const getVehicleTypeImage = (type = {}) => (
+    type?.image
+    || type?.icon
+    || type?.map_icon
+    || iconMap[normalizeIconType(type?.icon_types || type?.icon_types_for || type?.name)]
+    || CarIcon
+);
 
 const getDriverVehicleTypeId = (driver) => {
     if (!driver?.vehicleTypeId) {
@@ -50,13 +106,22 @@ const buildForm = (driver) => ({
     vehicleImage: driver?.vehicleImage || '',
 });
 
+const readVehicleFleetDraft = () => {
+    try {
+        const raw = sessionStorage.getItem(VEHICLE_FLEET_DRAFT_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+};
+
 const buildVisibleVehicleTypes = (allTypes, driver) => {
     const driverMode = String(driver?.registerFor || 'taxi').toLowerCase();
     const savedVehicleTypeId = getDriverVehicleTypeId(driver);
 
-    const activeMatchingTypes = allTypes.filter((type) => {
+    const activeTypes = allTypes.filter((type) => {
         const isActive = type.active !== false && Number(type.status ?? 1) !== 0;
-        const transportType = String(type.transport_type || 'taxi').toLowerCase();
+        const transportType = String(type.transport_type || type.is_taxi || 'taxi').toLowerCase();
 
         if (!isActive) {
             return false;
@@ -66,8 +131,10 @@ const buildVisibleVehicleTypes = (allTypes, driver) => {
             return true;
         }
 
-        return transportType === driverMode;
+        return transportType === driverMode || transportType === 'both' || transportType === 'all';
     });
+
+    const activeMatchingTypes = activeTypes.length ? activeTypes : allTypes.filter((type) => type.active !== false && Number(type.status ?? 1) !== 0);
 
     if (!savedVehicleTypeId) {
         return activeMatchingTypes;
@@ -139,10 +206,14 @@ const VehicleFleet = () => {
                 const userRole = localStorage.getItem('role') || 'driver';
                 setIsOwner(userRole === 'owner');
 
+                const savedDraft = readVehicleFleetDraft();
+                const wasEditing = sessionStorage.getItem(VEHICLE_FLEET_EDITING_KEY) === 'true';
+
                 setDriver(nextDriver);
                 setVehicleTypes(nextTypes);
-                setFormData(buildForm(nextDriver));
-                setVehicleImagePreview(nextDriver?.vehicleImage || null);
+                setFormData(savedDraft ? { ...buildForm(nextDriver), ...savedDraft } : buildForm(nextDriver));
+                setVehicleImagePreview(savedDraft?.vehicleImage || nextDriver?.vehicleImage || null);
+                setIsEditing(wasEditing);
             } catch (error) {
                 if (active) {
                     setMessage(error.message || 'Could not load vehicle details.');
@@ -161,8 +232,30 @@ const VehicleFleet = () => {
         };
     }, []);
 
+    useEffect(() => {
+        sessionStorage.setItem(VEHICLE_FLEET_DRAFT_KEY, JSON.stringify(formData));
+    }, [formData]);
+
+    useEffect(() => {
+        sessionStorage.setItem(VEHICLE_FLEET_EDITING_KEY, isEditing ? 'true' : 'false');
+    }, [isEditing]);
+
     const handleChange = (field, value) => {
-        setFormData((prev) => ({ ...prev, [field]: value }));
+        setFormData((prev) => {
+            if (field === 'vehicleTypeId' && String(prev.vehicleTypeId) !== String(value)) {
+                setVehicleImagePreview(null);
+                return {
+                    vehicleTypeId: value,
+                    vehicleMake: '',
+                    vehicleModel: '',
+                    vehicleNumber: '',
+                    vehicleColor: '',
+                    vehicleImage: '',
+                };
+            }
+
+            return { ...prev, [field]: value };
+        });
     };
 
     const handleVehicleImageSelected = (event) => {
@@ -175,6 +268,8 @@ const VehicleFleet = () => {
             return;
         }
 
+        const requiresReapproval = JSON.stringify(buildForm(driver)) !== JSON.stringify(formData);
+
         setIsSaving(true);
         setMessage('');
 
@@ -185,7 +280,14 @@ const VehicleFleet = () => {
             setFormData(buildForm(nextDriver));
             setVehicleImagePreview(nextDriver?.vehicleImage || null);
             setIsEditing(false);
-            setMessage('Vehicle updated successfully.');
+            if (requiresReapproval) {
+                localStorage.setItem(DRIVER_VEHICLE_REAPPROVAL_PENDING_KEY, 'true');
+                setMessage('Vehicle updated and sent for approval again. Go online after admin approval.');
+            } else {
+                setMessage('Vehicle updated successfully.');
+            }
+            sessionStorage.removeItem(VEHICLE_FLEET_DRAFT_KEY);
+            sessionStorage.setItem(VEHICLE_FLEET_EDITING_KEY, 'false');
         } catch (error) {
             setMessage(error.message || 'Could not update vehicle.');
         } finally {
@@ -263,22 +365,6 @@ const VehicleFleet = () => {
                             </p>
                         </div>
 
-                        <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-4 min-w-0">
-                                <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-white text-slate-900 border border-slate-100 shadow-sm shrink-0">
-                                    <ActiveIcon size={20} />
-                                </div>
-                                <div className="space-y-0.5 min-w-0">
-                                    <h4 className="text-[15px] font-bold text-slate-900 leading-tight truncate">{activeVehicleName}</h4>
-                                    <p className="text-[12px] font-medium text-slate-400 truncate">
-                                        {driver?.vehicleNumber || 'No number'} • {driver?.vehicleColor || 'No color'}
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 text-[10px] font-bold uppercase tracking-wider">
-                                Active
-                            </div>
-                        </div>
                     </section>
                 </main>
             )}
@@ -298,7 +384,7 @@ const VehicleFleet = () => {
                             animate={{ y: 0 }}
                             exit={{ y: '100%' }}
                             transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-                            className="fixed bottom-0 left-0 right-0 z-[100] bg-white rounded-t-[2.5rem] p-6 pb-10 shadow-2xl max-w-lg mx-auto space-y-6"
+                            className="fixed bottom-0 left-0 right-0 z-[100] max-h-[88vh] overflow-y-auto bg-white rounded-t-[2.5rem] p-6 pb-10 shadow-2xl max-w-lg mx-auto space-y-6"
                         >
                             <div className="flex items-center justify-between">
                                 <div>
@@ -318,6 +404,7 @@ const VehicleFleet = () => {
                                             const id = String(type._id || type.id);
                                             const TypeIcon = iconFor(type.icon_types || type.name);
                                             const selected = String(formData.vehicleTypeId) === id;
+                                            const typeImage = getVehicleTypeImage(type);
 
                                             return (
                                                 <button
@@ -330,7 +417,19 @@ const VehicleFleet = () => {
                                                             : 'bg-white border-slate-100 text-slate-400 transition-colors hover:border-slate-200'
                                                     }`}
                                                 >
-                                                    <TypeIcon size={20} />
+                                                    {typeImage ? (
+                                                        <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${
+                                                            selected ? 'bg-white/14' : 'bg-slate-50'
+                                                        }`}>
+                                                            <img
+                                                                src={typeImage}
+                                                                alt={getTypeLabel(type)}
+                                                                className="h-8 w-8 object-contain"
+                                                            />
+                                                        </div>
+                                                    ) : (
+                                                        <TypeIcon size={20} />
+                                                    )}
                                                     <span className="text-[10px] font-bold uppercase tracking-wider leading-none text-center">{getTypeLabel(type)}</span>
                                                 </button>
                                             );

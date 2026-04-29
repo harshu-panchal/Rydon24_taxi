@@ -28,13 +28,44 @@ import { useNavigate } from 'react-router-dom';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import { clearDriverAuthState, getCurrentDriver } from '../services/registrationService';
 
+const unwrapDriver = (response) => response?.data?.data || response?.data || response || null;
+const ROUTE_BOOKING_STORAGE_KEY = 'driver_route_booking_preferences';
+
+const readRouteBookingPreferences = () => {
+    try {
+        const raw = localStorage.getItem(ROUTE_BOOKING_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : { enabled: false, coordinates: null, label: '' };
+    } catch {
+        return { enabled: false, coordinates: null, label: '' };
+    }
+};
+
+const writeRouteBookingPreferences = (nextValue) => {
+    localStorage.setItem(ROUTE_BOOKING_STORAGE_KEY, JSON.stringify(nextValue));
+    return nextValue;
+};
+
+const formatRouteBookingLabel = (coordinates) => {
+    if (!Array.isArray(coordinates) || coordinates.length !== 2) {
+        return 'Receive requests from your selected area';
+    }
+
+    const [lng, lat] = coordinates;
+    if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) {
+        return 'Receive requests from your selected area';
+    }
+
+    return `Selected area ${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}`;
+};
+
 const DriverProfile = () => {
     const navigate = useNavigate();
-    const [isRouteBookingEnabled, setIsRouteBookingEnabled] = useState(false);
+    const [routeBookingPreferences, setRouteBookingPreferences] = useState(() => readRouteBookingPreferences());
     const [isLogoutOpen, setIsLogoutOpen] = useState(false);
     const [driver, setDriver] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
+    const [routeBookingBusy, setRouteBookingBusy] = useState(false);
 
     useEffect(() => {
         let active = true;
@@ -46,7 +77,7 @@ const DriverProfile = () => {
             try {
                 const response = await getCurrentDriver();
                 if (!active) return;
-                setDriver(response?.data || null);
+                setDriver(unwrapDriver(response));
             } catch (err) {
                 if (!active) return;
                 setError(err?.message || 'Unable to load driver profile');
@@ -88,8 +119,57 @@ const DriverProfile = () => {
     const driverNumber = useMemo(() => driver?.vehicleNumber || 'N/A', [driver?.vehicleNumber]);
     const driverColor = useMemo(() => driver?.vehicleColor || 'N/A', [driver?.vehicleColor]);
     const driverRating = useMemo(() => Number(driver?.rating || 0), [driver?.rating]);
+    const routeBookingSubtitle = useMemo(() => {
+        if (!routeBookingPreferences.enabled) {
+            return 'Receive requests from your live location';
+        }
+
+        return routeBookingPreferences.label || formatRouteBookingLabel(routeBookingPreferences.coordinates);
+    }, [routeBookingPreferences.coordinates, routeBookingPreferences.enabled, routeBookingPreferences.label]);
 
     const hasProfileImage = Boolean(driver?.profileImage);
+
+    const handleRouteBookingToggle = () => {
+        if (routeBookingBusy) {
+            return;
+        }
+
+        if (routeBookingPreferences.enabled) {
+            const nextPreferences = writeRouteBookingPreferences({
+                ...routeBookingPreferences,
+                enabled: false,
+            });
+            setRouteBookingPreferences(nextPreferences);
+            return;
+        }
+
+        if (!navigator.geolocation) {
+            setError('Location is not available on this device.');
+            return;
+        }
+
+        setRouteBookingBusy(true);
+        setError('');
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const nextCoordinates = [position.coords.longitude, position.coords.latitude];
+                const nextPreferences = writeRouteBookingPreferences({
+                    enabled: true,
+                    coordinates: nextCoordinates,
+                    label: formatRouteBookingLabel(nextCoordinates),
+                    updatedAt: new Date().toISOString(),
+                });
+                setRouteBookingPreferences(nextPreferences);
+                setRouteBookingBusy(false);
+            },
+            () => {
+                setRouteBookingBusy(false);
+                setError('Please allow location permission to enable route booking.');
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 },
+        );
+    };
 
     const sections = [
         ...(isOwner ? [{
@@ -124,7 +204,7 @@ const DriverProfile = () => {
             title: 'Preferences',
             items: [
                 { id: 'languages', label: 'App Language', icon: <Languages size={20} />, path: '/taxi/driver/lang-select', state: { allowAuthenticated: true } },
-                { id: 'routeBooking', label: 'My Route Booking', icon: <Route size={20} />, type: 'toggle' },
+                { id: 'routeBooking', label: 'My Route Booking', sub: routeBookingSubtitle, icon: <Route size={20} />, type: 'toggle' },
             ]
         },
         {
@@ -237,11 +317,12 @@ const DriverProfile = () => {
                                     </div>
                                     {item.type === 'toggle' ? (
                                         <button 
-                                            onClick={(e) => { e.stopPropagation(); setIsRouteBookingEnabled(!isRouteBookingEnabled); }}
-                                            className={`w-10 h-5.5 rounded-full relative transition-colors duration-300 ${isRouteBookingEnabled ? 'bg-slate-900' : 'bg-slate-200'}`}
+                                            onClick={(e) => { e.stopPropagation(); handleRouteBookingToggle(); }}
+                                            disabled={routeBookingBusy}
+                                            className={`w-10 h-5.5 rounded-full relative transition-colors duration-300 ${routeBookingPreferences.enabled ? 'bg-slate-900' : 'bg-slate-200'} ${routeBookingBusy ? 'opacity-70' : ''}`}
                                         >
                                             <motion.div 
-                                                animate={{ x: isRouteBookingEnabled ? 20 : 2 }}
+                                                animate={{ x: routeBookingPreferences.enabled ? 20 : 2 }}
                                                 className="absolute top-1 w-3.5 h-3.5 rounded-full bg-white shadow-sm"
                                             />
                                         </button>

@@ -8,9 +8,10 @@ import toast from 'react-hot-toast';
 
 const Motion = motion;
 const NAME_REGEX = /^[A-Za-z]+(?:[ .'-][A-Za-z]+)*$/;
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 const normalizeName = (value) => String(value || '').replace(/[^A-Za-z .'-]/g, '').replace(/\s+/g, ' ');
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
+const unwrapDriver = (response) => response?.data?.data || response?.data || response || {};
 
 const EditProfile = () => {
     const navigate = useNavigate();
@@ -38,7 +39,7 @@ const EditProfile = () => {
         const fetchProfile = async () => {
             try {
                 const res = await getCurrentDriver();
-                const data = res.data;
+                const data = unwrapDriver(res);
                 setDriver(data);
                 setFormData({
                     name: data.name || '',
@@ -64,7 +65,7 @@ const EditProfile = () => {
             nextErrors.name = 'Full name can contain alphabets only';
         }
 
-        if (email && !EMAIL_REGEX.test(email)) {
+        if (email && (!EMAIL_REGEX.test(email) || email.includes('..'))) {
             nextErrors.email = 'Please enter a valid email address, example aa@gmail.com';
         }
 
@@ -151,6 +152,7 @@ const EditProfile = () => {
                             <input 
                                 type="file" 
                                 accept="image/*" 
+                                capture="user"
                                 className="hidden" 
                                 onChange={onImageFileChange}
                                 disabled={imageUploading}

@@ -305,12 +305,20 @@ const ManageOwners = () => {
                             </span>
                           </td>
                           <td className="px-4 py-4 text-center">
-                            <div className="relative inline-block">
+                            <div className="inline-flex items-center gap-1">
                               <button
                                 onClick={() => handleEditClick(owner)}
                                 className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                                title="Edit owner"
                               >
                                 <Edit size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(owner._id)}
+                                className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                title="Delete owner"
+                              >
+                                <Trash2 size={16} />
                               </button>
                             </div>
                           </td>

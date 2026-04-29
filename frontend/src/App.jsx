@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { MapPin, FileText } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
@@ -7,6 +7,8 @@ import { socketService } from './shared/api/socket';
 import { SettingsProvider } from './shared/context/SettingsContext';
 import AppAutoUpdater from './modules/shared/components/AppAutoUpdater';
 import { addRealtimeNotification } from './modules/user/utils/realtimeNotificationStore';
+import { clearLocalUserSession, getLocalUserToken } from './modules/user/services/authService';
+import { clearCurrentRide } from './modules/user/services/currentRideService';
 import './App.css';
 
 
@@ -364,11 +366,26 @@ const ScrollToTop = () => {
 };
 
 const clearUserSession = () => {
-  localStorage.removeItem('token');
-  localStorage.removeItem('userToken');
-  localStorage.removeItem('userInfo');
-  localStorage.removeItem('chatRole');
+  clearCurrentRide();
+  clearLocalUserSession();
 };
+
+const UserProtectedRoute = () => {
+  const location = useLocation();
+
+  if (!getLocalUserToken()) {
+    const loginPath = location.pathname.startsWith('/taxi/user') ? '/taxi/user/login' : '/login';
+    return <Navigate to={loginPath} replace />;
+  }
+
+  return <Outlet />;
+};
+
+const UserHomeRoute = ({ taxiPrefixed = false }) => (
+  getLocalUserToken()
+    ? <UserHome />
+    : <Navigate to={taxiPrefixed ? '/taxi/user/login' : '/login'} replace />
+);
 
 const UserAccountInvalidationListener = () => {
   const location = useLocation();
@@ -499,9 +516,10 @@ function App() {
               <Route path="/privacy" element={<LegalPage />} />
               <Route path="/verify-otp" element={<VerifyOTP />} />
               <Route path="/signup" element={<Signup />} />
-              <Route path="/user" element={<UserHome />} />
+              <Route path="/user" element={<UserHomeRoute />} />
               <Route path="/" element={<LandingPage />} />
 
+              <Route element={<UserProtectedRoute />}>
               <Route
                 path="/ride/select-location"
                 element={<SelectLocation />}
@@ -591,6 +609,7 @@ function App() {
                 path="/support/ticket/:id"
                 element={<SupportTicketDetail />}
               />
+              </Route>
 
               {/* User Module Routes (Taxi-prefixed aliases to match Driver style) */}
               <Route path="/taxi/user/onboarding" element={<Onboarding />} />
@@ -599,8 +618,9 @@ function App() {
               <Route path="/taxi/user/privacy" element={<LegalPage />} />
               <Route path="/taxi/user/verify-otp" element={<VerifyOTP />} />
               <Route path="/taxi/user/signup" element={<Signup />} />
-              <Route path="/taxi/user" element={<UserHome />} />
+              <Route path="/taxi/user" element={<UserHomeRoute taxiPrefixed />} />
 
+              <Route element={<UserProtectedRoute />}>
               <Route
                 path="/taxi/user/ride/select-location"
                 element={<SelectLocation />}
@@ -763,6 +783,7 @@ function App() {
                 path="/taxi/user/support/ticket/:id"
                 element={<SupportTicketDetail />}
               />
+              </Route>
 
               {/* Driver Module Routes - Centralized under DriverLayout for Theme & Styling */}
               <Route path="/taxi/driver" element={<DriverLayout />}>
