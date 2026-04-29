@@ -167,6 +167,13 @@ const fileToDataUrl = (file) =>
     reader.readAsDataURL(file);
   });
 
+const getCoverImage = (item = {}) => item.coverImage || item.image || '';
+const getGalleryImages = (item = {}) => {
+  if (Array.isArray(item.galleryImages)) return item.galleryImages.filter(Boolean);
+  if (Array.isArray(item.gallery)) return item.gallery.filter(Boolean);
+  return [];
+};
+
 const buildDefaultForm = () => {
   const blueprint = createBlueprintFromTemplate('compact_4');
   return {
@@ -176,6 +183,8 @@ const buildDefaultForm = () => {
     description: '',
     vehicleCategory: 'Car',
     image: '',
+    coverImage: '',
+    galleryImages: [],
     map_icon: '',
     capacity: countSeats(blueprint),
     luggageCapacity: 2,
@@ -254,6 +263,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEditor = propMode === 'create' || propMode === 'edit';
+  const isView = propMode === 'view';
   const [items, setItems] = useState([]);
   const [serviceStores, setServiceStores] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -296,7 +306,9 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
               short_description: selected.short_description || '',
               description: selected.description || '',
               vehicleCategory: selected.vehicleCategory || 'Car',
-              image: selected.image || '',
+              image: getCoverImage(selected),
+              coverImage: getCoverImage(selected),
+              galleryImages: getGalleryImages(selected),
               map_icon: selected.map_icon || '',
               capacity: Number(selected.capacity || countSeats(selected.blueprint)),
               luggageCapacity: Number(selected.luggageCapacity || 0),
@@ -335,6 +347,10 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
   }, [id, propMode]);
 
   const totalActive = useMemo(() => items.filter((item) => item.active !== false).length, [items]);
+  const selectedItem = useMemo(
+    () => items.find((item) => String(item.id || item._id) === String(id)),
+    [id, items],
+  );
 
   const updateForm = (field, value) => {
     setFormData((current) => ({ ...current, [field]: value }));
@@ -395,7 +411,29 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
     if (!file) return;
     const result = await fileToDataUrl(file);
     updateForm(field, result);
+    if (field === 'coverImage' || field === 'image') {
+      updateForm('image', result);
+      updateForm('coverImage', result);
+    }
     event.target.value = '';
+  };
+
+  const handleGalleryImagesChange = async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    const results = await Promise.all(files.map((file) => fileToDataUrl(file)));
+    setFormData((current) => ({
+      ...current,
+      galleryImages: [...(Array.isArray(current.galleryImages) ? current.galleryImages : []), ...results.filter(Boolean)],
+    }));
+    event.target.value = '';
+  };
+
+  const removeGalleryImage = (indexToRemove) => {
+    setFormData((current) => ({
+      ...current,
+      galleryImages: (Array.isArray(current.galleryImages) ? current.galleryImages : []).filter((_, index) => index !== indexToRemove),
+    }));
   };
 
   const updatePricingRow = (pricingId, field, value) => {
@@ -448,6 +486,9 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
     try {
       const payload = {
         ...formData,
+        image: formData.coverImage || formData.image || '',
+        coverImage: formData.coverImage || formData.image || '',
+        galleryImages: (Array.isArray(formData.galleryImages) ? formData.galleryImages : []).filter(Boolean),
         capacity: countSeats(formData.blueprint),
         active: formData.active,
         status: formData.active ? 'active' : 'inactive',
@@ -543,7 +584,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
     }
   };
 
-  if (!isEditor) {
+  if (!isEditor && !isView) {
     return (
       <div className="min-h-screen bg-[#f6f7fb] p-6 lg:p-8">
         <div className="mb-6">
@@ -555,7 +596,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-slate-900">Rental Vehicles</h1>
-              <p className="mt-1 text-sm text-slate-500">Manage self-drive vehicle types, duration pricing, and seat blueprints.</p>
+              <p className="mt-1 text-sm text-slate-500">Manage rental vehicles in one simple list and open any vehicle for full details.</p>
             </div>
             <button
               type="button"
@@ -610,94 +651,57 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
           </div>
         ) : null}
 
-        <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
-          {loading ? (
-            <div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-400">Loading rental vehicles...</div>
-          ) : items.length === 0 ? (
-            <div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-400">No rental vehicles configured yet.</div>
-          ) : (
-            items.map((item) => (
-              <div key={item.id || item._id} className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50">
-                      {item.image ? (
-                        <img src={item.image} alt={item.name} className="h-12 w-12 object-contain" />
-                      ) : (
-                        <Car size={24} className="text-slate-400" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-sm font-black text-slate-900">{item.name}</p>
-                      <p className="text-xs font-semibold text-slate-500">{item.vehicleCategory || 'Rental vehicle'}</p>
-                    </div>
+        {loading ? (
+          <div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-400">Loading rental vehicles...</div>
+        ) : items.length === 0 ? (
+          <div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-400">No rental vehicles configured yet.</div>
+        ) : (
+          <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+            <div className="grid grid-cols-[minmax(0,1.6fr)_110px_110px_120px_180px] gap-4 border-b border-slate-100 px-6 py-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+              <span>Vehicle</span>
+              <span>Seats</span>
+              <span>Bags</span>
+              <span>Status</span>
+              <span className="text-right">Actions</span>
+            </div>
+            {items.map((item) => (
+              <div
+                key={item.id || item._id}
+                className="grid grid-cols-[minmax(0,1.6fr)_110px_110px_120px_180px] gap-4 border-b border-slate-100 px-6 py-4 last:border-b-0"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50">
+                    {getCoverImage(item) ? (
+                      <img src={getCoverImage(item)} alt={item.name} className="h-10 w-10 object-contain" />
+                    ) : (
+                      <Car size={20} className="text-slate-400" />
+                    )}
                   </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-slate-900">{item.name}</p>
+                    <p className="truncate text-xs text-slate-500">{item.vehicleCategory || 'Rental vehicle'}</p>
+                  </div>
+                </div>
+                <div className="flex items-center text-sm font-semibold text-slate-700">{item.capacity || 0}</div>
+                <div className="flex items-center text-sm font-semibold text-slate-700">{item.luggageCapacity || 0}</div>
+                <div className="flex items-center">
                   <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide ${item.active !== false ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
                     {item.active !== false ? 'Active' : 'Inactive'}
                   </span>
                 </div>
-
-                <div className="mt-5 grid grid-cols-3 gap-3">
-                  <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Seats</p>
-                    <p className="mt-1 text-sm font-black text-slate-900">{item.capacity || 0}</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Bags</p>
-                    <p className="mt-1 text-sm font-black text-slate-900">{item.luggageCapacity || 0}</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Packages</p>
-                    <p className="mt-1 text-sm font-black text-slate-900">{item.pricing?.length || 0}</p>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3">
-                  <div className="flex items-center gap-2 text-slate-600">
-                    <Users size={15} />
-                    <span className="text-[11px] font-bold uppercase tracking-wide">Pooling</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide ${
-                      item.poolingEnabled ? 'bg-sky-50 text-sky-700' : 'bg-slate-200 text-slate-600'
-                    }`}>
-                      {item.poolingEnabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleTogglePooling(item)}
-                      disabled={togglingIds.includes(String(item.id || item._id))}
-                      className={`relative h-7 w-14 rounded-full transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
-                        item.poolingEnabled ? 'bg-sky-500' : 'bg-slate-300'
-                      }`}
-                      aria-pressed={item.poolingEnabled}
-                      title="Toggle pooling"
-                    >
-                      <span
-                        className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-all ${
-                          item.poolingEnabled ? 'left-8' : 'left-1'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Pricing Snapshot</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {(item.pricing || []).slice(0, 3).map((price) => (
-                      <span key={price.id} className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-slate-700">
-                        {price.label}: Rs {price.price}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mt-5 flex items-center justify-end gap-2">
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/admin/pricing/rental-vehicles/view/${item.id || item._id}`)}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    View details
+                  </button>
                   <button
                     type="button"
                     onClick={() => navigate(`/admin/pricing/rental-vehicles/edit/${item.id || item._id}`)}
                     className="rounded-xl p-2 text-slate-400 transition hover:bg-blue-50 hover:text-blue-600"
+                    title="Edit"
                   >
                     <Edit2 size={15} />
                   </button>
@@ -705,14 +709,163 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                     type="button"
                     onClick={() => handleDelete(item.id || item._id)}
                     className="rounded-xl p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                    title="Delete"
                   >
                     <Trash2 size={15} />
                   </button>
                 </div>
               </div>
-            ))
-          )}
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (isView) {
+    return (
+      <div className="min-h-screen bg-[#f6f7fb] p-6 lg:p-8">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <div className="mb-2 flex items-center gap-1.5 text-xs text-slate-400">
+              <span>Pricing</span>
+              <ChevronRight size={12} />
+              <span className="text-slate-700">Rental Vehicles</span>
+              <ChevronRight size={12} />
+              <span className="text-slate-700">View Details</span>
+            </div>
+            <h1 className="text-2xl font-bold text-slate-900">{selectedItem?.name || 'Rental Vehicle Details'}</h1>
+            <p className="mt-1 text-sm text-slate-500">A simple detail view for this rental vehicle type.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/admin/pricing/rental-vehicles')}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              <ArrowLeft size={16} />
+              Back
+            </button>
+            {id ? (
+              <button
+                type="button"
+                onClick={() => navigate(`/admin/pricing/rental-vehicles/edit/${id}`)}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#2e3c78] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#24305f]"
+              >
+                <Edit2 size={16} />
+                Edit
+              </button>
+            ) : null}
+          </div>
         </div>
+
+        {loading ? (
+          <div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-400">Loading rental vehicle details...</div>
+        ) : !selectedItem ? (
+          <div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-400">Rental vehicle not found.</div>
+        ) : (
+          <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+            <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex h-52 items-center justify-center rounded-[24px] bg-slate-50">
+                {getCoverImage(selectedItem) ? (
+                  <img src={getCoverImage(selectedItem)} alt={selectedItem.name} className="max-h-44 w-full object-contain p-4" />
+                ) : (
+                  <Car size={42} className="text-slate-300" />
+                )}
+              </div>
+              {getGalleryImages(selectedItem).length ? (
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  {getGalleryImages(selectedItem).slice(0, 6).map((image, index) => (
+                    <div key={`${selectedItem.id || selectedItem._id}-gallery-${index}`} className="overflow-hidden rounded-2xl bg-slate-50">
+                      <img src={image} alt={`${selectedItem.name} gallery ${index + 1}`} className="h-20 w-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              <div className="mt-5">
+                <p className="text-xl font-bold text-slate-900">{selectedItem.name}</p>
+                <p className="mt-1 text-sm text-slate-500">{selectedItem.short_description || 'No short description added.'}</p>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Seats</p>
+                  <p className="mt-1 text-lg font-bold text-slate-900">{selectedItem.capacity || 0}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Bags</p>
+                  <p className="mt-1 text-lg font-bold text-slate-900">{selectedItem.luggageCapacity || 0}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Packages</p>
+                  <p className="mt-1 text-lg font-bold text-slate-900">{selectedItem.pricing?.length || 0}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Pooling</p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">{selectedItem.poolingEnabled ? 'Enabled' : 'Disabled'}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-900">Overview</h2>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Category</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{selectedItem.vehicleCategory || 'Rental vehicle'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Status</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{selectedItem.active !== false ? 'Active' : 'Inactive'}</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Description</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">{selectedItem.description || 'No description added yet.'}</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Amenities</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {(selectedItem.amenities || []).length ? (
+                        selectedItem.amenities.map((amenity) => (
+                          <span key={amenity} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                            {amenity}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-sm text-slate-500">No amenities listed.</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-900">Pricing Packages</h2>
+                <div className="mt-4 space-y-3">
+                  {(selectedItem.pricing || []).length ? (
+                    selectedItem.pricing.map((price) => (
+                      <div key={price.id} className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-4">
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <p className="text-sm font-bold text-slate-900">{price.label}</p>
+                            <p className="text-xs text-slate-500">{price.durationHours} hours • {price.includedKm} km included</p>
+                          </div>
+                          <p className="text-base font-bold text-slate-900">Rs {price.price}</p>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
+                          <span className="rounded-full bg-white px-3 py-1">Extra hour: Rs {price.extraHourPrice}</span>
+                          <span className="rounded-full bg-white px-3 py-1">Extra km: Rs {price.extraKmPrice}</span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-500">No pricing packages added.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -868,27 +1021,30 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
             <label className={labelClass}>Vehicle Image</label>
             <div className="rounded-2xl border border-dashed border-slate-300 p-4">
               <div className="flex min-h-[280px] items-center justify-center overflow-hidden rounded-2xl bg-slate-50">
-                {formData.image ? (
-                  <img src={formData.image} alt="Vehicle preview" className="max-h-[240px] w-full object-contain p-4" />
+                {formData.coverImage ? (
+                  <img src={formData.coverImage} alt="Vehicle preview" className="max-h-[240px] w-full object-contain p-4" />
                 ) : (
                   <label className="flex cursor-pointer flex-col items-center gap-3 text-center">
-                    <input type="file" accept="image/*" className="hidden" onChange={(event) => handleImageChange(event, 'image')} />
+                    <input type="file" accept="image/*" className="hidden" onChange={(event) => handleImageChange(event, 'coverImage')} />
                     <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-indigo-600 shadow-sm">
                       <ImagePlus size={20} />
                     </span>
-                    <span className="text-sm font-semibold text-slate-700">Upload rental vehicle image</span>
+                    <span className="text-sm font-semibold text-slate-700">Upload cover image</span>
                   </label>
                 )}
               </div>
-              {formData.image ? (
+              {formData.coverImage ? (
                 <div className="mt-3 flex gap-2">
                   <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">
                     Change
-                    <input type="file" accept="image/*" className="hidden" onChange={(event) => handleImageChange(event, 'image')} />
+                    <input type="file" accept="image/*" className="hidden" onChange={(event) => handleImageChange(event, 'coverImage')} />
                   </label>
                   <button
                     type="button"
-                    onClick={() => updateForm('image', '')}
+                    onClick={() => {
+                      updateForm('image', '');
+                      updateForm('coverImage', '');
+                    }}
                     className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-bold text-rose-600"
                   >
                     Remove
@@ -896,7 +1052,40 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                 </div>
               ) : null}
             </div>
-            <p className="mt-2 text-xs text-slate-500">This image is the visual identity for the rental vehicle card.</p>
+            <p className="mt-2 text-xs text-slate-500">This cover image becomes the main rental vehicle card image.</p>
+          </div>
+
+          <div>
+            <label className={labelClass}>Gallery Images</label>
+            <div className="rounded-2xl border border-dashed border-slate-300 p-4">
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm border border-slate-200">
+                <ImagePlus size={16} />
+                Add gallery images
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handleGalleryImagesChange} />
+              </label>
+
+              {formData.galleryImages.length ? (
+                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {formData.galleryImages.map((image, index) => (
+                    <div key={`gallery-${index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-2">
+                      <div className="overflow-hidden rounded-xl bg-white">
+                        <img src={image} alt={`Gallery ${index + 1}`} className="h-28 w-full object-cover" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeGalleryImage(index)}
+                        className="mt-2 w-full rounded-xl border border-rose-200 px-3 py-2 text-xs font-bold text-rose-600"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-3 text-xs text-slate-500">Add extra gallery photos for the inside detail view.</p>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">Cover stays separate. Gallery images are shown as supporting detail shots.</p>
           </div>
 
           <div className="space-y-6">
@@ -904,8 +1093,8 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Live Summary</p>
               <div className="mt-4 flex items-center gap-3">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm">
-                  {formData.image ? (
-                    <img src={formData.image} alt={formData.name || 'Vehicle'} className="h-12 w-12 object-contain" />
+                  {formData.coverImage ? (
+                    <img src={formData.coverImage} alt={formData.name || 'Vehicle'} className="h-12 w-12 object-contain" />
                   ) : (
                     <Car size={24} className="text-slate-400" />
                   )}

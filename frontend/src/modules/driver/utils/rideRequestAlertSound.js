@@ -7,6 +7,10 @@ let playInFlight = null;
 let retryTimeoutId = null;
 let lifecycleBound = false;
 let nativePulseIntervalId = null;
+let vibrationIntervalId = null;
+let audioContext = null;
+let oscillatorTimeoutId = null;
+let oscillatorIntervalId = null;
 
 const notifyNativeAlertBridge = (action = 'start') => {
     const payload = {
@@ -65,6 +69,118 @@ const stopNativePulse = () => {
     }
 };
 
+const getAudioContext = () => {
+    if (audioContext || typeof window === 'undefined') {
+        return audioContext;
+    }
+
+    const Context = window.AudioContext || window.webkitAudioContext;
+    if (!Context) {
+        return null;
+    }
+
+    try {
+        audioContext = new Context();
+    } catch {
+        audioContext = null;
+    }
+
+    return audioContext;
+};
+
+const clearOscillatorPulse = () => {
+    if (oscillatorTimeoutId) {
+        window.clearTimeout(oscillatorTimeoutId);
+        oscillatorTimeoutId = null;
+    }
+};
+
+const stopOscillatorLoop = () => {
+    clearOscillatorPulse();
+
+    if (oscillatorIntervalId) {
+        window.clearInterval(oscillatorIntervalId);
+        oscillatorIntervalId = null;
+    }
+};
+
+const pulseOscillator = () => {
+    const context = getAudioContext();
+    if (!context || context.state !== 'running') {
+        return;
+    }
+
+    try {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        const now = context.currentTime;
+
+        oscillator.type = 'square';
+        oscillator.frequency.setValueAtTime(880, now);
+
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.18, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+
+        oscillator.start(now);
+        oscillator.stop(now + 0.24);
+    } catch {}
+};
+
+const startOscillatorLoop = () => {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    pulseOscillator();
+
+    if (oscillatorIntervalId) {
+        return;
+    }
+
+    oscillatorIntervalId = window.setInterval(() => {
+        if (!shouldKeepPlaying) {
+            return;
+        }
+
+        pulseOscillator();
+    }, 1400);
+};
+
+const startVibrationLoop = () => {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined' || !navigator.vibrate) {
+        return;
+    }
+
+    navigator.vibrate([400, 180, 400]);
+
+    if (vibrationIntervalId) {
+        return;
+    }
+
+    vibrationIntervalId = window.setInterval(() => {
+        if (!shouldKeepPlaying) {
+            return;
+        }
+
+        navigator.vibrate([400, 180, 400]);
+    }, 1800);
+};
+
+const stopVibrationLoop = () => {
+    if (vibrationIntervalId) {
+        window.clearInterval(vibrationIntervalId);
+        vibrationIntervalId = null;
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(0);
+    }
+};
+
 const clearRetryTimeout = () => {
     if (retryTimeoutId) {
         window.clearTimeout(retryTimeoutId);
@@ -102,9 +218,13 @@ const handleLifecycleResume = () => {
     }
 
     const audio = getAlertAudio();
+    getAudioContext()?.resume?.().catch?.(() => {});
     if (audio.paused) {
         tryPlayAlertAudio();
     }
+
+    startOscillatorLoop();
+    startVibrationLoop();
 };
 
 const bindLifecycleListeners = () => {
@@ -125,6 +245,8 @@ const bindLifecycleListeners = () => {
 const tryPlayAlertAudio = () => {
     const audio = getAlertAudio();
     bindLifecycleListeners();
+    audio.load();
+    getAudioContext()?.resume?.().catch?.(() => {});
 
     if (playInFlight) {
         return playInFlight;
@@ -135,9 +257,11 @@ const tryPlayAlertAudio = () => {
             playInFlight = null;
             isUnlocked = true;
             clearRetryTimeout();
+            stopOscillatorLoop();
         })
         .catch(() => {
             playInFlight = null;
+            startOscillatorLoop();
             scheduleRetry(isUnlocked ? 1200 : 500);
         });
 
@@ -149,6 +273,8 @@ export const unlockRideRequestAlertSound = () => {
     const previousVolume = audio.volume;
     audio.volume = 0;
     bindLifecycleListeners();
+    getAudioContext()?.resume?.().catch?.(() => {});
+    pulseOscillator();
 
     audio.play()
         .then(() => {
@@ -161,10 +287,13 @@ export const unlockRideRequestAlertSound = () => {
             if (shouldKeepPlaying) {
                 audio.currentTime = 0;
                 tryPlayAlertAudio();
+                startOscillatorLoop();
+                startVibrationLoop();
             }
         })
         .catch(() => {
             audio.volume = previousVolume;
+            startOscillatorLoop();
             scheduleRetry(500);
         });
 };
@@ -175,17 +304,17 @@ export const playRideRequestAlertSound = () => {
     shouldKeepPlaying = true;
     audio.currentTime = 0;
     startNativePulse();
+    startVibrationLoop();
+    startOscillatorLoop();
     tryPlayAlertAudio();
-
-    if (navigator.vibrate) {
-        navigator.vibrate([250, 150, 250]);
-    }
 };
 
 export const stopRideRequestAlertSound = () => {
     shouldKeepPlaying = false;
     clearRetryTimeout();
     stopNativePulse();
+    stopVibrationLoop();
+    stopOscillatorLoop();
 
     if (!alertAudio) return;
 

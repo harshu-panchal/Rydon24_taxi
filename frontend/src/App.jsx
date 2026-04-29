@@ -1174,6 +1174,10 @@ function App() {
                     element={<AdminRentalVehicleTypes mode="edit" />}
                   />
                   <Route
+                    path="rental-vehicles/view/:id"
+                    element={<AdminRentalVehicleTypes mode="view" />}
+                  />
+                  <Route
                     path="rental-requests"
                     element={<AdminRentalBookingRequests />}
                   />
