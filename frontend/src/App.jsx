@@ -332,7 +332,7 @@ const AdminSectionPlaceholder = () => {
 // A wrapper to handle conditional layouts (Mobile for User/Driver, Full for Admin)
 const MainLayout = ({ children }) => {
   const location = useLocation();
-  const staticPages = ['/', '/about', '/contact', '/faq', '/services', '/privacy', '/terms', '/blog'];
+  const staticPages = ['/', '/about', '/contact', '/faq', '/services', '/privacy', '/terms', '/refund', '/cancellation', '/blog'];
   const isStaticPath = staticPages.includes(location.pathname);
   const isAdminPath =
     location.pathname.startsWith('/admin') ||
@@ -524,6 +524,8 @@ function App() {
               <Route path="/blog" element={<BlogPage />} />
               <Route path="/terms" element={<LegalPage />} />
               <Route path="/privacy" element={<LegalPage />} />
+              <Route path="/refund" element={<LegalPage />} />
+              <Route path="/cancellation" element={<LegalPage />} />
               <Route path="/login" element={<Login />} />
               <Route path="/onboarding" element={<Onboarding />} />
               <Route path="/verify-otp" element={<VerifyOTP />} />

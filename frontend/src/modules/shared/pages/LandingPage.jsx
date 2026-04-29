@@ -229,10 +229,12 @@ function LandingPage() {
           <div className="footer-col-2">
             <h3>Quick Links</h3>
             <ul>
+              <li><a href="/terms" onClick={handleRedirect('/terms')}>Terms & Conditions</a></li>
+              <li><a href="/privacy" onClick={handleRedirect('/privacy')}>Privacy Policy</a></li>
+              <li><a href="/refund" onClick={handleRedirect('/refund')}>Refund Policy</a></li>
+              <li><a href="/cancellation" onClick={handleRedirect('/cancellation')}>Cancellation Policy</a></li>
+              <li><a href="/contact" onClick={handleRedirect('/contact')}>Contact Us</a></li>
               <li><a href="/about" onClick={handleRedirect('/about')}>About Us</a></li>
-              <li><a href="/services" onClick={handleRedirect('/services')}>Service</a></li>
-              <li><a href="/contact" onClick={handleRedirect('/contact')}>Contact</a></li>
-              <li><a href="/faq" onClick={handleRedirect('/faq')}>FAQs</a></li>
             </ul>
           </div>
           <div className="footer-col-3">
@@ -251,7 +253,7 @@ function LandingPage() {
         <div className="footer-bottom-bar">
           <div className="footer-legal">
             <a href="/privacy" onClick={handleRedirect('/privacy')}>Privacy Policy</a>
-            <a href="/terms" onClick={handleRedirect('/terms')}>Terms & Service</a>
+            <a href="/terms" onClick={handleRedirect('/terms')}>Terms & Conditions</a>
           </div>
           <div className="footer-copyright">
             Copyright 2026 © All Right Reserved Design by Rydon24
