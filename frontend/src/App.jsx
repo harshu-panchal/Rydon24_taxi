@@ -41,6 +41,11 @@ const Wallet = lazy(() => import('./modules/user/pages/Wallet'));
 const ComingSoon = lazy(() => import('./modules/shared/pages/ComingSoon'));
 const LegalPage = lazy(() => import('./modules/shared/pages/LegalPage'));
 const LandingPage = lazy(() => import('./modules/shared/pages/LandingPage'));
+const AboutPage = lazy(() => import('./modules/shared/pages/AboutPage'));
+const ContactPage = lazy(() => import('./modules/shared/pages/ContactPage'));
+const FaqPage = lazy(() => import('./modules/shared/pages/FaqPage'));
+const ServicesPage = lazy(() => import('./modules/shared/pages/ServicesPage'));
+const BlogPage = lazy(() => import('./modules/shared/pages/BlogPage'));
 
 // Phase 1 — Parcel flow completions
 const ParcelSearchingDriver = lazy(() => import('./modules/user/pages/parcel/ParcelSearchingDriver'));
@@ -327,7 +332,8 @@ const AdminSectionPlaceholder = () => {
 // A wrapper to handle conditional layouts (Mobile for User/Driver, Full for Admin)
 const MainLayout = ({ children }) => {
   const location = useLocation();
-  const isLandingPath = location.pathname === '/';
+  const staticPages = ['/', '/about', '/contact', '/faq', '/services', '/privacy', '/terms', '/blog'];
+  const isStaticPath = staticPages.includes(location.pathname);
   const isAdminPath =
     location.pathname.startsWith('/admin') ||
     location.pathname.startsWith('/user-import') ||
@@ -338,7 +344,7 @@ const MainLayout = ({ children }) => {
     return <div className="redigo-admin-root h-screen bg-gray-50 overflow-hidden">{children}</div>;
   }
 
-  if (isLandingPath) {
+  if (isStaticPath) {
     return (
       <div className="redigo-landing-root min-h-screen bg-white">
         <main className="min-h-screen">{children}</main>
@@ -509,15 +515,20 @@ function App() {
             }>
             <Toaster position="top-right" />
             <Routes>
-              {/* User Module Routes */}
-              <Route path="/onboarding" element={<Onboarding />} />
-              <Route path="/login" element={<Login />} />
+              {/* Static / Public routes */}
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/about" element={<AboutPage />} />
+              <Route path="/contact" element={<ContactPage />} />
+              <Route path="/faq" element={<FaqPage />} />
+              <Route path="/services" element={<ServicesPage />} />
+              <Route path="/blog" element={<BlogPage />} />
               <Route path="/terms" element={<LegalPage />} />
               <Route path="/privacy" element={<LegalPage />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/onboarding" element={<Onboarding />} />
               <Route path="/verify-otp" element={<VerifyOTP />} />
               <Route path="/signup" element={<Signup />} />
               <Route path="/user" element={<UserHomeRoute />} />
-              <Route path="/" element={<LandingPage />} />
 
               <Route element={<UserProtectedRoute />}>
               <Route
