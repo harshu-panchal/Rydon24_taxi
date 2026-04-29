@@ -3,6 +3,16 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Calendar, ChevronRight, Clock3, Info, MapPin, Users } from 'lucide-react';
 
+const getTomorrowLocalDateTime = () => {
+  const next = new Date(Date.now() + 60 * 60 * 1000);
+  const year = next.getFullYear();
+  const month = String(next.getMonth() + 1).padStart(2, '0');
+  const day = String(next.getDate()).padStart(2, '0');
+  const hours = String(next.getHours()).padStart(2, '0');
+  const minutes = String(next.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
 const getVehicleIcon = (type = {}) => {
   const customIcon = String(type.icon || '').trim();
   if (customIcon) return customIcon;
@@ -63,8 +73,14 @@ const IntercityVehicle = () => {
       ? initialDate
       : new Date().toISOString().split('T')[0]
   );
+  const [scheduledAt, setScheduledAt] = useState(
+    initialRideMode === 'schedule' && location.state?.scheduledAt
+      ? String(location.state.scheduledAt).slice(0, 16)
+      : getTomorrowLocalDateTime()
+  );
   const [passengers, setPassengers] = useState(1);
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
+  const [scheduleError, setScheduleError] = useState('');
 
   const vehicles = useMemo(
     () =>
@@ -107,6 +123,21 @@ const IntercityVehicle = () => {
   const handleContinue = () => {
     if (!selectedVehicle) return;
 
+    if (rideMode === 'schedule') {
+      const parsedSchedule = new Date(scheduledAt);
+      if (!scheduledAt || Number.isNaN(parsedSchedule.getTime())) {
+        setScheduleError('Choose a valid schedule date and time.');
+        return;
+      }
+
+      if (parsedSchedule.getTime() <= Date.now() + 60 * 1000) {
+        setScheduleError('Schedule time must be at least 1 minute ahead.');
+        return;
+      }
+    }
+
+    setScheduleError('');
+
     navigate(`${routePrefix}/intercity/details`, {
       state: {
         fromCity,
@@ -115,6 +146,7 @@ const IntercityVehicle = () => {
         rideMode,
         date: getDisplayDate(rideMode, travelDate),
         travelDate,
+        scheduledAt: rideMode === 'schedule' ? new Date(scheduledAt).toISOString() : null,
         selectedPackages,
         pickupAddress,
         pickupCoords,
@@ -228,6 +260,19 @@ const IntercityVehicle = () => {
                 onChange={(event) => setTravelDate(event.target.value)}
                 className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none focus:border-blue-500"
               />
+              <label className="mb-2 mt-4 block text-sm font-medium text-slate-700">Pickup time</label>
+              <input
+                type="datetime-local"
+                min={getTomorrowLocalDateTime()}
+                value={scheduledAt}
+                onChange={(event) => setScheduledAt(event.target.value)}
+                className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none focus:border-blue-500"
+              />
+              {scheduleError ? (
+                <p className="mt-2 text-sm font-medium text-rose-500">{scheduleError}</p>
+              ) : (
+                <p className="mt-2 text-xs text-slate-500">Drivers will be notified automatically around this scheduled time.</p>
+              )}
             </div>
           ) : null}
 

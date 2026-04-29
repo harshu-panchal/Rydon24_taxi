@@ -106,6 +106,15 @@ const normalizeIntercityPayload = (intercity = {}) => ({
   vehicleName: String(intercity.vehicleName || '').trim(),
 });
 
+const normalizeScheduledAt = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 const normalizeVehicleTypeIds = (vehicleTypeIds = [], vehicleTypeId = null) => {
   const values = Array.isArray(vehicleTypeIds) ? vehicleTypeIds : [vehicleTypeIds];
 
@@ -279,6 +288,7 @@ export const createRideRecord = async ({
   promo_code,
   service_location_id,
   transport_type,
+  scheduledAt,
 }) => {
   const user = await User.findById(userId);
 
@@ -335,6 +345,11 @@ export const createRideRecord = async ({
   };
 
   const promoCode = typeof promo_code === 'string' ? promo_code.trim() : '';
+  const normalizedScheduledAt = normalizeScheduledAt(scheduledAt);
+
+  if (scheduledAt && !normalizedScheduledAt) {
+    throw new ApiError(400, 'scheduledAt is invalid');
+  }
 
   if (!promoCode) {
     const ride = await Ride.create({
@@ -358,6 +373,7 @@ export const createRideRecord = async ({
       pricingSnapshot,
       parcel: normalizeParcelPayload(parcel),
       intercity: normalizeIntercityPayload(intercity),
+      scheduledAt: normalizedScheduledAt,
       status: RIDE_STATUS.SEARCHING,
       liveStatus: RIDE_LIVE_STATUS.SEARCHING,
     });
@@ -400,6 +416,7 @@ export const createRideRecord = async ({
             pricingSnapshot,
             parcel: normalizeParcelPayload(parcel),
             intercity: normalizeIntercityPayload(intercity),
+            scheduledAt: normalizedScheduledAt,
             status: RIDE_STATUS.SEARCHING,
             liveStatus: RIDE_LIVE_STATUS.SEARCHING,
           },

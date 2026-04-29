@@ -46,10 +46,14 @@ const redirectToDriverLogin = (navigate) => {
     navigate('/taxi/driver/login', { replace: true });
 };
 
+const getStoredRole = () => String(localStorage.getItem('role') || 'driver').toLowerCase();
+
 const getAuthenticatedDriverHome = () => (
-    String(localStorage.getItem('role') || 'driver').toLowerCase() === 'owner'
+    getStoredRole() === 'owner'
         ? '/taxi/driver/profile'
-        : '/taxi/driver/home'
+        : getStoredRole() === 'bus_driver'
+            ? '/taxi/driver/bus-home'
+            : '/taxi/driver/home'
 );
 
 const getPendingDriverRoute = () => '/taxi/driver/registration-status';
@@ -177,7 +181,7 @@ const DriverLayout = () => {
             ) : (
                 <>
                     <Outlet context={{ isAllowed }} />
-                    {isAllowed && <DriverRideRequestListener />}
+                    {isAllowed && getStoredRole() === 'driver' && <DriverRideRequestListener />}
                 </>
             )}
         </div>

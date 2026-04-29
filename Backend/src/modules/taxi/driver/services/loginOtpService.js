@@ -3,6 +3,7 @@ import { ApiError } from '../../../../utils/ApiError.js';
 import { env } from '../../../../config/env.js';
 import { Owner } from '../../admin/models/Owner.js';
 import { Driver } from '../models/Driver.js';
+import { BusDriver } from '../models/BusDriver.js';
 import { DriverLoginSession } from '../models/DriverLoginSession.js';
 import { signAccessToken } from './authService.js';
 import { sendOtpSms } from '../../services/smsService.js';
@@ -28,8 +29,14 @@ const buildPhoneCandidates = (phone) => {
 };
 
 const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000));
-const normalizeRole = (role) =>
-  String(role || 'driver').toLowerCase() === 'owner' ? 'owner' : 'driver';
+const normalizeRole = (role) => {
+  const normalized = String(role || 'driver').toLowerCase();
+  if (normalized === 'owner') return 'owner';
+  if (normalized === 'bus_driver' || normalized === 'bus-driver' || normalized === 'busdriver') {
+    return 'bus_driver';
+  }
+  return 'driver';
+};
 
 const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
 const getVisibleOtp = (otp) => (process.env.NODE_ENV !== 'production' ? String(otp) : null);
@@ -106,6 +113,23 @@ const publicOwnerPayload = (owner) => ({
   status: owner.status,
 });
 
+const publicBusDriverPayload = (driver) => ({
+  id: driver._id,
+  name: driver.name || '',
+  phone: driver.phone || '',
+  email: driver.email || '',
+  approve: driver.approve,
+  active: driver.active,
+  status: driver.status || 'approved',
+  assignedBusServiceId: driver.assignedBusServiceId ? String(driver.assignedBusServiceId) : '',
+  operatorName: driver.operatorName || '',
+  busName: driver.busName || '',
+  serviceNumber: driver.serviceNumber || '',
+  routeName: driver.routeName || '',
+  originCity: driver.originCity || '',
+  destinationCity: driver.destinationCity || '',
+});
+
 const isApprovedDriver = (driver) =>
   Boolean(driver) &&
   driver.approve !== false &&
@@ -115,6 +139,12 @@ const isApprovedOwner = (owner) =>
   Boolean(owner) &&
   owner.active !== false &&
   (owner.approve === true || String(owner.status || '').toLowerCase() === 'approved');
+
+const isApprovedBusDriver = (driver) =>
+  Boolean(driver) &&
+  driver.active !== false &&
+  driver.approve !== false &&
+  !['pending', 'blocked'].includes(String(driver.status || '').toLowerCase());
 
 export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
   const normalizedPhone = normalizePhone(phone);
@@ -130,17 +160,38 @@ export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
       ? await Owner.findOne({
           $or: [{ mobile: { $in: phoneCandidates } }, { phone: { $in: phoneCandidates } }],
         })
-      : await Driver.findOne({ phone: { $in: phoneCandidates } });
+      : normalizedRole === 'bus_driver'
+        ? await BusDriver.findOne({ phone: { $in: phoneCandidates } })
+        : await Driver.findOne({ phone: { $in: phoneCandidates } });
 
   if (!account) {
-    throw new ApiError(404, `${normalizedRole === 'owner' ? 'Owner' : 'Driver'} account not found`);
+    throw new ApiError(
+      404,
+      `${
+        normalizedRole === 'owner'
+          ? 'Owner'
+          : normalizedRole === 'bus_driver'
+            ? 'Bus driver'
+            : 'Driver'
+      } account not found`,
+    );
   }
 
   if (
     (normalizedRole === 'owner' && !isApprovedOwner(account)) ||
-    (normalizedRole === 'driver' && !isApprovedDriver(account))
+    (normalizedRole === 'driver' && !isApprovedDriver(account)) ||
+    (normalizedRole === 'bus_driver' && !isApprovedBusDriver(account))
   ) {
-    throw new ApiError(403, `${normalizedRole === 'owner' ? 'Owner' : 'Driver'} account is pending approval`);
+    throw new ApiError(
+      403,
+      `${
+        normalizedRole === 'owner'
+          ? 'Owner'
+          : normalizedRole === 'bus_driver'
+            ? 'Bus driver'
+            : 'Driver'
+      } account is pending approval`,
+    );
   }
 
   const { otp, isStatic } = resolveDriverLoginOtpForPhone(normalizedPhone);
@@ -201,17 +252,43 @@ export const verifyDriverLoginOtp = async ({ phone, otp }) => {
   const account =
     normalizedRole === 'owner'
       ? await Owner.findById(session.driverId)
-      : await Driver.findById(session.driverId);
+      : normalizedRole === 'bus_driver'
+        ? await BusDriver.findById(session.driverId)
+        : await Driver.findById(session.driverId);
 
   if (!account) {
-    throw new ApiError(404, `${normalizedRole === 'owner' ? 'Owner' : 'Driver'} account not found`);
+    throw new ApiError(
+      404,
+      `${
+        normalizedRole === 'owner'
+          ? 'Owner'
+          : normalizedRole === 'bus_driver'
+            ? 'Bus driver'
+            : 'Driver'
+      } account not found`,
+    );
   }
 
   if (
     (normalizedRole === 'owner' && !isApprovedOwner(account)) ||
-    (normalizedRole === 'driver' && !isApprovedDriver(account))
+    (normalizedRole === 'driver' && !isApprovedDriver(account)) ||
+    (normalizedRole === 'bus_driver' && !isApprovedBusDriver(account))
   ) {
-    throw new ApiError(403, `${normalizedRole === 'owner' ? 'Owner' : 'Driver'} account is pending approval`);
+    throw new ApiError(
+      403,
+      `${
+        normalizedRole === 'owner'
+          ? 'Owner'
+          : normalizedRole === 'bus_driver'
+            ? 'Bus driver'
+            : 'Driver'
+      } account is pending approval`,
+    );
+  }
+
+  if (normalizedRole === 'bus_driver') {
+    account.lastLoginAt = new Date();
+    await account.save();
   }
 
   session.verifiedAt = new Date();
@@ -222,6 +299,11 @@ export const verifyDriverLoginOtp = async ({ phone, otp }) => {
   return {
     message: 'OTP verified successfully',
     token: signAccessToken({ sub: String(account._id), role: normalizedRole }),
-    driver: normalizedRole === 'owner' ? publicOwnerPayload(account) : publicDriverPayload(account),
+    driver:
+      normalizedRole === 'owner'
+        ? publicOwnerPayload(account)
+        : normalizedRole === 'bus_driver'
+          ? publicBusDriverPayload(account)
+          : publicDriverPayload(account),
   };
 };

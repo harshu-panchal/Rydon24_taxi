@@ -12,6 +12,14 @@ import {
 } from '../../services/registrationService';
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
+const normalizeDriverRole = (role) => {
+    const normalized = String(role || 'driver').toLowerCase();
+    if (normalized === 'owner') return 'owner';
+    if (normalized === 'bus_driver' || normalized === 'bus-driver' || normalized === 'busdriver') {
+        return 'bus_driver';
+    }
+    return 'driver';
+};
 const syncPushTokens = () => {
     window.__flushNativeFcmToken?.().catch?.(() => {});
     window.__registerBrowserFcmToken?.({ interactive: true }).catch?.(() => {});
@@ -108,16 +116,18 @@ const OTPVerification = () => {
                 if (token) {
                     localStorage.setItem('token', token);
                     localStorage.setItem('driverToken', token);
-                    const normalizedRole = String(role || 'driver').toLowerCase() === 'owner' ? 'owner' : 'driver';
+                    const normalizedRole = normalizeDriverRole(role);
                     localStorage.setItem('role', normalizedRole);
                     syncPushTokens();
                 }
 
                 clearDriverRegistrationSession();
                 const nextPath =
-                    String(role || 'driver').toLowerCase() === 'owner'
+                    normalizeDriverRole(role) === 'owner'
                         ? '/taxi/driver/profile'
-                        : '/taxi/driver/home';
+                        : normalizeDriverRole(role) === 'bus_driver'
+                            ? '/taxi/driver/bus-home'
+                            : '/taxi/driver/home';
                 navigate(nextPath, { replace: true });
                 return;
             }

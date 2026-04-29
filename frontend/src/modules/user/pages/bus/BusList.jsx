@@ -20,6 +20,12 @@ const formatTravelDate = (dateStr) => {
   }
 };
 
+const stopBadgeTone = {
+  pickup: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  drop: 'border-rose-200 bg-rose-50 text-rose-700',
+  both: 'border-indigo-200 bg-indigo-50 text-indigo-700',
+};
+
 const BusList = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -111,6 +117,10 @@ const BusList = () => {
 
         {!loading && !error
           ? buses.map((bus, index) => (
+              (() => {
+                const routeStops = Array.isArray(bus.route?.stops) ? bus.route.stops : [];
+                const visibleStops = routeStops.slice(0, 4);
+                return (
               <motion.button
                 key={bus.id}
                 type="button"
@@ -180,7 +190,49 @@ const BusList = () => {
                     Select Seats <ChevronRight size={16} />
                   </div>
                 </div>
+
+                {routeStops.length > 0 ? (
+                  <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Stops</p>
+                      <p className="text-[10px] font-bold text-slate-400">
+                        {routeStops.length} total
+                      </p>
+                    </div>
+
+                    <div className="mt-3 space-y-2">
+                      {visibleStops.map((stop, stopIndex) => (
+                        <div key={stop.id || `${bus.id}-stop-${stopIndex}`} className="flex items-start justify-between gap-3 rounded-2xl bg-white px-3 py-2.5">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-black text-slate-900">
+                              {stop.city || stop.pointName || 'Stop'}
+                            </p>
+                            <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">
+                              {stop.pointName || 'Point not set'}
+                            </p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <span className={`inline-flex rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-wider ${stopBadgeTone[stop.stopType] || stopBadgeTone.both}`}>
+                              {stop.stopType === 'both' ? 'BP + DP' : stop.stopType === 'drop' ? 'DP' : 'BP'}
+                            </span>
+                            <p className="mt-1 text-[10px] font-bold text-slate-400">
+                              {stop.arrivalTime || stop.departureTime || '--:--'}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {routeStops.length > visibleStops.length ? (
+                      <p className="mt-2 text-[11px] font-bold text-slate-400">
+                        +{routeStops.length - visibleStops.length} more stops
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
               </motion.button>
+                );
+              })()
             ))
           : null}
       </div>

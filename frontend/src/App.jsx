@@ -124,6 +124,7 @@ const DriverWallet = lazy(() => import('./modules/driver/pages/DriverWallet'));
 const DriverProfile = lazy(() => import('./modules/driver/pages/DriverProfile'));
 const RideRequests = lazy(() => import('./modules/driver/pages/RideRequests'));
 const DriverIncentives = lazy(() => import('./modules/driver/pages/DriverIncentives'));
+const BusDriverHome = lazy(() => import('./modules/driver/pages/BusDriverHome'));
 
 // Driver Module - Settings
 const EditProfile = lazy(() => import('./modules/driver/pages/settings/EditProfile'));
@@ -209,6 +210,7 @@ const AdminPoolingVehicles = lazy(() => import('./modules/admin/pages/pooling/Po
 const AdminPoolingVehicleForm = lazy(() => import('./modules/admin/pages/pooling/PoolingVehicleForm'));
 const AdminPoolingBookings = lazy(() => import('./modules/admin/pages/pooling/PoolingBookings'));
 const AdminBusServiceManager = lazy(() => import('./modules/admin/pages/bus-service/BusServiceManager'));
+const AdminBusServiceDetails = lazy(() => import('./modules/admin/pages/bus-service/BusServiceDetails'));
 const AdminPricingPlaceholder = ({ title }) => (
   <div className="flex flex-col items-center justify-center min-h-[500px] text-gray-400 bg-white rounded-[32px] border border-gray-100 shadow-sm p-10">
     <MapPin size={60} strokeWidth={1} className="mb-6 opacity-20" />
@@ -487,7 +489,7 @@ const DriverEntryRedirect = () => {
 
   return (
     <Navigate
-      to={role === 'owner' ? '/taxi/driver/profile' : '/taxi/driver/home'}
+      to={role === 'owner' ? '/taxi/driver/profile' : role === 'bus_driver' ? '/taxi/driver/bus-home' : '/taxi/driver/home'}
       replace
     />
   );
@@ -807,6 +809,7 @@ function App() {
                 <Route path="status" element={<ApplicationStatus />} />
 
                 <Route path="home" element={<DriverHome />} />
+                <Route path="bus-home" element={<BusDriverHome />} />
                 <Route path="dashboard" element={<DriverHome />} />
                 <Route path="active-trip" element={<ActiveTrip />} />
                 <Route path="chat" element={<Chat />} />
@@ -862,6 +865,9 @@ function App() {
                 <Route path="deliveries" element={<AdminDeliveries />} />
                 <Route path="ongoing" element={<AdminOngoing />} />
                 <Route path="bus-service" element={<AdminBusServiceManager />} />
+                <Route path="bus-service/create" element={<AdminBusServiceManager mode="create" />} />
+                <Route path="bus-service/edit/:id" element={<AdminBusServiceManager mode="edit" />} />
+                <Route path="bus-service/:id" element={<AdminBusServiceDetails />} />
                 <Route path="pooling" element={<Navigate to="/admin/pooling/routes" replace />} />
                 <Route path="pooling/routes" element={<AdminPoolingManager />} />
                 <Route

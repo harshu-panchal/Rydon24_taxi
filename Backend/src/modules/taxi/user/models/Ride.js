@@ -116,6 +116,11 @@ const rideSchema = new mongoose.Schema(
         trim: true,
       },
     },
+    scheduledAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
     status: {
       type: String,
       enum: Object.values(RIDE_STATUS),

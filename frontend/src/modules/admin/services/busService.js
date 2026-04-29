@@ -1,7 +1,5 @@
 import api from '../../../shared/api/axiosInstance';
 
-const DEFAULT_AMENITIES = ['Charging Port', 'WiFi', 'Blanket', 'Water Bottle', 'Live Tracking'];
-
 const createId = (prefix = 'item') => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return `${prefix}-${crypto.randomUUID()}`;
@@ -9,6 +7,42 @@ const createId = (prefix = 'item') => {
 
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 };
+
+const DEFAULT_AMENITIES = ['Charging Port', 'WiFi', 'Blanket', 'Water Bottle', 'Live Tracking'];
+const createDefaultCancellationRules = () => [
+  {
+    id: createId('cancel'),
+    label: '48h+ before departure',
+    hoursBeforeDeparture: 48,
+    refundType: 'percentage',
+    refundValue: 90,
+    notes: '10% cancellation charge',
+  },
+  {
+    id: createId('cancel'),
+    label: '24h to 48h before departure',
+    hoursBeforeDeparture: 24,
+    refundType: 'percentage',
+    refundValue: 75,
+    notes: '25% cancellation charge',
+  },
+  {
+    id: createId('cancel'),
+    label: '6h to 24h before departure',
+    hoursBeforeDeparture: 6,
+    refundType: 'percentage',
+    refundValue: 50,
+    notes: '50% cancellation charge',
+  },
+  {
+    id: createId('cancel'),
+    label: 'Within 6h of departure',
+    hoursBeforeDeparture: 0,
+    refundType: 'percentage',
+    refundValue: 0,
+    notes: 'No refund',
+  },
+];
 
 const createSeatCell = (deckCode, rowNumber, seatCode, variant = 'seat') => ({
   kind: 'seat',
@@ -103,6 +137,8 @@ export const createBusDraft = () => ({
   operatorName: '',
   busName: '',
   serviceNumber: '',
+  driverName: '',
+  driverPhone: '',
   coachType: 'AC Sleeper',
   busCategory: 'Sleeper',
   registrationNumber: '',
@@ -111,6 +147,7 @@ export const createBusDraft = () => ({
   fareCurrency: 'INR',
   boardingPolicy: 'Reach 15 minutes before departure.',
   cancellationPolicy: 'Cancellation allowed up to 6 hours before departure.',
+  cancellationRules: createDefaultCancellationRules(),
   luggagePolicy: 'One cabin bag and one check-in bag per passenger.',
   amenities: [...DEFAULT_AMENITIES],
   blueprint: createBlueprintFromTemplate('sleeper_2_1'),
@@ -178,6 +215,10 @@ const normalizeCatalog = (catalog = []) =>
         Array.isArray(bus.schedules) && bus.schedules.length > 0 ? bus.schedules : fallbackDraft.schedules,
       amenities:
         Array.isArray(bus.amenities) && bus.amenities.length > 0 ? bus.amenities : fallbackDraft.amenities,
+      cancellationRules:
+        Array.isArray(bus.cancellationRules) && bus.cancellationRules.length > 0
+          ? bus.cancellationRules
+          : fallbackDraft.cancellationRules,
       capacity: bus.capacity || countTotalSeats(blueprint),
     };
   });

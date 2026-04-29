@@ -313,7 +313,7 @@ const razorpayRequest = async ({ method, path, body, keyId, keySecret }) => {
 };
 
 export const createRide = async (req, res) => {
-  const { pickup, drop, pickupAddress, dropAddress, fare, estimatedDistanceMeters, estimatedDurationMinutes, vehicleTypeId, vehicleIconType, vehicleIconUrl, paymentMethod, serviceType, intercity, promo_code, service_location_id, transport_type } =
+  const { pickup, drop, pickupAddress, dropAddress, fare, estimatedDistanceMeters, estimatedDurationMinutes, vehicleTypeId, vehicleIconType, vehicleIconUrl, paymentMethod, serviceType, intercity, promo_code, service_location_id, transport_type, scheduledAt } =
     req.body;
 
   if (!pickup || !drop) {
@@ -338,6 +338,7 @@ export const createRide = async (req, res) => {
     promo_code,
     service_location_id,
     transport_type,
+    scheduledAt,
   });
 
   await startDispatchFlow(ride);

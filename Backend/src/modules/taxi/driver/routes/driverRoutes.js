@@ -12,7 +12,10 @@ import {
   claimDriverIncentiveReward,
   goOffline,
   goOnline,
+  createBusDriverReservation,
   getCurrentDriver,
+  getBusDriverSeatLayout,
+  listBusDriverBookings,
   getDriverPaymentQrStatus,
   getDriverApprovalStatus,
   getDriverDocumentTemplates,
@@ -58,13 +61,28 @@ driverRouter.post(
 );
 driverRouter.get(
   "/me",
-  authenticate(["driver", "owner"]),
+  authenticate(["driver", "owner", "bus_driver"]),
   asyncHandler(getCurrentDriver),
 );
 driverRouter.patch(
   "/me",
   authenticate(["driver", "owner"]),
   asyncHandler(updateCurrentDriver),
+);
+driverRouter.get(
+  "/bus/seats",
+  authenticate(["bus_driver"]),
+  asyncHandler(getBusDriverSeatLayout),
+);
+driverRouter.get(
+  "/bus/bookings",
+  authenticate(["bus_driver"]),
+  asyncHandler(listBusDriverBookings),
+);
+driverRouter.post(
+  "/bus/reservations",
+  authenticate(["bus_driver"]),
+  asyncHandler(createBusDriverReservation),
 );
 driverRouter.delete(
   "/me",

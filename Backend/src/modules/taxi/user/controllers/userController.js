@@ -348,6 +348,8 @@ const serializeBusBooking = (booking) => ({
   id: String(booking._id),
   bookingCode: booking.bookingCode || '',
   status: booking.status || 'pending',
+  bookingSource: booking.bookingSource || 'user',
+  reservedByDriverId: booking.reservedByDriverId ? String(booking.reservedByDriverId) : '',
   travelDate: booking.travelDate || '',
   scheduleId: booking.scheduleId || '',
   seatIds: Array.isArray(booking.seatIds) ? booking.seatIds : [],
@@ -355,6 +357,7 @@ const serializeBusBooking = (booking) => ({
   amount: Number(booking.amount || 0),
   currency: booking.currency || 'INR',
   passenger: booking.passenger || {},
+  notes: booking.notes || '',
   payment: {
     provider: booking.payment?.provider || 'razorpay',
     orderId: booking.payment?.orderId || '',

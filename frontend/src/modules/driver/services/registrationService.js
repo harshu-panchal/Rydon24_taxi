@@ -92,7 +92,7 @@ const readLocalDriverToken = () => {
   if (direct) return direct;
 
   const fallback = localStorage.getItem("token");
-  if (getTokenPayload(fallback)?.role === "driver") {
+  if (["driver", "owner", "bus_driver"].includes(getTokenPayload(fallback)?.role)) {
     return fallback;
   }
 

@@ -11,6 +11,26 @@ let vibrationIntervalId = null;
 let audioContext = null;
 let oscillatorTimeoutId = null;
 let oscillatorIntervalId = null;
+let userHasInteracted = false;
+let interactionListenersBound = false;
+
+const markUserInteraction = () => {
+    userHasInteracted = true;
+};
+
+const bindInteractionListeners = () => {
+    if (interactionListenersBound || typeof window === 'undefined') {
+        return;
+    }
+
+    interactionListenersBound = true;
+
+    const options = { passive: true };
+    window.addEventListener('pointerdown', markUserInteraction, options);
+    window.addEventListener('touchstart', markUserInteraction, options);
+    window.addEventListener('keydown', markUserInteraction, options);
+    window.addEventListener('click', markUserInteraction, options);
+};
 
 const notifyNativeAlertBridge = (action = 'start') => {
     const payload = {
@@ -155,6 +175,12 @@ const startVibrationLoop = () => {
         return;
     }
 
+    bindInteractionListeners();
+
+    if (!userHasInteracted) {
+        return;
+    }
+
     navigator.vibrate([400, 180, 400]);
 
     if (vibrationIntervalId) {
@@ -176,7 +202,7 @@ const stopVibrationLoop = () => {
         vibrationIntervalId = null;
     }
 
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+    if (typeof navigator !== 'undefined' && navigator.vibrate && userHasInteracted) {
         navigator.vibrate(0);
     }
 };
@@ -269,6 +295,8 @@ const tryPlayAlertAudio = () => {
 };
 
 export const unlockRideRequestAlertSound = () => {
+    markUserInteraction();
+    bindInteractionListeners();
     const audio = getAlertAudio();
     const previousVolume = audio.volume;
     audio.volume = 0;
@@ -300,6 +328,7 @@ export const unlockRideRequestAlertSound = () => {
 
 export const playRideRequestAlertSound = () => {
     const audio = getAlertAudio();
+    bindInteractionListeners();
     bindLifecycleListeners();
     shouldKeepPlaying = true;
     audio.currentTime = 0;

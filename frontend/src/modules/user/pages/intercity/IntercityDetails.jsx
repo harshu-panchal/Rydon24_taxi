@@ -179,34 +179,45 @@ const IntercityDetails = () => {
       }
     }
 
+    const nextState = {
+      ...state,
+      bookingId,
+      pickup,
+      drop,
+      pickupCoords: nextPickupCoords,
+      dropCoords: nextDropCoords,
+      searchNonce: generateSearchNonce(),
+      vehicleTypeId: vehicle.vehicleTypeId || '',
+      vehicleIconType: vehicle.iconType || vehicle.name || 'car',
+      vehicleIconUrl: vehicle.vehicleIconUrl || vehicle.icon || '',
+      paymentMethod: 'Cash',
+      serviceType: 'intercity',
+      transport_type: 'intercity',
+      intercity: {
+        bookingId,
+        fromCity,
+        toCity,
+        tripType: state.tripType || 'One Way',
+        travelDate: state.date || 'Ride Now',
+        passengers: state.passengers || 1,
+        distance: Number(state.distance || 0),
+        vehicleName: vehicle.name || vehicle.id || 'Intercity Cab',
+        packageId: vehicle.packageId || '',
+        packageTypeName: vehicle.packageTypeName || 'Intercity',
+      },
+      driverAvailability: availabilitySnapshot,
+    };
+
+    if (state.rideMode === 'schedule' && state.scheduledAt) {
+      navigate(`${routePrefix}/intercity/confirm`, {
+        state: nextState,
+      });
+      return;
+    }
+
     navigate(`${routePrefix}/ride/searching`, {
       state: {
-        ...state,
-        bookingId,
-        pickup,
-        drop,
-        pickupCoords: nextPickupCoords,
-        dropCoords: nextDropCoords,
-        searchNonce: generateSearchNonce(),
-        vehicleTypeId: vehicle.vehicleTypeId || '',
-        vehicleIconType: vehicle.iconType || vehicle.name || 'car',
-        vehicleIconUrl: vehicle.vehicleIconUrl || vehicle.icon || '',
-        paymentMethod: 'Cash',
-        serviceType: 'intercity',
-        transport_type: 'intercity',
-        intercity: {
-          bookingId,
-          fromCity,
-          toCity,
-          tripType: state.tripType || 'One Way',
-          travelDate: state.date || 'Ride Now',
-          passengers: state.passengers || 1,
-          distance: Number(state.distance || 0),
-          vehicleName: vehicle.name || vehicle.id || 'Intercity Cab',
-          packageId: vehicle.packageId || '',
-          packageTypeName: vehicle.packageTypeName || 'Intercity',
-        },
-        driverAvailability: availabilitySnapshot,
+        ...nextState,
       }
     });
   };

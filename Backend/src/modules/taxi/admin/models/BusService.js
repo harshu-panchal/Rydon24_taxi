@@ -102,6 +102,40 @@ const busScheduleSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const busCancellationRuleSchema = new mongoose.Schema(
+  {
+    id: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    label: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    hoursBeforeDeparture: {
+      type: Number,
+      default: 0,
+    },
+    refundType: {
+      type: String,
+      enum: ['percentage', 'fixed', 'none'],
+      default: 'percentage',
+    },
+    refundValue: {
+      type: Number,
+      default: 0,
+    },
+    notes: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+  },
+  { _id: false },
+);
+
 const busServiceSchema = new mongoose.Schema(
   {
     operatorName: {
@@ -118,6 +152,22 @@ const busServiceSchema = new mongoose.Schema(
       type: String,
       default: '',
       trim: true,
+    },
+    driverName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    driverPhone: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    busDriverId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TaxiBusDriver',
+      default: null,
+      index: true,
     },
     coachType: {
       type: String,
@@ -158,6 +208,10 @@ const busServiceSchema = new mongoose.Schema(
       type: String,
       default: '',
       trim: true,
+    },
+    cancellationRules: {
+      type: [busCancellationRuleSchema],
+      default: [],
     },
     luggagePolicy: {
       type: String,

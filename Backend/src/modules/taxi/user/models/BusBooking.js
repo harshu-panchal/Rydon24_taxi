@@ -78,6 +78,18 @@ const busBookingSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    bookingSource: {
+      type: String,
+      enum: ['user', 'bus_driver'],
+      default: 'user',
+      index: true,
+    },
+    reservedByDriverId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TaxiBusDriver',
+      default: null,
+      index: true,
+    },
     currency: {
       type: String,
       default: 'INR',
@@ -113,6 +125,11 @@ const busBookingSchema = new mongoose.Schema(
       signature: { type: String, default: '' },
       status: { type: String, default: 'pending' },
       paidAt: { type: Date, default: null },
+    },
+    notes: {
+      type: String,
+      default: '',
+      trim: true,
     },
   },
   { timestamps: true },

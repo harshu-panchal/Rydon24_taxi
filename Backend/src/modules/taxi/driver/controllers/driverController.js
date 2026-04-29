@@ -3,11 +3,15 @@ import QRCode from "qrcode";
 import { ApiError } from "../../../../utils/ApiError.js";
 import { normalizePoint, toPoint } from "../../../../utils/geo.js";
 import { Driver } from "../models/Driver.js";
+import { BusDriver } from "../models/BusDriver.js";
 import { DriverLoginSession } from "../models/DriverLoginSession.js";
 import { WalletTransaction } from "../models/WalletTransaction.js";
 import { WithdrawalRequest } from "../../admin/models/WithdrawalRequest.js";
 import { Ride } from "../../user/models/Ride.js";
+import { BusBooking } from "../../user/models/BusBooking.js";
+import { BusSeatHold } from "../../user/models/BusSeatHold.js";
 import { Owner } from "../../admin/models/Owner.js";
+import { BusService } from "../../admin/models/BusService.js";
 import { ServiceLocation } from "../../admin/models/ServiceLocation.js";
 import { Vehicle } from "../../admin/models/Vehicle.js";
 import { AdminBusinessSetting } from "../../admin/models/AdminBusinessSetting.js";
@@ -67,9 +71,212 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RAZORPAY_QR_MAX_AMOUNT = 500000;
 const IST_OFFSET_MS = 330 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const BUS_DAY_OPTIONS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const toIstDayKey = (value = new Date()) =>
   new Date(new Date(value).getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
+
+const toCleanString = (value = "") => String(value || "").trim();
+const normalizeBusPassengerPhone = (value = "") =>
+  String(value || "")
+    .replace(/\D/g, "")
+    .trim()
+    .slice(-10);
+const normalizeEmail = (value = "") => String(value || "").trim().toLowerCase();
+const BUS_DRIVER_NAME_REGEX = /^[A-Za-z]+(?:[ .'-][A-Za-z]+)*$/;
+
+const validateBusPassengerName = (value = "") => {
+  if (!BUS_DRIVER_NAME_REGEX.test(String(value || "").trim())) {
+    throw new ApiError(400, "Passenger name is required");
+  }
+};
+
+const validateBusPassengerPhone = (value = "") => {
+  if (!/^\d{10}$/.test(String(value || "").trim())) {
+    throw new ApiError(400, "Passenger phone must be a valid 10-digit number");
+  }
+};
+
+const validateBusPassengerEmail = (value = "") => {
+  if (value && !EMAIL_REGEX.test(String(value || "").trim())) {
+    throw new ApiError(400, "Passenger email is invalid");
+  }
+};
+
+const normalizeBusTravelDate = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    throw new ApiError(400, "Travel date is required");
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new ApiError(400, "Travel date is invalid");
+  }
+
+  return parsed.toISOString().slice(0, 10);
+};
+
+const getBusTravelDayLabel = (travelDate) => BUS_DAY_OPTIONS[new Date(travelDate).getUTCDay()] || "Mon";
+
+const findBusSchedule = (busService, scheduleId) => {
+  const schedules = Array.isArray(busService?.schedules) ? busService.schedules : [];
+  return schedules.find((item) => String(item?.id || "") === String(scheduleId || ""));
+};
+
+const isScheduleAvailableOnDate = (schedule, travelDate) => {
+  if (!schedule || String(schedule.status || "draft") !== "active") {
+    return false;
+  }
+
+  const activeDays = Array.isArray(schedule.activeDays) ? schedule.activeDays : [];
+  if (activeDays.length === 0) {
+    return true;
+  }
+
+  return activeDays.includes(getBusTravelDayLabel(travelDate));
+};
+
+const flattenBusBlueprintSeats = (blueprint = {}) =>
+  ["lowerDeck", "upperDeck"].flatMap((deckKey) =>
+    (Array.isArray(blueprint?.[deckKey]) ? blueprint[deckKey] : []).flatMap((row) =>
+      (Array.isArray(row) ? row : []).filter((cell) => String(cell?.kind || "") === "seat"),
+    ),
+  );
+
+const buildBusDriverSeatLayout = async ({ busService, scheduleId, travelDate }) => {
+  const activeHolds = await BusSeatHold.find({
+    busServiceId: busService._id,
+    scheduleId,
+    travelDate,
+    status: { $in: ["held", "booked"] },
+  })
+    .select("seatId")
+    .lean();
+
+  const reservedSeatIds = new Set(activeHolds.map((item) => String(item.seatId || "")));
+
+  const normalizeDeck = (deckRows = []) =>
+    (Array.isArray(deckRows) ? deckRows : []).map((row) =>
+      (Array.isArray(row) ? row : []).map((cell) => {
+        if (String(cell?.kind || "") !== "seat") {
+          return {
+            kind: "aisle",
+            id: "",
+            label: "",
+            variant: "seat",
+            status: "available",
+          };
+        }
+
+        const seatId = String(cell.id || "");
+        const isBlocked = String(cell.status || "available") === "blocked";
+        const isReserved = reservedSeatIds.has(seatId);
+
+        return {
+          ...cell,
+          status: isBlocked || isReserved ? "booked" : "available",
+        };
+      }),
+    );
+
+  const blueprint = {
+    templateKey: busService.blueprint?.templateKey || "seater_2_2",
+    lowerDeck: normalizeDeck(busService.blueprint?.lowerDeck || []),
+    upperDeck: normalizeDeck(busService.blueprint?.upperDeck || []),
+  };
+
+  const availableSeats = flattenBusBlueprintSeats(blueprint).filter(
+    (seat) => String(seat.status || "available") === "available",
+  ).length;
+
+  return {
+    busServiceId: String(busService._id),
+    scheduleId,
+    travelDate,
+    availableSeats,
+    blueprint,
+  };
+};
+
+const serializeBusDriverBooking = (booking = {}) => ({
+  id: String(booking._id || ""),
+  bookingCode: booking.bookingCode || "",
+  status: booking.status || "pending",
+  bookingSource: booking.bookingSource || "user",
+  travelDate: booking.travelDate || "",
+  scheduleId: booking.scheduleId || "",
+  seatIds: Array.isArray(booking.seatIds) ? booking.seatIds : [],
+  seatLabels: Array.isArray(booking.seatLabels) ? booking.seatLabels : [],
+  amount: Number(booking.amount || 0),
+  currency: booking.currency || "INR",
+  passenger: booking.passenger || {},
+  notes: booking.notes || "",
+  payment: booking.payment || {},
+  routeSnapshot: booking.routeSnapshot || {},
+  createdAt: booking.createdAt || null,
+});
+
+const serializeBusDriverProfile = async (busDriver) => {
+  const assignedBusServiceId = busDriver.assignedBusServiceId
+    ? String(busDriver.assignedBusServiceId)
+    : "";
+  const busService = assignedBusServiceId
+    ? await BusService.findById(assignedBusServiceId).lean()
+    : null;
+
+  const upcomingBookingsCount = assignedBusServiceId
+    ? await BusBooking.countDocuments({
+        busServiceId: assignedBusServiceId,
+        status: { $in: ["pending", "confirmed"] },
+      })
+    : 0;
+
+  const recentBookings = assignedBusServiceId
+    ? await BusBooking.find({ busServiceId: assignedBusServiceId })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean()
+    : [];
+
+  return {
+    id: busDriver._id,
+    accountType: "bus_driver",
+    name: busDriver.name || "",
+    phone: busDriver.phone || "",
+    email: busDriver.email || "",
+    approve: busDriver.approve,
+    active: busDriver.active,
+    status: busDriver.status || "approved",
+    assignedBusServiceId,
+    busService: busService
+      ? {
+          id: String(busService._id),
+          operatorName: busService.operatorName || "",
+          busName: busService.busName || "",
+          serviceNumber: busService.serviceNumber || "",
+          registrationNumber: busService.registrationNumber || "",
+          coachType: busService.coachType || "",
+          busCategory: busService.busCategory || "",
+          seatPrice: Number(busService.seatPrice || 0),
+          fareCurrency: busService.fareCurrency || "INR",
+          driverName: busService.driverName || "",
+          driverPhone: busService.driverPhone || "",
+          route: busService.route || {},
+          schedules: Array.isArray(busService.schedules) ? busService.schedules : [],
+          amenities: Array.isArray(busService.amenities) ? busService.amenities : [],
+          capacity: Number(busService.capacity || 0),
+          status: busService.status || "draft",
+        }
+      : null,
+    metrics: {
+      upcomingBookings: upcomingBookingsCount,
+      totalSchedules: Array.isArray(busService?.schedules) ? busService.schedules.length : 0,
+      totalCapacity: Number(busService?.capacity || 0),
+    },
+    recentBookings: recentBookings.map(serializeBusDriverBooking),
+  };
+};
 
 const getIstDayStart = (value = new Date()) => {
   const timestamp = new Date(value).getTime();
@@ -965,6 +1172,20 @@ export const getCurrentDriver = async (req, res) => {
     return;
   }
 
+  if (String(req.auth?.role || "").toLowerCase() === "bus_driver") {
+    const busDriver = await BusDriver.findById(req.auth.sub);
+
+    if (!busDriver) {
+      throw new ApiError(404, "Bus driver not found");
+    }
+
+    res.json({
+      success: true,
+      data: await serializeBusDriverProfile(busDriver),
+    });
+    return;
+  }
+
   const driver = await Driver.findById(req.auth.sub);
 
   if (!driver) {
@@ -1442,6 +1663,212 @@ export const getMyWallet = async (req, res) => {
       withdrawalRequests,
       settings: walletSettings,
     },
+  });
+};
+
+export const getBusDriverSeatLayout = async (req, res) => {
+  const busDriver = await BusDriver.findById(req.auth.sub).lean();
+
+  if (!busDriver) {
+    throw new ApiError(404, "Bus driver not found");
+  }
+
+  if (!busDriver.assignedBusServiceId) {
+    throw new ApiError(404, "No bus is assigned to this driver");
+  }
+
+  const busService = await BusService.findById(busDriver.assignedBusServiceId).lean();
+  if (!busService) {
+    throw new ApiError(404, "Assigned bus service not found");
+  }
+
+  const scheduleId = toCleanString(req.query?.scheduleId);
+  const travelDate = normalizeBusTravelDate(req.query?.date || req.query?.travelDate || new Date());
+  const schedule = findBusSchedule(busService, scheduleId);
+
+  if (!isScheduleAvailableOnDate(schedule, travelDate)) {
+    throw new ApiError(404, "Bus schedule not found for the selected date");
+  }
+
+  res.json({
+    success: true,
+    data: {
+      ...(await buildBusDriverSeatLayout({ busService, scheduleId, travelDate })),
+      bus: {
+        operatorName: busService.operatorName || "",
+        busName: busService.busName || "",
+        routeName: busService.route?.routeName || "",
+        fromCity: busService.route?.originCity || "",
+        toCity: busService.route?.destinationCity || "",
+        departureTime: schedule?.departureTime || "",
+        arrivalTime: schedule?.arrivalTime || "",
+      },
+    },
+  });
+};
+
+export const listBusDriverBookings = async (req, res) => {
+  const busDriver = await BusDriver.findById(req.auth.sub).lean();
+
+  if (!busDriver) {
+    throw new ApiError(404, "Bus driver not found");
+  }
+
+  if (!busDriver.assignedBusServiceId) {
+    throw new ApiError(404, "No bus is assigned to this driver");
+  }
+
+  const query = {
+    busServiceId: busDriver.assignedBusServiceId,
+  };
+
+  const travelDate = toCleanString(req.query?.date || req.query?.travelDate);
+  const scheduleId = toCleanString(req.query?.scheduleId);
+  const status = toCleanString(req.query?.status);
+
+  if (travelDate) {
+    query.travelDate = normalizeBusTravelDate(travelDate);
+  }
+
+  if (scheduleId) {
+    query.scheduleId = scheduleId;
+  }
+
+  if (status) {
+    query.status = status;
+  }
+
+  const items = await BusBooking.find(query).sort({ travelDate: 1, createdAt: -1 }).lean();
+
+  res.json({
+    success: true,
+    results: items.map(serializeBusDriverBooking),
+  });
+};
+
+export const createBusDriverReservation = async (req, res) => {
+  const busDriver = await BusDriver.findById(req.auth.sub).lean();
+
+  if (!busDriver) {
+    throw new ApiError(404, "Bus driver not found");
+  }
+
+  if (!busDriver.assignedBusServiceId) {
+    throw new ApiError(404, "No bus is assigned to this driver");
+  }
+
+  const busService = await BusService.findById(busDriver.assignedBusServiceId).lean();
+  if (!busService || String(busService.status || "") !== "active") {
+    throw new ApiError(404, "Assigned bus service not found");
+  }
+
+  const scheduleId = toCleanString(req.body?.scheduleId);
+  const travelDate = normalizeBusTravelDate(req.body?.travelDate || req.body?.date);
+  const seatIds = Array.isArray(req.body?.seatIds)
+    ? [...new Set(req.body.seatIds.map((item) => toCleanString(item)).filter(Boolean))]
+    : [];
+  const passenger = {
+    name: toCleanString(req.body?.passenger?.name),
+    age: Number(req.body?.passenger?.age || 0),
+    gender: toCleanString(req.body?.passenger?.gender),
+    phone: normalizeBusPassengerPhone(req.body?.passenger?.phone),
+    email: normalizeEmail(req.body?.passenger?.email),
+  };
+  const notes = toCleanString(req.body?.notes);
+
+  if (!scheduleId || seatIds.length === 0) {
+    throw new ApiError(400, "scheduleId and seatIds are required");
+  }
+
+  validateBusPassengerName(passenger.name);
+  validateBusPassengerPhone(passenger.phone);
+  validateBusPassengerEmail(passenger.email);
+
+  if (!Number.isFinite(passenger.age) || passenger.age < 1 || passenger.age > 120) {
+    throw new ApiError(400, "Passenger age must be valid");
+  }
+
+  const schedule = findBusSchedule(busService, scheduleId);
+  if (!isScheduleAvailableOnDate(schedule, travelDate)) {
+    throw new ApiError(404, "Bus schedule not found for the selected date");
+  }
+
+  const seatLayout = await buildBusDriverSeatLayout({ busService, scheduleId, travelDate });
+  const availableSeatMap = new Map(
+    flattenBusBlueprintSeats(seatLayout.blueprint)
+      .filter((seat) => String(seat.status || "available") === "available")
+      .map((seat) => [String(seat.id || ""), seat]),
+  );
+
+  const invalidSeat = seatIds.find((seatId) => !availableSeatMap.has(seatId));
+  if (invalidSeat) {
+    throw new ApiError(409, `Seat ${invalidSeat} is not available`);
+  }
+
+  const amount = Math.round(Number(busService.seatPrice || 0) * seatIds.length * 100) / 100;
+  const booking = await BusBooking.create({
+    userId: busDriver._id,
+    busServiceId: busService._id,
+    bookingCode: `BDR${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`,
+    scheduleId,
+    travelDate,
+    seatIds,
+    seatLabels: seatIds.map((seatId) => availableSeatMap.get(seatId)?.label || seatId),
+    passenger,
+    amount,
+    bookingSource: "bus_driver",
+    reservedByDriverId: busDriver._id,
+    currency: busService.fareCurrency || "INR",
+    status: "confirmed",
+    expiresAt: null,
+    routeSnapshot: {
+      originCity: busService.route?.originCity || "",
+      destinationCity: busService.route?.destinationCity || "",
+      departureTime: schedule?.departureTime || "",
+      arrivalTime: schedule?.arrivalTime || "",
+      durationHours: busService.route?.durationHours || "",
+      busName: busService.busName || "",
+      operatorName: busService.operatorName || "",
+      coachType: busService.coachType || "",
+      busCategory: busService.busCategory || "",
+    },
+    payment: {
+      provider: "manual",
+      orderId: "",
+      paymentId: "",
+      signature: "",
+      status: "manual_reserved",
+      paidAt: new Date(),
+    },
+    notes,
+  });
+
+  try {
+    await BusSeatHold.insertMany(
+      seatIds.map((seatId) => ({
+        busServiceId: busService._id,
+        bookingId: booking._id,
+        userId: busDriver._id,
+        scheduleId,
+        travelDate,
+        seatId,
+        holdToken: booking.bookingCode,
+        status: "booked",
+        expiresAt: null,
+      })),
+      { ordered: true },
+    );
+  } catch (error) {
+    await BusBooking.deleteOne({ _id: booking._id });
+    if (error?.code === 11000) {
+      throw new ApiError(409, "One or more selected seats were just booked");
+    }
+    throw error;
+  }
+
+  res.status(201).json({
+    success: true,
+    data: serializeBusDriverBooking(booking),
   });
 };
 

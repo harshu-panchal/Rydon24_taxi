@@ -14,6 +14,7 @@ import { sendPushNotificationToEntities } from './pushNotificationService.js';
 
 const activeDispatches = new Map();
 let ioInstance = null;
+const scheduledDispatchTimers = new Map();
 
 export const getUserRoom = (userId) => `user:${userId}`;
 export const getDriverRoom = (driverId) => `driver:${driverId}`;
@@ -79,8 +80,18 @@ const clearDispatchTimer = (rideId) => {
   }
 };
 
+const clearScheduledDispatchTimer = (rideId) => {
+  const key = String(rideId);
+  const timer = scheduledDispatchTimers.get(key);
+  if (timer) {
+    clearTimeout(timer);
+    scheduledDispatchTimers.delete(key);
+  }
+};
+
 export const stopDispatchFlow = (rideId) => {
   clearDispatchTimer(rideId);
+  clearScheduledDispatchTimer(rideId);
   activeDispatches.delete(String(rideId));
 };
 
@@ -492,7 +503,36 @@ const dispatchAttempt = async (rideId, attemptIndex = 0) => {
 
 export const startDispatchFlow = async (ride) => {
   stopDispatchFlow(ride._id);
+
+  const scheduledAt = ride?.scheduledAt ? new Date(ride.scheduledAt) : null;
+  const delayMs = scheduledAt ? scheduledAt.getTime() - Date.now() : 0;
+
+  if (scheduledAt && Number.isFinite(delayMs) && delayMs > 0) {
+    const rideId = String(ride._id);
+    const timer = setTimeout(() => {
+      scheduledDispatchTimers.delete(rideId);
+      dispatchAttempt(ride._id, 0).catch((error) => {
+        console.error('Scheduled dispatch failed', error);
+      });
+    }, delayMs);
+
+    scheduledDispatchTimers.set(rideId, timer);
+    return;
+  }
+
   await dispatchAttempt(ride._id, 0);
+};
+
+export const restoreScheduledDispatches = async () => {
+  const rides = await Ride.find({
+    status: RIDE_STATUS.SEARCHING,
+    liveStatus: RIDE_LIVE_STATUS.SEARCHING,
+    scheduledAt: { $ne: null },
+  }).select('_id scheduledAt');
+
+  for (const ride of rides) {
+    await startDispatchFlow(ride);
+  }
 };
 
 export const notifyLateAvailableDriver = async (driverId) => {

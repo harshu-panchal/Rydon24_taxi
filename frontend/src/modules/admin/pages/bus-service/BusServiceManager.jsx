@@ -6,6 +6,8 @@ import {
   CheckCircle2,
   Clock3,
   CopyPlus,
+  Eye,
+  Search,
   MapPin,
   Plus,
   Route,
@@ -23,6 +25,7 @@ import {
   getAdminBuses,
   upsertAdminBus,
 } from '../../services/busService';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 const DAY_OPTIONS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const AMENITY_OPTIONS = [
@@ -63,6 +66,15 @@ const blankSchedule = () => ({
   arrivalTime: '',
   activeDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
   status: 'active',
+});
+
+const blankCancellationRule = () => ({
+  id: `cancel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  label: '',
+  hoursBeforeDeparture: 0,
+  refundType: 'percentage',
+  refundValue: 0,
+  notes: '',
 });
 
 const SeatCell = ({ cell, onToggle }) => {
@@ -120,9 +132,16 @@ const SeatDeckPreview = ({ title, deckRows, onToggleSeat }) => {
   );
 };
 
-const BusServiceManager = () => {
+const BusServiceManager = ({ mode: modeProp = null }) => {
+  const navigate = useNavigate();
+  const { id: routeBusId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const currentMode = modeProp || searchParams.get('mode') || 'list';
+  const currentBusId = routeBusId || searchParams.get('bus') || '';
   const [catalog, setCatalog] = useState([]);
   const [selectedBusId, setSelectedBusId] = useState(null);
+  const [detailBusId, setDetailBusId] = useState(null);
+  const [catalogSearch, setCatalogSearch] = useState('');
   const [draft, setDraft] = useState(() => createBusDraft());
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -137,6 +156,9 @@ const BusServiceManager = () => {
         if (!active) return;
 
         setCatalog(buses);
+        if (currentMode === 'create') {
+          return;
+        }
         if (buses[0]) {
           setSelectedBusId((current) => current || buses[0].id);
           setDraft((current) =>
@@ -162,18 +184,67 @@ const BusServiceManager = () => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [currentMode]);
 
   useEffect(() => {
+    if (currentMode === 'create') return;
     const selectedBus = catalog.find((item) => item.id === selectedBusId);
     if (selectedBus) {
       setDraft(JSON.parse(JSON.stringify(selectedBus)));
     }
-  }, [catalog, selectedBusId]);
+  }, [catalog, currentMode, selectedBusId]);
 
   const totalSeats = useMemo(() => countTotalSeats(draft.blueprint), [draft.blueprint]);
   const totalStops = draft.route?.stops?.length || 0;
   const totalSchedules = draft.schedules?.length || 0;
+  const detailBus = useMemo(
+    () => catalog.find((item) => item.id === currentBusId || item.id === detailBusId) || null,
+    [catalog, currentBusId, detailBusId],
+  );
+  const filteredCatalog = useMemo(() => {
+    const query = catalogSearch.trim().toLowerCase();
+    if (!query) return catalog;
+
+    return catalog.filter((bus) =>
+      [
+        bus.busName,
+        bus.operatorName,
+        bus.serviceNumber,
+        bus.registrationNumber,
+        bus.driverName,
+        bus.driverPhone,
+        bus.route?.routeName,
+        bus.route?.originCity,
+        bus.route?.destinationCity,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query)),
+    );
+  }, [catalog, catalogSearch]);
+
+  useEffect(() => {
+    if (currentMode !== 'edit' || !currentBusId) return;
+    const selectedBus = catalog.find((item) => item.id === currentBusId);
+    if (selectedBus) {
+      setSelectedBusId(selectedBus.id);
+      setDraft(JSON.parse(JSON.stringify(selectedBus)));
+    }
+  }, [catalog, currentBusId, currentMode]);
+
+  const openListView = () => {
+    setDetailBusId(null);
+    navigate('/admin/bus-service');
+  };
+
+  const openEditView = (busId) => {
+    setDetailBusId(null);
+    setSelectedBusId(busId);
+    navigate(`/admin/bus-service/edit/${busId}`);
+  };
+
+  const openDetailView = (busId) => {
+    navigate(`/admin/bus-service/${busId}`);
+  };
 
   const updateDraft = (field, value) => {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -292,10 +363,35 @@ const BusServiceManager = () => {
     }));
   };
 
+  const updateCancellationRule = (ruleId, field, value) => {
+    setDraft((current) => ({
+      ...current,
+      cancellationRules: (current.cancellationRules || []).map((rule) =>
+        rule.id === ruleId ? { ...rule, [field]: value } : rule,
+      ),
+    }));
+  };
+
+  const addCancellationRule = () => {
+    setDraft((current) => ({
+      ...current,
+      cancellationRules: [...(current.cancellationRules || []), blankCancellationRule()],
+    }));
+  };
+
+  const removeCancellationRule = (ruleId) => {
+    setDraft((current) => ({
+      ...current,
+      cancellationRules: (current.cancellationRules || []).filter((rule) => rule.id !== ruleId),
+    }));
+  };
+
   const handleCreateNew = () => {
     const nextDraft = createBusDraft();
     setDraft(nextDraft);
     setSelectedBusId(nextDraft.id);
+    setDetailBusId(null);
+    navigate('/admin/bus-service/create');
   };
 
   const handleDuplicate = () => {
@@ -311,6 +407,8 @@ const BusServiceManager = () => {
 
     setDraft(copy);
     setSelectedBusId(copy.id);
+    setDetailBusId(null);
+    navigate('/admin/bus-service/create');
     toast.success('Bus duplicated as a new draft');
   };
 
@@ -341,6 +439,7 @@ const BusServiceManager = () => {
       });
       setSelectedBusId(nextBus.id);
       setDraft(nextBus);
+      navigate(`/admin/bus-service/edit/${nextBus.id}`);
       toast.success('Bus service saved');
     } catch (error) {
       toast.error(error?.message || 'Failed to save bus service');
@@ -354,6 +453,7 @@ const BusServiceManager = () => {
       const nextDraft = createBusDraft();
       setSelectedBusId(nextDraft.id);
       setDraft(nextDraft);
+      navigate('/admin/bus-service');
       toast.success('Unsaved draft cleared');
       return;
     }
@@ -366,6 +466,8 @@ const BusServiceManager = () => {
       const fallback = nextCatalog[0] || createBusDraft();
       setSelectedBusId(fallback.id);
       setDraft(fallback);
+      setDetailBusId(null);
+      navigate('/admin/bus-service');
       toast.success('Bus service removed');
     } catch (error) {
       toast.error(error?.message || 'Failed to remove bus service');
@@ -434,9 +536,329 @@ const BusServiceManager = () => {
         </div>
       </section>
 
+      {currentMode === 'list' ? (
+      <section className="rounded-[32px] border border-slate-100 bg-white p-8 shadow-sm">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <h2 className="text-xl font-black tracking-tight text-slate-900">Bus Services</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">Manage coaches, routes, assigned drivers, pricing and schedules.</p>
+          </div>
+
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <div className="flex items-center gap-3 text-sm font-semibold text-slate-400">
+              <span>show</span>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-900">
+                {filteredCatalog.length}
+              </div>
+              <span>entries</span>
+            </div>
+
+            <div className="relative">
+              <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm font-bold text-slate-800 shadow-sm outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-400/5 md:w-80"
+                placeholder="Search buses"
+                value={catalogSearch}
+                onChange={(event) => setCatalogSearch(event.target.value)}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleCreateNew}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white shadow-lg transition hover:-translate-y-0.5"
+            >
+              <Plus size={16} />
+              Add Bus Service
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-8 overflow-hidden rounded-[28px] border border-slate-100">
+          <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1fr)_120px_120px_170px] gap-4 bg-slate-100 px-6 py-5 text-sm font-black text-slate-700">
+            <p>Name</p>
+            <p>Driver</p>
+            <p>Route</p>
+            <p>Fare</p>
+            <p>Status</p>
+            <p>Action</p>
+          </div>
+
+          {isLoadingCatalog ? (
+            <div className="bg-white px-6 py-10 text-center text-sm font-bold text-slate-400">Loading bus services...</div>
+          ) : filteredCatalog.length === 0 ? (
+            <div className="bg-white px-6 py-10 text-center text-sm font-bold text-slate-400">No buses found.</div>
+          ) : (
+            <div className="divide-y divide-slate-100 bg-white">
+              {filteredCatalog.map((bus) => {
+                const active = selectedBusId === bus.id;
+                return (
+                  <div
+                    key={`catalog-${bus.id}`}
+                    className={`grid grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1fr)_120px_120px_170px] gap-4 px-6 py-6 transition ${
+                      active ? 'bg-indigo-50/70' : 'hover:bg-slate-50/80'
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-lg font-black text-slate-900">{bus.busName || 'Untitled Bus'}</p>
+                      <p className="mt-2 truncate text-sm font-semibold text-slate-500">{bus.operatorName || 'Operator not set'}</p>
+                      <p className="mt-1 truncate text-xs font-bold uppercase tracking-wider text-slate-400">
+                        {bus.serviceNumber || 'No service number'} | {bus.registrationNumber || 'No registration'}
+                      </p>
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="truncate text-base font-black text-slate-900">{bus.driverName || 'Driver not assigned'}</p>
+                      <p className="mt-2 text-sm font-semibold text-slate-500">{bus.driverPhone || 'No phone added'}</p>
+                      <p className="mt-2 text-xs font-bold uppercase tracking-wider text-slate-400">{countTotalSeats(bus.blueprint)} seats</p>
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="truncate text-base font-black text-slate-900">
+                        {bus.route?.originCity || 'Origin'} to {bus.route?.destinationCity || 'Destination'}
+                      </p>
+                      <p className="mt-2 truncate text-sm font-semibold text-slate-500">{bus.route?.routeName || 'Route not set'}</p>
+                    </div>
+
+                    <div>
+                      <p className="text-base font-black text-slate-900">Rs {bus.seatPrice || 0}</p>
+                      <p className="mt-2 text-sm font-semibold text-slate-500">{bus.fareCurrency || 'INR'}</p>
+                    </div>
+
+                    <div className="flex items-center">
+                      <span className={`rounded-full border px-4 py-2 text-xs font-black uppercase tracking-wider ${statusTone[bus.status] || statusTone.draft}`}>
+                        {bus.status || 'draft'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => openEditView(bus.id)}
+                        className={`inline-flex h-11 items-center justify-center rounded-2xl px-4 text-sm font-black transition ${
+                          active
+                            ? 'bg-slate-900 text-white'
+                            : 'border border-amber-200 bg-amber-50 text-amber-600 hover:bg-amber-100'
+                        }`}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openDetailView(bus.id)}
+                        className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                      >
+                        <Eye size={16} />
+                        View Details
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+      ) : null}
+
+      {currentMode === 'details' && detailBus ? (
+        <section className="space-y-6 rounded-[32px] border border-slate-100 bg-white p-8 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">Bus Details</p>
+              <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-900">{detailBus.busName || 'Untitled Bus'}</h2>
+              <p className="mt-2 text-sm font-semibold text-slate-500">
+                {detailBus.operatorName || 'Operator'} | {detailBus.serviceNumber || 'No service number'} | {detailBus.registrationNumber || 'No registration'}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={openListView}
+                className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+              >
+                Back To List
+              </button>
+              <button
+                type="button"
+                onClick={() => openEditView(detailBus.id)}
+                className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white shadow-lg transition hover:-translate-y-0.5"
+              >
+                Edit Bus
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+            <div className="space-y-6">
+              <div className="rounded-[28px] border border-slate-200 bg-slate-50/70 p-5">
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Route Overview</p>
+                <h3 className="mt-3 text-xl font-black text-slate-900">
+                  {detailBus.route?.originCity || 'Origin'} to {detailBus.route?.destinationCity || 'Destination'}
+                </h3>
+                <p className="mt-1 text-sm font-semibold text-slate-500">{detailBus.route?.routeName || 'Route name not configured'}</p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl bg-white px-4 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Distance</p>
+                    <p className="mt-1 text-sm font-black text-slate-900">{detailBus.route?.distanceKm || 'N/A'}</p>
+                  </div>
+                  <div className="rounded-2xl bg-white px-4 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Duration</p>
+                    <p className="mt-1 text-sm font-black text-slate-900">{detailBus.route?.durationHours || 'N/A'}</p>
+                  </div>
+                  <div className="rounded-2xl bg-white px-4 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Stops</p>
+                    <p className="mt-1 text-sm font-black text-slate-900">{detailBus.route?.stops?.length || 0}</p>
+                  </div>
+                </div>
+                <div className="mt-5 space-y-3">
+                  {(detailBus.route?.stops || []).map((stop, index) => (
+                    <div key={stop.id || `${detailBus.id}-stop-${index}`} className="rounded-2xl bg-white px-4 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-black text-slate-900">{stop.city || 'City not set'}</p>
+                          <p className="mt-1 text-xs font-semibold text-slate-500">{stop.pointName || 'Point not set'}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{stop.stopType || 'stop'}</p>
+                          <p className="mt-1 text-xs font-semibold text-slate-500">{stop.arrivalTime || '--:--'} | {stop.departureTime || '--:--'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                <div className="rounded-[28px] border border-slate-200 bg-white p-5">
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Policies</p>
+                  <div className="mt-4 space-y-4">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider text-slate-500">Boarding</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-700">{detailBus.boardingPolicy || 'Not set'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider text-slate-500">Cancellation</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-700">{detailBus.cancellationPolicy || 'Not set'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider text-slate-500">Luggage</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-700">{detailBus.luggagePolicy || 'Not set'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-slate-200 bg-white p-5">
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Amenities</p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {(detailBus.amenities || []).length > 0 ? (
+                      detailBus.amenities.map((amenity) => (
+                        <span key={amenity} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-black text-slate-700">
+                          {amenity}
+                        </span>
+                      ))
+                    ) : (
+                      <p className="text-sm font-semibold text-slate-500">No amenities configured.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <div className="rounded-[28px] border border-slate-200 bg-slate-900 p-5 text-white">
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Coach Summary</p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                  <div className="rounded-2xl bg-white/10 px-4 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Coach Type</p>
+                    <p className="mt-1 text-sm font-black">{detailBus.coachType || 'N/A'}</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/10 px-4 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Category</p>
+                    <p className="mt-1 text-sm font-black">{detailBus.busCategory || 'N/A'}</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/10 px-4 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Seat Capacity</p>
+                    <p className="mt-1 text-sm font-black">{countTotalSeats(detailBus.blueprint)}</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/10 px-4 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Fare</p>
+                    <p className="mt-1 text-sm font-black">Rs {detailBus.seatPrice || 0} {detailBus.fareCurrency || 'INR'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-slate-200 bg-white p-5">
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Driver Assignment</p>
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Driver Name</p>
+                    <p className="mt-1 text-sm font-black text-slate-900">{detailBus.driverName || 'Not assigned'}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Driver Phone</p>
+                    <p className="mt-1 text-sm font-black text-slate-900">{detailBus.driverPhone || 'Not assigned'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-slate-200 bg-white p-5">
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Schedules</p>
+                <div className="mt-4 space-y-3">
+                  {(detailBus.schedules || []).map((schedule, index) => (
+                    <div key={schedule.id || `${detailBus.id}-schedule-${index}`} className="rounded-2xl bg-slate-50 px-4 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-black text-slate-900">{schedule.label || `Schedule ${index + 1}`}</p>
+                          <p className="mt-1 text-xs font-semibold text-slate-500">{schedule.departureTime || '--:--'} to {schedule.arrivalTime || '--:--'}</p>
+                        </div>
+                        <span className={`rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-wider ${statusTone[schedule.status] || statusTone.draft}`}>
+                          {schedule.status || 'draft'}
+                        </span>
+                      </div>
+                      <p className="mt-3 text-[11px] font-semibold text-slate-500">{(schedule.activeDays || []).join(', ') || 'No active days'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-slate-200 bg-white p-5">
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Cancellation Slabs</p>
+                <div className="mt-4 space-y-3">
+                  {(detailBus.cancellationRules || []).length > 0 ? (
+                    detailBus.cancellationRules.map((rule, index) => (
+                      <div key={rule.id || `${detailBus.id}-cancel-${index}`} className="rounded-2xl bg-slate-50 px-4 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-black text-slate-900">{rule.label || `Slab ${index + 1}`}</p>
+                            <p className="mt-1 text-xs font-semibold text-slate-500">{rule.hoursBeforeDeparture ?? 0} hours before departure</p>
+                          </div>
+                          <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+                            {rule.refundType === 'percentage'
+                              ? `${rule.refundValue ?? 0}% refund`
+                              : rule.refundType === 'fixed'
+                                ? `Rs ${rule.refundValue ?? 0} refund`
+                                : 'No refund'}
+                          </p>
+                        </div>
+                        <p className="mt-3 text-[11px] font-semibold text-slate-500">{rule.notes || 'No extra notes.'}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm font-semibold text-slate-500">No hourly cancellation slabs configured.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {currentMode === 'edit' || currentMode === 'create' ? (
       <section className="grid gap-8 xl:grid-cols-[360px_minmax(0,1fr)]">
         <div className="space-y-4">
-          <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
+          <div className="hidden rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
             <div className="mb-6 flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Bus Catalog</h2>
@@ -460,7 +882,100 @@ const BusServiceManager = () => {
                 </div>
               )}
 
-              {catalog.map((bus) => (
+              {!isLoadingCatalog && catalog.length > 0 && (
+                <div className="overflow-hidden rounded-3xl border border-slate-100">
+                  <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] gap-3 bg-slate-50 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                    <p>Bus</p>
+                    <p>Route</p>
+                    <p>Actions</p>
+                  </div>
+
+                  <div className="divide-y divide-slate-100">
+                    {catalog.map((bus) => {
+                      const active = selectedBusId === bus.id;
+                      return (
+                        <div
+                          key={`row-${bus.id}`}
+                          className={`grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] gap-3 px-4 py-4 transition ${
+                            active ? 'bg-slate-900 text-white' : 'bg-white hover:bg-slate-50/80'
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-[10px] font-black uppercase tracking-wider text-slate-400">
+                              {bus.operatorName || 'Operator'}
+                            </p>
+                            <p className={`mt-1 truncate text-sm font-black ${active ? 'text-white' : 'text-slate-900'}`}>
+                              {bus.busName || 'Untitled Bus'}
+                            </p>
+                            <p className={`mt-1 truncate text-[11px] font-semibold ${active ? 'text-slate-300' : 'text-slate-500'}`}>
+                              {bus.serviceNumber || 'No service number'} | {bus.registrationNumber || 'No reg no.'}
+                            </p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <span className={`rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-wider ${
+                                active
+                                  ? 'border-white/20 bg-white/10 text-white'
+                                  : statusTone[bus.status] || statusTone.draft
+                              }`}>
+                                {bus.status || 'draft'}
+                              </span>
+                              <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-wider ${
+                                active ? 'bg-white/10 text-slate-200' : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                {countTotalSeats(bus.blueprint)} seats
+                              </span>
+                              <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-wider ${
+                                active ? 'bg-white/10 text-slate-200' : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                Rs {bus.seatPrice || 0}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="min-w-0">
+                            <p className={`truncate text-sm font-bold ${active ? 'text-white' : 'text-slate-900'}`}>
+                              {bus.route?.originCity || 'Origin'} to {bus.route?.destinationCity || 'Destination'}
+                            </p>
+                            <p className={`mt-1 truncate text-[11px] font-semibold ${active ? 'text-slate-300' : 'text-slate-500'}`}>
+                              {bus.route?.routeName || 'Route name not set'}
+                            </p>
+                            <p className={`mt-3 text-[11px] font-semibold ${active ? 'text-slate-300' : 'text-slate-500'}`}>
+                              {bus.route?.stops?.length || 0} stops configured
+                            </p>
+                          </div>
+
+                          <div className="flex flex-col items-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedBusId(bus.id)}
+                              className={`min-w-[92px] rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-wider transition ${
+                                active
+                                  ? 'bg-white text-slate-900'
+                                  : 'bg-slate-900 text-white hover:-translate-y-0.5'
+                              }`}
+                            >
+                              Edit Bus
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDetailBusId(bus.id)}
+                              className={`inline-flex min-w-[92px] items-center justify-center gap-1 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-wider transition ${
+                                active
+                                  ? 'border-white/20 bg-white/10 text-white'
+                                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                              }`}
+                            >
+                              <Eye size={12} />
+                              View Details
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {false && catalog.map((bus) => (
                 <button
                   key={bus.id}
                   type="button"
@@ -553,6 +1068,14 @@ const BusServiceManager = () => {
 
             <div className="grid gap-5 md:grid-cols-2">
               <div>
+                <label className={labelClassName}>Bus Driver Name</label>
+                <input className={fieldClassName} value={draft.driverName || ''} onChange={(event) => updateDraft('driverName', event.target.value)} placeholder="Rakesh Chauhan" />
+              </div>
+              <div>
+                <label className={labelClassName}>Bus Driver Phone</label>
+                <input className={fieldClassName} value={draft.driverPhone || ''} onChange={(event) => updateDraft('driverPhone', event.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="9876543210" />
+              </div>
+              <div>
                 <label className={labelClassName}>Operator Name</label>
                 <input className={fieldClassName} value={draft.operatorName} onChange={(event) => updateDraft('operatorName', event.target.value)} placeholder="Intercity Operator" />
               </div>
@@ -629,6 +1152,84 @@ const BusServiceManager = () => {
               <div>
                 <label className={labelClassName}>Luggage Policy</label>
                 <textarea className={`${fieldClassName} min-h-[92px]`} value={draft.luggagePolicy} onChange={(event) => updateDraft('luggagePolicy', event.target.value)} />
+              </div>
+              <div className="md:col-span-2">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <label className={labelClassName}>Hourly Cancellation Slabs</label>
+                    <p className="text-xs font-medium text-slate-500">Set refund slabs by hours before departure, with custom percentage or fixed value.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addCancellationRule}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-xs font-bold text-white shadow-sm"
+                  >
+                    <Plus size={14} />
+                    Add Slab
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {(draft.cancellationRules || []).map((rule, index) => (
+                    <div key={rule.id} className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
+                      <div className="mb-4 flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-black text-slate-900">Cancellation Slab {index + 1}</p>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Refund rule before departure</p>
+                        </div>
+                        {(draft.cancellationRules || []).length > 1 ? (
+                          <button
+                            type="button"
+                            onClick={() => removeCancellationRule(rule.id)}
+                            className="rounded-2xl border border-rose-200 bg-white p-2 text-rose-500 transition hover:bg-rose-50"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        ) : null}
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        <input
+                          className={fieldClassName}
+                          value={rule.label || ''}
+                          onChange={(event) => updateCancellationRule(rule.id, 'label', event.target.value)}
+                          placeholder="48h+ before departure"
+                        />
+                        <input
+                          className={fieldClassName}
+                          type="number"
+                          value={rule.hoursBeforeDeparture ?? 0}
+                          onChange={(event) => updateCancellationRule(rule.id, 'hoursBeforeDeparture', event.target.value)}
+                          placeholder="Hours before departure"
+                        />
+                        <select
+                          className={fieldClassName}
+                          value={rule.refundType || 'percentage'}
+                          onChange={(event) => updateCancellationRule(rule.id, 'refundType', event.target.value)}
+                        >
+                          <option value="percentage">Refund %</option>
+                          <option value="fixed">Fixed Refund</option>
+                          <option value="none">No Refund</option>
+                        </select>
+                        <input
+                          className={fieldClassName}
+                          type="number"
+                          value={rule.refundValue ?? 0}
+                          onChange={(event) => updateCancellationRule(rule.id, 'refundValue', event.target.value)}
+                          placeholder={rule.refundType === 'fixed' ? 'Refund amount' : 'Refund percentage'}
+                          disabled={rule.refundType === 'none'}
+                        />
+                      </div>
+
+                      <textarea
+                        className={`${fieldClassName} mt-4 min-h-[84px]`}
+                        value={rule.notes || ''}
+                        onChange={(event) => updateCancellationRule(rule.id, 'notes', event.target.value)}
+                        placeholder="Example: 25% cancellation charge applies in this window."
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </section>
@@ -868,6 +1469,7 @@ const BusServiceManager = () => {
           </section>
         </div>
       </section>
+      ) : null}
     </div>
   );
 };

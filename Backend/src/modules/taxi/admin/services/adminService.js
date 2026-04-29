@@ -31,6 +31,7 @@ import { ServiceLocation } from '../models/ServiceLocation.js';
 import { ServiceStore } from '../models/ServiceStore.js';
 import { Vehicle } from '../models/Vehicle.js';
 import { Driver } from '../../driver/models/Driver.js';
+import { BusDriver } from '../../driver/models/BusDriver.js';
 import { Zone } from '../../driver/models/Zone.js';
 import { Ride } from '../../user/models/Ride.js';
 import { AppLanguage } from '../models/AppLanguage.js';
@@ -175,6 +176,12 @@ const sanitizeBusSeatPrice = (value, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const sanitizeBusPhone = (value = '') =>
+  String(value || '')
+    .replace(/\D/g, '')
+    .trim()
+    .slice(-10);
+
 const normalizeBusSeatCell = (cell = {}) => {
   if (cell?.kind !== 'seat') {
     return {
@@ -225,6 +232,20 @@ const normalizeBusSchedule = (schedule = {}, index = 0) => ({
   status: ['active', 'paused', 'draft'].includes(schedule.status) ? schedule.status : 'active',
 });
 
+const normalizeBusCancellationRule = (rule = {}, index = 0) => ({
+  id: sanitizeBusText(rule.id, `cancel-${Date.now()}-${index}`),
+  label: sanitizeBusText(
+    rule.label,
+    `${sanitizeBusSeatPrice(rule.hoursBeforeDeparture, 0)}h before departure`,
+  ),
+  hoursBeforeDeparture: Math.max(0, sanitizeBusSeatPrice(rule.hoursBeforeDeparture, 0)),
+  refundType: ['percentage', 'fixed', 'none'].includes(rule.refundType)
+    ? rule.refundType
+    : 'percentage',
+  refundValue: Math.max(0, sanitizeBusSeatPrice(rule.refundValue, 0)),
+  notes: sanitizeBusText(rule.notes),
+});
+
 const normalizeBusServicePayload = (payload = {}, existing = {}) => {
   const blueprint = {
     templateKey: sanitizeBusText(
@@ -254,6 +275,12 @@ const normalizeBusServicePayload = (payload = {}, existing = {}) => {
       ? existing.schedules.map((schedule, index) => normalizeBusSchedule(schedule, index))
       : [];
 
+  const cancellationRules = Array.isArray(payload.cancellationRules)
+    ? payload.cancellationRules.map((rule, index) => normalizeBusCancellationRule(rule, index))
+    : Array.isArray(existing.cancellationRules)
+      ? existing.cancellationRules.map((rule, index) => normalizeBusCancellationRule(rule, index))
+      : [];
+
   const capacity =
     payload.capacity !== undefined
       ? sanitizeBusSeatPrice(payload.capacity, 0)
@@ -263,6 +290,12 @@ const normalizeBusServicePayload = (payload = {}, existing = {}) => {
     operatorName: sanitizeBusText(payload.operatorName, existing.operatorName || ''),
     busName: sanitizeBusText(payload.busName, existing.busName || ''),
     serviceNumber: sanitizeBusText(payload.serviceNumber, existing.serviceNumber || ''),
+    driverName: sanitizeBusText(payload.driverName, existing.driverName || ''),
+    driverPhone: sanitizeBusPhone(payload.driverPhone ?? existing.driverPhone ?? ''),
+    busDriverId:
+      toObjectId(payload.busDriverId) ||
+      toObjectId(existing.busDriverId) ||
+      null,
     coachType: sanitizeBusText(payload.coachType, existing.coachType || 'AC Sleeper'),
     busCategory: sanitizeBusText(payload.busCategory, existing.busCategory || 'Sleeper'),
     registrationNumber: sanitizeBusText(payload.registrationNumber, existing.registrationNumber || ''),
@@ -272,6 +305,7 @@ const normalizeBusServicePayload = (payload = {}, existing = {}) => {
       sanitizeBusText(payload.fareCurrency, existing.fareCurrency || 'INR').toUpperCase() || 'INR',
     boardingPolicy: sanitizeBusText(payload.boardingPolicy, existing.boardingPolicy || ''),
     cancellationPolicy: sanitizeBusText(payload.cancellationPolicy, existing.cancellationPolicy || ''),
+    cancellationRules,
     luggagePolicy: sanitizeBusText(payload.luggagePolicy, existing.luggagePolicy || ''),
     amenities: Array.isArray(payload.amenities)
       ? payload.amenities.map((item) => sanitizeBusText(item)).filter(Boolean)
@@ -292,6 +326,9 @@ const serializeBusService = (item = {}) => ({
   operatorName: item.operatorName || '',
   busName: item.busName || '',
   serviceNumber: item.serviceNumber || '',
+  driverName: item.driverName || '',
+  driverPhone: item.driverPhone || '',
+  busDriverId: item.busDriverId ? String(item.busDriverId) : '',
   coachType: item.coachType || 'AC Sleeper',
   busCategory: item.busCategory || 'Sleeper',
   registrationNumber: item.registrationNumber || '',
@@ -300,6 +337,9 @@ const serializeBusService = (item = {}) => ({
   fareCurrency: item.fareCurrency || 'INR',
   boardingPolicy: item.boardingPolicy || '',
   cancellationPolicy: item.cancellationPolicy || '',
+  cancellationRules: Array.isArray(item.cancellationRules)
+    ? item.cancellationRules.map((rule, index) => normalizeBusCancellationRule(rule, index))
+    : [],
   luggagePolicy: item.luggagePolicy || '',
   amenities: Array.isArray(item.amenities) ? item.amenities : [],
   blueprint: {
@@ -328,6 +368,52 @@ const serializeBusService = (item = {}) => ({
   createdAt: item.createdAt,
   updatedAt: item.updatedAt,
 });
+
+const syncBusDriverForBusService = async (busService, normalizedPayload = {}) => {
+  const driverName = sanitizeBusText(normalizedPayload.driverName, busService.driverName || '');
+  const driverPhone = sanitizeBusPhone(normalizedPayload.driverPhone || busService.driverPhone || '');
+  const existingDriverId = toObjectId(busService.busDriverId);
+
+  if (!driverName && !driverPhone) {
+    if (existingDriverId) {
+      await BusDriver.findByIdAndDelete(existingDriverId);
+    }
+
+    busService.driverName = '';
+    busService.driverPhone = '';
+    busService.busDriverId = null;
+    return;
+  }
+
+  if (!driverName || !driverPhone) {
+    throw new ApiError(400, 'Bus driver name and phone are both required');
+  }
+
+  const existingDriver =
+    (existingDriverId && await BusDriver.findById(existingDriverId)) ||
+    (await BusDriver.findOne({ phone: driverPhone }));
+
+  const driver = existingDriver || new BusDriver();
+
+  driver.name = driverName;
+  driver.phone = driverPhone;
+  driver.approve = true;
+  driver.active = true;
+  driver.status = 'approved';
+  driver.assignedBusServiceId = busService._id;
+  driver.operatorName = busService.operatorName || '';
+  driver.busName = busService.busName || '';
+  driver.serviceNumber = busService.serviceNumber || '';
+  driver.registrationNumber = busService.registrationNumber || '';
+  driver.routeName = busService.route?.routeName || '';
+  driver.originCity = busService.route?.originCity || '';
+  driver.destinationCity = busService.route?.destinationCity || '';
+  await driver.save();
+
+  busService.driverName = driver.name;
+  busService.driverPhone = driver.phone;
+  busService.busDriverId = driver._id;
+};
 
 const createRentalSeatCell = (rowNumber, seatCode, variant = 'seat') => ({
   kind: 'seat',
@@ -6335,6 +6421,8 @@ export const getDashboardData = async () => {
     }
 
     const item = await BusService.create(normalizedPayload);
+    await syncBusDriverForBusService(item, normalizedPayload);
+    await item.save();
     return serializeBusService(item.toObject());
   };
 
@@ -6364,6 +6452,7 @@ export const getDashboardData = async () => {
     }
 
     Object.assign(existingItem, normalizedPayload);
+    await syncBusDriverForBusService(existingItem, normalizedPayload);
     await existingItem.save();
 
     return serializeBusService(existingItem.toObject());
@@ -6372,6 +6461,9 @@ export const getDashboardData = async () => {
   export const deleteBusService = async (id) => {
     const item = await BusService.findByIdAndDelete(id);
     if (!item) throw new ApiError(404, 'Bus service not found');
+    if (item.busDriverId) {
+      await BusDriver.findByIdAndDelete(item.busDriverId);
+    }
     return true;
   };
 
