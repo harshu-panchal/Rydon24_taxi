@@ -182,10 +182,10 @@ const RentalVehicleDetail = () => {
     contactName: '',
     contactPhone: '',
     contactEmail: '',
-    requestedHours: duration === 'Hourly' ? 4 : duration === 'Half-Day' ? 8 : 24,
+    requestedHours: '',
     pickupLocation: '',
     dropLocation: '',
-    seatsNeeded: Math.min(Number(vehicle?.capacity || 1), 4) || 1,
+    seatsNeeded: '',
     luggageNeeded: Number(vehicle?.luggageCapacity || 0) || 0,
     pickupDateTime: '',
     returnDateTime: '',
@@ -497,8 +497,10 @@ const RentalVehicleDetail = () => {
       setShowQuoteForm(false);
       setQuoteForm((current) => ({
         ...current,
+        requestedHours: '',
         pickupLocation: '',
         dropLocation: '',
+        seatsNeeded: '',
         specialRequirements: '',
       }));
     } catch (error) {
@@ -1066,28 +1068,38 @@ const RentalVehicleDetail = () => {
                     Vehicle cap: {vehicle.capacity || 0} seats - {vehicle.luggageCapacity || 0} bags
                   </div>
                 </div>
-                <input
-                  type="datetime-local"
-                  value={quoteForm.pickupDateTime}
-                  onChange={(event) =>
-                    setQuoteForm((current) => ({
-                      ...current,
-                      pickupDateTime: event.target.value,
-                    }))
-                  }
-                  className={inputClass}
-                />
-                <input
-                  type="datetime-local"
-                  value={quoteForm.returnDateTime}
-                  onChange={(event) =>
-                    setQuoteForm((current) => ({
-                      ...current,
-                      returnDateTime: event.target.value,
-                    }))
-                  }
-                  className={inputClass}
-                />
+                <div className="space-y-2">
+                  <label className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                    Pickup date and time
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={quoteForm.pickupDateTime}
+                    onChange={(event) =>
+                      setQuoteForm((current) => ({
+                        ...current,
+                        pickupDateTime: event.target.value,
+                      }))
+                    }
+                    className={inputClass}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                    Return date and time
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={quoteForm.returnDateTime}
+                    onChange={(event) =>
+                      setQuoteForm((current) => ({
+                        ...current,
+                        returnDateTime: event.target.value,
+                      }))
+                    }
+                    className={inputClass}
+                  />
+                </div>
                 <input
                   value={quoteForm.pickupLocation}
                   onChange={(event) =>

@@ -6,6 +6,13 @@ import userBusService from '../../services/busService';
 
 const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
 
+const seatLegend = [
+  { key: 'available', label: 'Available' },
+  { key: 'selected', label: 'Selected' },
+  { key: 'booked', label: 'Booked' },
+  { key: 'sleeper', label: 'Sleeper' },
+];
+
 const SeatDeck = ({ title, rows, selectedSeatIds, onToggle }) => {
   if (!rows?.length) return null;
 
@@ -20,7 +27,11 @@ const SeatDeck = ({ title, rows, selectedSeatIds, onToggle }) => {
 
       <div className="space-y-3">
         {rows.map((row, rowIndex) => (
-          <div key={`${title}-${rowIndex}`} className="grid grid-cols-5 gap-3">
+          <div
+            key={`${title}-${rowIndex}`}
+            className="grid gap-3"
+            style={{ gridTemplateColumns: `repeat(${Math.max(1, row.length)}, minmax(0, 1fr))` }}
+          >
             {row.map((seat, cellIndex) => {
               if (!seat || seat.kind !== 'seat') {
                 return <div key={`${title}-${rowIndex}-${cellIndex}`} className="w-full" />;
@@ -28,6 +39,7 @@ const SeatDeck = ({ title, rows, selectedSeatIds, onToggle }) => {
 
               const isBooked = seat.status === 'booked';
               const isSelected = selectedSeatIds.includes(seat.id);
+              const isSleeper = seat.variant === 'sleeper';
 
               return (
                 <motion.button
@@ -36,20 +48,47 @@ const SeatDeck = ({ title, rows, selectedSeatIds, onToggle }) => {
                   disabled={isBooked}
                   whileTap={!isBooked ? { scale: 0.85 } : {}}
                   onClick={() => onToggle(seat)}
-                  className={`aspect-square w-full rounded-[8px] flex items-center justify-center border-2 transition-all relative ${
+                  className={`relative flex w-full items-center justify-center border-2 transition-all ${
                     isBooked
-                      ? 'bg-slate-200 border-slate-300 cursor-not-allowed'
+                      ? 'cursor-not-allowed border-slate-300 bg-slate-200'
                       : isSelected
-                        ? 'bg-slate-900 border-slate-900 shadow-[0_6px_16px_rgba(2,6,23,0.22)]'
-                        : 'bg-white border-slate-300 hover:border-orange-300'
+                        ? 'border-slate-900 bg-slate-900 shadow-[0_6px_16px_rgba(2,6,23,0.22)]'
+                        : isSleeper
+                          ? 'border-blue-200 bg-blue-50 hover:border-blue-300'
+                          : 'border-slate-300 bg-white hover:border-orange-300'
                   }`}
+                  style={{
+                    minHeight: isSleeper ? '52px' : '44px',
+                    borderRadius: isSleeper ? '18px' : '10px',
+                  }}
                   aria-label={isBooked ? `Seat ${seat.label || seat.id} sold out` : `Seat ${seat.label || seat.id}`}
                   title={isBooked ? `Sold out: ${seat.label || seat.id}` : `Available: ${seat.label || seat.id}`}
                 >
-                  <div className={`absolute -top-1 w-full h-2 rounded-t-sm transition-colors ${isBooked ? 'bg-slate-400' : isSelected ? 'bg-orange-400' : 'bg-slate-200'}`} />
-                  <span className={`text-[9px] font-black leading-none ${isSelected ? 'text-white' : isBooked ? 'text-slate-500' : 'text-slate-600'}`}>
-                    {seat.label || seat.id}
-                  </span>
+                  {isSleeper ? (
+                    <>
+                      <div
+                        className={`absolute left-1.5 top-1/2 h-[72%] w-2 -translate-y-1/2 rounded-full transition-colors ${
+                          isBooked ? 'bg-slate-400' : isSelected ? 'bg-orange-300' : 'bg-blue-200'
+                        }`}
+                      />
+                      <div className="flex w-full items-center justify-center px-3 pl-5">
+                        <span
+                          className={`text-[10px] font-black leading-none ${
+                            isSelected ? 'text-white' : isBooked ? 'text-slate-500' : 'text-slate-700'
+                          }`}
+                        >
+                          {seat.label || seat.id}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className={`absolute -top-1 h-2 w-full rounded-t-sm transition-colors ${isBooked ? 'bg-slate-400' : isSelected ? 'bg-orange-400' : 'bg-slate-200'}`} />
+                      <span className={`text-[9px] font-black leading-none ${isSelected ? 'text-white' : isBooked ? 'text-slate-500' : 'text-slate-600'}`}>
+                        {seat.label || seat.id}
+                      </span>
+                    </>
+                  )}
                 </motion.button>
               );
             })}
@@ -167,19 +206,25 @@ const BusSeats = () => {
               onToggle={toggleSeat}
             />
 
-            <div className="bg-white rounded-2xl border border-slate-100 p-4 flex justify-between gap-2 shadow-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded border-2 bg-white border-slate-200" />
-                <span className="text-[10px] font-bold text-slate-500 uppercase">Available</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded bg-slate-900" />
-                <span className="text-[10px] font-bold text-slate-500 uppercase">Selected</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded bg-slate-200" />
-                <span className="text-[10px] font-bold text-slate-500 uppercase">Booked</span>
-              </div>
+            <div className="grid grid-cols-2 gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+              {seatLegend.map((item) => (
+                <div key={item.key} className="flex items-center gap-2">
+                  <div
+                    className={`h-4 w-4 ${
+                      item.key === 'sleeper' ? 'rounded-xl border border-blue-200 bg-blue-50' : 'rounded border-2'
+                    } ${
+                      item.key === 'available'
+                        ? 'border-slate-200 bg-white'
+                        : item.key === 'selected'
+                          ? 'border-slate-900 bg-slate-900'
+                          : item.key === 'booked'
+                            ? 'border-slate-200 bg-slate-200'
+                            : ''
+                    }`}
+                  />
+                  <span className="text-[10px] font-bold uppercase text-slate-500">{item.label}</span>
+                </div>
+              ))}
             </div>
           </>
         ) : null}

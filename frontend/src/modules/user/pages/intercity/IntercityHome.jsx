@@ -63,7 +63,6 @@ const IntercityHome = () => {
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [fromCity, setFromCity] = useState('');
-  const [showAll, setShowAll] = useState(false);
   const [rideMode, setRideMode] = useState('now');
   const [travelDate, setTravelDate] = useState(new Date().toISOString().split('T')[0]);
   const [tripType, setTripType] = useState('One Way');
@@ -192,9 +191,8 @@ const IntercityHome = () => {
       );
     }
 
-    if (!showAll) return packages.slice(0, 4);
     return packages;
-  }, [packages, searchQuery, showAll]);
+  }, [packages, searchQuery]);
 
   const handlePackageSelect = (pkg) => {
     const flowPackage = serializePackageForFlow(pkg);
@@ -337,7 +335,7 @@ const IntercityHome = () => {
             Intercity <span className="text-blue-600">Rides</span>
           </h1>
           <p className="text-[14px] font-bold text-slate-500 max-w-[280px]">
-            Premium city-to-city travel with admin verified packages.
+            City-to-city travel with live destination choices, just like taxi booking.
           </p>
         </motion.div>
 
@@ -402,9 +400,7 @@ const IntercityHome = () => {
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
-                    setShowAll(false);
                   }}
-                  onFocus={() => setShowAll(true)}
                   className="w-full h-16 pl-14 pr-12 bg-slate-50 border-2 border-transparent focus:border-blue-100 focus:bg-white rounded-2xl text-[16px] font-bold text-slate-900 placeholder:text-slate-400 transition-all outline-none"
                 />
                 
@@ -442,15 +438,12 @@ const IntercityHome = () => {
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-2 mb-1">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
-                                  {pkg.packageTypeName}
-                                </span>
                                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[120px]">
-                                  {pkg.serviceLocationName}
+                                  From {pkg.serviceLocationName}
                                 </p>
                               </div>
                               <p className="text-[15px] font-black text-slate-900 group-hover:text-blue-600 transition-colors flex items-center gap-2">
-                                <span className="text-slate-400">→</span> {pkg.destination}
+                                <span className="text-slate-400">To</span> {pkg.destination}
                               </p>
                             </div>
                           </div>
@@ -482,14 +475,6 @@ const IntercityHome = () => {
                 </span>
               </button>
               
-              {!showAll && !searchQuery && (
-                <button
-                  onClick={() => setShowAll(true)}
-                  className="px-6 h-14 bg-slate-900 text-white rounded-2xl text-[14px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-slate-200"
-                >
-                  View All
-                </button>
-              )}
             </div>
 
             <AnimatePresence>
@@ -520,8 +505,8 @@ const IntercityHome = () => {
         <div className="mt-10 pb-10">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-[18px] font-black text-slate-900 flex items-center gap-2">
-              {searchQuery || showAll ? 'Available Packages' : 'Recommended Destinations'}
-              {(searchQuery || showAll) && (
+              {searchQuery ? 'Matching Destinations' : 'Available Destinations'}
+              {searchQuery && (
                 <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] rounded-full">
                   {filteredPackages.length} Found
                 </span>
@@ -548,10 +533,7 @@ const IntercityHome = () => {
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                          {pkg.packageTypeName}
-                        </span>
-                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{pkg.serviceLocationName} to</p>
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">From {pkg.serviceLocationName}</p>
                       </div>
                       <h4 className="text-[20px] font-black text-slate-900 group-hover:text-blue-600 transition-colors truncate">
                         {pkg.destination}
@@ -579,7 +561,7 @@ const IntercityHome = () => {
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 text-[12px] font-black text-slate-400 group-hover:text-blue-500 transition-colors uppercase tracking-widest">
-                      Details <ChevronRight size={14} strokeWidth={3} />
+                      Choose <ChevronRight size={14} strokeWidth={3} />
                     </div>
                   </div>
                 </motion.div>
@@ -608,7 +590,7 @@ const IntercityHome = () => {
       </div>
 
       {/* Floating Info */}
-      {!searchQuery && !showAll && (
+      {!searchQuery && (
         <div className="px-6">
           <div className="bg-indigo-600 rounded-[32px] p-6 text-white overflow-hidden relative">
             <div className="relative z-10">

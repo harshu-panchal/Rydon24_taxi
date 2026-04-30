@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Phone, ChevronRight, ShieldCheck, Briefcase, UserRound, Sparkles, Building2 } from 'lucide-react';
+import { ArrowLeft, Phone, ChevronRight, ShieldCheck, Briefcase, UserRound, Sparkles, Building2, CheckCircle2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
     clearDriverRegistrationSession,
     saveDriverRegistrationSession,
@@ -9,6 +10,7 @@ import {
 } from '../../services/registrationService';
 
 import { useSettings } from '../../../../shared/context/SettingsContext';
+import loginBg from '../../../../assets/images/driver-login-bg.png';
 
 const PhoneRegistration = () => {
     const navigate = useNavigate();
@@ -21,18 +23,19 @@ const PhoneRegistration = () => {
     const [error, setError] = useState('');
     const isLoginPage = location.pathname === '/taxi/driver/login' || location.pathname === '/taxi/driver/login/';
     const appName = settings.general?.app_name || 'App';
+    
     const roleOptions = isLoginPage
         ? [
             { id: 'driver', label: 'Driver', Icon: UserRound },
-            { id: 'owner', label: 'Fleet Owner', Icon: Briefcase },
-            { id: 'bus_driver', label: 'Bus Driver', Icon: ShieldCheck },
-            { id: 'service_center', label: 'Service Center', Icon: Building2 },
-            { id: 'service_center_staff', label: 'Center Staff', Icon: ShieldCheck },
+            { id: 'owner', label: 'Owner', Icon: Briefcase },
+            { id: 'bus_driver', label: 'Bus', Icon: ShieldCheck },
+            { id: 'service_center', label: 'Center', Icon: Building2 },
+            { id: 'service_center_staff', label: 'Staff', Icon: UserRound },
         ]
         : [
             { id: 'driver', label: 'Driver', Icon: UserRound },
-            { id: 'owner', label: 'Fleet Owner', Icon: Briefcase },
-            { id: 'bus_driver', label: 'Bus Driver', Icon: ShieldCheck },
+            { id: 'owner', label: 'Owner', Icon: Briefcase },
+            { id: 'bus_driver', label: 'Bus', Icon: ShieldCheck },
         ];
     
     const modeConfig = useMemo(() => {
@@ -50,10 +53,7 @@ const PhoneRegistration = () => {
                 ? `Enter your registered number to access your account.`
                 : `Start your journey as a ${isOwner ? 'fleet owner' : isBusDriver ? 'bus captain' : isServiceCenter ? 'service center operator' : isServiceCenterStaff ? 'service center staff member' : 'professional driver'}.`,
             highlight: isOwner ? 'Manage fleet, payouts & drivers.' : isBusDriver ? 'Manage your coach, schedules and seat desk.' : isServiceCenter ? 'Manage your center profile, staff and rental vehicle catalog.' : isServiceCenterStaff ? 'Handle assigned bookings and work queues for your center.' : 'Go online, get trips & earn daily.',
-            accentBg: isOwner ? 'bg-[#1C2833]' : isBusDriver ? 'bg-[#0f3d3e]' : isServiceCenter ? 'bg-[#14342b]' : isServiceCenterStaff ? 'bg-[#1e3a5f]' : 'bg-slate-900',
-            accentSoft: isOwner ? 'bg-[#fcfcfb]' : 'bg-white',
-            accentText: isOwner ? 'text-[#1C2833]' : isBusDriver ? 'text-[#0f3d3e]' : isServiceCenter ? 'text-[#14342b]' : isServiceCenterStaff ? 'text-[#1e3a5f]' : 'text-slate-900',
-            buttonClass: 'bg-slate-950 text-white',
+            accentColor: isOwner ? '#1C2833' : isBusDriver ? '#0f3d3e' : isServiceCenter ? '#14342b' : isServiceCenterStaff ? '#1e3a5f' : '#4F46E5',
             Icon: isOwner ? Briefcase : isBusDriver ? ShieldCheck : isServiceCenter ? Building2 : isServiceCenterStaff ? ShieldCheck : UserRound,
         };
     }, [appName, isLoginPage, role]);
@@ -100,192 +100,228 @@ const PhoneRegistration = () => {
         }
     };
 
+    const containerVariants = {
+        hidden: { opacity: 0, y: 20 },
+        visible: { 
+            opacity: 1, 
+            y: 0,
+            transition: { 
+                duration: 0.6, 
+                ease: [0.22, 1, 0.36, 1],
+                staggerChildren: 0.1
+            }
+        }
+    };
+
+    const itemVariants = {
+        hidden: { opacity: 0, y: 10 },
+        visible: { opacity: 1, y: 0 }
+    };
+
     return (
         <div 
-            className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-32 pt-8 select-none overflow-x-hidden"
-            style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+            className="min-h-screen relative bg-slate-50 select-none overflow-x-hidden font-['Inter']"
         >
-            <main className="mx-auto max-w-sm space-y-6">
-                <header className="space-y-5">
+            <div className="fixed inset-0 z-0">
+                <img 
+                    src={loginBg} 
+                    alt="" 
+                    className="w-full h-full object-cover opacity-10 blur-[2px]"
+                />
+                <div className="absolute inset-0 bg-gradient-to-b from-white/80 via-white/40 to-white/90" />
+            </div>
+
+            <main className="relative z-10 mx-auto max-w-sm px-5 pt-12 pb-32 space-y-8">
+                <motion.header 
+                    variants={containerVariants}
+                    initial="hidden"
+                    animate="visible"
+                    className="space-y-6"
+                >
                     <div className="flex items-center justify-between">
-                        {isLoginPage ? (
-                            <div className="h-10 w-10" />
-                        ) : (
-                            <button
+                        {!isLoginPage && (
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
                                 onClick={() => navigate(-1)}
-                                className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/70 bg-white/80 text-slate-900 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-sm transition-transform active:scale-95"
+                                className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-premium border border-slate-100 text-slate-900"
                             >
-                                <ArrowLeft size={18} strokeWidth={2.5} />
-                            </button>
+                                <ArrowLeft size={20} strokeWidth={2.5} />
+                            </motion.button>
                         )}
-                        <div className="rounded-full border border-[#dcc9ab] bg-[#f7efe2] px-3 py-1 text-[11px] font-semibold tracking-[0.18em] text-[#8a6a3d] uppercase">
-                            {isLoginPage ? 'Welcome Back' : 'Get Started'}
-                        </div>
+                        <motion.div 
+                            variants={itemVariants}
+                            className="ml-auto rounded-full bg-indigo-50 px-4 py-1.5 text-[11px] font-bold tracking-[0.1em] text-indigo-600 uppercase"
+                        >
+                            {isLoginPage ? 'Secure Portal' : 'Onboarding'}
+                        </motion.div>
                     </div>
 
-                    <section className="rounded-[28px] border border-white/80 bg-white/88 p-6 shadow-[0_22px_60px_rgba(148,116,70,0.12)] backdrop-blur-sm">
-                        <div className="flex items-start justify-between">
-                            <div className="space-y-2">
-                                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9a7b50]">
-                                    {modeConfig.badge}
-                                </p>
-                                <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.04em] text-slate-950">
-                                    {modeConfig.title}
-                                </h1>
-                                <p className="max-w-[24ch] text-sm leading-6 text-slate-600">
-                                    {modeConfig.subtitle}
-                                </p>
-                            </div>
-                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#f3e4cd] text-[#8a5a22]">
-                                <modeConfig.Icon size={22} />
-                            </div>
-                        </div>
-                    </section>
-                </header>
-
-                <div className="grid grid-cols-2 gap-2 rounded-[20px] bg-white/50 border border-white/80 p-1.5 shadow-soft backdrop-blur-sm sm:grid-cols-5">
-                    {roleOptions.map((option) => {
-                        const active = role === option.id;
-                        return (
-                            <button
-                                key={option.id}
-                                type="button"
-                                onClick={() => setRole(option.id)}
-                                className={`flex h-12 items-center justify-center gap-2 rounded-[14px] text-[13px] font-semibold tracking-tight transition-all ${
-                                    active
-                                        ? 'bg-slate-950 text-white shadow-lg'
-                                        : 'text-slate-500 hover:text-slate-700'
-                                }`}
+                    <motion.section 
+                        variants={itemVariants}
+                        className="space-y-4"
+                    >
+                        <div className="flex items-center gap-2">
+                             <div 
+                                className="flex h-12 w-12 items-center justify-center rounded-2xl text-white shadow-lg"
+                                style={{ backgroundColor: modeConfig.accentColor }}
                             >
-                                <option.Icon size={16} strokeWidth={2} />
-                                {option.label}
-                            </button>
-                        );
-                    })}
-                </div>
-
-                <section className="space-y-4 rounded-[30px] border border-slate-200/70 bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
-                    <div className="rounded-[24px] border border-slate-200 bg-[#fcfcfb] p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all focus-within:border-[#c59d66] focus-within:bg-white focus-within:shadow-[0_16px_40px_rgba(197,157,102,0.14)]">
-                        <div className="flex items-start gap-3.5">
-                            <div className="mt-0.5 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f7efe2] text-[#8a5a22]">
-                                <Phone size={18} />
+                                <modeConfig.Icon size={24} />
                             </div>
-                            <div className="flex-1 space-y-1.5">
-                                <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600">Mobile number</label>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[17px] font-semibold text-slate-400">+91</span>
-                                    <input 
-                                        type="tel" 
-                                        inputMode="numeric"
-                                        pattern="[0-9]*"
-                                        autoFocus
-                                        maxLength={10}
-                                        value={phone}
-                                        onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-                                        placeholder="Enter 10 digits"
-                                        className="w-full border-none bg-transparent p-0 text-[17px] font-semibold text-slate-950 outline-none focus:outline-none focus:ring-0 placeholder:text-slate-300"
-                                    />
+                            <span className="text-[12px] font-black uppercase tracking-[0.2em] text-slate-400">
+                                {modeConfig.badge}
+                            </span>
+                        </div>
+                        <h1 className="font-['Outfit'] text-[42px] font-extrabold leading-[1] tracking-[-0.03em] text-slate-900">
+                            {modeConfig.title}
+                        </h1>
+                        <p className="text-[16px] leading-relaxed text-slate-500 font-medium max-w-[30ch]">
+                            {modeConfig.subtitle}
+                        </p>
+                    </motion.section>
+                </motion.header>
+
+                <motion.div 
+                    variants={containerVariants}
+                    initial="hidden"
+                    animate="visible"
+                    className="space-y-6"
+                >
+                    <motion.div 
+                        variants={itemVariants}
+                        className="grid grid-cols-5 gap-2"
+                    >
+                        {roleOptions.map((option) => {
+                            const active = role === option.id;
+                            return (
+                                <motion.button
+                                    key={option.id}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => setRole(option.id)}
+                                    className={`flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl transition-all border ${
+                                        active
+                                            ? 'bg-slate-900 border-slate-900 text-white shadow-xl'
+                                            : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'
+                                    }`}
+                                >
+                                    <option.Icon size={18} strokeWidth={active ? 2.5 : 2} />
+                                    <span className="text-[10px] font-bold uppercase tracking-wider">{option.label}</span>
+                                </motion.button>
+                            );
+                        })}
+                    </motion.div>
+
+                    <motion.section 
+                        variants={itemVariants}
+                        className="glass-morphism rounded-[32px] p-1 shadow-premium overflow-hidden border-white/50"
+                    >
+                        <div className="bg-white rounded-[31px] p-6 space-y-6">
+                            <div className={`group rounded-[24px] border-2 transition-all p-4 ${error ? 'border-rose-100 bg-rose-50/30' : 'border-slate-50 bg-slate-50/50 focus-within:border-indigo-500 focus-within:bg-white focus-within:shadow-lg focus-within:shadow-indigo-500/10'}`}>
+                                <div className="flex items-center gap-4">
+                                    <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${error ? 'bg-rose-100 text-rose-600' : 'bg-indigo-50 text-indigo-600 group-focus-within:bg-indigo-600 group-focus-within:text-white'}`}>
+                                        <Phone size={20} strokeWidth={2.5} />
+                                    </div>
+                                    <div className="flex-1 space-y-1">
+                                        <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400">Mobile Number</label>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-lg font-black text-slate-400">+91</span>
+                                            <input 
+                                                type="tel" 
+                                                inputMode="numeric"
+                                                pattern="[0-9]*"
+                                                autoFocus
+                                                maxLength={10}
+                                                value={phone}
+                                                onChange={(e) => {
+                                                    const val = e.target.value.replace(/\D/g, '');
+                                                    setPhone(val);
+                                                    if (error) setError('');
+                                                }}
+                                                placeholder="00000 00000"
+                                                className="w-full border-none bg-transparent p-0 text-xl font-bold text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200"
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
+
+                            <div className="flex gap-4 px-2">
+                                <div className="relative flex items-center shrink-0">
+                                    <input 
+                                        type="checkbox" 
+                                        id="terms"
+                                        checked={agreed}
+                                        onChange={() => setAgreed(!agreed)}
+                                        className="peer h-6 w-6 cursor-pointer appearance-none rounded-lg border-2 border-slate-200 bg-white transition-all checked:bg-indigo-600 checked:border-indigo-600"
+                                    />
+                                    <CheckCircle2 className="pointer-events-none absolute inset-0 m-auto h-4 w-4 text-white opacity-0 transition-opacity peer-checked:opacity-100" strokeWidth={3} />
+                                </div>
+                                <label htmlFor="terms" className="text-[12px] font-semibold text-slate-500 leading-relaxed cursor-pointer">
+                                    By continuing, you agree to our{' '}
+                                    <button type="button" onClick={() => navigate('/terms')} className="text-indigo-600 font-bold hover:underline">Terms</button>
+                                    {' '}and{' '}
+                                    <button type="button" onClick={() => navigate('/privacy')} className="text-indigo-600 font-bold hover:underline">Privacy Policy</button>.
+                                </label>
+                            </div>
+
+                            <AnimatePresence>
+                                {error && (
+                                    <motion.div 
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="rounded-2xl bg-rose-50 border border-rose-100 px-4 py-3 text-[13px] font-bold text-rose-600"
+                                    >
+                                        {error}
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </div>
-                    </div>
+                    </motion.section>
 
-                    <div className="flex gap-3 px-1 py-1">
-                        <div className="relative flex items-center">
-                            <input 
-                                type="checkbox" 
-                                id="terms"
-                                checked={agreed}
-                                onChange={() => setAgreed(!agreed)}
-                                className="peer h-5 w-5 cursor-pointer appearance-none rounded-lg border-2 border-slate-200 bg-white transition-all checked:bg-slate-950 checked:border-slate-950"
-                            />
-                            <ShieldCheck className="pointer-events-none absolute left-1 top-1 h-3 w-3 text-white opacity-0 transition-opacity peer-checked:opacity-100" />
+                    <motion.div variants={itemVariants} className="space-y-6">
+                        <div className="flex items-center justify-center gap-3 py-2 text-slate-400">
+                            <Sparkles size={16} className="text-amber-400" />
+                            <span className="text-[13px] font-bold tracking-tight">{modeConfig.highlight}</span>
                         </div>
-                        <label htmlFor="terms" className="text-[12px] font-medium text-slate-500 leading-snug cursor-pointer">
-                            I understand and agree to the{' '}
-                            <button type="button" onClick={() => navigate('/terms')} className="text-slate-950 font-semibold underline underline-offset-2">Terms</button>
-                            {' '}and{' '}
-                            <button type="button" onClick={() => navigate('/privacy')} className="text-slate-950 font-semibold underline underline-offset-2">Privacy Policy</button>.
-                        </label>
-                    </div>
 
-                    {error && (
-                        <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600 animate-in fade-in slide-in-from-top-1 duration-300">
-                            {error}
-                        </div>
-                    )}
-                </section>
-
-                <div className="space-y-4 pt-2">
-                    <p className="text-center text-xs font-medium text-slate-400 flex items-center justify-center gap-2">
-                        <Sparkles size={14} className="text-amber-400" />
-                        {modeConfig.highlight}
-                    </p>
-
-                    <div className="rounded-[22px] border border-[#eadcc7] bg-[#fffaf2] px-4 py-4 text-center shadow-[0_10px_30px_rgba(138,106,61,0.08)]">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#9a7b50]">
-                            {role === 'owner'
-                                ? 'Driver Access'
-                                : role === 'bus_driver'
-                                    ? 'Taxi Driver Access'
-                                    : role === 'service_center'
-                                        ? 'Driver Access'
-                                        : role === 'service_center_staff'
-                                        ? 'Driver Access'
-                                        : 'Fleet Owner Access'}
-                        </p>
-                        <p className="mt-2 text-[13px] font-medium leading-6 text-slate-600">
-                            {role === 'owner'
-                                ? 'Not managing a fleet? Switch back to the driver side and continue with your normal trip account.'
-                                : role === 'bus_driver'
-                                    ? 'Need taxi duty instead? Switch back to the regular driver side for trips and ride requests.'
-                                    : role === 'service_center'
-                                        ? 'Need the regular taxi account instead? Switch back to driver login for trip and duty access.'
-                                        : role === 'service_center_staff'
-                                            ? 'Need the regular taxi account instead? Switch back to driver login for trip and duty access.'
-                                        : 'Are you a fleet owner? Switch to the fleet owner side to manage vehicles, drivers, and payouts.'}
-                        </p>
-                        <button
-                            type="button"
-                            onClick={() => setRole(role === 'owner' || role === 'bus_driver' || role === 'service_center' || role === 'service_center_staff' ? 'driver' : 'owner')}
-                            className="mt-3 inline-flex items-center justify-center rounded-full border border-[#d8be95] bg-white px-4 py-2 text-[12px] font-semibold text-[#8a5a22] transition hover:bg-[#fff4e3]"
-                        >
-                            {role === 'owner'
-                                ? 'Continue as Driver'
-                                : role === 'bus_driver'
-                                    ? 'Continue as Driver'
-                                    : role === 'service_center'
-                                        ? 'Continue as Driver'
-                                        : role === 'service_center_staff'
-                                        ? 'Continue as Driver'
-                                        : 'Continue as Fleet Owner'}
-                        </button>
-                    </div>
-
-                    <div className="space-y-3">
-                        <button 
+                        <motion.button 
+                            variants={itemVariants}
+                            whileHover={{ y: -1 }}
                             onClick={() => navigate(isLoginPage ? '/taxi/driver/reg-phone' : '/taxi/driver/login')}
-                            className="w-full text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors py-2"
+                            className="w-full text-[14px] font-bold text-slate-400 hover:text-slate-900 transition-colors py-2"
                         >
-                            {isLoginPage ? "Don't have an account? Sign up" : 'Already have an account? Login'}
-                        </button>
-                    </div>
-                </div>
+                            {isLoginPage ? (
+                                <>Don't have an account? <span className="text-indigo-600">Register now</span></>
+                            ) : (
+                                <>Already a partner? <span className="text-indigo-600">Sign in</span></>
+                            )}
+                        </motion.button>
+                    </motion.div>
+                </motion.div>
 
-                <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200/70 bg-white/88 p-5 backdrop-blur-md">
+                <div className="fixed bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-xl border-t border-slate-100">
                     <div className="mx-auto max-w-sm">
-                        <button 
+                        <motion.button 
+                            whileHover={{ scale: 1.02, y: -2 }}
+                            whileTap={{ scale: 0.98 }}
                             onClick={handleSendOTP}
                             disabled={loading || !agreed || phone.length !== 10}
-                            className={`flex h-14 w-full items-center justify-center gap-2 rounded-[22px] text-[15px] font-semibold tracking-[0.01em] shadow-[0_18px_40px_rgba(15,23,42,0.12)] transition-all ${
+                            className={`flex h-16 w-full items-center justify-center gap-3 rounded-[24px] text-[16px] font-black tracking-tight shadow-xl transition-all ${
                                 agreed && phone.length === 10 
-                                    ? 'bg-slate-950 text-white hover:bg-slate-900' 
-                                    : 'pointer-events-none bg-slate-200 text-slate-500 shadow-none'
+                                    ? 'bg-slate-900 text-white shadow-indigo-500/20' 
+                                    : 'pointer-events-none bg-slate-100 text-slate-300 shadow-none'
                             }`}
                         >
-                            {loading ? 'Sending OTP...' : 'Continue'} 
-                            {!loading && <ChevronRight size={17} strokeWidth={2.8} />}
-                        </button>
+                            {loading ? (
+                                <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : (
+                                <>
+                                    <span>Get Verification Code</span>
+                                    <ChevronRight size={20} strokeWidth={3} />
+                                </>
+                            )}
+                        </motion.button>
                     </div>
                 </div>
             </main>

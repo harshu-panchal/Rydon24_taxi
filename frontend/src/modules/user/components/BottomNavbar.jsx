@@ -9,6 +9,7 @@ const BottomNavbar = () => {
   const { pathname } = useLocation();
   const { settings } = useSettings();
   const showBusService = String(settings.transportRide?.enable_bus_service || '0') === '1';
+
   const navItems = [
     { icon: Home, label: 'Ride', path: '/taxi/user' },
     { icon: Clock, label: 'History', path: '/taxi/user/activity' },
@@ -18,54 +19,89 @@ const BottomNavbar = () => {
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto z-50 px-4 pb-5 pt-2">
-      <div className="flex items-center justify-around bg-white/90 backdrop-blur-xl border border-white/80 rounded-[22px] shadow-[0_8px_32px_rgba(15,23,42,0.12)] px-2 py-1.5">
+    <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto z-[100] px-6 pb-6 pt-2 pointer-events-none">
+      <div className="flex items-center justify-around bg-white/70 backdrop-blur-2xl border border-white/40 rounded-[32px] shadow-[0_20px_40px_rgba(0,0,0,0.12)] px-2 py-2 pointer-events-auto relative">
         {navItems.map(({ icon: Icon, label, path }) => {
           const isActive =
             path === '/taxi/user'
               ? pathname === path
               : pathname === path || pathname.startsWith(`${path}/`);
+
           return (
-            <motion.button
+            <button
               key={label}
               type="button"
-              whileTap={{ scale: 0.92 }}
               onClick={() => navigate(path)}
-              className="flex-1 flex flex-col items-center gap-1 py-1 relative"
+              className="flex-1 flex flex-col items-center justify-center py-1.5 relative z-10 outline-none tap-highlight-transparent group"
             >
-              {/* Active pill background */}
-              <div className={`w-10 h-10 rounded-[14px] flex items-center justify-center transition-all duration-200 ${
-                isActive
-                  ? 'bg-slate-900 shadow-[0_4px_12px_rgba(15,23,42,0.20)]'
-                  : 'bg-transparent'
-              }`}>
-                <Icon
-                  size={18}
-                  strokeWidth={isActive ? 2.5 : 2}
-                  className={isActive ? 'text-white' : 'text-slate-400'}
-                />
-              </div>
+              <div className="relative flex flex-col items-center">
+                {/* Active Sliding Background Pill */}
+                <AnimatePresence>
+                  {isActive && (
+                    <motion.div
+                      layoutId="active-pill"
+                      transition={{
+                        type: 'spring',
+                        stiffness: 400,
+                        damping: 32,
+                        mass: 1
+                      }}
+                      className="absolute -inset-y-2 -inset-x-4 bg-slate-900 rounded-[20px] shadow-[0_8px_20px_rgba(15,23,42,0.25)]"
+                    />
+                  )}
+                </AnimatePresence>
 
-              {/* Label */}
-              <span className={`text-[9px] font-black uppercase tracking-[0.18em] transition-colors duration-200 ${
-                isActive ? 'text-slate-900' : 'text-slate-400'
-              }`}>
-                {label}
-              </span>
+                {/* Icon Container with Transition */}
+                <motion.div
+                  animate={{ 
+                    scale: isActive ? 1.15 : 1,
+                    y: isActive ? -1 : 0
+                  }}
+                  transition={{
+                    type: 'spring',
+                    stiffness: 400,
+                    damping: 30
+                  }}
+                  className="relative z-20"
+                >
+                  <Icon
+                    size={21}
+                    strokeWidth={isActive ? 2.5 : 2}
+                    className={`transition-colors duration-300 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'}`}
+                  />
+                </motion.div>
 
-              {/* Active dot */}
-              <AnimatePresence>
+                {/* Label with Transition */}
+                <motion.span 
+                  animate={{ 
+                    opacity: isActive ? 1 : 0.5,
+                    y: isActive ? 2 : 1,
+                    scale: isActive ? 1 : 0.95
+                  }}
+                  transition={{
+                    duration: 0.2
+                  }}
+                  className={`relative z-20 text-[10px] font-black uppercase tracking-[0.18em] font-['Outfit'] mt-1 transition-colors duration-300 ${
+                    isActive ? 'text-white' : 'text-slate-500'
+                  }`}
+                >
+                  {label}
+                </motion.span>
+                
+                {/* Subtle Bottom Glow for Active Tab */}
                 {isActive && (
                   <motion.div
-                    layoutId="nav-dot"
-                    initial={{ opacity: 0, scale: 0 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0 }}
-                    className="absolute -bottom-0.5 w-1 h-1 rounded-full bg-orange-500"
+                    layoutId="active-glow"
+                    transition={{
+                      type: 'spring',
+                      stiffness: 400,
+                      damping: 32
+                    }}
+                    className="absolute -bottom-2 w-4 h-1 bg-white/20 rounded-full blur-[2px]"
                   />
                 )}
-              </AnimatePresence>
-            </motion.button>
+              </div>
+            </button>
           );
         })}
       </div>

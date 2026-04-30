@@ -289,6 +289,57 @@ const Home = () => {
       <div className="absolute top-52 left-[-60px] h-52 w-52 rounded-full bg-emerald-100/60 blur-3xl pointer-events-none" />
       <div className="absolute bottom-28 right-[-40px] h-40 w-40 rounded-full bg-blue-100/60 blur-3xl pointer-events-none" />
 
+      <AnimatePresence>
+        {currentRide && serviceType === 'rental' && (rideStage === 'assigned' || rideStage === 'end_requested') && (
+          <Motion.div
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -100, opacity: 0 }}
+            className="fixed top-0 inset-x-0 z-[70] p-4 pointer-events-none"
+          >
+            <Motion.button
+              whileTap={{ scale: 0.98 }}
+              onClick={() => navigate(trackingPath, { state: currentRide })}
+              className="pointer-events-auto mx-auto max-w-[calc(32rem-2rem)] flex items-center justify-between gap-4 rounded-[24px] border border-white/40 bg-white/70 px-5 py-3 shadow-[0_20px_40px_rgba(0,0,0,0.08)] backdrop-blur-2xl"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 shadow-lg">
+                  <img src={currentRideIcon} alt="" className="h-6 w-6 object-contain" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-1.5 w-1.5 rounded-full bg-orange-500 animate-pulse" />
+                    <p className="text-[10px] font-black uppercase tracking-widest text-orange-600">
+                      {rideStage === 'end_requested' ? 'Review Pending' : 'Live Rental'}
+                    </p>
+                  </div>
+                  <p className="text-[13px] font-black text-slate-900 leading-none mt-0.5">
+                    {currentRide.vehicle?.name || 'Rental Vehicle'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <div className="text-right">
+                  <div className="flex items-center justify-end gap-1.5">
+                    <Clock3 size={11} className="text-slate-400" />
+                    <p className="text-[12px] font-black tabular-nums text-slate-900 tracking-tight">
+                      {rentalTimerLabel}
+                    </p>
+                  </div>
+                  <p className="text-[10px] font-bold text-emerald-600 mt-0.5">
+                    Rs {rentalCurrentCharge.toFixed(0)}
+                  </p>
+                </div>
+                <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                  <ChevronRight size={16} strokeWidth={3} />
+                </div>
+              </div>
+            </Motion.button>
+          </Motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="relative z-10 space-y-4 pb-6">
         <HeaderGreeting />
         <ServiceGrid />

@@ -460,7 +460,7 @@ const IntercityDetails = () => {
       </AnimatePresence>
 
       {/* Main UI */}
-      <header className="bg-white/80 backdrop-blur-lg px-6 pt-12 pb-6 sticky top-0 z-30 border-b border-indigo-50 flex items-center gap-4">
+      <header className="fixed top-0 left-1/2 z-30 flex w-full max-w-lg -translate-x-1/2 items-center gap-4 border-b border-indigo-50 bg-white/92 px-6 pb-6 pt-12 backdrop-blur-lg">
         <motion.button 
           whileTap={{ scale: 0.9 }}
           onClick={() => navigate(-1)} 
@@ -473,6 +473,8 @@ const IntercityDetails = () => {
           <p className="text-[12px] font-bold text-slate-400 mt-1 uppercase tracking-widest truncate">{fromCity} → {toCity}</p>
         </div>
       </header>
+
+      <div className="h-[108px]" />
 
       <div className="px-6 pt-6 space-y-6">
         {/* Address Entry Card */}
