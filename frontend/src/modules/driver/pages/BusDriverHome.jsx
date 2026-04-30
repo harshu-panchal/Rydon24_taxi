@@ -183,7 +183,7 @@ const StatCard = ({ label, value, tone = 'light', Icon }) => (
 
 const BusDriverHome = () => {
   const navigate = useNavigate();
-  const dateInputRef = useRef(null);
+  const calendarPopoverRef = useRef(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [profile, setProfile] = useState(null);
   const [layout, setLayout] = useState(null);
@@ -203,6 +203,7 @@ const BusDriverHome = () => {
   const [bookingFilter, setBookingFilter] = useState('all');
   const [scheduleDrafts, setScheduleDrafts] = useState([]);
   const [isSavingSchedules, setIsSavingSchedules] = useState(false);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [passenger, setPassenger] = useState({
     name: '',
     age: '',
@@ -358,6 +359,34 @@ const BusDriverHome = () => {
     });
   }, [travelDate]);
 
+  useEffect(() => {
+    if (!isCalendarOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (calendarPopoverRef.current && !calendarPopoverRef.current.contains(event.target)) {
+        setIsCalendarOpen(false);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setIsCalendarOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isCalendarOpen]);
+
   const selectedFare = useMemo(
     () => selectedSeats.length * Number(busService?.seatPrice || 0),
     [selectedSeats, busService?.seatPrice],
@@ -409,22 +438,12 @@ const BusDriverHome = () => {
     );
   };
 
-  const openTravelDatePicker = () => {
-    const input = dateInputRef.current;
-    if (!input) return;
+  const openTravelDatePicker = () => setIsCalendarOpen(true);
 
-    try {
-      if (typeof input.showPicker === 'function') {
-        input.showPicker();
-      } else {
-        input.focus();
-        input.click();
-      }
-    } catch (error) {
-      // Fallback for browsers that block showPicker or don't support it
-      input.focus();
-      input.click();
-    }
+  const handleTravelDateSelect = (value) => {
+    setTravelDate(value);
+    setSelectedSeats([]);
+    setIsCalendarOpen(false);
   };
 
   const refreshDesk = async () => {
@@ -669,102 +688,16 @@ const BusDriverHome = () => {
 
           <label className="block">
             <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Travel Date</span>
-            <div className="flex items-center gap-2">
-              <input
-                ref={dateInputRef}
-                type="date"
-                value={travelDate}
-                onChange={(event) => {
-                  setTravelDate(event.target.value);
-                  setSelectedSeats([]);
-                }}
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-900 outline-none"
-              />
-              <button
-                type="button"
-                onClick={openTravelDatePicker}
-                className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 transition active:scale-95"
-                aria-label="Open travel date calendar"
-              >
-                <CalendarDays size={18} />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={openTravelDatePicker}
+              className="flex h-12 w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 text-left text-sm font-bold text-slate-900 transition active:scale-95"
+              aria-label="Open travel date calendar"
+            >
+              <span>{formatDisplayDate(travelDate)}</span>
+              <CalendarDays size={18} className="text-slate-500" />
+            </button>
           </label>
-        </div>
-
-        <div className="mt-4 rounded-[24px] border border-slate-200 bg-slate-50 p-4">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Calendar View</p>
-              <p className="mt-1 text-sm font-black text-slate-900">{calendarLabel}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  setCalendarMonth(
-                    (current) => new Date(current.getFullYear(), current.getMonth() - 1, 1),
-                  )
-                }
-                className="flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700"
-              >
-                <ChevronLeft size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setCalendarMonth(
-                    (current) => new Date(current.getFullYear(), current.getMonth() + 1, 1),
-                  )
-                }
-                className="flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700"
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-
-          <div className="mb-2 grid grid-cols-7 gap-2">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-              <div
-                key={day}
-                className="text-center text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400"
-              >
-                {day}
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-7 gap-2">
-            {calendarCells.map((cell, index) => {
-              if (!cell) {
-                return <div key={`empty-${index}`} className="h-11 rounded-2xl bg-transparent" />;
-              }
-
-              const isSelected = cell.value === travelDate;
-              const isToday = cell.value === createToday();
-
-              return (
-                <button
-                  key={cell.value}
-                  type="button"
-                  onClick={() => {
-                    setTravelDate(cell.value);
-                    setSelectedSeats([]);
-                  }}
-                  className={`h-11 rounded-2xl text-sm font-black transition ${
-                    isSelected
-                      ? 'bg-slate-950 text-white shadow-md'
-                      : isToday
-                        ? 'border border-slate-300 bg-white text-slate-900'
-                        : 'bg-white text-slate-600'
-                  }`}
-                >
-                  {cell.label}
-                </button>
-              );
-            })}
-          </div>
         </div>
       </section>
 
@@ -1185,18 +1118,90 @@ const BusDriverHome = () => {
 
   return (
     <div className="min-h-screen bg-[#f6f7fb] px-4 pb-28 pt-6" style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>
-      <input
-        ref={dateInputRef}
-        type="date"
-        value={travelDate}
-        onChange={(event) => {
-          setTravelDate(event.target.value);
-          setSelectedSeats([]);
-        }}
-        className="pointer-events-none absolute opacity-0"
-        aria-hidden="true"
-        tabIndex={-1}
-      />
+      {isCalendarOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4">
+          <div
+            ref={calendarPopoverRef}
+            className="w-full max-w-sm rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_30px_80px_rgba(15,23,42,0.28)]"
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Travel Date</p>
+                <p className="mt-1 text-sm font-black text-slate-900">{calendarLabel}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCalendarOpen(false)}
+                className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 transition active:scale-95"
+                aria-label="Close travel date calendar"
+              >
+                <XCircle size={18} />
+              </button>
+            </div>
+
+            <div className="mb-4 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() =>
+                  setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))
+                }
+                className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <p className="text-sm font-black text-slate-900">{calendarLabel}</p>
+              <button
+                type="button"
+                onClick={() =>
+                  setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))
+                }
+                className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+
+            <div className="mb-2 grid grid-cols-7 gap-2">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                <div
+                  key={day}
+                  className="text-center text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400"
+                >
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-2">
+              {calendarCells.map((cell, index) => {
+                if (!cell) {
+                  return <div key={`calendar-empty-${index}`} className="h-11 rounded-2xl bg-transparent" />;
+                }
+
+                const isSelected = cell.value === travelDate;
+                const isToday = cell.value === createToday();
+
+                return (
+                  <button
+                    key={cell.value}
+                    type="button"
+                    onClick={() => handleTravelDateSelect(cell.value)}
+                    className={`h-11 rounded-2xl text-sm font-black transition ${
+                      isSelected
+                        ? 'bg-slate-950 text-white shadow-md'
+                        : isToday
+                          ? 'border border-slate-300 bg-white text-slate-900'
+                          : 'bg-slate-50 text-slate-600'
+                    }`}
+                  >
+                    {cell.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="mx-auto max-w-lg space-y-5">
         {activeTab === 'overview' ? (
           <section className="rounded-[32px] bg-[#10213b] p-5 text-white shadow-[0_24px_60px_rgba(15,23,42,0.22)]">
