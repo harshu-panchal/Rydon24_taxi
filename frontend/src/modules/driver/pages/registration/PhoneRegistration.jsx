@@ -218,13 +218,13 @@ const PhoneRegistration = () => {
                         <div className="bg-white rounded-[31px] p-6 space-y-6">
                             <div className={`group rounded-[24px] border-2 transition-all p-4 ${error ? 'border-rose-100 bg-rose-50/30' : 'border-slate-50 bg-slate-50/50 focus-within:border-indigo-500 focus-within:bg-white focus-within:shadow-lg focus-within:shadow-indigo-500/10'}`}>
                                 <div className="flex items-center gap-4">
-                                    <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${error ? 'bg-rose-100 text-rose-600' : 'bg-indigo-50 text-indigo-600 group-focus-within:bg-indigo-600 group-focus-within:text-white'}`}>
+                                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl transition-colors ${error ? 'bg-rose-100 text-rose-600' : 'bg-indigo-50 text-indigo-600 group-focus-within:bg-indigo-600 group-focus-within:text-white'}`}>
                                         <Phone size={20} strokeWidth={2.5} />
                                     </div>
-                                    <div className="flex-1 space-y-1">
+                                    <div className="min-w-0 flex-1 space-y-1">
                                         <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400">Mobile Number</label>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-lg font-black text-slate-400">+91</span>
+                                        <div className="flex min-w-0 items-center gap-2">
+                                            <span className="shrink-0 text-base font-black text-slate-400 sm:text-lg">+91</span>
                                             <input 
                                                 type="tel" 
                                                 inputMode="numeric"
@@ -238,7 +238,7 @@ const PhoneRegistration = () => {
                                                     if (error) setError('');
                                                 }}
                                                 placeholder="00000 00000"
-                                                className="w-full border-none bg-transparent p-0 text-xl font-bold text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200"
+                                                className="min-w-0 w-full border-none bg-transparent p-0 text-lg font-bold text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200 sm:text-xl"
                                             />
                                         </div>
                                     </div>
