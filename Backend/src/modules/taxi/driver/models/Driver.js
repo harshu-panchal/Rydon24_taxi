@@ -1,6 +1,22 @@
 import mongoose from 'mongoose';
 import { VEHICLE_TYPES } from '../../constants/index.js';
 
+const geoPointSchema = new mongoose.Schema(
+  {
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: 'Point',
+    },
+    coordinates: {
+      type: [Number],
+      required: true,
+      default: [0, 0],
+    },
+  },
+  { _id: false },
+);
+
 const driverSchema = new mongoose.Schema(
   {
     name: {
@@ -251,6 +267,25 @@ const driverSchema = new mongoose.Schema(
         default: [0, 0],
       },
     },
+    routeBooking: {
+      enabled: {
+        type: Boolean,
+        default: false,
+      },
+      anchorLocation: {
+        type: geoPointSchema,
+        default: null,
+      },
+      label: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      updatedAt: {
+        type: Date,
+        default: null,
+      },
+    },
     documents: {
       type: mongoose.Schema.Types.Mixed,
       default: {},
@@ -322,6 +357,7 @@ driverSchema.index({ status: 1, deletedAt: 1 });
 driverSchema.index({ phone: 1, deletedAt: 1 });
 
 driverSchema.index({ location: '2dsphere' });
+driverSchema.index({ 'routeBooking.anchorLocation': '2dsphere' });
 
 export const Driver = mongoose.models.TaxiDriver || mongoose.model('TaxiDriver', driverSchema);
 

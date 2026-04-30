@@ -339,10 +339,28 @@ const getTodaySelfieKey = () => new Date().toISOString().slice(0, 10);
 const readRouteBookingPreferences = () => {
     try {
         const raw = localStorage.getItem(DRIVER_ROUTE_BOOKING_STORAGE_KEY);
-        return raw ? JSON.parse(raw) : { enabled: false, coordinates: null };
+        return raw ? JSON.parse(raw) : { enabled: false, coordinates: null, label: '' };
     } catch {
-        return { enabled: false, coordinates: null };
+        return { enabled: false, coordinates: null, label: '' };
     }
+};
+
+const writeRouteBookingPreferences = (nextValue) => {
+    localStorage.setItem(DRIVER_ROUTE_BOOKING_STORAGE_KEY, JSON.stringify(nextValue));
+    return nextValue;
+};
+
+const normalizeRouteBookingPreferences = (routeBooking = null) => {
+    const coordinates = Array.isArray(routeBooking?.coordinates) && routeBooking.coordinates.length === 2
+        ? routeBooking.coordinates
+        : null;
+
+    return {
+        enabled: Boolean(routeBooking?.enabled && coordinates),
+        coordinates,
+        label: String(routeBooking?.label || '').trim(),
+        updatedAt: routeBooking?.updatedAt || null,
+    };
 };
 
 const isDriverVehicleApprovalPending = (driver = {}) =>
@@ -651,6 +669,7 @@ const DriverHome = () => {
         }
         setOnlineSelfie(driver?.onlineSelfie || null);
         setDriverDocuments(driver?.documents || {});
+        setRouteBookingPreferences(writeRouteBookingPreferences(normalizeRouteBookingPreferences(driver?.routeBooking)));
         const nextVehicleApprovalPending = isDriverVehicleApprovalPending(driver);
         setVehicleReapprovalPending(nextVehicleApprovalPending);
         if (nextVehicleApprovalPending) {

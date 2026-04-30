@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
-import { clearDriverAuthState, getCurrentDriver } from '../services/registrationService';
+import { clearDriverAuthState, getCurrentDriver, updateDriverProfile } from '../services/registrationService';
 
 const unwrapDriver = (response) => response?.data?.data || response?.data || response || null;
 const ROUTE_BOOKING_STORAGE_KEY = 'driver_route_booking_preferences';
@@ -58,6 +58,19 @@ const formatRouteBookingLabel = (coordinates) => {
     return `Selected area ${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}`;
 };
 
+const normalizeRouteBookingPreferences = (routeBooking = null) => {
+    const coordinates = Array.isArray(routeBooking?.coordinates) && routeBooking.coordinates.length === 2
+        ? routeBooking.coordinates
+        : null;
+
+    return {
+        enabled: Boolean(routeBooking?.enabled && coordinates),
+        coordinates,
+        label: String(routeBooking?.label || (coordinates ? formatRouteBookingLabel(coordinates) : '')).trim(),
+        updatedAt: routeBooking?.updatedAt || null,
+    };
+};
+
 const DriverProfile = () => {
     const navigate = useNavigate();
     const [routeBookingPreferences, setRouteBookingPreferences] = useState(() => readRouteBookingPreferences());
@@ -77,7 +90,10 @@ const DriverProfile = () => {
             try {
                 const response = await getCurrentDriver();
                 if (!active) return;
-                setDriver(unwrapDriver(response));
+                const nextDriver = unwrapDriver(response);
+                setDriver(nextDriver);
+                const nextRouteBooking = normalizeRouteBookingPreferences(nextDriver?.routeBooking);
+                setRouteBookingPreferences(writeRouteBookingPreferences(nextRouteBooking));
             } catch (err) {
                 if (!active) return;
                 setError(err?.message || 'Unable to load driver profile');
@@ -129,17 +145,29 @@ const DriverProfile = () => {
 
     const hasProfileImage = Boolean(driver?.profileImage);
 
-    const handleRouteBookingToggle = () => {
+    const handleRouteBookingToggle = async () => {
         if (routeBookingBusy) {
             return;
         }
 
         if (routeBookingPreferences.enabled) {
-            const nextPreferences = writeRouteBookingPreferences({
-                ...routeBookingPreferences,
-                enabled: false,
-            });
-            setRouteBookingPreferences(nextPreferences);
+            setRouteBookingBusy(true);
+            setError('');
+            try {
+                const response = await updateDriverProfile({
+                    routeBooking: {
+                        enabled: false,
+                    },
+                });
+                const nextRouteBooking = normalizeRouteBookingPreferences(
+                    unwrapDriver(response)?.routeBooking || { enabled: false },
+                );
+                setRouteBookingPreferences(writeRouteBookingPreferences(nextRouteBooking));
+            } catch (err) {
+                setError(err?.response?.data?.message || err?.message || 'Could not update route booking.');
+            } finally {
+                setRouteBookingBusy(false);
+            }
             return;
         }
 
@@ -152,16 +180,31 @@ const DriverProfile = () => {
         setError('');
 
         navigator.geolocation.getCurrentPosition(
-            (position) => {
+            async (position) => {
                 const nextCoordinates = [position.coords.longitude, position.coords.latitude];
-                const nextPreferences = writeRouteBookingPreferences({
-                    enabled: true,
-                    coordinates: nextCoordinates,
-                    label: formatRouteBookingLabel(nextCoordinates),
-                    updatedAt: new Date().toISOString(),
-                });
-                setRouteBookingPreferences(nextPreferences);
-                setRouteBookingBusy(false);
+                const nextLabel = formatRouteBookingLabel(nextCoordinates);
+
+                try {
+                    const response = await updateDriverProfile({
+                        routeBooking: {
+                            enabled: true,
+                            coordinates: nextCoordinates,
+                            label: nextLabel,
+                        },
+                    });
+                    const nextRouteBooking = normalizeRouteBookingPreferences(
+                        unwrapDriver(response)?.routeBooking || {
+                            enabled: true,
+                            coordinates: nextCoordinates,
+                            label: nextLabel,
+                        },
+                    );
+                    setRouteBookingPreferences(writeRouteBookingPreferences(nextRouteBooking));
+                } catch (err) {
+                    setError(err?.response?.data?.message || err?.message || 'Could not update route booking.');
+                } finally {
+                    setRouteBookingBusy(false);
+                }
             },
             () => {
                 setRouteBookingBusy(false);

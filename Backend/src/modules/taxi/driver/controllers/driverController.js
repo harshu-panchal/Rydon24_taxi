@@ -95,6 +95,19 @@ const normalizeBusPassengerPhone = (value = "") =>
 const normalizeEmail = (value = "") => String(value || "").trim().toLowerCase();
 const BUS_DRIVER_NAME_REGEX = /^[A-Za-z]+(?:[ .'-][A-Za-z]+)*$/;
 
+const serializeDriverRouteBooking = (routeBooking = {}) => {
+  const coordinates = Array.isArray(routeBooking?.anchorLocation?.coordinates)
+    ? routeBooking.anchorLocation.coordinates
+    : [];
+
+  return {
+    enabled: Boolean(routeBooking?.enabled && coordinates.length === 2),
+    coordinates: coordinates.length === 2 ? coordinates : null,
+    label: String(routeBooking?.label || "").trim(),
+    updatedAt: routeBooking?.updatedAt || null,
+  };
+};
+
 const validateBusPassengerName = (value = "") => {
   if (!BUS_DRIVER_NAME_REGEX.test(String(value || "").trim())) {
     throw new ApiError(400, "Passenger name is required");
@@ -1617,6 +1630,7 @@ export const getCurrentDriver = async (req, res) => {
       onlineSelfie: driver.onlineSelfie || {},
       location: driver.location,
       zoneId: driver.zoneId,
+      routeBooking: serializeDriverRouteBooking(driver.routeBooking),
       documents: driver.documents || {},
       emergencyContacts: Array.isArray(driver.emergencyContacts)
         ? driver.emergencyContacts.map(serializeEmergencyContact)
@@ -1894,6 +1908,32 @@ export const updateCurrentDriver = async (req, res) => {
     driver.profileImage = String(req.body.profileImage || "").trim();
   }
 
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "routeBooking")) {
+    const routeBookingPayload = req.body?.routeBooking || {};
+    const enabled = Boolean(routeBookingPayload?.enabled);
+
+    if (!enabled) {
+      driver.routeBooking = {
+        enabled: false,
+        anchorLocation: null,
+        label: "",
+        updatedAt: new Date(),
+      };
+    } else {
+      const coordinates = normalizePoint(
+        routeBookingPayload?.coordinates || routeBookingPayload?.anchorLocation,
+        "routeBooking.coordinates",
+      );
+
+      driver.routeBooking = {
+        enabled: true,
+        anchorLocation: toPoint(coordinates, "routeBooking.coordinates"),
+        label: String(routeBookingPayload?.label || "").trim(),
+        updatedAt: new Date(),
+      };
+    }
+  }
+
   await driver.save();
 
   res.json({
@@ -1904,6 +1944,7 @@ export const updateCurrentDriver = async (req, res) => {
       phone: driver.phone,
       email: driver.email,
       profileImage: driver.profileImage || "",
+      routeBooking: serializeDriverRouteBooking(driver.routeBooking),
     },
   });
 };

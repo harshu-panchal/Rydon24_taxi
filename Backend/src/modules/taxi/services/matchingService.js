@@ -131,6 +131,104 @@ const getZoneBoundaryCapMeters = (zone, pickupCoords) => {
   return Number.isFinite(shortestDistance) ? Math.max(0, Math.round(shortestDistance)) : null;
 };
 
+const getDistanceBetweenMeters = (origin, target) => {
+  const [originLng, originLat] = origin;
+  const [targetLng, targetLat] = target;
+
+  const dLat = ((targetLat - originLat) * Math.PI) / 180;
+  const dLng = ((targetLng - originLng) * Math.PI) / 180;
+  const lat1 = (originLat * Math.PI) / 180;
+  const lat2 = (targetLat * Math.PI) / 180;
+
+  const a =
+    (Math.sin(dLat / 2) ** 2) +
+    (Math.cos(lat1) * Math.cos(lat2) * (Math.sin(dLng / 2) ** 2));
+
+  return Math.round(2 * EARTH_RADIUS_METERS * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+};
+
+const buildGeoNearFilter = (field, coordinates, maxDistance) => ({
+  [field]: {
+    $near: {
+      $geometry: {
+        type: 'Point',
+        coordinates,
+      },
+      $maxDistance: maxDistance,
+    },
+  },
+});
+
+const getDispatchAnchorCoordinates = (driver = {}) => {
+  const routeCoordinates = Array.isArray(driver?.routeBooking?.anchorLocation?.coordinates)
+    ? driver.routeBooking.anchorLocation.coordinates
+    : [];
+
+  if (driver?.routeBooking?.enabled && routeCoordinates.length === 2) {
+    return routeCoordinates;
+  }
+
+  return Array.isArray(driver?.location?.coordinates) ? driver.location.coordinates : [];
+};
+
+const sortDriversByDispatchAnchorDistance = (drivers = [], pickupCoords) =>
+  [...drivers]
+    .map((driver) => {
+      const anchorCoordinates = getDispatchAnchorCoordinates(driver);
+      return {
+        driver,
+        distanceMeters:
+          anchorCoordinates.length === 2
+            ? getDistanceBetweenMeters(pickupCoords, anchorCoordinates)
+            : Number.POSITIVE_INFINITY,
+      };
+    })
+    .sort((left, right) => left.distanceMeters - right.distanceMeters)
+    .map(({ driver }) => driver);
+
+const findDriversForZone = async ({
+  zoneId,
+  coordinates,
+  effectiveMaxDistance,
+  limit,
+  normalizedVehicleTypeIds,
+  vehicleTypeKeys,
+}) => {
+  const commonFilters = buildDriverMatchFilters({
+    zoneId,
+    vehicleTypeIds: normalizedVehicleTypeIds,
+    vehicleTypeKeys,
+  });
+  const selectedFields =
+    'name phone socketId vehicleTypeId vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel rating location zoneId isOnline isOnRide routeBooking';
+
+  const [liveLocationDrivers, routeBookingDrivers] = await Promise.all([
+    Driver.find({
+      ...commonFilters,
+      'routeBooking.enabled': { $ne: true },
+      ...buildGeoNearFilter('location', coordinates, effectiveMaxDistance),
+    })
+      .limit(limit)
+      .select(selectedFields),
+    Driver.find({
+      ...commonFilters,
+      'routeBooking.enabled': true,
+      'routeBooking.anchorLocation': { $ne: null },
+      'routeBooking.anchorLocation.coordinates.1': { $exists: true },
+      ...buildGeoNearFilter('routeBooking.anchorLocation', coordinates, effectiveMaxDistance),
+    })
+      .limit(limit)
+      .select(selectedFields),
+  ]);
+
+  return sortDriversByDispatchAnchorDistance(
+    [...liveLocationDrivers, ...routeBookingDrivers].filter(
+      (driver, index, items) => items.findIndex((item) => String(item._id) === String(driver._id)) === index,
+    ),
+    coordinates,
+  ).slice(0, limit);
+};
+
 export const matchDrivers = async (pickupCoords, options = {}) => {
   const coordinates = normalizePoint(pickupCoords, 'pickupCoords');
   const {
@@ -151,41 +249,24 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
     ? Math.min(Math.max(1, Math.round(maxDistance)), Math.max(1, zoneBoundaryCapMeters))
     : Math.max(1, Math.round(maxDistance));
 
-  // MongoDB handles both distance filtering and nearest-first sorting via $near.
-  const locationFilter = {
-    location: {
-      $near: {
-        $geometry: {
-          type: 'Point',
-          coordinates,
-        },
-        $maxDistance: effectiveMaxDistance,
-      },
-    },
-  };
-
-  let drivers = await Driver.find({
-    ...buildDriverMatchFilters({
-      zoneId: zone?._id || null,
-      vehicleTypeIds: normalizedVehicleTypeIds,
-      vehicleTypeKeys,
-    }),
-    ...locationFilter,
-  })
-    .limit(limit)
-    .select('name phone socketId vehicleTypeId vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel rating location zoneId isOnline isOnRide');
+  let drivers = await findDriversForZone({
+    zoneId: zone?._id || null,
+    coordinates,
+    effectiveMaxDistance,
+    limit,
+    normalizedVehicleTypeIds,
+    vehicleTypeKeys,
+  });
 
   if (drivers.length === 0 && zone?._id) {
-    drivers = await Driver.find({
-      ...buildDriverMatchFilters({
-        zoneId: null,
-        vehicleTypeIds: normalizedVehicleTypeIds,
-        vehicleTypeKeys,
-      }),
-      ...locationFilter,
-    })
-      .limit(limit)
-      .select('name phone socketId vehicleTypeId vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel rating location zoneId isOnline isOnRide');
+    drivers = await findDriversForZone({
+      zoneId: null,
+      coordinates,
+      effectiveMaxDistance,
+      limit,
+      normalizedVehicleTypeIds,
+      vehicleTypeKeys,
+    });
   }
 
   return {
