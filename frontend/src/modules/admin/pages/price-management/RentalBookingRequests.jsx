@@ -24,9 +24,19 @@ const statusClasses = {
   pending: 'bg-amber-50 text-amber-700 border-amber-100',
   confirmed: 'bg-sky-50 text-sky-700 border-sky-100',
   assigned: 'bg-violet-50 text-violet-700 border-violet-100',
+  end_requested: 'bg-orange-50 text-orange-700 border-orange-100',
   completed: 'bg-emerald-50 text-emerald-700 border-emerald-100',
   cancelled: 'bg-rose-50 text-rose-700 border-rose-100',
 };
+
+const bookingStatusOptions = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'confirmed', label: 'Confirmed' },
+  { value: 'assigned', label: 'Assigned' },
+  { value: 'end_requested', label: 'End Requested' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
 
 const paymentStatusClasses = {
   pending: 'bg-amber-50 text-amber-700 border-amber-100',
@@ -450,11 +460,11 @@ const RentalBookingRequests = () => {
                           onChange={(event) => updateLocal(selectedRequest.id || selectedRequest._id, { status: event.target.value })}
                           className={inputClass}
                         >
-                          <option value="pending">Pending</option>
-                          <option value="confirmed">Confirmed</option>
-                          <option value="assigned">Assigned</option>
-                          <option value="completed">Completed</option>
-                          <option value="cancelled">Cancelled</option>
+                          {bookingStatusOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
                         </select>
                       </div>
 

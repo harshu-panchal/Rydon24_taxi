@@ -71,6 +71,40 @@ const canCompleteBooking = (booking) => {
   );
 };
 
+const canRequestEndRide = (booking) => {
+  const status = String(booking?.status || '').toLowerCase();
+  return ['confirmed', 'assigned'].includes(status);
+};
+
+const canFinalizeBooking = (booking) => {
+  const status = String(booking?.status || '').toLowerCase();
+  return canCompleteBooking(booking) && !['completed', 'cancelled'].includes(status);
+};
+
+const getCompletionRequirements = (booking) => {
+  const inspection = booking?.rentalInspection || {};
+  const missing = [];
+  const meter = Number(inspection.returnMeterReading);
+
+  if (!Number.isFinite(meter) || meter < 0) {
+    missing.push('return meter reading');
+  }
+
+  if (!String(inspection.returnFuelLevel || '').trim()) {
+    missing.push('return fuel level');
+  }
+
+  if (!String(inspection.returnNotes || '').trim()) {
+    missing.push('return notes');
+  }
+
+  if (!Array.isArray(inspection.afterConditionImages) || inspection.afterConditionImages.filter(Boolean).length === 0) {
+    missing.push('after-condition photos');
+  }
+
+  return missing;
+};
+
 const buildVehicleForm = () => ({
   name: '',
   short_description: '',
@@ -161,6 +195,11 @@ const ServiceCenterDashboard = () => {
   const [vehicleForm, setVehicleForm] = useState(buildVehicleForm);
   const [staffForm, setStaffForm] = useState(buildStaffForm);
   const [previewImage, setPreviewImage] = useState('');
+  const [bookingDraft, setBookingDraft] = useState({
+    assignedStaffId: '',
+    status: 'pending',
+    serviceCenterNote: '',
+  });
 
   const role = String(profile?.onboarding?.role || '').toLowerCase();
   const isStaffUser = role === 'service_center_staff';
@@ -247,6 +286,17 @@ const ServiceCenterDashboard = () => {
       bookings.find((item) => String(item.id || item._id) === String(selectedBookingId)) || null,
     [bookings, selectedBookingId],
   );
+  const bookingDraftDirty = useMemo(() => {
+    if (!selectedBooking) {
+      return false;
+    }
+
+    return (
+      String(bookingDraft.assignedStaffId || '') !== String(selectedBooking.assignedStaff?.id || '') ||
+      String(bookingDraft.status || 'pending') !== String(selectedBooking.status || 'pending') ||
+      String(bookingDraft.serviceCenterNote || '') !== String(selectedBooking.serviceCenterNote || '')
+    );
+  }, [bookingDraft.assignedStaffId, bookingDraft.serviceCenterNote, bookingDraft.status, selectedBooking]);
   const validTabIds = useMemo(() => tabs.map((tab) => tab.id), [tabs]);
   const fallbackTab = tabs[0]?.id || 'overview';
   const rawTab = searchParams.get('tab') || '';
@@ -293,6 +343,23 @@ const ServiceCenterDashboard = () => {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!selectedBooking) {
+      setBookingDraft({
+        assignedStaffId: '',
+        status: 'pending',
+        serviceCenterNote: '',
+      });
+      return;
+    }
+
+    setBookingDraft({
+      assignedStaffId: String(selectedBooking.assignedStaff?.id || ''),
+      status: String(selectedBooking.status || 'pending'),
+      serviceCenterNote: String(selectedBooking.serviceCenterNote || ''),
+    });
+  }, [selectedBooking]);
 
   const headerContent = useMemo(() => {
     if (activeTab === 'bookings') {
@@ -573,6 +640,49 @@ const ServiceCenterDashboard = () => {
     } finally {
       setUpdatingBookingId('');
     }
+  };
+
+  const saveBookingDraft = async () => {
+    if (!selectedBooking || !bookingDraftDirty) {
+      return;
+    }
+
+    if (bookingDraft.status === 'completed' && !canCompleteBooking(selectedBooking)) {
+      const missing = getCompletionRequirements(selectedBooking);
+      setError(`Complete the return checklist before marking completed: ${missing.join(', ')}`);
+      return;
+    }
+
+    const payload = {
+      status: bookingDraft.status,
+      serviceCenterNote: bookingDraft.serviceCenterNote,
+    };
+
+    if (permissions.canAssignBookings) {
+      payload.assignedStaffId = bookingDraft.assignedStaffId;
+    }
+
+    await handleBookingUpdate(selectedBooking.id || selectedBooking._id, payload);
+  };
+
+  const requestEndRide = async () => {
+    if (!selectedBooking || !canRequestEndRide(selectedBooking)) {
+      return;
+    }
+
+    await handleBookingUpdate(selectedBooking.id || selectedBooking._id, {
+      status: 'end_requested',
+    });
+  };
+
+  const completeRide = async () => {
+    if (!selectedBooking || !canFinalizeBooking(selectedBooking)) {
+      return;
+    }
+
+    await handleBookingUpdate(selectedBooking.id || selectedBooking._id, {
+      status: 'completed',
+    });
   };
 
   if (loading) {
@@ -876,11 +986,12 @@ const ServiceCenterDashboard = () => {
                       <div>
                         <label className={labelClass}>Assign Staff</label>
                         <select
-                          value={selectedBooking.assignedStaff?.id || ''}
+                          value={bookingDraft.assignedStaffId}
                           onChange={(event) =>
-                            handleBookingUpdate(selectedBooking.id || selectedBooking._id, {
+                            setBookingDraft((current) => ({
+                              ...current,
                               assignedStaffId: event.target.value,
-                            })
+                            }))
                           }
                           disabled={updatingBookingId === String(selectedBooking.id || selectedBooking._id)}
                           className={inputClass}
@@ -905,20 +1016,21 @@ const ServiceCenterDashboard = () => {
                     <div>
                       <label className={labelClass}>Status</label>
                       <select
-                        value={selectedBooking.status || 'pending'}
+                        value={bookingDraft.status}
                         onChange={(event) =>
-                          handleBookingUpdate(selectedBooking.id || selectedBooking._id, {
+                          setBookingDraft((current) => ({
+                            ...current,
                             status: event.target.value,
-                          })
+                          }))
                         }
                         disabled={updatingBookingId === String(selectedBooking.id || selectedBooking._id)}
                         className={inputClass}
                       >
                         {!isStaffUser && <option value="pending">Pending</option>}
-                        <option value="assigned">Assigned</option>
                         <option value="confirmed">Confirmed</option>
+                        <option value="assigned">Assigned</option>
                         <option value="end_requested">End Requested</option>
-                        <option value="completed" disabled={!canCompleteBooking(selectedBooking)}>Completed</option>
+                        <option value="completed">Completed</option>
                         {!isStaffUser && <option value="cancelled">Cancelled</option>}
                       </select>
                       {!canCompleteBooking(selectedBooking) ? (
@@ -933,17 +1045,75 @@ const ServiceCenterDashboard = () => {
                     <label className={labelClass}>Handling Note</label>
                     <textarea
                       rows={3}
-                      defaultValue={selectedBooking.serviceCenterNote || ''}
-                      onBlur={(event) => {
-                        if (event.target.value !== (selectedBooking.serviceCenterNote || '')) {
-                          handleBookingUpdate(selectedBooking.id || selectedBooking._id, {
-                            serviceCenterNote: event.target.value,
-                          });
-                        }
-                      }}
+                      value={bookingDraft.serviceCenterNote}
+                      onChange={(event) =>
+                        setBookingDraft((current) => ({
+                          ...current,
+                          serviceCenterNote: event.target.value,
+                        }))
+                      }
                       className={`${inputClass} resize-none`}
                       placeholder="Add handling notes, call updates, or internal remarks"
                     />
+                    <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
+                      {bookingDraftDirty ? (
+                        <span className="text-xs font-semibold text-amber-700">
+                          You have unsaved booking changes.
+                        </span>
+                      ) : (
+                        <span className="text-xs font-semibold text-slate-500">
+                          Booking fields are in sync.
+                        </span>
+                      )}
+                      {canRequestEndRide(selectedBooking) ? (
+                        <button
+                          type="button"
+                          onClick={requestEndRide}
+                          disabled={updatingBookingId === String(selectedBooking.id || selectedBooking._id)}
+                          className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {updatingBookingId === String(selectedBooking.id || selectedBooking._id)
+                            ? 'Requesting...'
+                            : 'Request End Ride'}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={completeRide}
+                        disabled={
+                          updatingBookingId === String(selectedBooking.id || selectedBooking._id) ||
+                          !canFinalizeBooking(selectedBooking)
+                        }
+                        className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        title={
+                          canFinalizeBooking(selectedBooking)
+                            ? 'Complete this booking'
+                            : `Missing: ${getCompletionRequirements(selectedBooking).join(', ')}`
+                        }
+                      >
+                        {updatingBookingId === String(selectedBooking.id || selectedBooking._id)
+                          ? 'Completing...'
+                          : 'Complete Ride'}
+                      </button>
+                      {!canFinalizeBooking(selectedBooking) ? (
+                        <span className="text-xs font-semibold text-slate-500">
+                          Missing: {getCompletionRequirements(selectedBooking).join(', ')}
+                        </span>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={saveBookingDraft}
+                        disabled={
+                          !bookingDraftDirty ||
+                          updatingBookingId === String(selectedBooking.id || selectedBooking._id)
+                        }
+                        className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                      >
+                        {updatingBookingId === String(selectedBooking.id || selectedBooking._id)
+                          ? 'Saving...'
+                          : 'Save Changes'}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mt-5 rounded-[24px] border border-slate-200 bg-white p-4">

@@ -97,27 +97,37 @@ const Home = () => {
     let cancelled = false;
 
     const syncCurrentRide = async () => {
+      let rideData = null;
+
       try {
         const res = await api.get('/rides/active/me');
-        const rideData = res.data?.ride || res.data || res;
-        if (rideData?._id || rideData?.rideId) {
-          const normalizedRide = {
-            rideId: rideData._id || rideData.rideId,
-            pickup: rideData.pickupAddress || rideData.pickup,
-            drop: rideData.dropAddress || rideData.drop,
-            fare: rideData.fare,
-            status: rideData.status,
-            liveStatus: rideData.liveStatus,
-            serviceType: rideData.serviceType,
-            driver: rideData.driverId || rideData.driver,
-            vehicleIconUrl: rideData.vehicleIconUrl,
-            vehicleIconType: rideData.vehicleIconType,
-          };
-          if (cancelled) return;
-          saveCurrentRide(normalizedRide);
-          return;
+        rideData = res?.ride || res || null;
+      } catch (error) {
+        const status = Number(error?.response?.status || 0);
+        if (status !== 404) {
+          throw error;
         }
+      }
 
+      if (rideData?._id || rideData?.rideId) {
+        const normalizedRide = {
+          rideId: rideData._id || rideData.rideId,
+          pickup: rideData.pickupAddress || rideData.pickup,
+          drop: rideData.dropAddress || rideData.drop,
+          fare: rideData.fare,
+          status: rideData.status,
+          liveStatus: rideData.liveStatus,
+          serviceType: rideData.serviceType,
+          driver: rideData.driverId || rideData.driver,
+          vehicleIconUrl: rideData.vehicleIconUrl,
+          vehicleIconType: rideData.vehicleIconType,
+        };
+        if (cancelled) return;
+        saveCurrentRide(normalizedRide);
+        return;
+      }
+
+      try {
         const rentalResponse = await userService.getActiveRentalBooking();
         const rentalRide = rentalResponse?.id ? rentalResponse : (rentalResponse?.data || null);
 
@@ -159,12 +169,16 @@ const Home = () => {
           });
           return;
         }
-
-        if (cancelled) return;
-        clearCurrentRide();
-      } catch {
-        // Fallback for offline or errors
+      } catch (error) {
+        const status = Number(error?.response?.status || 0);
+        if (status !== 404) {
+          // Keep the previous card on transient failures, but don't block normal cleanup on 404/not found.
+          return;
+        }
       }
+
+      if (cancelled) return;
+      clearCurrentRide();
     };
 
     const handleWindowFocus = () => {
@@ -341,7 +355,7 @@ const Home = () => {
       </div>
 
       <AnimatePresence>
-        {currentRide && serviceType !== 'rental' && (
+        {currentRide && (
           <Motion.button
             type="button"
             initial={{ y: 24, opacity: 0, scale: 0.96 }}

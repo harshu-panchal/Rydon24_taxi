@@ -2372,12 +2372,16 @@ export const updateServiceCenterBooking = async (req, res) => {
   }
 
   if (req.body?.assignedStaffId !== undefined) {
-    if (!access.canAssignBookings) {
+    const assignedStaffId = String(req.body.assignedStaffId || "").trim();
+    const currentAssignedStaffId = String(booking.assignedStaffId || "").trim();
+
+    if (!access.canAssignBookings && assignedStaffId !== currentAssignedStaffId) {
       throw new ApiError(403, "Only service center owners can assign staff");
     }
 
-    const assignedStaffId = String(req.body.assignedStaffId || "").trim();
-    if (!assignedStaffId) {
+    if (!access.canAssignBookings) {
+      // Staff form submissions may carry the current assignment value; keep that as a no-op.
+    } else if (!assignedStaffId) {
       booking.assignedStaffId = null;
       booking.assignedStaffName = "";
       booking.assignedStaffPhone = "";
