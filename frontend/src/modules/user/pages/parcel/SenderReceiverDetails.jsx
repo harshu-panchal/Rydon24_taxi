@@ -67,6 +67,47 @@ const coordPairToLatLng = (coords, fallback = DEFAULT_COORDS) => {
 
 const latLngToCoordPair = (position) => [Number(position.lng), Number(position.lat)];
 
+const toRadians = (value) => (Number(value) * Math.PI) / 180;
+
+const calculateDistanceKm = (fromCoords, toCoords) => {
+  const from = coordPairToLatLng(fromCoords, null);
+  const to = coordPairToLatLng(toCoords, null);
+
+  if (!from || !to) {
+    return 0;
+  }
+
+  const earthRadiusKm = 6371;
+  const dLat = toRadians(to.lat - from.lat);
+  const dLng = toRadians(to.lng - from.lng);
+  const lat1 = toRadians(from.lat);
+  const lat2 = toRadians(to.lat);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.sin(dLng / 2) * Math.sin(dLng / 2) * Math.cos(lat1) * Math.cos(lat2);
+
+  return earthRadiusKm * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+};
+
+const normalizeDeliveryPricing = (vehicle = {}) => ({
+  enabled: Boolean(vehicle?.delivery_distance_pricing?.enabled),
+  basePrice: Number(vehicle?.delivery_distance_pricing?.base_price ?? 0),
+  freeDistance: Number(vehicle?.delivery_distance_pricing?.free_distance ?? 0),
+  distancePrice: Number(vehicle?.delivery_distance_pricing?.distance_price ?? 0),
+});
+
+const calculateVehicleFare = (vehicle, distanceKm) => {
+  const pricing = normalizeDeliveryPricing(vehicle);
+  if (!pricing.enabled) {
+    return null;
+  }
+
+  const extraDistanceKm = Math.max(Number(distanceKm || 0) - pricing.freeDistance, 0);
+  const total = pricing.basePrice + extraDistanceKm * pricing.distancePrice;
+  return Math.max(0, Math.round(total));
+};
+
 const formatCoordLabel = (coords) => {
   const position = coordPairToLatLng(coords);
   return `${position.lat.toFixed(5)}, ${position.lng.toFixed(5)}`;
@@ -509,6 +550,38 @@ const SenderReceiverDetails = () => {
     () => POPULAR_LOCATIONS.filter((item) => item.toLowerCase().includes(String(drop || '').toLowerCase())).slice(0, 4),
     [drop],
   );
+  const selectedVehicles = useMemo(() => {
+    if (Array.isArray(parcelState.selectedVehicles) && parcelState.selectedVehicles.length) {
+      return parcelState.selectedVehicles;
+    }
+    if (parcelState.selectedVehicle) {
+      return [parcelState.selectedVehicle];
+    }
+    return [];
+  }, [parcelState.selectedVehicle, parcelState.selectedVehicles]);
+  const estimatedDistanceKm = useMemo(
+    () => calculateDistanceKm(pickupCoords, dropCoords),
+    [dropCoords, pickupCoords],
+  );
+  const estimatedFare = useMemo(() => {
+    const dynamicFares = selectedVehicles
+      .map((vehicle) => calculateVehicleFare(vehicle, estimatedDistanceKm))
+      .filter((value) => Number.isFinite(value));
+
+    if (dynamicFares.length > 0) {
+      return {
+        min: Math.min(...dynamicFares),
+        max: Math.max(...dynamicFares),
+        dynamic: true,
+      };
+    }
+
+    return {
+      min: Number(parcelState.estimatedFare?.min || 45),
+      max: Number(parcelState.estimatedFare?.max || parcelState.estimatedFare?.min || 80),
+      dynamic: false,
+    };
+  }, [estimatedDistanceKm, parcelState.estimatedFare?.max, parcelState.estimatedFare?.min, selectedVehicles]);
 
   const validate = () => {
     const nextErrors = {};
@@ -681,7 +754,9 @@ const SenderReceiverDetails = () => {
         receiverName,
         receiverMobile,
         paymentMethod: 'Cash',
-        fare: parcelState.estimatedFare?.min || 45,
+        fare: estimatedFare.min || 45,
+        estimatedFare,
+        estimatedDistanceKm,
         deliveryScope: parcelState.deliveryScope || 'city',
         isOutstation: Boolean(parcelState.isOutstation || parcelState.deliveryScope === 'outstation'),
         parcel: {
@@ -877,7 +952,12 @@ const SenderReceiverDetails = () => {
           <div className="relative z-10 flex items-center justify-between gap-3">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">Approx. Delivery Fare</p>
-              <p className="mt-1 text-2xl font-black">Rs {parcelState.estimatedFare?.min || 45} - {parcelState.estimatedFare?.max || 80}</p>
+              <p className="mt-1 text-2xl font-black">Rs {estimatedFare.min} - {estimatedFare.max}</p>
+              <p className="mt-1 text-[11px] font-bold text-white/55">
+                {estimatedFare.dynamic
+                  ? `Based on admin pricing for about ${estimatedDistanceKm.toFixed(1)} km`
+                  : 'Using current parcel fare fallback'}
+              </p>
             </div>
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-md">
               <PackageCheck size={24} className="text-emerald-400" />

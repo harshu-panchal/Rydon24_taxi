@@ -78,11 +78,13 @@ const ParcelType = () => {
     const selectedVehicleIds = filteredVehicles.length
       ? filteredVehicles.map((vehicle) => vehicle?._id || vehicle?.id).filter(Boolean)
       : [selectedVehicle?._id || selectedVehicle?.id].filter(Boolean);
+    const selectedVehicles = filteredVehicles.length ? filteredVehicles : selectedVehicle ? [selectedVehicle] : [];
 
     navigate('/taxi/user/parcel/details', {
       state: {
         parcelType: 'General Parcel',
         selectedVehicle: selectedVehicle,
+        selectedVehicles,
         selectedVehicleId: selectedVehicle?._id || selectedVehicle?.id,
         selectedVehicleIds,
         category: category.id,
