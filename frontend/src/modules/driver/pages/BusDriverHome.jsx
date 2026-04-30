@@ -33,7 +33,44 @@ import {
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
 const unwrapResults = (response) => response?.data?.results || response?.results || [];
-const createToday = () => new Date().toISOString().slice(0, 10);
+const formatDateKey = (value) => {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    return '';
+  }
+
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const parseDateKey = (value) => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const parsed = new Date(year, monthIndex, day);
+
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== monthIndex ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return parsed;
+};
+
+const createToday = () => formatDateKey(new Date());
 const DAY_OPTIONS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const createLocalScheduleId = () =>
   `schedule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -55,7 +92,7 @@ const formatCurrency = (value, currency = 'INR') =>
 
 const formatDisplayDate = (value) => {
   if (!value) return 'No date selected';
-  const date = new Date(value);
+  const date = parseDateKey(value) || new Date(value);
   if (Number.isNaN(date.getTime())) return value;
 
   return date.toLocaleDateString('en-IN', {
@@ -74,7 +111,7 @@ const getNextTravelDate = (schedule) => {
     nextDate.setDate(nextDate.getDate() + index);
     const label = dayLabels[nextDate.getDay()];
     if (activeDays.length === 0 || activeDays.includes(label)) {
-      return nextDate.toISOString().slice(0, 10);
+      return formatDateKey(nextDate);
     }
   }
 
@@ -89,7 +126,7 @@ const WORKSPACE_TABS = [
 ];
 
 const getCalendarMatrix = (value) => {
-  const sourceDate = value ? new Date(value) : new Date();
+  const sourceDate = value instanceof Date ? value : parseDateKey(value) || new Date();
   const year = sourceDate.getFullYear();
   const month = sourceDate.getMonth();
   const firstDay = new Date(year, month, 1);
@@ -105,7 +142,7 @@ const getCalendarMatrix = (value) => {
     const cellDate = new Date(year, month, day);
     cells.push({
       label: day,
-      value: cellDate.toISOString().slice(0, 10),
+      value: formatDateKey(cellDate),
     });
   }
 
@@ -247,7 +284,8 @@ const BusDriverHome = () => {
           setSelectedScheduleId(firstSchedule.id);
           const nextDate = getNextTravelDate(firstSchedule);
           setTravelDate(nextDate);
-          const parsedDate = new Date(nextDate);
+          const parsedDate = parseDateKey(nextDate);
+          if (!parsedDate) return;
           setCalendarMonth(new Date(parsedDate.getFullYear(), parsedDate.getMonth(), 1));
         }
       } catch (error) {
@@ -293,7 +331,8 @@ const BusDriverHome = () => {
       setSelectedScheduleId(nextSchedule.id);
       const nextDate = getNextTravelDate(nextSchedule);
       setTravelDate(nextDate);
-      const parsedDate = new Date(nextDate);
+      const parsedDate = parseDateKey(nextDate);
+      if (!parsedDate) return;
       setCalendarMonth(new Date(parsedDate.getFullYear(), parsedDate.getMonth(), 1));
       setSelectedSeats([]);
     }
@@ -342,8 +381,8 @@ const BusDriverHome = () => {
       return;
     }
 
-    const parsedDate = new Date(travelDate);
-    if (Number.isNaN(parsedDate.getTime())) {
+    const parsedDate = parseDateKey(travelDate);
+    if (!parsedDate || Number.isNaN(parsedDate.getTime())) {
       return;
     }
 
@@ -671,7 +710,8 @@ const BusDriverHome = () => {
                 if (nextSchedule) {
                   const nextDate = getNextTravelDate(nextSchedule);
                   setTravelDate(nextDate);
-                  const parsedDate = new Date(nextDate);
+                  const parsedDate = parseDateKey(nextDate);
+                  if (!parsedDate) return;
                   setCalendarMonth(new Date(parsedDate.getFullYear(), parsedDate.getMonth(), 1));
                 }
                 setSelectedSeats([]);
