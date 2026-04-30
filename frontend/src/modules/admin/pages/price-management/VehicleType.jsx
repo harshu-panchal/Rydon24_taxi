@@ -111,6 +111,14 @@ const defaultFormData = {
   is_taxi: 'taxi',
   is_accept_share_ride: 0,
   delivery_category: '',
+  delivery_distance_pricing: {
+    enabled: false,
+    base_price: '',
+    free_distance: '',
+    distance_price: '',
+    free_time: '',
+    time_price: '',
+  },
   status: 1,
   active: true,
   supported_other_vehicle_types: [],
@@ -145,6 +153,15 @@ const TRANSPORT_TYPE_OPTIONS = [
 ];
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
+
+const normalizeDeliveryDistancePricing = (value = {}) => ({
+  enabled: Boolean(value?.enabled),
+  base_price: String(value?.base_price ?? ''),
+  free_distance: String(value?.free_distance ?? ''),
+  distance_price: String(value?.distance_price ?? ''),
+  free_time: String(value?.free_time ?? ''),
+  time_price: String(value?.time_price ?? ''),
+});
 
 const normalizeVehicle = (item = {}) => ({
   ...item,
@@ -315,6 +332,7 @@ const VehicleType = ({ mode: propMode }) => {
               is_taxi: selectedVehicle.is_taxi || 'taxi',
               is_accept_share_ride: Number(selectedVehicle.is_accept_share_ride || 0),
               delivery_category: String(selectedVehicle.delivery_category || ''),
+              delivery_distance_pricing: normalizeDeliveryDistancePricing(selectedVehicle.delivery_distance_pricing),
               status: Number(selectedVehicle.status ?? (selectedVehicle.active !== false ? 1 : 0)),
               active: selectedVehicle.active !== false && Number(selectedVehicle.status ?? 1) !== 0,
               supported_other_vehicle_types: Array.isArray(selectedVehicle.supported_other_vehicle_types)
@@ -415,6 +433,23 @@ const VehicleType = ({ mode: propMode }) => {
         is_taxi: normalizeTaxiMode(formData.is_taxi || formData.transport_type),
         is_accept_share_ride: Number(formData.is_accept_share_ride || 0),
         delivery_category: showsDeliveryCategorySelector ? formData.delivery_category : '',
+        delivery_distance_pricing: showsDeliveryCategorySelector
+          ? {
+              enabled: Boolean(formData.delivery_distance_pricing?.enabled),
+              base_price: Number(formData.delivery_distance_pricing?.base_price || 0),
+              free_distance: Number(formData.delivery_distance_pricing?.free_distance || 0),
+              distance_price: Number(formData.delivery_distance_pricing?.distance_price || 0),
+              free_time: Number(formData.delivery_distance_pricing?.free_time || 0),
+              time_price: Number(formData.delivery_distance_pricing?.time_price || 0),
+            }
+          : {
+              enabled: false,
+              base_price: 0,
+              free_distance: 0,
+              distance_price: 0,
+              free_time: 0,
+              time_price: 0,
+            },
         status: formData.active ? 1 : 0,
         active: formData.active,
         supported_other_vehicle_types: sanitizeObjectIdList(formData.supported_other_vehicle_types),
@@ -629,6 +664,7 @@ const VehicleType = ({ mode: propMode }) => {
                 updateForm('transport_type', nextTransportType);
                 if (!['delivery', 'both'].includes(normalizeTransportType(nextTransportType))) {
                   updateForm('delivery_category', '');
+                  updateForm('delivery_distance_pricing', normalizeDeliveryDistancePricing());
                 }
               }}
               className={inputClass}
@@ -690,6 +726,117 @@ const VehicleType = ({ mode: propMode }) => {
               </div>
               <p className="mt-2 text-xs text-slate-500">
                 This decides which delivery card this vehicle type appears under in the user parcel flow.
+              </p>
+            </div>
+          ) : null}
+
+          {showsDeliveryCategorySelector ? (
+            <div className="lg:col-span-2 rounded-[28px] border border-slate-200 bg-slate-50/70 p-5">
+              <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <label className={labelClass}>Delivery Distance Based Charges</label>
+                  <p className="text-xs text-slate-500">
+                    Enable quick parcel pricing defaults for this delivery-enabled vehicle type.
+                  </p>
+                </div>
+                <label className="inline-flex items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(formData.delivery_distance_pricing?.enabled)}
+                    onChange={(e) => updateForm('delivery_distance_pricing', {
+                      ...formData.delivery_distance_pricing,
+                      enabled: e.target.checked,
+                    })}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  Enable distance based charges
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                <div>
+                  <label className={labelClass}>Base Price</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.delivery_distance_pricing?.base_price ?? ''}
+                    onChange={(e) => updateForm('delivery_distance_pricing', {
+                      ...formData.delivery_distance_pricing,
+                      base_price: e.target.value,
+                    })}
+                    className={inputClass}
+                    placeholder="45"
+                    disabled={!formData.delivery_distance_pricing?.enabled}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Free Distance (KM)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.delivery_distance_pricing?.free_distance ?? ''}
+                    onChange={(e) => updateForm('delivery_distance_pricing', {
+                      ...formData.delivery_distance_pricing,
+                      free_distance: e.target.value,
+                    })}
+                    className={inputClass}
+                    placeholder="2"
+                    disabled={!formData.delivery_distance_pricing?.enabled}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Distance Price</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.delivery_distance_pricing?.distance_price ?? ''}
+                    onChange={(e) => updateForm('delivery_distance_pricing', {
+                      ...formData.delivery_distance_pricing,
+                      distance_price: e.target.value,
+                    })}
+                    className={inputClass}
+                    placeholder="12"
+                    disabled={!formData.delivery_distance_pricing?.enabled}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Free Time (Min)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.delivery_distance_pricing?.free_time ?? ''}
+                    onChange={(e) => updateForm('delivery_distance_pricing', {
+                      ...formData.delivery_distance_pricing,
+                      free_time: e.target.value,
+                    })}
+                    className={inputClass}
+                    placeholder="0"
+                    disabled={!formData.delivery_distance_pricing?.enabled}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Time Price</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.delivery_distance_pricing?.time_price ?? ''}
+                    onChange={(e) => updateForm('delivery_distance_pricing', {
+                      ...formData.delivery_distance_pricing,
+                      time_price: e.target.value,
+                    })}
+                    className={inputClass}
+                    placeholder="0"
+                    disabled={!formData.delivery_distance_pricing?.enabled}
+                  />
+                </div>
+              </div>
+
+              <p className="mt-3 text-xs text-slate-500">
+                This section only appears when the vehicle supports `Delivery` or `Both`.
               </p>
             </div>
           ) : null}

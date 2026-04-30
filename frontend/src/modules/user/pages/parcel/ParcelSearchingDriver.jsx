@@ -1,36 +1,51 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  X, 
-  ShieldCheck, 
-  Phone, 
-  MessageCircle, 
-  Shield, 
-  CheckCircle2, 
-  Navigation, 
-  AlertTriangle, 
-  Star, 
-  Package,
-  Locate,
-  Zap,
-  MapPin,
-  Clock,
-  ChevronRight
-} from 'lucide-react';
+import { X, ShieldCheck, Phone, MessageCircle, CheckCircle2, AlertTriangle, Star } from 'lucide-react';
+import { GoogleMap, Marker, OverlayView, Polyline } from '@react-google-maps/api';
 import api from '../../../../shared/api/axiosInstance';
 import { socketService } from '../../../../shared/api/socket';
 import { getLocalUserToken, userAuthService } from '../../services/authService';
 import { getCurrentRide, isActiveCurrentRide, saveCurrentRide } from '../../services/currentRideService';
+import { useAppGoogleMapsLoader, HAS_VALID_GOOGLE_MAPS_KEY } from '../../../admin/utils/googleMaps';
+import LuxuryIcon from '@/assets/icons/Luxury.png';
+import PremiumIcon from '@/assets/icons/Premium.png';
+import SuvIcon from '@/assets/icons/SUV.png';
+import BikeIcon from '@/assets/icons/bike.png';
+import CarIcon from '@/assets/icons/car.png';
+import AutoIcon from '@/assets/icons/auto.png';
 
-const Motion = motion;
+const MAP_OPTIONS = {
+  disableDefaultUI: true,
+  styles: [
+    { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
+    { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+    { elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
+    { elementType: 'labels.text.stroke', stylers: [{ color: '#f5f5f5' }] },
+    { featureType: 'administrative.land_parcel', elementType: 'labels.text.fill', stylers: [{ color: '#bdbdbd' }] },
+    { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#eeeeee' }] },
+    { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+    { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#e5e5e5' }] },
+    { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
+    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+    { featureType: 'road.arterial', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+    { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#dadada' }] },
+    { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
+    { featureType: 'road.local', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
+    { featureType: 'transit.line', elementType: 'geometry', stylers: [{ color: '#e5e5e5' }] },
+    { featureType: 'transit.station', elementType: 'geometry', stylers: [{ color: '#eeeeee' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9c9c9' }] },
+    { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
+  ],
+};
 
-const generateOTP = () => String(Math.floor(1000 + Math.random() * 9000));
 const unwrap = (response) => response?.data?.data || response?.data || response;
 const unwrapLoginPayload = (response) => {
   const payload = unwrap(response);
   return payload?.token ? payload : payload?.data || {};
 };
+
+const generateOTP = () => String(Math.floor(1000 + Math.random() * 9000));
 const DRIVER_PLACEHOLDER = { name: 'Delivery Captain', rating: '4.9', vehicle: 'Bike', plate: 'Assigned', phone: '', eta: 2 };
 const STAGES = { SEARCHING: 'searching', ACCEPTED: 'accepted' };
 const ACTIVE_DELIVERY_POLL_MS = 1500;
@@ -49,12 +64,105 @@ const withUserAuthorization = (token) => (
     : {}
 );
 
+const getVehicleIcon = (type = 'car') => {
+  const val = String(type).toLowerCase();
+  if (val.includes('bike') || val.includes('2wheel')) return BikeIcon;
+  if (val.includes('auto')) return AutoIcon;
+  if (val.includes('lux')) return LuxuryIcon;
+  if (val.includes('premium')) return PremiumIcon;
+  if (val.includes('suv')) return SuvIcon;
+  return CarIcon;
+};
+
+const getOverlayCenterOffset = (width, height) => ({
+  x: -(width / 2),
+  y: -(height / 2),
+});
+
+const clampVehicleCount = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return 4;
+  }
+  return Math.max(3, Math.min(8, Math.round(numeric)));
+};
+
+const buildAvailableVehicleMarkers = (center, count) => {
+  const safeCount = clampVehicleCount(count);
+  const lat = Number(center?.lat || 0);
+  const lng = Number(center?.lng || 0);
+
+  return Array.from({ length: safeCount }, (_, index) => {
+    const angle = ((Math.PI * 2) / safeCount) * index + (index % 2 ? 0.28 : -0.12);
+    const radius = 0.0022 + (index % 3) * 0.00045;
+
+    return {
+      id: `available-delivery-${index}`,
+      position: {
+        lat: lat + Math.sin(angle) * radius,
+        lng: lng + Math.cos(angle) * radius,
+      },
+      heading: (angle * 180) / Math.PI + 90,
+      delay: index * 0.18,
+    };
+  });
+};
+
+const BlinkingVehicleMarker = ({ marker, iconUrl }) => (
+  <OverlayView
+    position={marker.position}
+    mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+    getPixelPositionOffset={getOverlayCenterOffset}
+  >
+    <div className="pointer-events-none relative flex h-14 w-14 items-center justify-center">
+      {[0, 1].map((ring) => (
+        <motion.span
+          key={ring}
+          className="absolute h-10 w-10 rounded-full border border-emerald-500/45 bg-emerald-400/10"
+          animate={{ scale: [0.65, 1.7], opacity: [0.55, 0] }}
+          transition={{
+            repeat: Infinity,
+            duration: 1.8,
+            delay: marker.delay + ring * 0.55,
+            ease: 'easeOut',
+          }}
+        />
+      ))}
+      <motion.img
+        src={iconUrl || BikeIcon}
+        alt="Available vehicle"
+        draggable={false}
+        className="relative h-9 w-9 object-contain drop-shadow-[0_6px_8px_rgba(15,23,42,0.34)]"
+        style={{ rotate: `${marker.heading}deg` }}
+        animate={{
+          scale: [1, 1.16, 1],
+          opacity: [0.78, 1, 0.78],
+        }}
+        transition={{
+          repeat: Infinity,
+          duration: 1.35,
+          delay: marker.delay,
+          ease: 'easeInOut',
+        }}
+      />
+    </div>
+  </OverlayView>
+);
+
 const normalizeDriver = (driver = {}) => ({
   name: driver.name || 'Delivery Captain',
   rating: driver.rating || '4.9',
-  vehicle: driver.vehicleType || 'Bike',
-  plate: driver.vehicleNumber || 'Assigned',
-  phone: driver.phone || '',
+  vehicle: driver.vehicle || driver.vehicleType || driver.vehicle_type || 'Bike',
+  vehicleType: driver.vehicleType || driver.vehicle_type || driver.vehicle || 'Bike',
+  plate: driver.plate || driver.vehicleNumber || driver.vehicle_number || 'Assigned',
+  vehicleNumber: driver.vehicleNumber || driver.vehicle_number || driver.plate || 'Assigned',
+  phone: driver.phone || driver.mobile || driver.phoneNumber || '',
+  profileImage: driver.profileImage || driver.profile_image || driver.image || driver.avatar || driver.selfie || '',
+  vehicleImage: driver.vehicleImage || driver.vehicle_image || driver.vehiclePhoto || driver.vehicle_photo || driver.vehicle?.image || '',
+  vehicleColor: driver.vehicleColor || driver.vehicle_color || driver.vehicle?.vehicleColor || driver.vehicle?.vehicle_color || '',
+  vehicleMake: driver.vehicleMake || driver.vehicle_make || driver.vehicle?.vehicleMake || driver.vehicle?.vehicle_make || '',
+  vehicleModel: driver.vehicleModel || driver.vehicle_model || driver.vehicle?.vehicleModel || driver.vehicle?.vehicle_model || '',
+  vehicleIconUrl: driver.vehicleIconUrl || driver.map_icon || driver.icon || '',
   eta: driver.eta || 2,
 });
 
@@ -99,13 +207,16 @@ const pickParcelVehicles = (types = [], preferredType = '') => {
   const activeTypes = types.filter((type) => type.active !== false && Number(type.status ?? 1) !== 0);
   const preferredLabels = normalizePreferredVehicleTypes(preferredType).filter((entry) => entry !== 'both');
   const matches = [];
+
   for (const preferredLabel of preferredLabels) {
     const match = findVehicleMatch(activeTypes, preferredLabel);
     if (match && !matches.some((item) => String(item._id || item.id) === String(match._id || match.id))) {
       matches.push(match);
     }
   }
+
   if (matches.length > 0) return matches;
+
   if (!preferredLabels.length) {
     const parcelMatches = activeTypes.filter((type) => {
       const value = `${type.name || ''} ${type.icon_types || ''} ${type.transport_type || ''}`.toLowerCase();
@@ -114,10 +225,12 @@ const pickParcelVehicles = (types = [], preferredType = '') => {
     if (parcelMatches.length > 0) return parcelMatches;
     return activeTypes;
   }
+
   const parcelFirst = activeTypes.find((type) => {
     const value = `${type.name || ''} ${type.icon_types || ''} ${type.transport_type || ''}`.toLowerCase();
     return value.includes('bike') || value.includes('delivery') || value.includes('parcel');
   });
+
   return parcelFirst ? [parcelFirst] : activeTypes.slice(0, 1);
 };
 
@@ -152,55 +265,6 @@ const isVehicleCompatibleWithGoodsType = (vehicle, goodsTypeFor = '') => {
   return allowedLabels.some((label) => tokens.some((token) => token.includes(label) || label.includes(token)));
 };
 
-const ActionBtn = ({ icon, label, onClick, color = 'bg-gray-50 text-gray-700' }) => (
-  <Motion.button
-    whileHover={{ scale: 1.02 }}
-    whileTap={{ scale: 0.94 }}
-    onClick={onClick}
-    className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl border border-gray-100 transition-all ${color}`}
-  >
-    {React.createElement(icon, { size: 18, strokeWidth: 2.5 })}
-    <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
-  </Motion.button>
-);
-
-const DriverCard = ({ driver, banner, bannerGradient, children }) => (
-  <div className="rounded-[40px] bg-white shadow-[0_32px_64px_rgba(0,0,0,0.12)] border border-gray-100 overflow-hidden">
-    <div className={`px-6 py-4 flex items-center gap-3 ${bannerGradient}`}>
-      {banner}
-    </div>
-    <div className="p-6 space-y-6">
-      <div className="flex items-center gap-4">
-        <div className="relative shrink-0">
-          <div className="w-16 h-16 rounded-[24px] bg-indigo-50 overflow-hidden border-2 border-white shadow-sm">
-            <img 
-              src={`https://ui-avatars.com/api/?name=${driver.name.replace(' ', '+')}&background=4f46e5&color=fff&bold=true&size=128`} 
-              className="w-full h-full object-cover" 
-              alt="Driver" 
-            />
-          </div>
-          <div className="absolute -bottom-1 -right-1 bg-white px-2 py-0.5 rounded-full border border-gray-100 flex items-center gap-1 shadow-sm">
-            <Star size={10} className="text-amber-400 fill-amber-400" />
-            <span className="text-[10px] font-black text-gray-900">{driver.rating}</span>
-          </div>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-black text-gray-900 leading-tight tracking-tight">{driver.name}</h3>
-            <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-[10px] font-black text-emerald-600 uppercase tracking-widest">Verified</span>
-          </div>
-          <p className="text-xs font-bold text-gray-400 mt-1 uppercase tracking-tight">{driver.vehicle} • {driver.plate}</p>
-          <div className="flex items-center gap-1.5 mt-2 text-indigo-600">
-            <Clock size={12} strokeWidth={3} />
-            <span className="text-[11px] font-black uppercase tracking-wider">Arriving in {driver.eta} mins</span>
-          </div>
-        </div>
-      </div>
-      {children}
-    </div>
-  </div>
-);
-
 const ParcelSearchingDriver = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -216,14 +280,16 @@ const ParcelSearchingDriver = () => {
   const [driver, setDriver] = useState(DRIVER_PLACEHOLDER);
   const [searchStatus, setSearchStatus] = useState('Preparing dispatch...');
   const [bookingError, setBookingError] = useState('');
+  const [nearbyVehicleCount, setNearbyVehicleCount] = useState(4);
   const activeRidePollRef = useRef(null);
   const searchTimeoutRef = useRef(null);
   const requestStartedRef = useRef(false);
   const cleanupSearchRef = useRef(null);
   const cleanupDelayRef = useRef(null);
-  const trackingStartedRef = useRef(false);
+  const acceptedTimerRef = useRef(null);
   const driverRef = useRef(driver);
   const activeRideIdRef = useRef('');
+  const trackingStartedRef = useRef(false);
   const searchNonce = String(routeState.searchNonce || '');
   const preferredVehicleType = String(
     routeState.goodsTypeFor ||
@@ -232,6 +298,40 @@ const ParcelSearchingDriver = () => {
     routeState.selectedGoodsType?.goods_type_for ||
     '',
   ).trim();
+  const { isLoaded } = useAppGoogleMapsLoader();
+
+  const pickupPos = useMemo(
+    () => (
+      routeState.pickupCoords
+        ? { lng: routeState.pickupCoords[0], lat: routeState.pickupCoords[1] }
+        : { lat: 22.7196, lng: 75.8577 }
+    ),
+    [routeState.pickupCoords],
+  );
+
+  const dropPos = useMemo(
+    () => (
+      routeState.dropCoords
+        ? { lng: routeState.dropCoords[0], lat: routeState.dropCoords[1] }
+        : null
+    ),
+    [routeState.dropCoords],
+  );
+
+  const availableVehicleIcon = useMemo(
+    () => (
+      routeState.vehicleIconUrl ||
+      routeState.vehicle?.vehicleIconUrl ||
+      routeState.vehicle?.icon ||
+      getVehicleIcon(routeState.vehicleIconType || routeState.vehicle?.iconType || preferredVehicleType || 'bike')
+    ),
+    [preferredVehicleType, routeState.vehicle, routeState.vehicleIconType, routeState.vehicleIconUrl],
+  );
+
+  const availableVehicleMarkers = useMemo(
+    () => buildAvailableVehicleMarkers(pickupPos, nearbyVehicleCount),
+    [nearbyVehicleCount, pickupPos],
+  );
 
   useEffect(() => {
     driverRef.current = driver;
@@ -250,7 +350,15 @@ const ParcelSearchingDriver = () => {
       ACTIVE_SEARCH_NONCE_CLEANUPS.delete(searchNonce);
     }
 
-    if (ACTIVE_SEARCH_NONCES.has(searchNonce)) return;
+    if (ACTIVE_SEARCH_NONCES.has(searchNonce)) {
+      return () => {
+        const cleanupId = setTimeout(() => {
+          ACTIVE_SEARCH_NONCES.delete(searchNonce);
+          ACTIVE_SEARCH_NONCE_CLEANUPS.delete(searchNonce);
+        }, 0);
+        ACTIVE_SEARCH_NONCE_CLEANUPS.set(searchNonce, cleanupId);
+      };
+    }
 
     if (sessionStorage.getItem(nonceKey)) {
       const activeRide = getCurrentRide();
@@ -302,7 +410,7 @@ const ParcelSearchingDriver = () => {
       driverRef.current = nextDriver;
       setDriver(nextDriver);
       setStage(STAGES.ACCEPTED);
-      setSearchStatus('Captain assigned!');
+      setSearchStatus('Captain accepted your parcel request.');
       activeRideIdRef.current = String(rideId || activeRideIdRef.current || '');
       trackingStartedRef.current = true;
 
@@ -312,10 +420,13 @@ const ParcelSearchingDriver = () => {
         serviceType: 'parcel',
         pickup: rideSnapshot?.pickupAddress || routeState.pickup,
         drop: rideSnapshot?.dropAddress || routeState.drop,
+        pickupCoords: rideSnapshot?.pickupLocation?.coordinates || routeState.pickupCoords,
+        dropCoords: rideSnapshot?.dropLocation?.coordinates || routeState.dropCoords,
         rideId: activeRideIdRef.current,
         otp,
         driver: nextDriver,
         fare: rideSnapshot?.fare || routeState.fare || routeState.estimatedFare?.min || 45,
+        vehicleIconUrl: rideSnapshot?.vehicleIconUrl || routeState.vehicleIconUrl || routeState.vehicle?.vehicleIconUrl || routeState.vehicle?.icon || '',
         paymentMethod: routeState.paymentMethod || 'Cash',
         status: 'accepted',
         parcel: rideSnapshot?.parcel || routeState.parcel || null,
@@ -324,9 +435,10 @@ const ParcelSearchingDriver = () => {
       saveCurrentRide(nextRide);
       clearInterval(activeRidePollRef.current);
       clearTimeout(searchTimeoutRef.current);
-      setTimeout(() => {
+      clearTimeout(acceptedTimerRef.current);
+      acceptedTimerRef.current = setTimeout(() => {
         navigate(`${routePrefix}/parcel/tracking`, { replace: true, state: nextRide });
-      }, 1800);
+      }, 2200);
     };
 
     const hydrateAcceptedDelivery = async (token) => {
@@ -341,11 +453,12 @@ const ParcelSearchingDriver = () => {
     };
 
     const onRideSearchUpdate = ({ matchedDrivers, radius }) => {
+      setNearbyVehicleCount(clampVehicleCount(matchedDrivers));
       const radiusKm = radius ? (Number(radius) / 1000).toFixed(1) : '';
       setSearchStatus(
         matchedDrivers > 0
-          ? `${matchedDrivers} Captain${matchedDrivers > 1 ? 's' : ''} notified within ${radiusKm}km`
-          : `Scanning nearby agents (${radiusKm}km)...`,
+          ? `${matchedDrivers} captain${matchedDrivers > 1 ? 's' : ''} notified within ${radiusKm} km`
+          : `Searching within ${radiusKm} km`,
       );
     };
 
@@ -373,15 +486,17 @@ const ParcelSearchingDriver = () => {
     };
 
     const onRideCancelled = ({ reason }) => {
-      setBookingError(reason || 'Search timed out.');
-      setSearchStatus(reason || 'Search timed out.');
+      const nextMessage = reason || 'Search timed out.';
+      setBookingError(nextMessage);
+      setSearchStatus(nextMessage);
       setStage(STAGES.SEARCHING);
       clearTimeout(searchTimeoutRef.current);
     };
 
     const onError = ({ message }) => {
-      setBookingError(message || 'Error occurred.');
-      setSearchStatus(message || 'Error occurred.');
+      const nextMessage = message || 'Error occurred.';
+      setBookingError(nextMessage);
+      setSearchStatus(nextMessage);
       clearTimeout(searchTimeoutRef.current);
     };
 
@@ -398,6 +513,7 @@ const ParcelSearchingDriver = () => {
       requestStartedRef.current = false;
       clearInterval(activeRidePollRef.current);
       clearTimeout(searchTimeoutRef.current);
+      clearTimeout(acceptedTimerRef.current);
       activeRidePollRef.current = null;
       socketService.off('rideSearchUpdate', onRideSearchUpdate);
       socketService.off('rideAccepted', onRideAccepted);
@@ -423,7 +539,6 @@ const ParcelSearchingDriver = () => {
         }
         if (disposed) return;
 
-        setSearchStatus('Optimizing route...');
         const vehicleCatalogResponse = await api.get('/users/vehicle-types');
         if (disposed) return;
 
@@ -440,7 +555,9 @@ const ParcelSearchingDriver = () => {
         const selectedVehicleType = selectedVehicleTypes[0];
         const selectedVehicleTypeIds = selectedVehicleTypes.map((type) => type?._id || type?.id).filter(Boolean);
 
-        if (selectedVehicleTypeIds.length === 0) throw new Error('No vehicles available.');
+        if (selectedVehicleTypeIds.length === 0) {
+          throw new Error('No vehicles available.');
+        }
 
         const rideRequestConfig = userToken ? { headers: { Authorization: `Bearer ${userToken}` } } : {};
         const parcelPayload = {
@@ -455,6 +572,7 @@ const ParcelSearchingDriver = () => {
           receiverName: routeState.parcel?.receiverName || routeState.receiverName || '',
           receiverMobile: routeState.parcel?.receiverMobile || routeState.receiverMobile || '',
           goodsTypeFor: preferredVehicleType || routeState.parcel?.goodsTypeFor || 'both',
+          deliveryCategory: routeState.parcel?.deliveryCategory || routeState.deliveryCategory || '',
         };
 
         const socket = socketService.connect({ role: 'user', token: userToken });
@@ -495,18 +613,23 @@ const ParcelSearchingDriver = () => {
 
             if (isThisRide && ['searching', 'pending'].includes(rideState)) {
               setStage(STAGES.SEARCHING);
-              setSearchStatus('Broadcasted to nearby Captains...');
+              setSearchStatus('Broadcasted to nearby captains...');
             }
             if (isThisRide && isAcceptedRide) {
               moveToTracking({ acceptedDriver: activeRide.driver || driverRef.current, rideId: activeRide.rideId, rideSnapshot: activeRide });
             }
-          } catch { /* Socket stays primary */ }
+          } catch {
+            // Socket remains the primary path; polling is only a race-condition fallback.
+          }
         };
 
         clearInterval(activeRidePollRef.current);
         activeRidePollRef.current = setInterval(pollActiveRide, ACTIVE_DELIVERY_POLL_MS);
         pollActiveRide();
-        if (!disposed) setSearchStatus('Searching nearby Captains...');
+        if (!disposed) {
+          setSearchStatus('Booking created. Notifying nearby captains...');
+          setNearbyVehicleCount(clampVehicleCount(selectedVehicleTypeIds.length));
+        }
 
         searchTimeoutRef.current = setTimeout(async () => {
           if (disposed || trackingStartedRef.current) return;
@@ -520,14 +643,13 @@ const ParcelSearchingDriver = () => {
           }
           if (['accepted', 'arriving', 'started', 'ongoing'].includes(rideState)) {
             moveToTracking({ acceptedDriver: activeRide.driver || driverRef.current, rideId: activeRide.rideId, rideSnapshot: activeRide });
-            return;
           }
         }, SEARCH_TIMEOUT_MS);
       } catch (error) {
         if (disposed) return;
         const errorMessage = error?.response?.data?.message || error?.response?.data?.error || error?.message || 'Dispatch failed.';
         setBookingError(errorMessage);
-        setSearchStatus('Error creating booking.');
+        setSearchStatus(errorMessage);
         clearTimeout(searchTimeoutRef.current);
       }
     })();
@@ -539,8 +661,21 @@ const ParcelSearchingDriver = () => {
     };
   }, [navigate, otp, preferredVehicleType, routePrefix, routeState, searchNonce, userHomeRoute]);
 
-  const handleCancel = () => {
+  const handleCancel = async () => {
     clearInterval(activeRidePollRef.current);
+    clearTimeout(searchTimeoutRef.current);
+    clearTimeout(acceptedTimerRef.current);
+
+    const rideId = activeRideIdRef.current;
+
+    try {
+      if (rideId) {
+        await api.patch(`/rides/${rideId}/cancel`);
+      }
+    } catch (_error) {
+      // Navigation still proceeds even if the cancel request races with another state update.
+    }
+
     navigate(userHomeRoute, { replace: true });
   };
 
@@ -548,257 +683,331 @@ const ParcelSearchingDriver = () => {
   const isAccepted = stage === STAGES.ACCEPTED;
 
   return (
-    <div className="min-h-screen bg-gray-50 max-w-lg mx-auto relative font-sans overflow-hidden">
-      {/* Dynamic Map Background with Overlays */}
-      <div className="absolute inset-0 z-0 overflow-hidden">
-        <div className="absolute inset-0 bg-slate-900/5 backdrop-blur-[1px] z-10" />
-        <img 
-          src="/map image.avif" 
-          className="w-full h-full object-cover scale-110 grayscale-[0.3] opacity-60" 
-          alt="Map Background" 
-        />
-        
-        {/* Animated Radial Gradients for Depth */}
-        <div className="absolute inset-0 z-10 bg-gradient-to-b from-white/80 via-transparent to-white" />
+    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto relative font-['Plus_Jakarta_Sans'] overflow-hidden">
+      <div className="absolute inset-0 z-0">
+        {HAS_VALID_GOOGLE_MAPS_KEY && isLoaded ? (
+          <GoogleMap
+            mapContainerStyle={{ width: '100%', height: '100%' }}
+            center={pickupPos}
+            zoom={15}
+            options={MAP_OPTIONS}
+          >
+            <Marker
+              position={pickupPos}
+              zIndex={100}
+              icon={{
+                path: 'M12,2C8.13,2,5,5.13,5,9c0,5.25,7,13,7,13s7-7.75,7-13C19,5.13,15.87,2,12,2z M12,13c-2.21,0-4-1.79-4-4s1.79-4,4-4s4,1.79,4,4S14.21,13,12,13z',
+                fillColor: '#000000',
+                fillOpacity: 1,
+                strokeWeight: 2,
+                strokeColor: '#ffffff',
+                scale: 1.6,
+                anchor: new window.google.maps.Point(12, 22),
+              }}
+            />
+
+            {dropPos && (
+              <Marker
+                position={dropPos}
+                icon={{
+                  path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z',
+                  fillColor: '#f97316',
+                  fillOpacity: 1,
+                  strokeWeight: 2,
+                  strokeColor: '#ffffff',
+                  scale: 1.6,
+                  anchor: new window.google.maps.Point(12, 22),
+                }}
+              />
+            )}
+
+            {isSearching && (
+              <>
+                {availableVehicleMarkers.map((marker) => (
+                  <BlinkingVehicleMarker
+                    key={marker.id}
+                    marker={marker}
+                    iconUrl={availableVehicleIcon}
+                  />
+                ))}
+                <OverlayView
+                  position={pickupPos}
+                  mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+                >
+                  <div className="flex items-center justify-center -translate-y-[22px]">
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="relative flex items-center justify-center pointer-events-none"
+                    >
+                      {[1, 2, 3, 4].map((i) => (
+                        <motion.div
+                          key={i}
+                          animate={{ scale: [0.5, 4.5], opacity: [0.5, 0] }}
+                          transition={{
+                            repeat: Infinity,
+                            duration: 3,
+                            delay: i * 0.75,
+                            ease: 'easeOut',
+                          }}
+                          className="absolute w-20 h-20 rounded-full border-2 border-orange-400/40 bg-orange-400/5 shadow-[0_0_20px_rgba(249,115,22,0.2)]"
+                        />
+                      ))}
+
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ repeat: Infinity, duration: 4, ease: 'linear' }}
+                        className="absolute w-[320px] h-[320px] rounded-full overflow-hidden"
+                        style={{
+                          background: 'conic-gradient(from 0deg, rgba(249, 115, 22, 0.5) 0deg, transparent 60deg, transparent 360deg)',
+                        }}
+                      />
+                    </motion.div>
+                  </div>
+                </OverlayView>
+              </>
+            )}
+
+            {dropPos && (
+              <Polyline
+                path={[pickupPos, dropPos]}
+                options={{
+                  strokeColor: '#0f172a',
+                  strokeOpacity: 0.2,
+                  strokeWeight: 4,
+                  icons: [{
+                    icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 2 },
+                    offset: '0',
+                    repeat: '10px',
+                  }],
+                }}
+              />
+            )}
+          </GoogleMap>
+        ) : (
+          <div className="w-full h-full bg-slate-50 flex flex-col items-center justify-center p-8 text-center" />
+        )}
       </div>
 
-      {/* Header Overlay */}
-      <motion.div 
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="absolute top-8 left-4 right-4 z-20 flex items-center gap-3"
-      >
-        <div className="flex-1 bg-white/90 backdrop-blur-xl rounded-[28px] p-4 shadow-xl shadow-black/5 border border-white/80 flex items-center gap-4">
-          <div className="w-10 h-10 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0">
-            <Package size={20} strokeWidth={2.5} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Parcel Trip</p>
-            <div className="flex items-center gap-2 text-xs font-black text-gray-900 truncate">
-              <span className="truncate">{routeState.pickup || 'Source'}</span>
-              <ChevronRight size={10} className="text-gray-300 shrink-0" />
-              <span className="truncate">{routeState.drop || 'Destination'}</span>
-            </div>
-          </div>
-        </div>
-        
-        {isSearching && (
-          <motion.button 
-            whileTap={{ scale: 0.9 }} 
-            onClick={() => setShowCancelConfirm(true)} 
-            className="w-12 h-12 bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl shadow-black/5 border border-white/80 flex items-center justify-center text-gray-900"
-          >
-            <X size={20} strokeWidth={2.5} />
-          </motion.button>
-        )}
-      </motion.div>
+      <div className="absolute top-8 left-4 right-16 z-20 bg-white/90 backdrop-blur-md rounded-2xl px-5 py-3 shadow-[0_8px_32px_rgba(15,23,42,0.12)] border border-white/80">
+        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.1em] leading-none mb-1">Parcel Route</p>
+        <p className="text-[13px] font-extrabold text-slate-900 leading-tight truncate">{routeState.pickup || 'Pickup'} to {routeState.drop || 'Drop'}</p>
+      </div>
 
-      {/* Center Search Animation */}
       <AnimatePresence>
-        {isSearching && (
-          <Motion.div 
-            key="search-core"
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }} 
-            exit={{ opacity: 0 }} 
-            className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none"
+        {isAccepted && otp && (
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0, x: -20 }}
+            animate={{ scale: 1, opacity: 1, x: 0 }}
+            className="absolute top-[88px] left-4 z-20 bg-white shadow-[0_4px_16px_rgba(15,23,42,0.12)] rounded-[12px] p-3 min-w-[70px] border border-slate-50"
           >
-            <div className="relative">
-              <Motion.div 
-                animate={{ scale: [1, 2, 1], opacity: [0.3, 0, 0.3] }} 
-                transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }} 
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-indigo-500/10 rounded-full border border-indigo-500/20" 
-              />
-              <Motion.div 
-                animate={{ scale: [1, 1.6, 1], opacity: [0.5, 0, 0.5] }} 
-                transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut", delay: 0.5 }} 
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-indigo-500/20 rounded-full border border-indigo-500/30" 
-              />
-              
-              <div className="relative w-20 h-20 bg-white rounded-[32px] shadow-2xl flex items-center justify-center border-4 border-indigo-50 group">
-                <Motion.div 
-                  animate={{ 
-                    y: [0, -5, 0],
-                    rotate: [0, 5, -5, 0]
-                  }} 
-                  transition={{ 
-                    repeat: Infinity, 
-                    duration: 4, 
-                    ease: "easeInOut" 
-                  }}
-                >
-                  <Package size={32} className="text-indigo-600" strokeWidth={2.5} />
-                </Motion.div>
-                
-                {/* Scanning Light Effect */}
-                <Motion.div 
-                  animate={{ y: [-30, 30, -30] }}
-                  transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-                  className="absolute inset-x-0 h-px bg-gradient-to-r from-transparent via-indigo-400 to-transparent blur-[1px] opacity-50"
-                />
-              </div>
-            </div>
-          </Motion.div>
+            <p className="text-[18px] font-extrabold text-[#1d4ed8] leading-tight text-center tracking-wider">{otp}</p>
+            <p className="text-[10px] font-bold text-slate-400 mt-0.5 text-center whitespace-nowrap">Pickup OTP</p>
+          </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Bottom Status Card */}
+      {(isSearching || isAccepted) && (
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setShowCancelConfirm(true)}
+          className="absolute top-8 right-4 z-20 w-10 h-10 bg-white/90 backdrop-blur-md rounded-[12px] shadow-[0_4px_14px_rgba(15,23,42,0.10)] border border-white/80 flex items-center justify-center"
+        >
+          <X size={16} className="text-slate-900" strokeWidth={2.5} />
+        </motion.button>
+      )}
+
       <div className="absolute bottom-8 left-4 right-4 z-20">
         <AnimatePresence mode="wait">
           {isSearching && (
-            <Motion.div 
-              key="searching-card"
-              initial={{ y: 60, opacity: 0 }} 
-              animate={{ y: 0, opacity: 1 }} 
-              exit={{ y: 40, opacity: 0 }} 
-              className="rounded-[40px] bg-white shadow-[0_32px_64px_rgba(0,0,0,0.15)] p-8 border border-gray-100"
+            <motion.div
+              key="searching"
+              initial={{ y: 40, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 20, opacity: 0 }}
+              className="rounded-[32px] border border-white/80 bg-white/95 backdrop-blur-xl shadow-[0_20px_50px_rgba(0,0,0,0.12)] px-6 pt-3 pb-6 space-y-5"
             >
-              <div className="space-y-6">
-                <div className="text-center space-y-2">
-                  <h1 className="text-2xl font-black text-gray-900 tracking-tight">Broadcasting...</h1>
-                  <p className="text-sm font-bold text-gray-400 max-w-[240px] mx-auto leading-relaxed">
-                    {searchStatus}
-                  </p>
-                </div>
+              <div className="w-10 h-1.5 bg-slate-100 rounded-full mx-auto mb-2" />
 
-                <div className="flex justify-center gap-2">
-                  {[0, 1, 2].map((index) => (
-                    <Motion.div 
-                      key={index} 
-                      animate={{ scale: [1, 1.4, 1], backgroundColor: ['#E5E7EB', '#6366F1', '#E5E7EB'] }} 
-                      transition={{ repeat: Infinity, duration: 1, delay: index * 0.2 }} 
-                      className="w-2.5 h-2.5 rounded-full" 
-                    />
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 py-4 border-y border-gray-50">
-                  <div className="flex flex-col items-center gap-1">
-                    <Zap size={18} className="text-amber-500 fill-amber-500/20" strokeWidth={2.5} />
-                    <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Priority</span>
-                  </div>
-                  <div className="flex flex-col items-center gap-1 border-l border-gray-50">
-                    <ShieldCheck size={18} className="text-emerald-500 fill-emerald-500/20" strokeWidth={2.5} />
-                    <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Insured</span>
-                  </div>
-                </div>
-
-                {bookingError && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-3 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center gap-2">
-                    <AlertTriangle size={14} className="text-red-500" />
-                    <span className="text-[11px] font-black text-red-600">{bookingError}</span>
-                  </motion.div>
-                )}
-
-                <button 
-                  onClick={() => setShowCancelConfirm(true)} 
-                  className="w-full py-2 text-[11px] font-black text-gray-300 hover:text-red-400 transition-colors uppercase tracking-widest"
-                >
-                  Cancel Dispatch
-                </button>
+              <div className="text-center space-y-1.5">
+                <h1 className="text-[22px] font-extrabold text-slate-950 tracking-tight">Finding your delivery captain</h1>
+                <p className="text-[13px] font-semibold text-slate-400 max-w-[260px] mx-auto leading-normal">{searchStatus}</p>
               </div>
-            </Motion.div>
+
+              <div className="flex justify-center gap-2.5 py-1">
+                {[0, 1, 2, 3].map((i) => (
+                  <motion.div
+                    key={i}
+                    animate={{
+                      scale: [1, 1.4, 1],
+                      opacity: [0.3, 1, 0.3],
+                      backgroundColor: ['#e2e8f0', '#f97316', '#e2e8f0'],
+                    }}
+                    transition={{ repeat: Infinity, duration: 1.5, delay: i * 0.2 }}
+                    className="w-2.5 h-2.5 rounded-full"
+                  />
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between px-5 py-4 rounded-[24px] bg-slate-50/80 border border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-emerald-50 flex items-center justify-center">
+                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                  </div>
+                  <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Fast Dispatch</span>
+                </div>
+                <div className="w-px h-8 bg-slate-200" />
+                <div className="flex items-center gap-3">
+                  <ShieldCheck size={20} className="text-blue-500" strokeWidth={2.5} />
+                  <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Parcel Safety</span>
+                </div>
+              </div>
+
+              {bookingError && (
+                <div className="rounded-[22px] border border-red-100 bg-red-50 px-4 py-3 text-center">
+                  <p className="text-[12px] font-bold text-red-500">{bookingError}</p>
+                </div>
+              )}
+
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setShowCancelConfirm(true)}
+                className="w-full py-4.5 rounded-[22px] bg-red-50 text-[13px] font-extrabold text-red-500 uppercase tracking-[0.1em] hover:bg-red-100 transition-colors border border-red-100/50"
+              >
+                Cancel Search
+              </motion.button>
+            </motion.div>
           )}
 
           {isAccepted && (
-            <Motion.div 
-              key="accepted-card"
-              initial={{ y: 60, opacity: 0 }} 
-              animate={{ y: 0, opacity: 1 }} 
-              exit={{ y: 40, opacity: 0 }}
+            <motion.div
+              key="accepted"
+              initial={{ y: 60, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 30, opacity: 0 }}
+              className="px-0"
             >
-              <DriverCard 
-                driver={driver} 
-                bannerGradient="bg-gradient-to-r from-indigo-600 to-violet-600" 
-                banner={
-                  <>
-                    <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shrink-0">
-                      <CheckCircle2 size={20} strokeWidth={2.5} />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-white font-black text-sm uppercase tracking-tight">Captain Confirmed</p>
-                      <p className="text-indigo-100 text-[10px] font-bold">Your delivery agent is on the way</p>
-                    </div>
-                  </>
-                }
-              >
-                <div className="flex gap-4">
-                  <ActionBtn icon={Phone} label="Call" onClick={() => window.open(`tel:${driver.phone}`)} />
-                      <ActionBtn icon={MessageCircle} label="Chat" onClick={() => navigate(`${routePrefix}/ride/chat`, { state: { driver } })} />
-                      <ActionBtn icon={Shield} label="Safety" onClick={() => navigate(`${routePrefix}/support`)} color="bg-indigo-50 text-indigo-600 border-indigo-100" />
+              <div className="overflow-hidden rounded-[32px] bg-white shadow-[0_24px_64px_-12px_rgba(15,23,42,0.18)] border border-slate-100">
+                <div className="flex items-center justify-center gap-2.5 bg-emerald-50/50 py-4 border-b border-emerald-100/50">
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.3)]">
+                    <CheckCircle2 size={12} className="text-white" strokeWidth={3} />
+                  </div>
+                  <span className="text-[14px] font-black tracking-tight text-emerald-700 uppercase tracking-wider">Captain confirmed</span>
                 </div>
 
-                <Motion.div 
-                  initial={{ y: 10, opacity: 0 }} 
-                  animate={{ y: 0, opacity: 1 }} 
-                  transition={{ delay: 0.3 }}
-                  className="rounded-[32px] bg-slate-900 p-6 flex items-center justify-between shadow-xl"
-                >
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black text-indigo-300 uppercase tracking-[0.2em]">Pickup OTP</p>
-                    <p className="text-[11px] font-bold text-slate-400">Share only with your captain</p>
+                <div className="p-6">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[14px] font-black text-slate-400 uppercase tracking-widest">{driver.name || 'Captain'}</span>
+                        <div className="flex items-center gap-1 bg-yellow-400/10 px-1.5 py-0.5 rounded-full border border-yellow-400/20">
+                          <Star size={10} className="fill-yellow-500 text-yellow-500" />
+                          <span className="text-[11px] font-black text-yellow-700">{driver.rating || '4.7'}</span>
+                        </div>
+                      </div>
+
+                      <h2 className="text-[28px] font-black tracking-tighter text-slate-900 leading-none mb-4 uppercase">
+                        {driver.plate || 'Assigned'}
+                      </h2>
+
+                      <div className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 border border-slate-200/50">
+                        <p className="text-[12px] font-black text-slate-600">
+                          {[driver.vehicleColor, driver.vehicleMake, driver.vehicleModel, driver.vehicleType || 'Delivery Vehicle'].filter(Boolean).join(' ') || 'Delivery Vehicle'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="relative h-20 w-24 shrink-0">
+                      <div className="absolute right-0 top-0 h-20 w-20 overflow-hidden rounded-[24px] bg-[#1d2333] border-4 border-white shadow-xl flex items-center justify-center">
+                        <img
+                          src={driver.vehicleIconUrl || availableVehicleIcon || BikeIcon}
+                          className="h-12 w-12 object-contain brightness-0 invert opacity-90"
+                          alt="Vehicle"
+                        />
+                      </div>
+                      <div className="absolute -left-2 bottom-0 h-16 w-16 overflow-hidden rounded-full border-[4px] border-white shadow-2xl bg-slate-200">
+                        <img
+                          src={driver.profileImage || `https://ui-avatars.com/api/?name=${(driver.name || 'DC').replace(' ', '+')}&background=cbd5e1&color=0f172a`}
+                          className="h-full w-full object-cover"
+                          alt="Driver"
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex gap-1.5">
-                    {otp.split('').map((digit, index) => (
-                      <Motion.div 
-                        key={index} 
-                        initial={{ scale: 0.8, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        transition={{ delay: 0.4 + index * 0.1 }}
-                        className="w-10 h-12 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center backdrop-blur-md"
-                      >
-                        <span className="text-xl font-black text-white">{digit}</span>
-                      </Motion.div>
-                    ))}
+
+                  <div className="mt-7 grid grid-cols-2 gap-4">
+                    <motion.button
+                      whileTap={{ scale: 0.96 }}
+                      onClick={() => window.open(`tel:${driver.phone}`)}
+                      className="flex items-center justify-center gap-3 rounded-[22px] bg-slate-50 py-4.5 border border-slate-200/60 hover:bg-slate-100 transition-colors"
+                    >
+                      <Phone size={18} className="text-slate-900" strokeWidth={2.5} />
+                      <span className="text-[13px] font-black text-slate-900 uppercase tracking-widest leading-none">Call</span>
+                    </motion.button>
+                    <motion.button
+                      whileTap={{ scale: 0.96 }}
+                      onClick={() => navigate(`${routePrefix}/parcel/chat`, { state: { driver } })}
+                      className="flex items-center justify-center gap-3 rounded-[22px] bg-slate-950 py-4.5 shadow-[0_12px_24px_rgba(15,23,42,0.15)] active:shadow-none"
+                    >
+                      <MessageCircle size={18} className="text-white" strokeWidth={2.5} />
+                      <span className="text-[13px] font-black text-white uppercase tracking-widest leading-none">Chat</span>
+                    </motion.button>
                   </div>
-                </Motion.div>
-              </DriverCard>
-            </Motion.div>
+                </div>
+              </div>
+
+              <div className="mt-5 flex items-center justify-center gap-2.5">
+                <div className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </div>
+                <span className="text-[12px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none">Captain is arriving</span>
+              </div>
+            </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      {/* Global Modals */}
       <AnimatePresence>
         {showCancelConfirm && (
-          <>
-            <Motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }} 
-              onClick={() => setShowCancelConfirm(false)} 
-              className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-[100] max-w-lg mx-auto" 
+          <div className="z-[100] relative">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowCancelConfirm(false)}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] max-w-lg mx-auto"
             />
-            <Motion.div 
-              initial={{ scale: 0.9, opacity: 0, y: 40 }} 
-              animate={{ scale: 1, opacity: 1, y: 0 }} 
-              exit={{ scale: 0.9, opacity: 0, y: 40 }} 
-              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[85%] max-w-sm bg-white rounded-[40px] p-8 z-[101] shadow-2xl text-center"
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0, y: 40 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.92, opacity: 0, y: 40 }}
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[82%] max-w-sm bg-white rounded-[28px] p-7 z-[101] shadow-2xl text-center"
             >
-              <div className="w-16 h-16 bg-red-50 rounded-[24px] flex items-center justify-center mx-auto mb-6 text-red-500">
-                <AlertTriangle size={32} strokeWidth={2.5} />
+              <div className="w-14 h-14 bg-red-50 rounded-[18px] flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle size={26} className="text-red-400" strokeWidth={2} />
               </div>
-              <h3 className="text-xl font-black text-gray-900 mb-2">Cancel Dispatch?</h3>
-              <p className="text-sm font-bold text-gray-400 mb-8 leading-relaxed">
-                We've almost found a captain for your parcel. Are you sure you want to stop?
+              <h3 className="text-[18px] font-bold text-slate-900 mb-1.5">Cancel parcel search?</h3>
+              <p className="text-[13px] font-bold text-slate-400 mb-6 leading-relaxed">
+                We&apos;re still searching nearby captains. Stop looking?
               </p>
-              <div className="flex flex-col gap-3">
-                <Motion.button 
-                  whileTap={{ scale: 0.96 }} 
-                  onClick={handleCancel} 
-                  className="w-full bg-red-500 text-white py-5 rounded-[24px] text-sm font-black uppercase tracking-widest shadow-xl shadow-red-500/20"
+              <div className="space-y-2.5">
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  onClick={handleCancel}
+                  className="w-full bg-slate-900 text-white py-3.5 rounded-[16px] text-[13px] font-bold uppercase tracking-widest"
                 >
-                  Yes, Stop Search
-                </Motion.button>
-                <button 
-                  onClick={() => setShowCancelConfirm(false)} 
-                  className="w-full py-4 text-sm font-black text-gray-400 uppercase tracking-widest"
+                  Yes, Cancel
+                </motion.button>
+                <button
+                  onClick={() => setShowCancelConfirm(false)}
+                  className="w-full py-3.5 text-[13px] font-bold text-slate-400 uppercase tracking-widest"
                 >
-                  Wait for Captain
+                  {isSearching ? 'Keep Searching' : 'Go Back'}
                 </button>
               </div>
-            </Motion.div>
-          </>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

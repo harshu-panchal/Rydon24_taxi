@@ -23,6 +23,15 @@ const DELIVERY_CATEGORY_TYPES = [
   'movers',
 ];
 
+const DELIVERY_DISTANCE_PRICING_DEFAULTS = {
+  enabled: false,
+  base_price: 0,
+  free_distance: 0,
+  distance_price: 0,
+  free_time: 0,
+  time_price: 0,
+};
+
 const vehicleSchema = new mongoose.Schema(
   {
     name: {
@@ -81,6 +90,32 @@ const vehicleSchema = new mongoose.Schema(
       enum: DELIVERY_CATEGORY_TYPES,
       default: '',
       trim: true,
+    },
+    delivery_distance_pricing: {
+      enabled: {
+        type: Boolean,
+        default: DELIVERY_DISTANCE_PRICING_DEFAULTS.enabled,
+      },
+      base_price: {
+        type: Number,
+        default: DELIVERY_DISTANCE_PRICING_DEFAULTS.base_price,
+      },
+      free_distance: {
+        type: Number,
+        default: DELIVERY_DISTANCE_PRICING_DEFAULTS.free_distance,
+      },
+      distance_price: {
+        type: Number,
+        default: DELIVERY_DISTANCE_PRICING_DEFAULTS.distance_price,
+      },
+      free_time: {
+        type: Number,
+        default: DELIVERY_DISTANCE_PRICING_DEFAULTS.free_time,
+      },
+      time_price: {
+        type: Number,
+        default: DELIVERY_DISTANCE_PRICING_DEFAULTS.time_price,
+      },
     },
     image: {
       type: String,

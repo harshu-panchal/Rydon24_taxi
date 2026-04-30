@@ -174,6 +174,20 @@ const normalizeDeliveryCategory = (value = '') => {
   return '';
 };
 
+const normalizeDeliveryDistancePricing = (value = {}, fallback = {}) => {
+  const source = value && typeof value === 'object' ? value : {};
+  const defaults = fallback && typeof fallback === 'object' ? fallback : {};
+
+  return {
+    enabled: Boolean(source.enabled ?? defaults.enabled ?? false),
+    base_price: Number(source.base_price ?? defaults.base_price ?? 0),
+    free_distance: Number(source.free_distance ?? defaults.free_distance ?? 0),
+    distance_price: Number(source.distance_price ?? defaults.distance_price ?? 0),
+    free_time: Number(source.free_time ?? defaults.free_time ?? 0),
+    time_price: Number(source.time_price ?? defaults.time_price ?? 0),
+  };
+};
+
 const BUS_DAY_OPTIONS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const sanitizeBusText = (value = '', fallback = '') =>
@@ -4626,6 +4640,7 @@ export const listVehicleTypes = async (queryParams = {}) => {
     icon: item.map_icon || item.icon || item.image || '',
     map_icon: item.map_icon || item.icon || item.image || '',
     delivery_category: item.delivery_category || '',
+    delivery_distance_pricing: normalizeDeliveryDistancePricing(item.delivery_distance_pricing),
   }));
 
   return {
@@ -4652,6 +4667,7 @@ export const listVehicleCatalog = async () => {
     icon: item.map_icon || item.icon || item.image || '',
     map_icon: item.map_icon || item.icon || item.image || '',
     delivery_category: item.delivery_category || '',
+    delivery_distance_pricing: normalizeDeliveryDistancePricing(item.delivery_distance_pricing),
     supported_vehicles: Array.isArray(item.supported_other_vehicle_types)
       ? item.supported_other_vehicle_types.map((v) => String(v)).join(',')
       : '',
@@ -4694,6 +4710,7 @@ export const listPublicVehicleCatalog = async () => {
     transport_type: item.transport_type || 'taxi',
     icon_types: item.icon_types || 'car',
     delivery_category: item.delivery_category || '',
+    delivery_distance_pricing: normalizeDeliveryDistancePricing(item.delivery_distance_pricing),
     capacity: Number(item.capacity || 0),
     image: item.image || '',
     map_icon: item.map_icon || item.icon || item.image || '',
@@ -4763,6 +4780,9 @@ export const createVehicleType = async (payload) => {
     delivery_category: ['delivery', 'both'].includes(transportType)
       ? normalizeDeliveryCategory(payload.delivery_category)
       : '',
+    delivery_distance_pricing: ['delivery', 'both'].includes(transportType)
+      ? normalizeDeliveryDistancePricing(payload.delivery_distance_pricing)
+      : normalizeDeliveryDistancePricing(),
     image: payload.image ?? mapIcon,
     icon: mapIcon,
     map_icon: mapIcon,
@@ -4829,6 +4849,11 @@ export const updateVehicleType = async (id, payload) => {
     vehicle.delivery_category = ['delivery', 'both'].includes(vehicle.transport_type)
       ? normalizeDeliveryCategory(payload.delivery_category ?? vehicle.delivery_category)
       : '';
+  }
+  if (payload.delivery_distance_pricing !== undefined || payload.transport_type !== undefined) {
+    vehicle.delivery_distance_pricing = ['delivery', 'both'].includes(vehicle.transport_type)
+      ? normalizeDeliveryDistancePricing(payload.delivery_distance_pricing, vehicle.delivery_distance_pricing)
+      : normalizeDeliveryDistancePricing();
   }
   if (payload.status !== undefined) {
     vehicle.status = Number(payload.status) ? 1 : 0;
