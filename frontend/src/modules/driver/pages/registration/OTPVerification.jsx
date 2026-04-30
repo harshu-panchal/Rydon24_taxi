@@ -15,6 +15,12 @@ const unwrap = (response) => response?.data?.data || response?.data || response;
 const normalizeDriverRole = (role) => {
     const normalized = String(role || 'driver').toLowerCase();
     if (normalized === 'owner') return 'owner';
+    if (normalized === 'service_center' || normalized === 'service-center' || normalized === 'servicecenter') {
+        return 'service_center';
+    }
+    if (normalized === 'service_center_staff' || normalized === 'service-center-staff' || normalized === 'servicecenterstaff') {
+        return 'service_center_staff';
+    }
     if (normalized === 'bus_driver' || normalized === 'bus-driver' || normalized === 'busdriver') {
         return 'bus_driver';
     }
@@ -125,6 +131,10 @@ const OTPVerification = () => {
                 const nextPath =
                     normalizeDriverRole(role) === 'owner'
                         ? '/taxi/driver/profile'
+                        : normalizeDriverRole(role) === 'service_center'
+                            ? '/taxi/driver/service-center'
+                            : normalizeDriverRole(role) === 'service_center_staff'
+                            ? '/taxi/driver/service-center'
                         : normalizeDriverRole(role) === 'bus_driver'
                             ? '/taxi/driver/bus-home'
                             : '/taxi/driver/home';

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   Bus,
@@ -11,11 +11,14 @@ import {
   LayoutDashboard,
   MapPin,
   Phone,
+  Plus,
   RefreshCcw,
+  Save,
   Search,
   Ticket,
   UserRound,
   Users,
+  XCircle,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -25,11 +28,23 @@ import {
   createBusDriverReservation,
   getBusDriverBookings,
   getBusDriverSeatLayout,
+  updateBusDriverSchedules,
 } from '../services/busDriverService';
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
 const unwrapResults = (response) => response?.data?.results || response?.results || [];
 const createToday = () => new Date().toISOString().slice(0, 10);
+const DAY_OPTIONS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const createLocalScheduleId = () =>
+  `schedule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+const createScheduleDraft = () => ({
+  id: createLocalScheduleId(),
+  label: '',
+  departureTime: '',
+  arrivalTime: '',
+  activeDays: [...DAY_OPTIONS],
+  status: 'active',
+});
 
 const formatCurrency = (value, currency = 'INR') =>
   new Intl.NumberFormat('en-IN', {
@@ -37,6 +52,18 @@ const formatCurrency = (value, currency = 'INR') =>
     currency: currency || 'INR',
     maximumFractionDigits: 0,
   }).format(Number(value || 0));
+
+const formatDisplayDate = (value) => {
+  if (!value) return 'No date selected';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+};
 
 const getNextTravelDate = (schedule) => {
   const activeDays = Array.isArray(schedule?.activeDays) ? schedule.activeDays : [];
@@ -156,6 +183,7 @@ const StatCard = ({ label, value, tone = 'light', Icon }) => (
 
 const BusDriverHome = () => {
   const navigate = useNavigate();
+  const dateInputRef = useRef(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [profile, setProfile] = useState(null);
   const [layout, setLayout] = useState(null);
@@ -173,6 +201,8 @@ const BusDriverHome = () => {
   const [deskError, setDeskError] = useState('');
   const [bookingSearch, setBookingSearch] = useState('');
   const [bookingFilter, setBookingFilter] = useState('all');
+  const [scheduleDrafts, setScheduleDrafts] = useState([]);
+  const [isSavingSchedules, setIsSavingSchedules] = useState(false);
   const [passenger, setPassenger] = useState({
     name: '',
     age: '',
@@ -186,6 +216,10 @@ const BusDriverHome = () => {
   const schedules = Array.isArray(busService?.schedules) ? busService.schedules : [];
   const selectedSchedule =
     schedules.find((item) => item.id === selectedScheduleId) || schedules[0] || null;
+  const persistedScheduleIds = useMemo(
+    () => new Set(schedules.map((item) => item.id)),
+    [schedules],
+  );
   const calendarCells = useMemo(() => getCalendarMatrix(calendarMonth), [calendarMonth]);
   const calendarLabel = useMemo(
     () =>
@@ -231,6 +265,38 @@ const BusDriverHome = () => {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    setScheduleDrafts(
+      Array.isArray(schedules) && schedules.length
+        ? schedules.map((schedule) => ({
+            id: schedule.id,
+            label: schedule.label || '',
+            departureTime: schedule.departureTime || '',
+            arrivalTime: schedule.arrivalTime || '',
+            activeDays: Array.isArray(schedule.activeDays) ? [...schedule.activeDays] : [],
+            status: schedule.status || 'active',
+          }))
+        : [createScheduleDraft()],
+    );
+  }, [schedules]);
+
+  useEffect(() => {
+    if (!schedules.length) {
+      setSelectedScheduleId('');
+      return;
+    }
+
+    if (!selectedScheduleId || !schedules.some((item) => item.id === selectedScheduleId)) {
+      const nextSchedule = schedules[0];
+      setSelectedScheduleId(nextSchedule.id);
+      const nextDate = getNextTravelDate(nextSchedule);
+      setTravelDate(nextDate);
+      const parsedDate = new Date(nextDate);
+      setCalendarMonth(new Date(parsedDate.getFullYear(), parsedDate.getMonth(), 1));
+      setSelectedSeats([]);
+    }
+  }, [schedules, selectedScheduleId]);
 
   useEffect(() => {
     if (!selectedScheduleId || !travelDate) {
@@ -343,6 +409,19 @@ const BusDriverHome = () => {
     );
   };
 
+  const openTravelDatePicker = () => {
+    const input = dateInputRef.current;
+    if (!input) return;
+
+    if (typeof input.showPicker === 'function') {
+      input.showPicker();
+      return;
+    }
+
+    input.focus();
+    input.click();
+  };
+
   const refreshDesk = async () => {
     if (!selectedScheduleId || !travelDate) {
       return;
@@ -364,6 +443,75 @@ const BusDriverHome = () => {
       setDeskError(error?.message || 'Unable to refresh desk');
     } finally {
       setLoadingDesk(false);
+    }
+  };
+
+  const updateScheduleDraftField = (scheduleId, field, value) => {
+    setScheduleDrafts((current) =>
+      current.map((schedule) =>
+        schedule.id === scheduleId ? { ...schedule, [field]: value } : schedule,
+      ),
+    );
+  };
+
+  const toggleScheduleDraftDay = (scheduleId, day) => {
+    setScheduleDrafts((current) =>
+      current.map((schedule) => {
+        if (schedule.id !== scheduleId) return schedule;
+        const activeDays = schedule.activeDays.includes(day)
+          ? schedule.activeDays.filter((item) => item !== day)
+          : [...schedule.activeDays, day];
+        return { ...schedule, activeDays };
+      }),
+    );
+  };
+
+  const addScheduleDraft = () => {
+    setScheduleDrafts((current) => [...current, createScheduleDraft()]);
+  };
+
+  const removeScheduleDraft = (scheduleId) => {
+    setScheduleDrafts((current) => {
+      if (current.length <= 1) return current;
+      return current.filter((schedule) => schedule.id !== scheduleId);
+    });
+  };
+
+  const handleSaveSchedules = async () => {
+    const cleanedSchedules = scheduleDrafts.map((schedule) => ({
+      id: String(schedule.id || '').trim() || createLocalScheduleId(),
+      label: String(schedule.label || '').trim(),
+      departureTime: String(schedule.departureTime || '').trim(),
+      arrivalTime: String(schedule.arrivalTime || '').trim(),
+      activeDays: Array.isArray(schedule.activeDays)
+        ? DAY_OPTIONS.filter((day) => schedule.activeDays.includes(day))
+        : [],
+      status: ['active', 'paused', 'draft'].includes(schedule.status) ? schedule.status : 'active',
+    }));
+
+    if (!cleanedSchedules.length) {
+      toast.error('Add at least one schedule');
+      return;
+    }
+
+    const invalidSchedule = cleanedSchedules.find(
+      (schedule) => !schedule.label || !schedule.departureTime || !schedule.arrivalTime,
+    );
+    if (invalidSchedule) {
+      toast.error('Each schedule needs a label, departure time, and arrival time');
+      return;
+    }
+
+    setIsSavingSchedules(true);
+    try {
+      await updateBusDriverSchedules({ schedules: cleanedSchedules });
+      const profileResponse = await getCurrentDriver();
+      setProfile(unwrap(profileResponse));
+      toast.success('Schedules updated for driver and admin');
+    } catch (error) {
+      toast.error(error?.message || 'Unable to save schedules');
+    } finally {
+      setIsSavingSchedules(false);
     }
   };
 
@@ -470,7 +618,24 @@ const BusDriverHome = () => {
   const renderScheduleTab = () => (
     <div className="space-y-5">
       <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Schedule Control</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Schedule Control</p>
+            <h2 className="mt-2 text-xl font-black text-slate-900">Manage live service scheduling</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">Changes here update the same bus service schedules the admin panel uses.</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleSaveSchedules}
+            disabled={isSavingSchedules}
+            className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-[11px] font-black uppercase tracking-[0.12em] transition ${
+              isSavingSchedules ? 'bg-slate-200 text-slate-500' : 'bg-slate-950 text-white shadow-lg'
+            }`}
+          >
+            <Save size={15} />
+            {isSavingSchedules ? 'Saving' : 'Save'}
+          </button>
+        </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label className="block">
             <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Schedule</span>
@@ -499,15 +664,26 @@ const BusDriverHome = () => {
 
           <label className="block">
             <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Travel Date</span>
-            <input
-              type="date"
-              value={travelDate}
-              onChange={(event) => {
-                setTravelDate(event.target.value);
-                setSelectedSeats([]);
-              }}
-              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-900 outline-none"
-            />
+            <div className="flex items-center gap-2">
+              <input
+                ref={dateInputRef}
+                type="date"
+                value={travelDate}
+                onChange={(event) => {
+                  setTravelDate(event.target.value);
+                  setSelectedSeats([]);
+                }}
+                className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-900 outline-none"
+              />
+              <button
+                type="button"
+                onClick={openTravelDatePicker}
+                className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 transition active:scale-95"
+                aria-label="Open travel date calendar"
+              >
+                <CalendarDays size={18} />
+              </button>
+            </div>
           </label>
         </div>
 
@@ -588,16 +764,28 @@ const BusDriverHome = () => {
       </section>
 
       <section className="space-y-3">
-        {schedules.map((schedule) => {
+        <div className="flex items-center justify-between gap-3 rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Departure Slots</p>
+            <p className="mt-1 text-sm font-medium text-slate-500">Add, pause, or update the assigned bus schedules from here.</p>
+          </div>
+          <button
+            type="button"
+            onClick={addScheduleDraft}
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-black uppercase tracking-[0.12em] text-slate-700 transition active:scale-95"
+          >
+            <Plus size={15} />
+            Add Schedule
+          </button>
+        </div>
+
+        {scheduleDrafts.map((schedule, index) => {
           const active = schedule.id === selectedScheduleId;
+          const isPersisted = persistedScheduleIds.has(schedule.id);
+
           return (
-            <button
+            <div
               key={schedule.id}
-              type="button"
-              onClick={() => {
-                setSelectedScheduleId(schedule.id);
-                setTravelDate(getNextTravelDate(schedule));
-              }}
               className={`w-full rounded-[28px] border p-4 text-left transition ${
                 active ? 'border-slate-900 bg-slate-900 text-white shadow-lg' : 'border-slate-200 bg-white text-slate-900 shadow-sm'
               }`}
@@ -605,28 +793,112 @@ const BusDriverHome = () => {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className={`text-[10px] font-bold uppercase tracking-[0.16em] ${active ? 'text-white/55' : 'text-slate-400'}`}>Route Slot</p>
-                  <h3 className="mt-2 text-lg font-black">{schedule.label || 'Bus Schedule'}</h3>
+                  <h3 className="mt-2 text-lg font-black">Schedule {index + 1}</h3>
                 </div>
-                <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${active ? 'bg-white/10 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                  {schedule.status || 'active'}
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isPersisted) return;
+                      setSelectedScheduleId(schedule.id);
+                      setTravelDate(getNextTravelDate(schedule));
+                      setSelectedSeats([]);
+                    }}
+                    disabled={!isPersisted}
+                    className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${
+                      active ? 'bg-white text-slate-900' : 'bg-slate-100 text-slate-600'
+                    } ${!isPersisted ? 'opacity-50' : ''}`}
+                  >
+                    {active ? 'Live Now' : isPersisted ? 'Use for Ops' : 'Save First'}
+                  </button>
+                  {scheduleDrafts.length > 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => removeScheduleDraft(schedule.id)}
+                      className={`rounded-2xl border p-2 transition ${
+                        active
+                          ? 'border-white/15 bg-white/10 text-white hover:bg-white/15'
+                          : 'border-rose-200 bg-white text-rose-500 hover:bg-rose-50'
+                      }`}
+                    >
+                      <XCircle size={16} />
+                    </button>
+                  ) : null}
+                </div>
               </div>
 
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <div className={`rounded-2xl px-3 py-3 ${active ? 'bg-white/10' : 'bg-slate-50'}`}>
-                  <p className={`text-[10px] font-bold uppercase tracking-[0.16em] ${active ? 'text-white/55' : 'text-slate-400'}`}>Departure</p>
-                  <p className="mt-1 text-sm font-black">{schedule.departureTime || '--:--'}</p>
-                </div>
+                <input
+                  value={schedule.label}
+                  onChange={(event) => updateScheduleDraftField(schedule.id, 'label', event.target.value)}
+                  placeholder="Daily Evening Service"
+                  className={`rounded-2xl px-4 py-3 text-sm font-black outline-none ${
+                    active ? 'bg-white/10 text-white placeholder:text-white/45' : 'bg-slate-50 text-slate-900'
+                  }`}
+                />
+                <input
+                  type="time"
+                  value={schedule.departureTime}
+                  onChange={(event) => updateScheduleDraftField(schedule.id, 'departureTime', event.target.value)}
+                  className={`rounded-2xl px-4 py-3 text-sm font-black outline-none ${
+                    active ? 'bg-white/10 text-white' : 'bg-slate-50 text-slate-900'
+                  }`}
+                />
+                <select
+                  value={schedule.status}
+                  onChange={(event) => updateScheduleDraftField(schedule.id, 'status', event.target.value)}
+                  className={`rounded-2xl px-4 py-3 text-sm font-black outline-none ${
+                    active ? 'bg-white/10 text-white' : 'bg-slate-50 text-slate-900'
+                  }`}
+                >
+                  <option value="active">Active</option>
+                  <option value="paused">Paused</option>
+                  <option value="draft">Draft</option>
+                </select>
+              </div>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <div className={`rounded-2xl px-3 py-3 ${active ? 'bg-white/10' : 'bg-slate-50'}`}>
                   <p className={`text-[10px] font-bold uppercase tracking-[0.16em] ${active ? 'text-white/55' : 'text-slate-400'}`}>Arrival</p>
-                  <p className="mt-1 text-sm font-black">{schedule.arrivalTime || '--:--'}</p>
+                  <input
+                    type="time"
+                    value={schedule.arrivalTime}
+                    onChange={(event) => updateScheduleDraftField(schedule.id, 'arrivalTime', event.target.value)}
+                    className={`mt-1 w-full bg-transparent text-sm font-black outline-none ${active ? 'text-white' : 'text-slate-900'}`}
+                  />
                 </div>
                 <div className={`rounded-2xl px-3 py-3 ${active ? 'bg-white/10' : 'bg-slate-50'}`}>
                   <p className={`text-[10px] font-bold uppercase tracking-[0.16em] ${active ? 'text-white/55' : 'text-slate-400'}`}>Active Days</p>
-                  <p className="mt-1 text-sm font-black">{Array.isArray(schedule.activeDays) && schedule.activeDays.length ? schedule.activeDays.join(', ') : 'Daily'}</p>
+                  <p className="mt-1 text-sm font-black">
+                    {Array.isArray(schedule.activeDays) && schedule.activeDays.length ? schedule.activeDays.join(', ') : 'No days selected'}
+                  </p>
                 </div>
               </div>
-            </button>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {DAY_OPTIONS.map((day) => {
+                  const enabled = schedule.activeDays.includes(day);
+                  return (
+                    <button
+                      key={`${schedule.id}-${day}`}
+                      type="button"
+                      onClick={() => toggleScheduleDraftDay(schedule.id, day)}
+                      className={`rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] transition ${
+                        enabled
+                          ? active
+                            ? 'border-white bg-white text-slate-900'
+                            : 'border-slate-900 bg-slate-900 text-white'
+                          : active
+                            ? 'border-white/15 bg-white/10 text-white'
+                            : 'border-slate-200 bg-white text-slate-500'
+                      }`}
+                    >
+                      {day}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           );
         })}
       </section>
@@ -953,6 +1225,26 @@ const BusDriverHome = () => {
               <p className="mt-2 text-2xl font-black">{profile?.metrics?.upcomingBookings || 0}</p>
             </div>
           </div>
+
+          <div className="mt-4 flex items-center justify-between gap-3 rounded-[24px] border border-white/10 bg-white/8 px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/50">Selected Travel Date</p>
+              <p className="mt-1 truncate text-sm font-black text-white">{formatDisplayDate(travelDate)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('schedule');
+                window.setTimeout(() => {
+                  openTravelDatePicker();
+                }, 0);
+              }}
+              className="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.12em] text-white transition active:scale-95"
+            >
+              <CalendarDays size={15} />
+              Calendar
+            </button>
+          </div>
         </section>
 
         {!busService ? (
@@ -962,29 +1254,6 @@ const BusDriverHome = () => {
           </section>
         ) : (
           <>
-            <section className="sticky top-3 z-20 rounded-[28px] border border-slate-200 bg-white/92 p-2 shadow-lg backdrop-blur-md">
-              <div className="grid grid-cols-4 gap-2">
-                {WORKSPACE_TABS.map((tab) => {
-                  const active = activeTab === tab.id;
-                  return (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`rounded-2xl px-2 py-3 text-center transition ${
-                        active ? 'bg-slate-950 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'
-                      }`}
-                    >
-                      <tab.Icon size={16} className="mx-auto mb-1" />
-                      <span className="block text-[10px] font-black uppercase tracking-[0.12em]">
-                        {tab.label}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-
             {activeTab === 'overview' ? renderOverviewTab() : null}
             {activeTab === 'schedule' ? renderScheduleTab() : null}
             {activeTab === 'desk' ? renderDeskTab() : null}

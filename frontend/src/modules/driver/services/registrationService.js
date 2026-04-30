@@ -92,7 +92,7 @@ const readLocalDriverToken = () => {
   if (direct) return direct;
 
   const fallback = localStorage.getItem("token");
-  if (["driver", "owner", "bus_driver"].includes(getTokenPayload(fallback)?.role)) {
+  if (["driver", "owner", "bus_driver", "service_center", "service_center_staff"].includes(getTokenPayload(fallback)?.role)) {
     return fallback;
   }
 
@@ -177,6 +177,27 @@ export const createOwnerFleetVehicle = (payload) =>
 
 export const deleteOwnerFleetVehicle = (vehicleId) =>
   api.delete(`/drivers/fleet/vehicles/${vehicleId}`, withDriverAuth());
+
+export const getServiceCenterVehicles = () =>
+  api.get("/drivers/service-center/vehicles", withDriverAuth());
+
+export const createServiceCenterVehicle = (payload) =>
+  api.post("/drivers/service-center/vehicles", payload, withDriverAuth());
+
+export const deleteServiceCenterVehicle = (vehicleId) =>
+  api.delete(`/drivers/service-center/vehicles/${vehicleId}`, withDriverAuth());
+
+export const getServiceCenterStaff = () =>
+  api.get("/drivers/service-center/staff", withDriverAuth());
+
+export const createServiceCenterStaff = (payload) =>
+  api.post("/drivers/service-center/staff", payload, withDriverAuth());
+
+export const getServiceCenterBookings = () =>
+  api.get("/drivers/service-center/bookings", withDriverAuth());
+
+export const updateServiceCenterBooking = (bookingId, payload) =>
+  api.patch(`/drivers/service-center/bookings/${bookingId}`, payload, withDriverAuth());
 
 export const getDriverRegistrationSession = ({ registrationId, phone }) =>
   api.get(`/drivers/onboarding/session/${registrationId}`, {

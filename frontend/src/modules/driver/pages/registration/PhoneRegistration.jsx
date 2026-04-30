@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Phone, ChevronRight, ShieldCheck, Briefcase, UserRound, Sparkles } from 'lucide-react';
+import { ArrowLeft, Phone, ChevronRight, ShieldCheck, Briefcase, UserRound, Sparkles, Building2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
     clearDriverRegistrationSession,
@@ -21,25 +21,40 @@ const PhoneRegistration = () => {
     const [error, setError] = useState('');
     const isLoginPage = location.pathname === '/taxi/driver/login' || location.pathname === '/taxi/driver/login/';
     const appName = settings.general?.app_name || 'App';
+    const roleOptions = isLoginPage
+        ? [
+            { id: 'driver', label: 'Driver', Icon: UserRound },
+            { id: 'owner', label: 'Fleet Owner', Icon: Briefcase },
+            { id: 'bus_driver', label: 'Bus Driver', Icon: ShieldCheck },
+            { id: 'service_center', label: 'Service Center', Icon: Building2 },
+            { id: 'service_center_staff', label: 'Center Staff', Icon: ShieldCheck },
+        ]
+        : [
+            { id: 'driver', label: 'Driver', Icon: UserRound },
+            { id: 'owner', label: 'Fleet Owner', Icon: Briefcase },
+            { id: 'bus_driver', label: 'Bus Driver', Icon: ShieldCheck },
+        ];
     
     const modeConfig = useMemo(() => {
         const isOwner = role === 'owner';
         const isBusDriver = role === 'bus_driver';
+        const isServiceCenter = role === 'service_center';
+        const isServiceCenterStaff = role === 'service_center_staff';
 
         return {
-            badge: isOwner ? 'Enterprise' : isBusDriver ? 'Transit' : 'Partner',
+            badge: isOwner ? 'Enterprise' : isBusDriver ? 'Transit' : isServiceCenter ? 'Operations' : isServiceCenterStaff ? 'Team' : 'Partner',
             title: isLoginPage
-                ? `${isOwner ? 'Owner' : isBusDriver ? 'Bus Driver' : 'Driver'} Login`
+                ? `${isOwner ? 'Owner' : isBusDriver ? 'Bus Driver' : isServiceCenter ? 'Service Center' : isServiceCenterStaff ? 'Service Staff' : 'Driver'} Login`
                 : `Join ${appName}`,
             subtitle: isLoginPage
                 ? `Enter your registered number to access your account.`
-                : `Start your journey as a ${isOwner ? 'fleet owner' : isBusDriver ? 'bus captain' : 'professional driver'}.`,
-            highlight: isOwner ? 'Manage fleet, payouts & drivers.' : isBusDriver ? 'Manage your coach, schedules and seat desk.' : 'Go online, get trips & earn daily.',
-            accentBg: isOwner ? 'bg-[#1C2833]' : isBusDriver ? 'bg-[#0f3d3e]' : 'bg-slate-900',
+                : `Start your journey as a ${isOwner ? 'fleet owner' : isBusDriver ? 'bus captain' : isServiceCenter ? 'service center operator' : isServiceCenterStaff ? 'service center staff member' : 'professional driver'}.`,
+            highlight: isOwner ? 'Manage fleet, payouts & drivers.' : isBusDriver ? 'Manage your coach, schedules and seat desk.' : isServiceCenter ? 'Manage your center profile, staff and rental vehicle catalog.' : isServiceCenterStaff ? 'Handle assigned bookings and work queues for your center.' : 'Go online, get trips & earn daily.',
+            accentBg: isOwner ? 'bg-[#1C2833]' : isBusDriver ? 'bg-[#0f3d3e]' : isServiceCenter ? 'bg-[#14342b]' : isServiceCenterStaff ? 'bg-[#1e3a5f]' : 'bg-slate-900',
             accentSoft: isOwner ? 'bg-[#fcfcfb]' : 'bg-white',
-            accentText: isOwner ? 'text-[#1C2833]' : isBusDriver ? 'text-[#0f3d3e]' : 'text-slate-900',
+            accentText: isOwner ? 'text-[#1C2833]' : isBusDriver ? 'text-[#0f3d3e]' : isServiceCenter ? 'text-[#14342b]' : isServiceCenterStaff ? 'text-[#1e3a5f]' : 'text-slate-900',
             buttonClass: 'bg-slate-950 text-white',
-            Icon: isOwner ? Briefcase : isBusDriver ? ShieldCheck : UserRound,
+            Icon: isOwner ? Briefcase : isBusDriver ? ShieldCheck : isServiceCenter ? Building2 : isServiceCenterStaff ? ShieldCheck : UserRound,
         };
     }, [appName, isLoginPage, role]);
 
@@ -128,12 +143,8 @@ const PhoneRegistration = () => {
                     </section>
                 </header>
 
-                <div className="grid grid-cols-3 gap-2 rounded-[20px] bg-white/50 border border-white/80 p-1.5 shadow-soft backdrop-blur-sm">
-                    {[
-                        { id: 'driver', label: 'Driver', Icon: UserRound },
-                        { id: 'owner', label: 'Fleet Owner', Icon: Briefcase },
-                        { id: 'bus_driver', label: 'Bus Driver', Icon: ShieldCheck },
-                    ].map((option) => {
+                <div className="grid grid-cols-2 gap-2 rounded-[20px] bg-white/50 border border-white/80 p-1.5 shadow-soft backdrop-blur-sm sm:grid-cols-5">
+                    {roleOptions.map((option) => {
                         const active = role === option.id;
                         return (
                             <button
@@ -213,21 +224,41 @@ const PhoneRegistration = () => {
 
                     <div className="rounded-[22px] border border-[#eadcc7] bg-[#fffaf2] px-4 py-4 text-center shadow-[0_10px_30px_rgba(138,106,61,0.08)]">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#9a7b50]">
-                            {role === 'owner' ? 'Driver Access' : role === 'bus_driver' ? 'Taxi Driver Access' : 'Fleet Owner Access'}
+                            {role === 'owner'
+                                ? 'Driver Access'
+                                : role === 'bus_driver'
+                                    ? 'Taxi Driver Access'
+                                    : role === 'service_center'
+                                        ? 'Driver Access'
+                                        : role === 'service_center_staff'
+                                        ? 'Driver Access'
+                                        : 'Fleet Owner Access'}
                         </p>
                         <p className="mt-2 text-[13px] font-medium leading-6 text-slate-600">
                             {role === 'owner'
                                 ? 'Not managing a fleet? Switch back to the driver side and continue with your normal trip account.'
                                 : role === 'bus_driver'
                                     ? 'Need taxi duty instead? Switch back to the regular driver side for trips and ride requests.'
-                                    : 'Are you a fleet owner? Switch to the fleet owner side to manage vehicles, drivers, and payouts.'}
+                                    : role === 'service_center'
+                                        ? 'Need the regular taxi account instead? Switch back to driver login for trip and duty access.'
+                                        : role === 'service_center_staff'
+                                            ? 'Need the regular taxi account instead? Switch back to driver login for trip and duty access.'
+                                        : 'Are you a fleet owner? Switch to the fleet owner side to manage vehicles, drivers, and payouts.'}
                         </p>
                         <button
                             type="button"
-                            onClick={() => setRole(role === 'owner' ? 'driver' : role === 'bus_driver' ? 'driver' : 'owner')}
+                            onClick={() => setRole(role === 'owner' || role === 'bus_driver' || role === 'service_center' || role === 'service_center_staff' ? 'driver' : 'owner')}
                             className="mt-3 inline-flex items-center justify-center rounded-full border border-[#d8be95] bg-white px-4 py-2 text-[12px] font-semibold text-[#8a5a22] transition hover:bg-[#fff4e3]"
                         >
-                            {role === 'owner' ? 'Continue as Driver' : role === 'bus_driver' ? 'Continue as Driver' : 'Continue as Fleet Owner'}
+                            {role === 'owner'
+                                ? 'Continue as Driver'
+                                : role === 'bus_driver'
+                                    ? 'Continue as Driver'
+                                    : role === 'service_center'
+                                        ? 'Continue as Driver'
+                                        : role === 'service_center_staff'
+                                        ? 'Continue as Driver'
+                                        : 'Continue as Fleet Owner'}
                         </button>
                     </div>
 

@@ -210,6 +210,31 @@ const rentalBookingRequestSchema = new mongoose.Schema(
         trim: true,
       },
     },
+    serviceCenterIds: {
+      type: [mongoose.Schema.Types.ObjectId],
+      ref: 'TaxiServiceStore',
+      default: [],
+    },
+    assignedStaffId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TaxiServiceCenterStaff',
+      default: null,
+    },
+    assignedStaffName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    assignedStaffPhone: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    serviceCenterNote: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     status: {
       type: String,
       enum: ['pending', 'confirmed', 'assigned', 'end_requested', 'completed', 'cancelled'],

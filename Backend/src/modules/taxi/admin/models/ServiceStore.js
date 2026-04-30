@@ -24,6 +24,16 @@ const serviceStoreSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    owner_name: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    owner_phone: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     latitude: {
       type: Number,
       required: true,

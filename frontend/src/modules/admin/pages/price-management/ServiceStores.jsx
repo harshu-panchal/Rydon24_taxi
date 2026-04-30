@@ -25,6 +25,8 @@ const defaultFormData = {
   name: '',
   zone_id: '',
   address: '',
+  owner_name: '',
+  owner_phone: '',
   latitude: '',
   longitude: '',
   status: 'active',
@@ -189,6 +191,8 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
     return stores.filter((store) =>
       [
         store.name,
+        store.owner_name,
+        store.owner_phone,
         store.zone_id?.name,
         store.service_location_id?.name,
         store.address,
@@ -288,6 +292,8 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
       name: store.name || '',
       zone_id: zoneId,
       address: store.address || '',
+      owner_name: store.owner_name || '',
+      owner_phone: store.owner_phone || '',
       latitude: store.latitude ?? '',
       longitude: store.longitude ?? '',
       status: store.status || 'active',
@@ -337,6 +343,8 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
         name: formData.name.trim(),
         zone_id: formData.zone_id,
         address: formData.address.trim(),
+        owner_name: formData.owner_name.trim(),
+        owner_phone: formData.owner_phone.trim(),
         latitude: Number(formData.latitude),
         longitude: Number(formData.longitude),
         status: formData.status,
@@ -473,6 +481,9 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
                           Service Location
                         </th>
                         <th className="px-6 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                          Owner
+                        </th>
+                        <th className="px-6 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
                           Coordinates
                         </th>
                         <th className="px-6 py-3.5 text-right text-[10px] font-bold uppercase tracking-widest text-gray-400">
@@ -504,6 +515,12 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
                           </td>
                           <td className="px-6 py-4 font-medium text-gray-700">
                             {store.service_location_id?.name || '-'}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="min-w-[160px]">
+                              <p className="font-medium text-gray-700">{store.owner_name || '-'}</p>
+                              <p className="text-xs text-gray-400">{store.owner_phone || '-'}</p>
+                            </div>
                           </td>
                           <td className="px-6 py-4 text-xs font-semibold text-gray-500">
                             {Number.isFinite(Number(store.latitude)) &&
@@ -649,6 +666,32 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
                           ? 'Fetching address from the pinned location...'
                           : 'Address auto-fills from the map pin, and you can still edit it manually.'}
                       </p>
+                    </div>
+
+                    <div>
+                      <label className={labelClass}>Service Owner Name</label>
+                      <input
+                        type="text"
+                        value={formData.owner_name}
+                        onChange={(event) =>
+                          setFormData((current) => ({ ...current, owner_name: event.target.value }))
+                        }
+                        placeholder="Enter owner name"
+                        className={inputClass}
+                      />
+                    </div>
+
+                    <div>
+                      <label className={labelClass}>Service Owner Number</label>
+                      <input
+                        type="tel"
+                        value={formData.owner_phone}
+                        onChange={(event) =>
+                          setFormData((current) => ({ ...current, owner_phone: event.target.value }))
+                        }
+                        placeholder="Enter owner mobile number"
+                        className={inputClass}
+                      />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">

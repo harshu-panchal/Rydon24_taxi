@@ -992,6 +992,15 @@ const serializeRentalBookingRequest = (item = {}) => ({
     vehicleCategory: item.assignedVehicle?.vehicleCategory || '',
     image: item.assignedVehicle?.image || '',
   },
+  serviceCenterIds: Array.isArray(item.serviceCenterIds)
+    ? item.serviceCenterIds.map((centerId) => String(centerId))
+    : [],
+  assignedStaff: {
+    id: item.assignedStaffId ? String(item.assignedStaffId) : '',
+    name: item.assignedStaffName || '',
+    phone: item.assignedStaffPhone || '',
+  },
+  serviceCenterNote: item.serviceCenterNote || '',
   status: item.status || 'pending',
   assignedAt: item.assignedAt || null,
   completionRequestedAt: item.completionRequestedAt || null,
@@ -1151,6 +1160,8 @@ const serializeServiceStore = (store) => ({
   id: store._id,
   name: store.name || '',
   address: store.address || '',
+  owner_name: store.owner_name || '',
+  owner_phone: store.owner_phone || '',
   zone_id: store.zone_id
     ? {
         _id: store.zone_id._id || store.zone_id,
@@ -6114,6 +6125,8 @@ export const getDashboardData = async () => {
       zone_id: zone._id,
       service_location_id: zone.service_location_id || null,
       address: String(payload.address || '').trim(),
+      owner_name: String(payload.owner_name || '').trim(),
+      owner_phone: String(payload.owner_phone || '').trim(),
       ...point,
       status,
       active: status === 'active',
@@ -6160,6 +6173,14 @@ export const getDashboardData = async () => {
 
     if (payload.address !== undefined) {
       store.address = String(payload.address || '').trim();
+    }
+
+    if (payload.owner_name !== undefined) {
+      store.owner_name = String(payload.owner_name || '').trim();
+    }
+
+    if (payload.owner_phone !== undefined) {
+      store.owner_phone = String(payload.owner_phone || '').trim();
     }
 
     if (payload.latitude !== undefined || payload.longitude !== undefined) {

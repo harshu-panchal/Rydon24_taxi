@@ -1,5 +1,7 @@
 import { Admin } from '../admin/models/Admin.js';
 import { Owner } from '../admin/models/Owner.js';
+import { ServiceStore } from '../admin/models/ServiceStore.js';
+import { ServiceCenterStaff } from '../admin/models/ServiceCenterStaff.js';
 import { ApiError } from '../../../utils/ApiError.js';
 import { Driver } from '../driver/models/Driver.js';
 import { BusDriver } from '../driver/models/BusDriver.js';
@@ -12,6 +14,8 @@ const roleModelMap = {
   driver: Driver,
   bus_driver: BusDriver,
   owner: Owner,
+  service_center: ServiceStore,
+  service_center_staff: ServiceCenterStaff,
   user: User,
 };
 
@@ -112,6 +116,20 @@ export const authenticate = (allowedRoles = []) => async (req, _res, next) => {
         ['pending', 'blocked'].includes(String(entity.status || '').toLowerCase()))
     ) {
       throw new ApiError(403, 'Bus driver account is pending approval');
+    }
+
+    if (
+      normalizedRole === 'service_center' &&
+      (entity.active === false || String(entity.status || '').toLowerCase() === 'inactive')
+    ) {
+      throw new ApiError(403, 'Service center account is inactive');
+    }
+
+    if (
+      normalizedRole === 'service_center_staff' &&
+      (entity.active === false || String(entity.status || '').toLowerCase() === 'inactive')
+    ) {
+      throw new ApiError(403, 'Service center staff account is inactive');
     }
 
     attachResolvedAuth(req, payload);

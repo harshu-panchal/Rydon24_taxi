@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import mongoose from "mongoose";
 import QRCode from "qrcode";
 import { ApiError } from "../../../../utils/ApiError.js";
 import { normalizePoint, toPoint } from "../../../../utils/geo.js";
@@ -13,7 +14,11 @@ import { BusSeatHold } from "../../user/models/BusSeatHold.js";
 import { Owner } from "../../admin/models/Owner.js";
 import { BusService } from "../../admin/models/BusService.js";
 import { ServiceLocation } from "../../admin/models/ServiceLocation.js";
+import { ServiceStore } from "../../admin/models/ServiceStore.js";
+import { ServiceCenterStaff } from "../../admin/models/ServiceCenterStaff.js";
 import { Vehicle } from "../../admin/models/Vehicle.js";
+import { RentalVehicleType } from "../../admin/models/RentalVehicleType.js";
+import { RentalBookingRequest } from "../../admin/models/RentalBookingRequest.js";
 import { AdminBusinessSetting } from "../../admin/models/AdminBusinessSetting.js";
 import { Notification } from "../../admin/promotions/models/Notification.js";
 import { FleetVehicle } from "../../admin/models/FleetVehicle.js";
@@ -41,8 +46,11 @@ import { clearDriverActiveRideIfStale } from "../../services/rideService.js";
 import { getWalletSettings } from "../../services/appSettingsService.js";
 import { RIDE_STATUS } from "../../constants/index.js";
 import {
+  createRentalVehicleType,
+  deleteRentalVehicleType,
   ensureThirdPartySettings,
   listDriverNeededDocuments,
+  listRentalVehicleTypes,
 } from "../../admin/services/adminService.js";
 import { assignPushTokenToEntity } from "../../services/pushTokenService.js";
 import {
@@ -72,6 +80,7 @@ const RAZORPAY_QR_MAX_AMOUNT = 500000;
 const IST_OFFSET_MS = 330 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BUS_DAY_OPTIONS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const BUS_DRIVER_SCHEDULE_DAY_OPTIONS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const toIstDayKey = (value = new Date()) =>
   new Date(new Date(value).getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
@@ -101,6 +110,50 @@ const validateBusPassengerEmail = (value = "") => {
   if (value && !EMAIL_REGEX.test(String(value || "").trim())) {
     throw new ApiError(400, "Passenger email is invalid");
   }
+};
+
+const normalizeBusDriverSchedule = (schedule = {}, index = 0) => ({
+  id: toCleanString(schedule.id) || `schedule-${Date.now()}-${index}`,
+  label: toCleanString(schedule.label),
+  departureTime: toCleanString(schedule.departureTime),
+  arrivalTime: toCleanString(schedule.arrivalTime),
+  activeDays: Array.isArray(schedule.activeDays)
+    ? [...new Set(schedule.activeDays.map((day) => toCleanString(day)).filter((day) => BUS_DRIVER_SCHEDULE_DAY_OPTIONS.includes(day)))]
+    : [],
+  status: ["active", "paused", "draft"].includes(toCleanString(schedule.status))
+    ? toCleanString(schedule.status)
+    : "active",
+});
+
+const validateBusDriverSchedules = (schedules = []) => {
+  if (!Array.isArray(schedules) || schedules.length === 0) {
+    throw new ApiError(400, "At least one schedule is required");
+  }
+
+  const ids = new Set();
+
+  schedules.forEach((schedule, index) => {
+    if (!schedule.id) {
+      throw new ApiError(400, `Schedule ${index + 1} is missing an id`);
+    }
+
+    if (ids.has(schedule.id)) {
+      throw new ApiError(400, "Schedule ids must be unique");
+    }
+    ids.add(schedule.id);
+
+    if (!schedule.label) {
+      throw new ApiError(400, `Schedule ${index + 1} label is required`);
+    }
+
+    if (!/^\d{2}:\d{2}$/.test(schedule.departureTime)) {
+      throw new ApiError(400, `Schedule ${index + 1} departure time is invalid`);
+    }
+
+    if (!/^\d{2}:\d{2}$/.test(schedule.arrivalTime)) {
+      throw new ApiError(400, `Schedule ${index + 1} arrival time is invalid`);
+    }
+  });
 };
 
 const normalizeBusTravelDate = (value) => {
@@ -983,6 +1036,253 @@ const serializeOwnerProfile = (owner = {}) => ({
   },
 });
 
+const serializeServiceCenterProfile = (center = {}) => ({
+  id: center._id,
+  name: center.name || "Service Center",
+  phone: center.owner_phone || "",
+  email: "",
+  profileImage: "",
+  gender: "",
+  vehicleType: "rental",
+  vehicleTypeId: null,
+  vehicleIconType: "car",
+  vehicleIconUrl: "",
+  vehicleMake: center.name || "",
+  vehicleModel: "",
+  registerFor: "service_center",
+  vehicleNumber: "",
+  vehicleColor: "",
+  vehicleImage: "",
+  city: center.service_location_id?.name || center.service_location_id?.service_location_name || "",
+  approve: true,
+  status: center.status || "active",
+  rating: 0,
+  wallet: {
+    balance: 0,
+    currency: "INR",
+  },
+  referralCode: "",
+  deletionRequest: { status: "none" },
+  isOnline: false,
+  isOnRide: false,
+  onlineSelfie: {},
+  location:
+    Number.isFinite(Number(center.longitude)) && Number.isFinite(Number(center.latitude))
+      ? {
+          type: "Point",
+          coordinates: [Number(center.longitude), Number(center.latitude)],
+        }
+      : null,
+  zoneId: center.zone_id?._id || center.zone_id || null,
+  documents: {},
+  emergencyContacts: [],
+  ownerName: center.owner_name || "",
+  ownerPhone: center.owner_phone || "",
+  address: center.address || "",
+  latitude: Number(center.latitude ?? 0),
+  longitude: Number(center.longitude ?? 0),
+  zone: center.zone_id
+    ? {
+        id: center.zone_id._id || center.zone_id,
+        name: center.zone_id.name || "",
+      }
+    : null,
+  serviceLocation: center.service_location_id
+    ? {
+        id: center.service_location_id._id || center.service_location_id,
+        name: center.service_location_id.service_location_name || center.service_location_id.name || "",
+        country: center.service_location_id.country || "",
+      }
+    : null,
+  onboarding: {
+    role: "service_center",
+  },
+});
+
+const serializeServiceCenterStaffProfile = (staff = {}, center = null) => ({
+  id: staff._id,
+  name: staff.name || "Service Center Staff",
+  phone: staff.phone || "",
+  email: "",
+  profileImage: "",
+  gender: "",
+  vehicleType: "rental",
+  vehicleTypeId: null,
+  vehicleIconType: "car",
+  vehicleIconUrl: "",
+  vehicleMake: center?.name || "",
+  vehicleModel: "",
+  registerFor: "service_center_staff",
+  vehicleNumber: "",
+  vehicleColor: "",
+  vehicleImage: "",
+  city: center?.service_location_id?.name || center?.service_location_id?.service_location_name || "",
+  approve: true,
+  status: staff.status || "active",
+  rating: 0,
+  wallet: {
+    balance: 0,
+    currency: "INR",
+  },
+  referralCode: "",
+  deletionRequest: { status: "none" },
+  isOnline: false,
+  isOnRide: false,
+  onlineSelfie: {},
+  location: null,
+  zoneId: center?.zone_id?._id || center?.zone_id || null,
+  documents: {},
+  emergencyContacts: [],
+  ownerName: center?.owner_name || "",
+  ownerPhone: center?.owner_phone || "",
+  address: center?.address || "",
+  latitude: Number(center?.latitude ?? 0),
+  longitude: Number(center?.longitude ?? 0),
+  zone: center?.zone_id
+    ? {
+        id: center.zone_id._id || center.zone_id,
+        name: center.zone_id.name || "",
+      }
+    : null,
+  serviceLocation: center?.service_location_id
+    ? {
+        id: center.service_location_id._id || center.service_location_id,
+        name: center.service_location_id.service_location_name || center.service_location_id.name || "",
+        country: center.service_location_id.country || "",
+      }
+    : null,
+  serviceCenterId: center?._id ? String(center._id) : "",
+  onboarding: {
+    role: "service_center_staff",
+  },
+});
+
+const serializeServiceCenterStaff = (staff = {}, bookingCount = 0) => ({
+  id: String(staff._id || ""),
+  _id: staff._id,
+  name: staff.name || "",
+  phone: staff.phone || "",
+  active: staff.active !== false,
+  status: staff.status || "active",
+  bookingCount: Number(bookingCount || 0),
+  createdAt: staff.createdAt || null,
+  updatedAt: staff.updatedAt || null,
+});
+
+const serializeServiceCenterBooking = (item = {}) => ({
+  id: String(item._id || item.id || ""),
+  _id: item._id,
+  bookingReference: item.bookingReference || "",
+  customer: {
+    id: item.userId?._id ? String(item.userId._id) : "",
+    name: item.userId?.name || item.contactName || "",
+    phone: item.userId?.phone || item.contactPhone || "",
+    email: item.userId?.email || item.contactEmail || "",
+  },
+  vehicleName: item.vehicleName || item.vehicleTypeId?.name || "",
+  vehicleCategory: item.vehicleCategory || item.vehicleTypeId?.vehicleCategory || "",
+  vehicleImage: item.vehicleImage || item.vehicleTypeId?.image || "",
+  selectedPackage: {
+    packageId: item.selectedPackage?.packageId || "",
+    label: item.selectedPackage?.label || "",
+    durationHours: Number(item.selectedPackage?.durationHours || 0),
+    price: Number(item.selectedPackage?.price || 0),
+  },
+  serviceLocation: {
+    locationId: item.serviceLocation?.locationId || "",
+    name: item.serviceLocation?.name || "",
+    address: item.serviceLocation?.address || "",
+    city: item.serviceLocation?.city || "",
+  },
+  pickupDateTime: item.pickupDateTime || null,
+  returnDateTime: item.returnDateTime || null,
+  requestedHours: Number(item.requestedHours || 0),
+  totalCost: Number(item.totalCost || 0),
+  payableNow: Number(item.payableNow || 0),
+  paymentStatus: item.paymentStatus || "pending",
+  assignedVehicle: {
+    vehicleId: item.assignedVehicle?.vehicleId ? String(item.assignedVehicle.vehicleId) : "",
+    name: item.assignedVehicle?.name || "",
+    vehicleCategory: item.assignedVehicle?.vehicleCategory || "",
+    image: item.assignedVehicle?.image || "",
+  },
+  serviceCenterIds: Array.isArray(item.serviceCenterIds)
+    ? item.serviceCenterIds.map((centerId) => String(centerId))
+    : [],
+  assignedStaff: {
+    id: item.assignedStaffId ? String(item.assignedStaffId) : "",
+    name: item.assignedStaffName || "",
+    phone: item.assignedStaffPhone || "",
+  },
+  serviceCenterNote: item.serviceCenterNote || "",
+  status: item.status || "pending",
+  assignedAt: item.assignedAt || null,
+  completedAt: item.completedAt || null,
+  createdAt: item.createdAt || null,
+  updatedAt: item.updatedAt || null,
+});
+
+const resolveAuthenticatedServiceCenter = async (req) => {
+  if (String(req.auth?.role || "").toLowerCase() !== "service_center") {
+    return null;
+  }
+
+  const center = await ServiceStore.findById(req.auth?.sub)
+    .populate("zone_id", "name")
+    .populate("service_location_id", "name service_location_name country")
+    .lean();
+
+  if (!center || center.active === false || String(center.status || "").toLowerCase() === "inactive") {
+    return null;
+  }
+
+  return center;
+};
+
+const resolveAuthenticatedServiceCenterAccess = async (req) => {
+  const role = String(req.auth?.role || "").toLowerCase();
+
+  if (role === "service_center") {
+    const center = await resolveAuthenticatedServiceCenter(req);
+    if (!center) return null;
+    return {
+      role,
+      center,
+      staff: null,
+      canManageStaff: true,
+      canManageVehicles: true,
+      canAssignBookings: true,
+    };
+  }
+
+  if (role !== "service_center_staff") {
+    return null;
+  }
+
+  const staff = await ServiceCenterStaff.findById(req.auth?.sub).lean();
+  if (!staff || staff.active === false || String(staff.status || "").toLowerCase() === "inactive") {
+    return null;
+  }
+
+  const center = await ServiceStore.findById(staff.serviceCenterId)
+    .populate("zone_id", "name")
+    .populate("service_location_id", "name service_location_name country")
+    .lean();
+
+  if (!center || center.active === false || String(center.status || "").toLowerCase() === "inactive") {
+    return null;
+  }
+
+  return {
+    role,
+    center,
+    staff,
+    canManageStaff: false,
+    canManageVehicles: false,
+    canAssignBookings: false,
+  };
+};
+
 const serializeDriverNotification = (item = {}) => ({
   id: String(item._id || ""),
   title: String(item.push_title || "").trim(),
@@ -1158,6 +1458,34 @@ export const goOnline = async (req, res) => {
 };
 
 export const getCurrentDriver = async (req, res) => {
+  if (String(req.auth?.role || "").toLowerCase() === "service_center_staff") {
+    const access = await resolveAuthenticatedServiceCenterAccess(req);
+
+    if (!access?.staff || !access?.center) {
+      throw new ApiError(404, "Service center staff not found");
+    }
+
+    res.json({
+      success: true,
+      data: serializeServiceCenterStaffProfile(access.staff, access.center),
+    });
+    return;
+  }
+
+  if (String(req.auth?.role || "").toLowerCase() === "service_center") {
+    const center = await resolveAuthenticatedServiceCenter(req);
+
+    if (!center) {
+      throw new ApiError(404, "Service center not found");
+    }
+
+    res.json({
+      success: true,
+      data: serializeServiceCenterProfile(center),
+    });
+    return;
+  }
+
   if (String(req.auth?.role || "").toLowerCase() === "owner") {
     const owner = await Owner.findById(req.auth.sub);
 
@@ -1666,6 +1994,311 @@ export const getMyWallet = async (req, res) => {
   });
 };
 
+export const getServiceCenterVehicles = async (req, res) => {
+  const access = await resolveAuthenticatedServiceCenterAccess(req);
+  const center = access?.center;
+
+  if (!center?._id) {
+    throw new ApiError(403, "Service center access is required");
+  }
+
+  const items = await listRentalVehicleTypes();
+  const centerId = String(center._id);
+  const results = items.filter((item) =>
+    Array.isArray(item.serviceStoreIds) && item.serviceStoreIds.includes(centerId),
+  );
+
+  res.json({
+    success: true,
+    data: {
+      serviceCenter: {
+        id: centerId,
+        name: center.name || "",
+      },
+      results,
+    },
+  });
+};
+
+export const createServiceCenterVehicle = async (req, res) => {
+  const access = await resolveAuthenticatedServiceCenterAccess(req);
+  const center = access?.center;
+
+  if (!center?._id || !access?.canManageVehicles) {
+    throw new ApiError(403, "Service center access is required");
+  }
+
+  const payload = {
+    ...req.body,
+    transport_type: "rental",
+    serviceStoreIds: [String(center._id)],
+    status: req.body?.status === "inactive" ? "inactive" : "active",
+  };
+
+  const created = await createRentalVehicleType(payload);
+
+  res.json({
+    success: true,
+    data: created,
+  });
+};
+
+export const deleteServiceCenterVehicle = async (req, res) => {
+  const access = await resolveAuthenticatedServiceCenterAccess(req);
+  const center = access?.center;
+
+  if (!center?._id || !access?.canManageVehicles) {
+    throw new ApiError(403, "Service center access is required");
+  }
+
+  const vehicle = await RentalVehicleType.findById(req.params.vehicleId).lean();
+
+  if (!vehicle) {
+    throw new ApiError(404, "Rental vehicle type not found");
+  }
+
+  const storeIds = Array.isArray(vehicle.serviceStoreIds)
+    ? vehicle.serviceStoreIds.map((item) => String(item))
+    : [];
+
+  if (!storeIds.includes(String(center._id))) {
+    throw new ApiError(403, "You can only manage vehicles assigned to your service center");
+  }
+
+  await deleteRentalVehicleType(req.params.vehicleId);
+
+  res.json({
+    success: true,
+    data: true,
+  });
+};
+
+export const getServiceCenterStaffMembers = async (req, res) => {
+  const access = await resolveAuthenticatedServiceCenterAccess(req);
+  const center = access?.center;
+
+  if (!center?._id || !access?.canManageStaff) {
+    throw new ApiError(403, "Only service center owners can manage staff");
+  }
+
+  const [staffItems, bookingCounts] = await Promise.all([
+    ServiceCenterStaff.find({ serviceCenterId: center._id }).sort({ createdAt: -1 }).lean(),
+    RentalBookingRequest.aggregate([
+      {
+        $match: {
+          assignedStaffId: { $ne: null },
+          serviceCenterIds: center._id,
+        },
+      },
+      {
+        $group: {
+          _id: "$assignedStaffId",
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+  ]);
+
+  const countMap = new Map(bookingCounts.map((item) => [String(item._id), Number(item.count || 0)]));
+
+  res.json({
+    success: true,
+    data: {
+      serviceCenter: {
+        id: String(center._id),
+        name: center.name || "",
+      },
+      results: staffItems.map((item) => serializeServiceCenterStaff(item, countMap.get(String(item._id)) || 0)),
+    },
+  });
+};
+
+export const createServiceCenterStaffMember = async (req, res) => {
+  const access = await resolveAuthenticatedServiceCenterAccess(req);
+  const center = access?.center;
+
+  if (!center?._id || !access?.canManageStaff) {
+    throw new ApiError(403, "Only service center owners can manage staff");
+  }
+
+  const name = String(req.body?.name || "").trim();
+  const phone = String(req.body?.phone || "").replace(/\D/g, "").slice(-10);
+
+  if (!name) {
+    throw new ApiError(400, "Staff name is required");
+  }
+
+  if (!/^\d{10}$/.test(phone)) {
+    throw new ApiError(400, "Staff login number must be a valid 10-digit number");
+  }
+
+  const existing = await ServiceCenterStaff.findOne({ phone }).lean();
+  if (existing) {
+    throw new ApiError(409, "A staff account already exists with this number");
+  }
+
+  const created = await ServiceCenterStaff.create({
+    serviceCenterId: center._id,
+    name,
+    phone,
+    active: true,
+    status: "active",
+  });
+
+  res.json({
+    success: true,
+    data: serializeServiceCenterStaff(created.toObject(), 0),
+  });
+};
+
+export const getServiceCenterBookings = async (req, res) => {
+  const access = await resolveAuthenticatedServiceCenterAccess(req);
+  const center = access?.center;
+
+  if (!center?._id) {
+    throw new ApiError(403, "Service center access is required");
+  }
+
+  const query = {
+    serviceCenterIds: center._id,
+  };
+
+  if (access.staff?._id) {
+    query.assignedStaffId = access.staff._id;
+  }
+
+  const bookings = await RentalBookingRequest.find(query)
+    .populate("userId", "name phone email")
+    .populate("vehicleTypeId", "name vehicleCategory image")
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const staffItems = access.canManageStaff
+    ? await ServiceCenterStaff.find({ serviceCenterId: center._id, active: true, status: "active" })
+        .sort({ name: 1 })
+        .lean()
+    : [];
+
+  res.json({
+    success: true,
+    data: {
+      permissions: {
+        canManageStaff: access.canManageStaff,
+        canManageVehicles: access.canManageVehicles,
+        canAssignBookings: access.canAssignBookings,
+      },
+      results: bookings.map(serializeServiceCenterBooking),
+      staff: staffItems.map((item) => serializeServiceCenterStaff(item, 0)),
+    },
+  });
+};
+
+export const updateServiceCenterBooking = async (req, res) => {
+  const access = await resolveAuthenticatedServiceCenterAccess(req);
+  const center = access?.center;
+
+  if (!center?._id) {
+    throw new ApiError(403, "Service center access is required");
+  }
+
+  const bookingId = String(req.params?.bookingId || "").trim();
+  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+    throw new ApiError(400, "Valid booking id is required");
+  }
+
+  const booking = await RentalBookingRequest.findById(bookingId)
+    .populate("userId", "name phone email")
+    .populate("vehicleTypeId", "name vehicleCategory image");
+
+  if (!booking) {
+    throw new ApiError(404, "Rental booking request not found");
+  }
+
+  const centerIds = Array.isArray(booking.serviceCenterIds)
+    ? booking.serviceCenterIds.map((item) => String(item))
+    : [];
+
+  if (!centerIds.includes(String(center._id))) {
+    throw new ApiError(403, "This booking is not assigned to your service center");
+  }
+
+  if (req.body?.assignedStaffId !== undefined) {
+    if (!access.canAssignBookings) {
+      throw new ApiError(403, "Only service center owners can assign staff");
+    }
+
+    const assignedStaffId = String(req.body.assignedStaffId || "").trim();
+    if (!assignedStaffId) {
+      booking.assignedStaffId = null;
+      booking.assignedStaffName = "";
+      booking.assignedStaffPhone = "";
+    } else {
+      const staff = await ServiceCenterStaff.findOne({
+        _id: assignedStaffId,
+        serviceCenterId: center._id,
+        active: true,
+        status: "active",
+      }).lean();
+
+      if (!staff) {
+        throw new ApiError(404, "Assigned staff member not found");
+      }
+
+      booking.assignedStaffId = staff._id;
+      booking.assignedStaffName = staff.name || "";
+      booking.assignedStaffPhone = staff.phone || "";
+
+      if (String(booking.status || "") === "pending") {
+        booking.status = "assigned";
+      }
+    }
+  }
+
+  if (req.body?.serviceCenterNote !== undefined) {
+    booking.serviceCenterNote = String(req.body.serviceCenterNote || "").trim();
+  }
+
+  if (req.body?.status !== undefined) {
+    const nextStatus = String(req.body.status || "").trim();
+    const allowedStatuses = ["pending", "confirmed", "assigned", "completed", "cancelled", "end_requested"];
+    if (!allowedStatuses.includes(nextStatus)) {
+      throw new ApiError(400, "Invalid booking status");
+    }
+
+    if (access.staff?._id) {
+      if (String(booking.assignedStaffId || "") !== String(access.staff._id)) {
+        throw new ApiError(403, "Staff can only update bookings assigned to them");
+      }
+      if (!["assigned", "confirmed", "completed", "end_requested"].includes(nextStatus)) {
+        throw new ApiError(403, "Staff have limited status update access");
+      }
+    }
+
+    booking.status = nextStatus;
+    if (nextStatus === "assigned" && !booking.assignedAt) {
+      booking.assignedAt = new Date();
+    }
+    if (nextStatus === "completed" && !booking.completedAt) {
+      booking.completedAt = new Date();
+    }
+    if (nextStatus === "cancelled" && !booking.cancelledAt) {
+      booking.cancelledAt = new Date();
+    }
+  }
+
+  await booking.save();
+
+  const populated = await RentalBookingRequest.findById(booking._id)
+    .populate("userId", "name phone email")
+    .populate("vehicleTypeId", "name vehicleCategory image")
+    .lean();
+
+  res.json({
+    success: true,
+    data: serializeServiceCenterBooking(populated),
+  });
+};
+
 export const getBusDriverSeatLayout = async (req, res) => {
   const busDriver = await BusDriver.findById(req.auth.sub).lean();
 
@@ -1869,6 +2502,41 @@ export const createBusDriverReservation = async (req, res) => {
   res.status(201).json({
     success: true,
     data: serializeBusDriverBooking(booking),
+  });
+};
+
+export const updateBusDriverSchedules = async (req, res) => {
+  const busDriver = await BusDriver.findById(req.auth.sub);
+
+  if (!busDriver) {
+    throw new ApiError(404, "Bus driver not found");
+  }
+
+  if (!busDriver.assignedBusServiceId) {
+    throw new ApiError(404, "No bus is assigned to this driver");
+  }
+
+  const busService = await BusService.findById(busDriver.assignedBusServiceId);
+  if (!busService) {
+    throw new ApiError(404, "Assigned bus service not found");
+  }
+
+  const schedules = Array.isArray(req.body?.schedules)
+    ? req.body.schedules.map((schedule, index) => normalizeBusDriverSchedule(schedule, index))
+    : [];
+
+  validateBusDriverSchedules(schedules);
+
+  busService.schedules = schedules;
+  await busService.save();
+
+  res.json({
+    success: true,
+    data: {
+      busServiceId: String(busService._id),
+      schedules: Array.isArray(busService.schedules) ? busService.schedules : [],
+      updatedAt: busService.updatedAt,
+    },
   });
 };
 

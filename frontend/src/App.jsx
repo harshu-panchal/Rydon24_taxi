@@ -129,6 +129,7 @@ const DriverHome = lazy(() => import('./modules/driver/pages/DriverHome'));
 const ActiveTrip = lazy(() => import('./modules/driver/pages/ActiveTrip'));
 const DriverWallet = lazy(() => import('./modules/driver/pages/DriverWallet'));
 const DriverProfile = lazy(() => import('./modules/driver/pages/DriverProfile'));
+const ServiceCenterDashboard = lazy(() => import('./modules/driver/pages/ServiceCenterDashboard'));
 const RideRequests = lazy(() => import('./modules/driver/pages/RideRequests'));
 const DriverIncentives = lazy(() => import('./modules/driver/pages/DriverIncentives'));
 const BusDriverHome = lazy(() => import('./modules/driver/pages/BusDriverHome'));
@@ -497,7 +498,17 @@ const DriverEntryRedirect = () => {
 
   return (
     <Navigate
-      to={role === 'owner' ? '/taxi/driver/profile' : role === 'bus_driver' ? '/taxi/driver/bus-home' : '/taxi/driver/home'}
+      to={
+        role === 'owner'
+          ? '/taxi/driver/profile'
+          : role === 'service_center'
+            ? '/taxi/driver/service-center'
+            : role === 'service_center_staff'
+              ? '/taxi/driver/service-center'
+            : role === 'bus_driver'
+              ? '/taxi/driver/bus-home'
+              : '/taxi/driver/home'
+      }
       replace
     />
   );
@@ -835,6 +846,7 @@ function App() {
                 <Route path="chat" element={<Chat />} />
                 <Route path="wallet" element={<DriverWallet />} />
                 <Route path="profile" element={<DriverProfile />} />
+                <Route path="service-center" element={<ServiceCenterDashboard />} />
                 <Route path="history" element={<RideRequests />} />
                 <Route path="incentives" element={<DriverIncentives />} />
 

@@ -10,6 +10,11 @@ const isDriverApproved = (driver) => {
         return false;
     }
 
+    const role = String(driver?.onboarding?.role || localStorage.getItem('role') || 'driver').toLowerCase();
+    if (role === 'service_center' || role === 'service_center_staff') {
+        return driver.status !== 'inactive';
+    }
+
     const approval = String(driver.approve ?? '').toLowerCase();
     const status = String(driver.status || '').toLowerCase();
 
@@ -51,6 +56,10 @@ const getStoredRole = () => String(localStorage.getItem('role') || 'driver').toL
 const getAuthenticatedDriverHome = () => (
     getStoredRole() === 'owner'
         ? '/taxi/driver/profile'
+        : getStoredRole() === 'service_center'
+            ? '/taxi/driver/service-center'
+        : getStoredRole() === 'service_center_staff'
+            ? '/taxi/driver/service-center'
         : getStoredRole() === 'bus_driver'
             ? '/taxi/driver/bus-home'
             : '/taxi/driver/home'

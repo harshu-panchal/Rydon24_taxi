@@ -35,3 +35,6 @@ export const getBusDriverBookings = ({ scheduleId, date, status } = {}) =>
 
 export const createBusDriverReservation = (payload) =>
   api.post('/drivers/bus/reservations', payload, withDriverAuth());
+
+export const updateBusDriverSchedules = (payload) =>
+  api.patch('/drivers/bus/schedules', payload, withDriverAuth());

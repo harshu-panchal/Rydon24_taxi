@@ -23,6 +23,7 @@ import { BusBooking } from '../models/BusBooking.js';
 import { RentalBookingRequest } from '../../admin/models/RentalBookingRequest.js';
 import { RentalQuoteRequest } from '../../admin/models/RentalQuoteRequest.js';
 import { RentalVehicleType } from '../../admin/models/RentalVehicleType.js';
+import { ServiceStore } from '../../admin/models/ServiceStore.js';
 import { SetPrice } from '../../admin/models/SetPrice.js';
 import { applyDriverWalletAdjustment } from '../../driver/services/walletService.js';
 import { emitToDriver } from '../../services/dispatchService.js';
@@ -2483,6 +2484,18 @@ export const createRentalBookingRequest = async (req, res) => {
   const selectedPackage = payload.selectedPackage || {};
   const serviceLocation = payload.serviceLocation || {};
   const paymentPayload = payload.payment || {};
+  const requestedLocationId = toCleanString(serviceLocation.id || serviceLocation._id || serviceLocation.locationId || '');
+  const allowedServiceStoreIds = Array.isArray(vehicle.serviceStoreIds)
+    ? vehicle.serviceStoreIds.filter((item) => mongoose.Types.ObjectId.isValid(item))
+    : [];
+  const matchingServiceCenters = allowedServiceStoreIds.length
+    ? await ServiceStore.find({
+        _id: { $in: allowedServiceStoreIds },
+        ...(requestedLocationId ? { service_location_id: requestedLocationId } : {}),
+      })
+        .select('_id')
+        .lean()
+    : [];
 
   const update = {
     userId: user._id,
@@ -2491,6 +2504,7 @@ export const createRentalBookingRequest = async (req, res) => {
     vehicleName: vehicle.name || '',
     vehicleCategory: vehicle.vehicleCategory || '',
     vehicleImage: vehicle.image || '',
+    serviceCenterIds: matchingServiceCenters.map((item) => item._id),
     selectedPackage: {
       packageId: toCleanString(selectedPackage.id || selectedPackage.packageId || ''),
       label: toCleanString(selectedPackage.label),

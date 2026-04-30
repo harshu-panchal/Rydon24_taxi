@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { env } from '../../../../config/env.js';
 import { Owner } from '../../admin/models/Owner.js';
+import { ServiceStore } from '../../admin/models/ServiceStore.js';
+import { ServiceCenterStaff } from '../../admin/models/ServiceCenterStaff.js';
 import { Driver } from '../models/Driver.js';
 import { BusDriver } from '../models/BusDriver.js';
 import { DriverLoginSession } from '../models/DriverLoginSession.js';
@@ -32,6 +34,21 @@ const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000));
 const normalizeRole = (role) => {
   const normalized = String(role || 'driver').toLowerCase();
   if (normalized === 'owner') return 'owner';
+  if (
+    normalized === 'service_center' ||
+    normalized === 'service-center' ||
+    normalized === 'servicecenter'
+  ) {
+    return 'service_center';
+  }
+  if (
+    normalized === 'service_center_staff' ||
+    normalized === 'service-center-staff' ||
+    normalized === 'servicecenterstaff' ||
+    normalized === 'center_staff'
+  ) {
+    return 'service_center_staff';
+  }
   if (normalized === 'bus_driver' || normalized === 'bus-driver' || normalized === 'busdriver') {
     return 'bus_driver';
   }
@@ -113,6 +130,23 @@ const publicOwnerPayload = (owner) => ({
   status: owner.status,
 });
 
+const publicServiceCenterPayload = (center) => ({
+  id: center._id,
+  name: center.name || '',
+  owner_name: center.owner_name || '',
+  phone: center.owner_phone || '',
+  address: center.address || '',
+  status: center.status || 'active',
+});
+
+const publicServiceCenterStaffPayload = (staff) => ({
+  id: staff._id,
+  name: staff.name || '',
+  phone: staff.phone || '',
+  status: staff.status || 'active',
+  serviceCenterId: staff.serviceCenterId ? String(staff.serviceCenterId) : '',
+});
+
 const publicBusDriverPayload = (driver) => ({
   id: driver._id,
   name: driver.name || '',
@@ -146,6 +180,16 @@ const isApprovedBusDriver = (driver) =>
   driver.approve !== false &&
   !['pending', 'blocked'].includes(String(driver.status || '').toLowerCase());
 
+const isApprovedServiceCenter = (center) =>
+  Boolean(center) &&
+  center.active !== false &&
+  String(center.status || '').toLowerCase() !== 'inactive';
+
+const isApprovedServiceCenterStaff = (staff) =>
+  Boolean(staff) &&
+  staff.active !== false &&
+  String(staff.status || '').toLowerCase() !== 'inactive';
+
 export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
   const normalizedPhone = normalizePhone(phone);
   const normalizedRole = normalizeRole(role);
@@ -160,6 +204,10 @@ export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
       ? await Owner.findOne({
           $or: [{ mobile: { $in: phoneCandidates } }, { phone: { $in: phoneCandidates } }],
         })
+      : normalizedRole === 'service_center'
+        ? await ServiceStore.findOne({ owner_phone: { $in: phoneCandidates } })
+      : normalizedRole === 'service_center_staff'
+        ? await ServiceCenterStaff.findOne({ phone: { $in: phoneCandidates } })
       : normalizedRole === 'bus_driver'
         ? await BusDriver.findOne({ phone: { $in: phoneCandidates } })
         : await Driver.findOne({ phone: { $in: phoneCandidates } });
@@ -170,6 +218,10 @@ export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
       `${
         normalizedRole === 'owner'
           ? 'Owner'
+          : normalizedRole === 'service_center'
+            ? 'Service center'
+          : normalizedRole === 'service_center_staff'
+            ? 'Service center staff'
           : normalizedRole === 'bus_driver'
             ? 'Bus driver'
             : 'Driver'
@@ -179,6 +231,8 @@ export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
 
   if (
     (normalizedRole === 'owner' && !isApprovedOwner(account)) ||
+    (normalizedRole === 'service_center' && !isApprovedServiceCenter(account)) ||
+    (normalizedRole === 'service_center_staff' && !isApprovedServiceCenterStaff(account)) ||
     (normalizedRole === 'driver' && !isApprovedDriver(account)) ||
     (normalizedRole === 'bus_driver' && !isApprovedBusDriver(account))
   ) {
@@ -187,6 +241,10 @@ export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
       `${
         normalizedRole === 'owner'
           ? 'Owner'
+          : normalizedRole === 'service_center'
+            ? 'Service center'
+          : normalizedRole === 'service_center_staff'
+            ? 'Service center staff'
           : normalizedRole === 'bus_driver'
             ? 'Bus driver'
             : 'Driver'
@@ -252,6 +310,10 @@ export const verifyDriverLoginOtp = async ({ phone, otp }) => {
   const account =
     normalizedRole === 'owner'
       ? await Owner.findById(session.driverId)
+      : normalizedRole === 'service_center'
+        ? await ServiceStore.findById(session.driverId)
+      : normalizedRole === 'service_center_staff'
+        ? await ServiceCenterStaff.findById(session.driverId)
       : normalizedRole === 'bus_driver'
         ? await BusDriver.findById(session.driverId)
         : await Driver.findById(session.driverId);
@@ -262,6 +324,10 @@ export const verifyDriverLoginOtp = async ({ phone, otp }) => {
       `${
         normalizedRole === 'owner'
           ? 'Owner'
+          : normalizedRole === 'service_center'
+            ? 'Service center'
+          : normalizedRole === 'service_center_staff'
+            ? 'Service center staff'
           : normalizedRole === 'bus_driver'
             ? 'Bus driver'
             : 'Driver'
@@ -271,6 +337,8 @@ export const verifyDriverLoginOtp = async ({ phone, otp }) => {
 
   if (
     (normalizedRole === 'owner' && !isApprovedOwner(account)) ||
+    (normalizedRole === 'service_center' && !isApprovedServiceCenter(account)) ||
+    (normalizedRole === 'service_center_staff' && !isApprovedServiceCenterStaff(account)) ||
     (normalizedRole === 'driver' && !isApprovedDriver(account)) ||
     (normalizedRole === 'bus_driver' && !isApprovedBusDriver(account))
   ) {
@@ -279,6 +347,10 @@ export const verifyDriverLoginOtp = async ({ phone, otp }) => {
       `${
         normalizedRole === 'owner'
           ? 'Owner'
+          : normalizedRole === 'service_center'
+            ? 'Service center'
+          : normalizedRole === 'service_center_staff'
+            ? 'Service center staff'
           : normalizedRole === 'bus_driver'
             ? 'Bus driver'
             : 'Driver'
@@ -302,6 +374,10 @@ export const verifyDriverLoginOtp = async ({ phone, otp }) => {
     driver:
       normalizedRole === 'owner'
         ? publicOwnerPayload(account)
+        : normalizedRole === 'service_center'
+          ? publicServiceCenterPayload(account)
+          : normalizedRole === 'service_center_staff'
+            ? publicServiceCenterStaffPayload(account)
         : normalizedRole === 'bus_driver'
           ? publicBusDriverPayload(account)
           : publicDriverPayload(account),
