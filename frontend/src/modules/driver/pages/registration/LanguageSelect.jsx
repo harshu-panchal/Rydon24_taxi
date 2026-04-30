@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Check, Globe, ChevronRight } from 'lucide-react';
 import { useSettings } from '../../../../shared/context/SettingsContext';
+import { getLocalDriverToken, getStoredDriverRole } from '../../services/registrationService';
 
 const LanguageSelect = () => {
     const navigate = useNavigate();
@@ -11,9 +12,9 @@ const LanguageSelect = () => {
     const appName = settings.general?.app_name || 'App';
     const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
     const [selectedLang, setSelectedLang] = useState(() => localStorage.getItem('driver_lang') || 'english');
-    const isAuthenticatedDriver = Boolean(localStorage.getItem('driverToken') || localStorage.getItem('token')) && !location.state?.registrationFlow;
+    const isAuthenticatedDriver = Boolean(getLocalDriverToken()) && !location.state?.registrationFlow;
     const authenticatedHome =
-        String(localStorage.getItem('role') || 'driver').toLowerCase() === 'owner'
+        String(getStoredDriverRole() || 'driver').toLowerCase() === 'owner'
             ? '/taxi/driver/profile'
             : '/taxi/driver/home';
 

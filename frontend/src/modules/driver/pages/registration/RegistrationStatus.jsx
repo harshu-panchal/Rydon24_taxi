@@ -12,6 +12,9 @@ import {
   clearDriverRegistrationSession,
   getDriverApprovalStatus,
   clearDriverAuthState,
+  getLocalDriverToken,
+  getStoredDriverRole,
+  persistDriverAuthSession,
 } from "../../services/registrationService";
 
 const APPROVAL_POLL_MS = 2500;
@@ -62,7 +65,7 @@ const RegistrationStatus = () => {
         String(location.state.role).toLowerCase() === "owner"
           ? "owner"
           : "driver";
-      localStorage.setItem("role", normalizedRole);
+      persistDriverAuthSession({ role: normalizedRole });
     }
 
     const onboardingToken =
@@ -71,13 +74,11 @@ const RegistrationStatus = () => {
       "";
 
     if (onboardingToken) {
-      localStorage.setItem("token", onboardingToken);
-      localStorage.setItem("driverToken", onboardingToken);
       const roleFromState = String(location.state?.role || "").toLowerCase();
-      localStorage.setItem(
-        "role",
-        roleFromState === "owner" ? "owner" : "driver",
-      );
+      persistDriverAuthSession({
+        token: onboardingToken,
+        role: roleFromState === "owner" ? "owner" : "driver",
+      });
     }
 
     mountedRef.current = true;
@@ -88,8 +89,7 @@ const RegistrationStatus = () => {
       }
 
       requestInFlightRef.current = true;
-      const token =
-        localStorage.getItem("driverToken") || localStorage.getItem("token");
+      const token = getLocalDriverToken();
 
       if (!token) {
         if (mountedRef.current) {
@@ -115,9 +115,7 @@ const RegistrationStatus = () => {
         if (isApproved) {
           clearDriverRegistrationSession();
           const normalizedRole =
-            String(
-              localStorage.getItem("role") || location.state?.role || "driver",
-            ).toLowerCase() === "owner"
+            String(getStoredDriverRole() || location.state?.role || "driver").toLowerCase() === "owner"
               ? "owner"
               : "driver";
           navigate(

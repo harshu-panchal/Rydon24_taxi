@@ -49,7 +49,8 @@ const inferRole = (explicitRole) => {
   }
 
   const storedCandidates = [
-    localStorage.getItem('driverToken'),
+    sessionStorage.getItem('driverToken'),
+    sessionStorage.getItem('token'),
     localStorage.getItem('userToken'),
     localStorage.getItem('token'),
   ].filter(Boolean);

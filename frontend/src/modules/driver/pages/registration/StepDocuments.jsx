@@ -16,6 +16,7 @@ import {
   completeDriverOnboarding,
   getDriverDocumentTemplates,
   getStoredDriverRegistrationSession,
+  persistDriverAuthSession,
   saveDriverDocuments,
   saveDriverRegistrationSession,
 } from '../../services/registrationService';
@@ -257,11 +258,9 @@ const StepDocuments = () => {
 
       const token = payload?.token;
       if (token) {
-        localStorage.setItem('token', token);
-        localStorage.setItem('driverToken', token);
         const normalizedRole =
           String(session.role || 'driver').toLowerCase() === 'owner' ? 'owner' : 'driver';
-        localStorage.setItem('role', normalizedRole);
+        persistDriverAuthSession({ token, role: normalizedRole });
       }
 
       saveDriverRegistrationSession({

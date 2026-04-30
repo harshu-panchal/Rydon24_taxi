@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { clearDriverAuthState, getCurrentDriver } from '../services/registrationService';
+import { clearDriverAuthState, getCurrentDriver, getLocalDriverToken, getStoredDriverRole } from '../services/registrationService';
 import DriverRideRequestListener from './DriverRideRequestListener';
 
 const unwrapDriver = (response) => response?.data?.data || response?.data || response;
@@ -10,7 +10,7 @@ const isDriverApproved = (driver) => {
         return false;
     }
 
-    const role = String(driver?.onboarding?.role || localStorage.getItem('role') || 'driver').toLowerCase();
+    const role = String(driver?.onboarding?.role || getStoredDriverRole() || 'driver').toLowerCase();
     if (role === 'service_center' || role === 'service_center_staff') {
         return driver.status !== 'inactive';
     }
@@ -51,7 +51,7 @@ const redirectToDriverLogin = (navigate) => {
     navigate('/taxi/driver/login', { replace: true });
 };
 
-const getStoredRole = () => String(localStorage.getItem('role') || 'driver').toLowerCase();
+const getStoredRole = () => String(getStoredDriverRole() || 'driver').toLowerCase();
 
 const getAuthenticatedDriverHome = () => (
     getStoredRole() === 'owner'
@@ -77,7 +77,7 @@ const DriverLayout = () => {
     useEffect(() => {
         const currentPath = location.pathname;
         const onboardingState = location.state || {};
-        const token = localStorage.getItem('driverToken') || localStorage.getItem('token');
+        const token = getLocalDriverToken();
         const authenticatedHome = getAuthenticatedDriverHome();
         const shouldVerifyOnboardingRoute =
             Boolean(token)

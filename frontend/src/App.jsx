@@ -9,6 +9,7 @@ import AppAutoUpdater from './modules/shared/components/AppAutoUpdater';
 import { addRealtimeNotification } from './modules/user/utils/realtimeNotificationStore';
 import { clearLocalUserSession, getLocalUserToken } from './modules/user/services/authService';
 import { clearCurrentRide } from './modules/user/services/currentRideService';
+import { getLocalDriverToken, getStoredDriverRole } from './modules/driver/services/registrationService';
 import './App.css';
 
 
@@ -489,8 +490,8 @@ const UserAccountInvalidationListener = () => {
 };
 
 const DriverEntryRedirect = () => {
-  const token = localStorage.getItem('driverToken') || localStorage.getItem('token');
-  const role = String(localStorage.getItem('role') || 'driver').toLowerCase();
+  const token = getLocalDriverToken();
+  const role = String(getStoredDriverRole() || 'driver').toLowerCase();
 
   if (!token) {
     return <Navigate to="/taxi/driver/login" replace />;
