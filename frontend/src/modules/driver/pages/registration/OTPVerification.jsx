@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
     getStoredDriverRegistrationSession,
     clearDriverRegistrationSession,
+    persistDriverAuthSession,
     saveDriverRegistrationSession,
     sendDriverLoginOtp,
     sendDriverOtp,
@@ -120,10 +121,8 @@ const OTPVerification = () => {
 
                 const token = payload?.token;
                 if (token) {
-                    localStorage.setItem('token', token);
-                    localStorage.setItem('driverToken', token);
                     const normalizedRole = normalizeDriverRole(role);
-                    localStorage.setItem('role', normalizedRole);
+                    persistDriverAuthSession({ token, role: normalizedRole });
                     syncPushTokens();
                 }
 

@@ -62,14 +62,27 @@ const normalizeAuthRole = (role) => {
   return value;
 };
 
+const getSessionItem = (key) => {
+  try {
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
 const getStoredTokenByRole = (role) => {
   const normalizedRole = normalizeAuthRole(role);
-  const entries = [
-    localStorage.getItem(`${role}Token`),
-    normalizedRole === 'owner' ? localStorage.getItem('driverToken') : null,
-    normalizedRole === 'driver' ? localStorage.getItem('driverToken') : null,
-    localStorage.getItem('token'),
-  ].filter(Boolean);
+  const entries = (
+    normalizedRole === 'driver' || normalizedRole === 'owner'
+      ? [
+          getSessionItem('driverToken'),
+          getSessionItem('token'),
+        ]
+      : [
+          localStorage.getItem(`${role}Token`),
+          localStorage.getItem('token'),
+        ]
+  ).filter(Boolean);
 
   return entries.find((token) => normalizeAuthRole(getTokenPayload(token)?.role) === normalizedRole) || null;
 };
@@ -104,13 +117,18 @@ const getRoleFromPathname = () => {
 const clearStaleAuthState = (role = '', staleToken = '') => {
   const normalizedRole = normalizeAuthRole(role);
   const currentGenericToken = localStorage.getItem('token');
+  const currentSessionGenericToken = getSessionItem('token');
   const shouldClearGenericToken =
     !staleToken ||
     currentGenericToken === staleToken ||
+    currentSessionGenericToken === staleToken ||
     normalizeAuthRole(getTokenPayload(currentGenericToken)?.role) === normalizedRole;
 
   if (shouldClearGenericToken) {
     localStorage.removeItem('token');
+    try {
+      sessionStorage.removeItem('token');
+    } catch {}
   }
 
   if (!normalizedRole || normalizedRole === 'user') {
@@ -124,6 +142,13 @@ const clearStaleAuthState = (role = '', staleToken = '') => {
     if (!staleToken || localStorage.getItem('driverToken') === staleToken) {
       localStorage.removeItem('driverToken');
     }
+    try {
+      if (!staleToken || getSessionItem('driverToken') === staleToken) {
+        sessionStorage.removeItem('driverToken');
+      }
+      sessionStorage.removeItem('driverInfo');
+      sessionStorage.removeItem('chatRole');
+    } catch {}
     localStorage.removeItem('driverInfo');
   }
 

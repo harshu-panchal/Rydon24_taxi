@@ -29,13 +29,11 @@ import { uploadService } from '../../../shared/services/uploadService';
 import {
   clearDriverAuthState,
   createServiceCenterStaff,
-  createServiceCenterVehicle,
   deleteServiceCenterVehicle,
   getCurrentDriver,
   getServiceCenterBookings,
   getServiceCenterStaff,
   getServiceCenterVehicles,
-  updateServiceCenterVehicle,
   updateServiceCenterBooking,
 } from '../services/registrationService';
 
@@ -109,21 +107,6 @@ const getCompletionRequirements = (booking) => {
 
   return missing;
 };
-
-const buildVehicleForm = () => ({
-  name: '',
-  short_description: '',
-  description: '',
-  vehicleCategory: 'Car',
-  capacity: '4',
-  luggageCapacity: '2',
-  image: '',
-  amenities: 'AC, GPS, Charging Port',
-  price6: '799',
-  price12: '1299',
-  price24: '1999',
-  status: 'active',
-});
 
 const buildStaffForm = () => ({
   name: '',
@@ -228,15 +211,11 @@ const ServiceCenterDashboard = () => {
     canAssignBookings: false,
   });
   const [loading, setLoading] = useState(true);
-  const [savingVehicle, setSavingVehicle] = useState(false);
   const [savingStaff, setSavingStaff] = useState(false);
   const [updatingBookingId, setUpdatingBookingId] = useState('');
   const [uploadingConditionSection, setUploadingConditionSection] = useState('');
-  const [showVehicleForm, setShowVehicleForm] = useState(false);
   const [showStaffForm, setShowStaffForm] = useState(false);
-  const [editingVehicleId, setEditingVehicleId] = useState('');
   const [error, setError] = useState('');
-  const [vehicleForm, setVehicleForm] = useState(buildVehicleForm);
   const [staffForm, setStaffForm] = useState(buildStaffForm);
   const [previewImage, setPreviewImage] = useState('');
   const [bookingDraft, setBookingDraft] = useState({
@@ -476,65 +455,8 @@ const ServiceCenterDashboard = () => {
     navigate('/taxi/driver/login', { replace: true });
   };
 
-  const handleVehicleChange = (field, value) => {
-    setVehicleForm((current) => ({ ...current, [field]: value }));
-  };
-
   const handleStaffChange = (field, value) => {
     setStaffForm((current) => ({ ...current, [field]: value }));
-  };
-
-  const handleCreateVehicle = async () => {
-    if (!vehicleForm.name.trim()) {
-      setError('Vehicle name is required');
-      return;
-    }
-
-    setSavingVehicle(true);
-    setError('');
-
-    try {
-      const payload = {
-        transport_type: 'rental',
-        name: vehicleForm.name.trim(),
-        short_description: vehicleForm.short_description.trim(),
-        description: vehicleForm.description.trim(),
-        vehicleCategory: vehicleForm.vehicleCategory.trim() || 'Car',
-        image: vehicleForm.image.trim(),
-        coverImage: vehicleForm.image.trim(),
-        capacity: Number(vehicleForm.capacity || 4),
-        luggageCapacity: Number(vehicleForm.luggageCapacity || 0),
-        amenities: vehicleForm.amenities.split(',').map((item) => item.trim()).filter(Boolean),
-        pricing: [
-          { id: 'pkg-6h', label: '6 Hours', durationHours: 6, price: Number(vehicleForm.price6 || 0), includedKm: 60, extraHourPrice: 120, extraKmPrice: 12, active: true },
-          { id: 'pkg-12h', label: '12 Hours', durationHours: 12, price: Number(vehicleForm.price12 || 0), includedKm: 120, extraHourPrice: 110, extraKmPrice: 11, active: true },
-          { id: 'pkg-24h', label: '24 Hours', durationHours: 24, price: Number(vehicleForm.price24 || 0), includedKm: 240, extraHourPrice: 95, extraKmPrice: 10, active: true },
-        ],
-        status: vehicleForm.status,
-      };
-
-      if (editingVehicleId) {
-        const response = await updateServiceCenterVehicle(editingVehicleId, payload);
-        const updated = unwrap(response);
-        setVehicles((current) =>
-          current.map((item) =>
-            String(item.id || item._id) === String(editingVehicleId) ? updated : item,
-          ),
-        );
-      } else {
-        const response = await createServiceCenterVehicle(payload);
-        const created = unwrap(response);
-        setVehicles((current) => [created, ...current]);
-      }
-
-      setVehicleForm(buildVehicleForm());
-      setEditingVehicleId('');
-      setShowVehicleForm(false);
-    } catch (err) {
-      setError(err?.message || (editingVehicleId ? 'Unable to update vehicle' : 'Unable to create vehicle'));
-    } finally {
-      setSavingVehicle(false);
-    }
   };
 
   const handleDeleteVehicle = async (vehicleId) => {
@@ -581,40 +503,16 @@ const ServiceCenterDashboard = () => {
     }
   };
 
-  const closeVehicleForm = () => {
-    setShowVehicleForm(false);
-    setEditingVehicleId('');
-    setVehicleForm(buildVehicleForm());
-  };
-
   const openCreateVehicleForm = () => {
-    setEditingVehicleId('');
-    setVehicleForm(buildVehicleForm());
-    setShowVehicleForm(true);
+    navigate('/taxi/driver/service-center/vehicles/new');
   };
 
   const openVehicleEditor = (vehicle) => {
-    const pricing = Array.isArray(vehicle?.pricing) ? vehicle.pricing : [];
-    const sixHour = pricing.find((item) => Number(item?.durationHours) === 6);
-    const twelveHour = pricing.find((item) => Number(item?.durationHours) === 12);
-    const twentyFourHour = pricing.find((item) => Number(item?.durationHours) === 24);
-
-    setEditingVehicleId(String(vehicle?.id || vehicle?._id || ''));
-    setVehicleForm({
-      name: vehicle?.name || '',
-      short_description: vehicle?.short_description || '',
-      description: vehicle?.description || '',
-      vehicleCategory: vehicle?.vehicleCategory || 'Car',
-      capacity: String(vehicle?.capacity ?? 4),
-      luggageCapacity: String(vehicle?.luggageCapacity ?? 0),
-      image: vehicle?.image || vehicle?.coverImage || '',
-      amenities: Array.isArray(vehicle?.amenities) ? vehicle.amenities.join(', ') : '',
-      price6: String(sixHour?.price ?? 0),
-      price12: String(twelveHour?.price ?? 0),
-      price24: String(twentyFourHour?.price ?? 0),
-      status: vehicle?.status === 'inactive' ? 'inactive' : 'active',
-    });
-    setShowVehicleForm(true);
+    const id = vehicle?.id || vehicle?._id;
+    if (!id) {
+      return;
+    }
+    navigate(`/taxi/driver/service-center/vehicles/${id}`);
   };
 
   const patchBookingLocal = (bookingId, patch) => {
@@ -991,286 +889,26 @@ const ServiceCenterDashboard = () => {
             </div>
 
             <div className="mt-6 space-y-4">
-              {selectedBooking ? (
-                <div className="rounded-[32px] border border-slate-200 bg-white shadow-[0_8px_40px_rgba(0,0,0,0.08)] overflow-hidden">
-                  {(() => {
-                    const inspection = selectedBooking.rentalInspection || {};
-                    const beforeInspection = inspection.beforeHandover || {};
-                    const afterInspection = inspection.afterReturn || {};
-                    const beforeConditionImages = Array.isArray(inspection.beforeConditionImages)
-                      ? inspection.beforeConditionImages
-                      : [];
-                    const afterConditionImages = Array.isArray(inspection.afterConditionImages)
-                      ? inspection.afterConditionImages
-                      : [];
-                    const customerDocumentCards = getCustomerDocumentCards(selectedBooking);
-
-                    const getPossessionTime = () => {
-                      const start = new Date(selectedBooking.pickupDateTime);
-                      const end = selectedBooking.status === 'completed' ? new Date(selectedBooking.updatedAt) : new Date();
-                      const diffMs = Math.max(0, end - start);
-                      const hours = Math.floor(diffMs / (1000 * 60 * 60));
-                      const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-                      const days = Math.floor(hours / 24);
-                      
-                      if (days > 0) return `${days}d ${hours % 24}h`;
-                      if (hours > 0) return `${hours}h ${mins}m`;
-                      return `${mins}m`;
-                    };
-
-                    return (
-                      <div className="flex flex-col h-full">
-                        {/* Header Summary */}
-                        <div className="p-6 bg-slate-50/50 border-b border-slate-100">
-                          <div className="flex flex-wrap items-start justify-between gap-4">
-                            <div className="space-y-1">
-                              <h3 className="font-['Outfit'] text-xl font-bold text-slate-900 leading-tight">
-                                {selectedBooking.bookingReference || 'Rental Booking'}
-                              </h3>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${statusBadgeClass(selectedBooking.status)}`}>
-                                  {selectedBooking.status}
-                                </span>
-                                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-900 text-white shadow-sm">
-                                   <Clock size={10} className="text-emerald-400" />
-                                   <span className="text-[9px] font-black uppercase tracking-widest">{getPossessionTime()}</span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                                {new Date(selectedBooking.pickupDateTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
-                              </p>
-                              <div className="mt-1 flex items-center justify-end gap-1 text-lg font-black text-slate-950">
-                                <BadgeIndianRupee size={18} className="text-emerald-600" />
-                                {Number(selectedBooking.totalCost || 0)}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Collapsible Content Area */}
-                        <div className="divide-y divide-slate-100">
-                          {/* 1. Customer & Documents */}
-                          <CollapsibleSection 
-                            title="Customer & Documents" 
-                            icon={UserRound}
-                            badge={`${customerDocumentCards.filter(d => d.imageUrl).length}/2 Uploaded`}
-                          >
-                            <div className="space-y-4">
-                               <div className="rounded-2xl bg-slate-50 p-4 border border-slate-100">
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Customer</p>
-                                      <p className="text-sm font-bold text-slate-900 mt-0.5">{selectedBooking.customer?.name || 'N/A'}</p>
-                                    </div>
-                                    <div>
-                                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Phone</p>
-                                      <p className="text-sm font-bold text-slate-900 mt-0.5">{selectedBooking.customer?.phone || 'N/A'}</p>
-                                    </div>
-                                  </div>
-                               </div>
-
-                               <div className="grid grid-cols-2 gap-3">
-                                  {customerDocumentCards.map((doc) => (
-                                    <div key={doc.key} className="relative group overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/70 aspect-[4/3]">
-                                      {doc.imageUrl ? (
-                                        <>
-                                          <img src={doc.imageUrl} className="h-full w-full object-cover transition group-hover:scale-105" alt={doc.label} />
-                                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex flex-col justify-end p-3">
-                                            <p className="text-[10px] font-black text-white/90 uppercase tracking-widest">{doc.label}</p>
-                                            <button 
-                                              onClick={() => setPreviewImage(doc.imageUrl)}
-                                              className="mt-2 w-full py-1.5 bg-white/20 backdrop-blur-md rounded-lg text-white text-[10px] font-bold hover:bg-white/30 transition"
-                                            >
-                                              View Full
-                                            </button>
-                                          </div>
-                                        </>
-                                      ) : (
-                                        <div className="h-full flex flex-col items-center justify-center p-4 text-center">
-                                          <ShieldCheck size={24} className="text-slate-300 mb-2" />
-                                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Awaiting {doc.label}</p>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                               </div>
-                            </div>
-                          </CollapsibleSection>
-
-                          {/* 2. Before Handover */}
-                          <CollapsibleSection title="Pickup Inspection" icon={ClipboardList} badge="Before Handover">
-                             <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-2">
-                                  {beforeHandoverItems.map((item) => {
-                                    const active = beforeInspection[item.key] === true;
-                                    return (
-                                      <button
-                                        key={item.key}
-                                        type="button"
-                                        onClick={() => updateBookingInspection(selectedBooking.id || selectedBooking._id, 'beforeHandover', item.key, !active)}
-                                        className={`rounded-xl border p-3 text-left transition-all ${active ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'}`}
-                                      >
-                                        <div className="flex items-center gap-2">
-                                          {active ? <CheckCircle2 size={14} /> : <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-300" />}
-                                          <span className="text-[11px] font-bold">{item.label}</span>
-                                        </div>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Handover Photos</label>
-                                    <label className="cursor-pointer text-[10px] font-black text-emerald-600 hover:text-emerald-700">
-                                      + ADD NEW
-                                      <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => uploadConditionImages(selectedBooking.id || selectedBooking._id, 'beforeConditionImages', e.target.files)} />
-                                    </label>
-                                  </div>
-                                  <div className="grid grid-cols-4 gap-2">
-                                    {beforeConditionImages.map((img, i) => (
-                                      <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-slate-100">
-                                        <img src={img} className="h-full w-full object-cover" alt="" />
-                                        <button onClick={() => removeConditionImage(selectedBooking.id || selectedBooking._id, 'beforeConditionImages', img)} className="absolute top-1 right-1 p-1 bg-black/50 text-white rounded-full"><X size={10} /></button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-3">
-                                   <div className="space-y-1">
-                                      <p className="text-[10px] font-black uppercase text-slate-400">Pickup KM</p>
-                                      <input type="number" className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-emerald-500/20" defaultValue={inspection.pickupMeterReading} onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'pickupMeterReading', e.target.value)} />
-                                   </div>
-                                   <div className="space-y-1">
-                                      <p className="text-[10px] font-black uppercase text-slate-400">Fuel Level</p>
-                                      <input type="text" className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-emerald-500/20" defaultValue={inspection.pickupFuelLevel} onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'pickupFuelLevel', e.target.value)} />
-                                   </div>
-                                </div>
-                             </div>
-                          </CollapsibleSection>
-
-                          {/* 3. After Return */}
-                          <CollapsibleSection title="Return Inspection" icon={CheckCircle2} badge="After Return">
-                             <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-2">
-                                  {afterReturnItems.map((item) => {
-                                    const active = afterInspection[item.key] === true;
-                                    return (
-                                      <button
-                                        key={item.key}
-                                        type="button"
-                                        onClick={() => updateBookingInspection(selectedBooking.id || selectedBooking._id, 'afterReturn', item.key, !active)}
-                                        className={`rounded-xl border p-3 text-left transition-all ${active ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'}`}
-                                      >
-                                        <div className="flex items-center gap-2">
-                                          {active ? <CheckCircle2 size={14} /> : <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-300" />}
-                                          <span className="text-[11px] font-bold">{item.label}</span>
-                                        </div>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Return Photos</label>
-                                    <label className="cursor-pointer text-[10px] font-black text-amber-600 hover:text-amber-700">
-                                      + ADD NEW
-                                      <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => uploadConditionImages(selectedBooking.id || selectedBooking._id, 'afterConditionImages', e.target.files)} />
-                                    </label>
-                                  </div>
-                                  <div className="grid grid-cols-4 gap-2">
-                                    {afterConditionImages.map((img, i) => (
-                                      <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-slate-100">
-                                        <img src={img} className="h-full w-full object-cover" alt="" />
-                                        <button onClick={() => removeConditionImage(selectedBooking.id || selectedBooking._id, 'afterConditionImages', img)} className="absolute top-1 right-1 p-1 bg-black/50 text-white rounded-full"><X size={10} /></button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-3">
-                                   <div className="space-y-1">
-                                      <p className="text-[10px] font-black uppercase text-slate-400">Return KM</p>
-                                      <input type="number" className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-amber-500/20" defaultValue={inspection.returnMeterReading} onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'returnMeterReading', e.target.value)} />
-                                   </div>
-                                   <div className="space-y-1">
-                                      <p className="text-[10px] font-black uppercase text-slate-400">Return Fuel</p>
-                                      <input type="text" className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-amber-500/20" defaultValue={inspection.returnFuelLevel} onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'returnFuelLevel', e.target.value)} />
-                                   </div>
-                                </div>
-                             </div>
-                          </CollapsibleSection>
-                        </div>
-
-                        {/* Bottom Action Section */}
-                        <div className="p-5 sm:p-6 bg-slate-900 text-white mt-auto rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.1)]">
-                           <div className="space-y-5">
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                 {permissions.canAssignBookings && (
-                                   <div className="space-y-1.5">
-                                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Assign Staff</label>
-                                      <select 
-                                        value={bookingDraft.assignedStaffId} 
-                                        onChange={(e) => setBookingDraft(c => ({...c, assignedStaffId: e.target.value}))}
-                                        className="w-full bg-white/10 border-none rounded-xl text-[12px] sm:text-[13px] font-bold py-2.5 px-3 focus:ring-2 focus:ring-white/20 appearance-none"
-                                      >
-                                        <option value="" className="text-slate-900">Unassigned</option>
-                                        {bookingStaffOptions.map(s => <option key={s.id || s._id} value={s.id || s._id} className="text-slate-900">{s.name}</option>)}
-                                      </select>
-                                   </div>
-                                 )}
-                                 <div className="space-y-1.5">
-                                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Status</label>
-                                    <select 
-                                      value={bookingDraft.status} 
-                                      onChange={(e) => setBookingDraft(c => ({...c, status: e.target.value}))}
-                                      className="w-full bg-white/10 border-none rounded-xl text-[12px] sm:text-[13px] font-bold py-2.5 px-3 focus:ring-2 focus:ring-white/20 appearance-none"
-                                    >
-                                      <option value="pending" className="text-slate-900">Pending</option>
-                                      <option value="confirmed" className="text-slate-900">Confirmed</option>
-                                      <option value="assigned" className="text-slate-900">Assigned</option>
-                                      <option value="end_requested" className="text-slate-900">End Requested</option>
-                                      <option value="completed" className="text-slate-900">Completed</option>
-                                    </select>
-                                 </div>
-                              </div>
-
-                              <div className="space-y-1.5">
-                                 <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Internal Handling Notes</label>
-                                 <textarea 
-                                    rows={2}
-                                    value={bookingDraft.serviceCenterNote}
-                                    onChange={(e) => setBookingDraft(c => ({...c, serviceCenterNote: e.target.value}))}
-                                    className="w-full bg-white/10 border-none rounded-xl text-[12px] sm:text-sm font-medium py-2 px-3 focus:ring-2 focus:ring-white/20 resize-none"
-                                    placeholder="Add notes for the team..."
-                                 />
-                              </div>
-
-                              <div className="flex items-center gap-3 pt-2">
-                                 <button
-                                    onClick={saveBookingDraft}
-                                    disabled={!bookingDraftDirty || updatingBookingId === String(selectedBooking.id || selectedBooking._id)}
-                                    className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-700 disabled:opacity-50 text-white py-3 sm:py-3.5 rounded-2xl text-[13px] sm:text-sm font-black transition-all"
-                                  >
-                                    {updatingBookingId === String(selectedBooking.id || selectedBooking._id) ? 'Saving...' : 'Update Booking'}
-                                 </button>
-                                 {canFinalizeBooking(selectedBooking) && (
-                                   <button onClick={completeRide} className="bg-white text-slate-900 px-4 sm:px-6 py-3 sm:py-3.5 rounded-2xl text-[13px] sm:text-sm font-black hover:bg-slate-100 transition-all">
-                                      Finalize
-                                   </button>
-                                 )}
-                              </div>
-                           </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-               {selectedBooking ? (
-                 <div className="rounded-[32px] border border-slate-200 bg-white shadow-[0_8px_40px_rgba(0,0,0,0.08)] overflow-hidden">
+               {selectedBooking ? (() => {
+                 const inspection = selectedBooking.rentalInspection || {};
+                 const beforeInspection = inspection.beforeHandover || {};
+                 const afterInspection = inspection.afterReturn || {};
+                 const beforeConditionImages = Array.isArray(inspection.beforeConditionImages) ? inspection.beforeConditionImages : [];
+                 const afterConditionImages = Array.isArray(inspection.afterConditionImages) ? inspection.afterConditionImages : [];
+                 const customerDocumentCards = getCustomerDocumentCards(selectedBooking);
+                 const getPossessionTime = () => {
+                   const start = new Date(selectedBooking.pickupDateTime);
+                   const end = selectedBooking.status === 'completed' ? new Date(selectedBooking.updatedAt) : new Date();
+                   const diffMs = Math.max(0, end - start);
+                   const hours = Math.floor(diffMs / (1000 * 60 * 60));
+                   const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                   const days = Math.floor(hours / 24);
+                   if (days > 0) return `${days}d ${hours % 24}h`;
+                   if (hours > 0) return `${hours}h ${mins}m`;
+                   return `${mins}m`;
+                 };
+                 return (
+                   <div className="rounded-[32px] border border-slate-200 bg-white shadow-[0_8px_40px_rgba(0,0,0,0.08)] overflow-hidden">
                     <div className="flex flex-col h-full">
                         {/* Header Summary */}
                         <div className="p-6 bg-slate-50/50 border-b border-slate-100">
@@ -1520,7 +1158,7 @@ const ServiceCenterDashboard = () => {
                         </div>
                       </div>
                  </div>
-               ) : (
+               ); })() : (
                  <>
                    <div className="relative mb-6">
                      <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -1825,93 +1463,6 @@ const ServiceCenterDashboard = () => {
           </motion.div>
         ) : null}
 
-        {showVehicleForm ? (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-slate-950/40 p-4 backdrop-blur-sm">
-            <div className="mx-auto flex min-h-full max-w-3xl items-center justify-center">
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="max-h-[92vh] w-full overflow-y-auto rounded-[30px] bg-white p-6 shadow-[0_28px_100px_rgba(15,23,42,0.22)]">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-2xl font-bold tracking-[-0.04em] text-slate-950">
-                      {editingVehicleId ? 'Vehicle Details' : 'Add Rental Vehicle'}
-                    </h3>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {editingVehicleId
-                        ? 'View and edit the complete vehicle setup for this service-center listing.'
-                        : 'This vehicle will be assigned directly to your service center.'}
-                    </p>
-                  </div>
-                  <button type="button" onClick={closeVehicleForm} className="rounded-2xl border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50">
-                    <X size={18} />
-                  </button>
-                </div>
-
-                <div className="mt-6 grid gap-5 md:grid-cols-2">
-                  <div className="md:col-span-2">
-                    <label className={labelClass}>Vehicle Name</label>
-                    <input value={vehicleForm.name} onChange={(event) => handleVehicleChange('name', event.target.value)} className={inputClass} placeholder="Swift Dzire Rental" />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Category</label>
-                    <input value={vehicleForm.vehicleCategory} onChange={(event) => handleVehicleChange('vehicleCategory', event.target.value)} className={inputClass} placeholder="Car" />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Image URL</label>
-                    <input value={vehicleForm.image} onChange={(event) => handleVehicleChange('image', event.target.value)} className={inputClass} placeholder="https://..." />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Capacity</label>
-                    <input type="number" min="1" value={vehicleForm.capacity} onChange={(event) => handleVehicleChange('capacity', event.target.value)} className={inputClass} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Luggage Capacity</label>
-                    <input type="number" min="0" value={vehicleForm.luggageCapacity} onChange={(event) => handleVehicleChange('luggageCapacity', event.target.value)} className={inputClass} />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className={labelClass}>Short Description</label>
-                    <input value={vehicleForm.short_description} onChange={(event) => handleVehicleChange('short_description', event.target.value)} className={inputClass} placeholder="Comfortable city rental" />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className={labelClass}>Description</label>
-                    <textarea rows={4} value={vehicleForm.description} onChange={(event) => handleVehicleChange('description', event.target.value)} className={`${inputClass} resize-none`} placeholder="Add details about this rental vehicle" />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className={labelClass}>Amenities</label>
-                    <input value={vehicleForm.amenities} onChange={(event) => handleVehicleChange('amenities', event.target.value)} className={inputClass} placeholder="AC, GPS, Charging Port" />
-                  </div>
-                  <div>
-                    <label className={labelClass}>6 Hour Price</label>
-                    <input type="number" min="0" value={vehicleForm.price6} onChange={(event) => handleVehicleChange('price6', event.target.value)} className={inputClass} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>12 Hour Price</label>
-                    <input type="number" min="0" value={vehicleForm.price12} onChange={(event) => handleVehicleChange('price12', event.target.value)} className={inputClass} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>24 Hour Price</label>
-                    <input type="number" min="0" value={vehicleForm.price24} onChange={(event) => handleVehicleChange('price24', event.target.value)} className={inputClass} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Status</label>
-                    <select value={vehicleForm.status} onChange={(event) => handleVehicleChange('status', event.target.value)} className={inputClass}>
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="mt-6 flex items-center justify-end gap-3">
-                  <button type="button" onClick={closeVehicleForm} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">
-                    Cancel
-                  </button>
-                  <button type="button" disabled={savingVehicle} onClick={handleCreateVehicle} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60">
-                    {savingVehicle ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-                    {editingVehicleId ? 'Save Changes' : 'Save Vehicle'}
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          </motion.div>
-        ) : null}
       </AnimatePresence>
     </div>
   );

@@ -25,6 +25,7 @@ import { HAS_VALID_GOOGLE_MAPS_KEY, INDIA_CENTER, useAppGoogleMapsLoader } from 
 import { userService } from '../../services/userService';
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
+const RENTAL_SELECTED_VEHICLE_STORAGE_KEY = 'selectedRentalVehicleDetail';
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100/60';
@@ -159,14 +160,30 @@ const getCurrentCoordinates = () =>
     );
   });
 
+const readStoredRentalVehicleDetail = () => {
+  try {
+    const raw = window.sessionStorage.getItem(RENTAL_SELECTED_VEHICLE_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
 const RentalVehicleDetail = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { settings } = useSettings();
   const appName = settings.general?.app_name || 'App';
-  const { vehicle, duration } = location.state || {};
+  const storedDetail = useMemo(() => readStoredRentalVehicleDetail(), []);
+  const initialVehicle = location.state?.vehicle || storedDetail?.vehicle || null;
+  const duration = location.state?.duration || storedDetail?.duration || 'Hourly';
+  const [vehicle, setVehicle] = useState(initialVehicle);
 
-  const [selectedImage, setSelectedImage] = useState(vehicle?.gallery?.[0] || vehicle?.image || '');
+  const [selectedImage, setSelectedImage] = useState(
+    vehicle?.gallery?.[0] || vehicle?.galleryImages?.[0] || vehicle?.coverImage || vehicle?.image || '',
+  );
   const [showQuoteForm, setShowQuoteForm] = useState(false);
   const [selectedPackageId, setSelectedPackageId] = useState('');
   const [selectionStep, setSelectionStep] = useState('package');
@@ -193,12 +210,95 @@ const RentalVehicleDetail = () => {
   });
   const [submittingQuote, setSubmittingQuote] = useState(false);
 
+  useEffect(() => {
+    setVehicle(initialVehicle);
+  }, [initialVehicle]);
+
+  useEffect(() => {
+    if (!vehicle?.id && !vehicle?._id) return;
+
+    let active = true;
+
+    const refreshVehicle = async () => {
+      try {
+        const response = await userService.getRentalVehicles();
+        const results =
+          response?.data?.results ||
+          response?.results ||
+          response?.data?.data?.results ||
+          [];
+
+        if (!active) return;
+
+        const latestVehicle = results.find(
+          (item) => String(item.id || item._id) === String(vehicle.id || vehicle._id),
+        );
+
+        if (!latestVehicle) return;
+
+        const mergedGallery = [
+          ...(Array.isArray(latestVehicle.galleryImages) ? latestVehicle.galleryImages : []),
+          ...(Array.isArray(latestVehicle.gallery) ? latestVehicle.gallery : []),
+          ...(Array.isArray(vehicle.galleryImages) ? vehicle.galleryImages : []),
+          ...(Array.isArray(vehicle.gallery) ? vehicle.gallery : []),
+        ].filter((value, index, array) => value && array.indexOf(value) === index);
+
+        setVehicle((current) => ({
+          ...current,
+          ...latestVehicle,
+          galleryImages: mergedGallery,
+          gallery: [
+            latestVehicle.coverImage,
+            latestVehicle.image,
+            ...mergedGallery,
+            latestVehicle.map_icon,
+          ].filter((value, index, array) => value && array.indexOf(value) === index),
+        }));
+      } catch {
+        // Keep existing route or cached state if refresh fails.
+      }
+    };
+
+    refreshVehicle();
+
+    return () => {
+      active = false;
+    };
+  }, [vehicle?.id, vehicle?._id]);
+
+  useEffect(() => {
+    if (!vehicle) return;
+
+    try {
+      window.sessionStorage.setItem(
+        RENTAL_SELECTED_VEHICLE_STORAGE_KEY,
+        JSON.stringify({ vehicle, duration }),
+      );
+    } catch {
+      // Ignore storage failures and continue rendering with route state only.
+    }
+  }, [duration, vehicle]);
+
   if (!vehicle) {
     navigate('/rental');
     return null;
   }
 
-  const gallery = vehicle.gallery?.length ? vehicle.gallery : vehicle.image ? [vehicle.image] : [];
+  const gallery = useMemo(
+    () =>
+      [
+        ...(Array.isArray(vehicle.gallery) ? vehicle.gallery : []),
+        ...(Array.isArray(vehicle.galleryImages) ? vehicle.galleryImages : []),
+        vehicle.coverImage,
+        vehicle.image,
+        vehicle.map_icon,
+      ].filter((value, index, array) => value && array.indexOf(value) === index),
+    [vehicle],
+  );
+
+  useEffect(() => {
+    setSelectedImage(gallery[0] || '');
+  }, [gallery]);
   const pricingRows = Array.isArray(vehicle.rawPricing)
     ? [...vehicle.rawPricing].sort(
         (a, b) => Number(a.durationHours || 0) - Number(b.durationHours || 0),

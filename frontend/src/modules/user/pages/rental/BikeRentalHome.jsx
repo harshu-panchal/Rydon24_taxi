@@ -5,6 +5,7 @@ import { ArrowLeft, Fuel, Shield, ChevronRight, Star, Info, Car } from 'lucide-r
 import { userService } from '../../services/userService';
 
 const DURATION_TABS = ['Hourly', 'Half-Day', 'Daily'];
+const RENTAL_SELECTED_VEHICLE_STORAGE_KEY = 'selectedRentalVehicleDetail';
 
 const infoBanner = {
   Hourly: 'Short rentals for quick city use.',
@@ -91,9 +92,13 @@ const normalizeRentalVehicle = (item = {}, index = 0) => {
     tagBg = 'bg-orange-50 border-orange-100';
   }
 
-  const gallery = [item.image, item.map_icon].filter(
-    (value, currentIndex, array) => value && array.indexOf(value) === currentIndex,
-  );
+  const gallery = [
+    item.coverImage,
+    item.image,
+    ...(Array.isArray(item.galleryImages) ? item.galleryImages : []),
+    ...(Array.isArray(item.gallery) ? item.gallery : []),
+    item.map_icon,
+  ].filter((value, currentIndex, array) => value && array.indexOf(value) === currentIndex);
 
   return {
     id: item.id || item._id,
@@ -134,6 +139,21 @@ const BikeRentalHome = () => {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   const navigate = useNavigate();
+
+  const openVehicleDetail = (vehicle) => {
+    const payload = {
+      vehicle,
+      duration: selectedDuration,
+    };
+
+    try {
+      window.sessionStorage.setItem(RENTAL_SELECTED_VEHICLE_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // Ignore storage failures and continue with navigation state.
+    }
+
+    navigate('/rental/vehicle', { state: payload });
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -323,7 +343,7 @@ const BikeRentalHome = () => {
                   </div>
                   <motion.button
                     whileTap={{ scale: 0.96 }}
-                    onClick={() => navigate('/rental/vehicle', { state: { vehicle: v, duration: selectedDuration } })}
+                    onClick={() => openVehicleDetail(v)}
                     className="bg-slate-900 text-white px-4 py-2.5 rounded-[12px] text-[11px] font-black uppercase tracking-widest flex items-center gap-1 shadow-[0_6px_16px_rgba(15,23,42,0.18)] active:bg-black transition-all"
                   >
                     Book Now <ChevronRight size={13} strokeWidth={3} className="opacity-60" />

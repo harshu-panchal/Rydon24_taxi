@@ -27,14 +27,27 @@ const getTokenPayload = (token) => {
   }
 };
 
+const getSessionItem = (key) => {
+  try {
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
 const getStoredTokenByRole = (role) => {
   const normalizedRole = String(role || '').toLowerCase();
-  const entries = [
-    localStorage.getItem(`${role}Token`),
-    normalizedRole === 'owner' ? localStorage.getItem('driverToken') : null,
-    normalizedRole === 'driver' ? localStorage.getItem('driverToken') : null,
-    localStorage.getItem('token'),
-  ].filter(Boolean);
+  const entries = (
+    normalizedRole === 'driver' || normalizedRole === 'owner'
+      ? [
+          getSessionItem('driverToken'),
+          getSessionItem('token'),
+        ]
+      : [
+          localStorage.getItem(`${role}Token`),
+          localStorage.getItem('token'),
+        ]
+  ).filter(Boolean);
 
   return entries.find((token) => String(getTokenPayload(token)?.role || '').toLowerCase() === normalizedRole) || null;
 };

@@ -180,6 +180,7 @@ const getCoverImage = (item = {}) => normalizeMediaValue(item.coverImage) || nor
 const getGalleryImages = (item = {}) => {
   if (Array.isArray(item.galleryImages)) return item.galleryImages.map(normalizeMediaValue).filter(Boolean);
   if (Array.isArray(item.gallery)) return item.gallery.map(normalizeMediaValue).filter(Boolean);
+  if (Array.isArray(item.images)) return item.images.map(normalizeMediaValue).filter(Boolean);
   return [];
 };
 
@@ -280,6 +281,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
   const [errorMessage, setErrorMessage] = useState('');
   const [formData, setFormData] = useState(buildDefaultForm);
   const [togglingIds, setTogglingIds] = useState([]);
+  const [galleryImageUrl, setGalleryImageUrl] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -443,6 +445,33 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
       ...current,
       galleryImages: (Array.isArray(current.galleryImages) ? current.galleryImages : []).filter((_, index) => index !== indexToRemove),
     }));
+  };
+
+  const updateGalleryImage = (indexToUpdate, value) => {
+    setFormData((current) => ({
+      ...current,
+      galleryImages: (Array.isArray(current.galleryImages) ? current.galleryImages : []).map((image, index) =>
+        index === indexToUpdate ? value : image,
+      ),
+    }));
+  };
+
+  const replaceGalleryImage = async (event, indexToReplace) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const result = await fileToDataUrl(file);
+    updateGalleryImage(indexToReplace, result);
+    event.target.value = '';
+  };
+
+  const addGalleryImageByUrl = () => {
+    const nextValue = galleryImageUrl.trim();
+    if (!nextValue) return;
+    setFormData((current) => ({
+      ...current,
+      galleryImages: [...(Array.isArray(current.galleryImages) ? current.galleryImages : []), nextValue],
+    }));
+    setGalleryImageUrl('');
   };
 
   const updatePricingRow = (pricingId, field, value) => {
@@ -1067,11 +1096,35 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
           <div>
             <label className={labelClass}>Gallery Images</label>
             <div className="rounded-2xl border border-dashed border-slate-300 p-4">
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm border border-slate-200">
-                <ImagePlus size={16} />
-                Add gallery images
-                <input type="file" accept="image/*" multiple className="hidden" onChange={handleGalleryImagesChange} />
-              </label>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm">
+                  <ImagePlus size={16} />
+                  Add gallery images
+                  <input type="file" accept="image/*" multiple className="hidden" onChange={handleGalleryImagesChange} />
+                </label>
+                <div className="flex flex-1 gap-2">
+                  <input
+                    type="text"
+                    value={galleryImageUrl}
+                    onChange={(event) => setGalleryImageUrl(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        addGalleryImageByUrl();
+                      }
+                    }}
+                    className={inputClass}
+                    placeholder="Paste gallery image URL"
+                  />
+                  <button
+                    type="button"
+                    onClick={addGalleryImageByUrl}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm"
+                  >
+                    Add URL
+                  </button>
+                </div>
+              </div>
 
               {formData.galleryImages.length ? (
                 <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -1080,6 +1133,22 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                       <div className="overflow-hidden rounded-xl bg-white">
                         <img src={image} alt={`Gallery ${index + 1}`} className="h-28 w-full object-cover" />
                       </div>
+                      <input
+                        type="text"
+                        value={image}
+                        onChange={(event) => updateGalleryImage(index, event.target.value)}
+                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none transition-all focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100/60"
+                        placeholder="Gallery image URL"
+                      />
+                      <label className="mt-2 flex cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                        Replace image
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(event) => replaceGalleryImage(event, index)}
+                        />
+                      </label>
                       <button
                         type="button"
                         onClick={() => removeGalleryImage(index)}

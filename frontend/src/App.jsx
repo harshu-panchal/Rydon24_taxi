@@ -9,6 +9,7 @@ import AppAutoUpdater from './modules/shared/components/AppAutoUpdater';
 import { addRealtimeNotification } from './modules/user/utils/realtimeNotificationStore';
 import { clearLocalUserSession, getLocalUserToken } from './modules/user/services/authService';
 import { clearCurrentRide } from './modules/user/services/currentRideService';
+import { getLocalDriverToken, getStoredDriverRole } from './modules/driver/services/registrationService';
 import './App.css';
 
 
@@ -130,6 +131,7 @@ const ActiveTrip = lazy(() => import('./modules/driver/pages/ActiveTrip'));
 const DriverWallet = lazy(() => import('./modules/driver/pages/DriverWallet'));
 const DriverProfile = lazy(() => import('./modules/driver/pages/DriverProfile'));
 const ServiceCenterDashboard = lazy(() => import('./modules/driver/pages/ServiceCenterDashboard'));
+const ServiceCenterVehicleDetails = lazy(() => import('./modules/driver/pages/ServiceCenterVehicleDetails'));
 const RideRequests = lazy(() => import('./modules/driver/pages/RideRequests'));
 const DriverIncentives = lazy(() => import('./modules/driver/pages/DriverIncentives'));
 const BusDriverHome = lazy(() => import('./modules/driver/pages/BusDriverHome'));
@@ -489,8 +491,8 @@ const UserAccountInvalidationListener = () => {
 };
 
 const DriverEntryRedirect = () => {
-  const token = localStorage.getItem('driverToken') || localStorage.getItem('token');
-  const role = String(localStorage.getItem('role') || 'driver').toLowerCase();
+  const token = getLocalDriverToken();
+  const role = String(getStoredDriverRole() || 'driver').toLowerCase();
 
   if (!token) {
     return <Navigate to="/taxi/driver/login" replace />;
@@ -847,6 +849,8 @@ function App() {
                 <Route path="wallet" element={<DriverWallet />} />
                 <Route path="profile" element={<DriverProfile />} />
                 <Route path="service-center" element={<ServiceCenterDashboard />} />
+                <Route path="service-center/vehicles/new" element={<ServiceCenterVehicleDetails />} />
+                <Route path="service-center/vehicles/:vehicleId" element={<ServiceCenterVehicleDetails />} />
                 <Route path="history" element={<RideRequests />} />
                 <Route path="incentives" element={<DriverIncentives />} />
 

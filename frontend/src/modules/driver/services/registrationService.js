@@ -1,6 +1,24 @@
 import api from "../../../shared/api/axiosInstance";
 
 const STORAGE_KEY = "driverRegistrationSession";
+const DRIVER_AUTH_KEYS = ["token", "driverToken", "driverInfo", "role", "chatRole"];
+const readSessionValue = (key) => {
+  try {
+    return sessionStorage.getItem(key) || "";
+  } catch {
+    return "";
+  }
+};
+const writeSessionValue = (key, value) => {
+  try {
+    sessionStorage.setItem(key, value);
+  } catch {}
+};
+const removeSessionValue = (key) => {
+  try {
+    sessionStorage.removeItem(key);
+  } catch {}
+};
 
 const readStoredSession = () => {
   try {
@@ -29,12 +47,28 @@ export const clearDriverRegistrationSession = () => {
 
 export const clearDriverAuthState = () => {
   clearDriverRegistrationSession();
+  DRIVER_AUTH_KEYS.forEach((key) => {
+    removeSessionValue(key);
+    localStorage.removeItem(key);
+  });
+};
+
+export const persistDriverAuthSession = ({ token = "", role = "driver" } = {}) => {
+  const normalizedRole = String(role || "driver").toLowerCase();
+
+  if (token) {
+    writeSessionValue("token", token);
+    writeSessionValue("driverToken", token);
+  }
+
+  writeSessionValue("role", normalizedRole);
+  localStorage.setItem("role", normalizedRole);
   localStorage.removeItem("token");
   localStorage.removeItem("driverToken");
-  localStorage.removeItem("driverInfo");
-  localStorage.removeItem("role");
-  localStorage.removeItem("chatRole");
 };
+
+export const getStoredDriverRole = () =>
+  readSessionValue("role") || String(localStorage.getItem("role") || "driver").toLowerCase();
 
 export const sendDriverOtp = (payload) =>
   api.post("/drivers/onboarding/send-otp", payload);
@@ -88,10 +122,10 @@ const getTokenPayload = (token) => {
 };
 
 const readLocalDriverToken = () => {
-  const direct = localStorage.getItem("driverToken");
+  const direct = readSessionValue("driverToken");
   if (direct) return direct;
 
-  const fallback = localStorage.getItem("token");
+  const fallback = readSessionValue("token");
   if (["driver", "owner", "bus_driver", "service_center", "service_center_staff"].includes(getTokenPayload(fallback)?.role)) {
     return fallback;
   }
