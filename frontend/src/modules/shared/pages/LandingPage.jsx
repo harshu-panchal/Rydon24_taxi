@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Home, Clock, Gift, Map, Car } from 'lucide-react';
 import './LandingPage.css';
 import { useSettings } from '../../../shared/context/SettingsContext';
@@ -16,7 +16,9 @@ function LandingPage() {
   const navigate = useNavigate();
   const { settings } = useSettings();
   const appName = settings.general?.app_name || 'easytaxi';
-  
+  const [activeTab, setActiveTab] = React.useState('home');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+
   // Custom logo rendering to match 'easytaxi' style (first part yellow, second part white)
   const renderLogo = () => {
     const nameStr = appName.toString();
@@ -32,8 +34,10 @@ function LandingPage() {
     return nameStr;
   };
 
-  const handleRedirect = (path) => (e) => {
+  const handleRedirect = (path, tabName) => (e) => {
     e?.preventDefault();
+    if (tabName) setActiveTab(tabName);
+    setIsMobileMenuOpen(false);
     if (path.startsWith('#')) {
       const element = document.querySelector(path);
       if (element) {
@@ -59,10 +63,10 @@ function LandingPage() {
           </div>
           <div className="new-top-contacts">
              <div className="top-contact-item">
-               <span>+234 80 1000 000</span>
+               <span>7409129517</span>
              </div>
              <div className="top-contact-item">
-               <span>info@rydon24.com</span>
+               <span>supportrydon24@gmail.com</span>
              </div>
           </div>
         </div>
@@ -71,16 +75,22 @@ function LandingPage() {
         <header className="new-main-header">
           <div className="new-nav-bg-slant"></div>
           <div className="new-nav-container">
-            <nav className="new-nav-links">
-              <a href="/" className="new-nav-link active">Home</a>
-              <a href="/about" className="new-nav-link" onClick={handleRedirect('/about')}>Company</a>
-              <a href="/services" className="new-nav-link" onClick={handleRedirect('/services')}>Our Taxi</a>
-              <a href="/faq" className="new-nav-link" onClick={handleRedirect('/faq')}>FAQs</a>
-              <a href="/blog" className="new-nav-link" onClick={handleRedirect('/blog')}>Blog</a>
-              <a href="/contact" className="new-nav-link" onClick={handleRedirect('/contact')}>Contact</a>
+            <a href="/" className="mobile-only-logo">
+               <span>Rydon24</span>
+            </a>
+            <nav className={`new-nav-links ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
+              <a href="#home" className={`new-nav-link ${activeTab === 'home' ? 'active' : ''}`} onClick={handleRedirect('#home', 'home')}>Home</a>
+              <Link to="/about" className={`new-nav-link ${activeTab === 'about' ? 'active' : ''}`} onClick={() => { setActiveTab('about'); setIsMobileMenuOpen(false); }}>Company</Link>
+              <Link to="/services" className={`new-nav-link ${activeTab === 'services' ? 'active' : ''}`} onClick={() => { setActiveTab('services'); setIsMobileMenuOpen(false); }}>Our Taxi</Link>
+              <Link to="/faq" className={`new-nav-link ${activeTab === 'faq' ? 'active' : ''}`} onClick={() => { setActiveTab('faq'); setIsMobileMenuOpen(false); }}>FAQs</Link>
+              <Link to="/blog" className={`new-nav-link ${activeTab === 'blog' ? 'active' : ''}`} onClick={() => { setActiveTab('blog'); setIsMobileMenuOpen(false); }}>Blog</Link>
+              <Link to="/contact" className={`new-nav-link ${activeTab === 'contact' ? 'active' : ''}`} onClick={() => { setActiveTab('contact'); setIsMobileMenuOpen(false); }}>Contact</Link>
             </nav>
             <div className="new-nav-actions">
-              <button className="new-book-btn" onClick={handleRedirect('/login')}>Book a Taxi</button>
+              <button className="new-book-btn hidden-mobile" onClick={() => window.open('https://play.google.com/store/apps/details?id=com.rydon24.user', '_blank')}>Book a Taxi</button>
+              <button className="mobile-menu-btn" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
+                ☰
+              </button>
             </div>
           </div>
         </header>
@@ -91,7 +101,7 @@ function LandingPage() {
             <span className="new-hero-subtitle">Travel securely with us!</span>
             <h1 className="new-hero-title">Book your taxi from<br/>anywhare today!</h1>
             <p className="new-hero-desc">Everything your taxi business needs is already here!<br/>Ridek made for taxi service companies!</p>
-            <button className="new-hero-action-btn" onClick={handleRedirect('/login')}>Book Your Ride</button>
+            <button className="new-hero-action-btn" onClick={() => window.open('https://play.google.com/store/apps/details?id=com.rydon24.user', '_blank')}>Book Your Ride</button>
           </div>
           
           <div className="new-hero-graphic">
@@ -205,7 +215,7 @@ function LandingPage() {
               <h3 className="newsletter-title">Subscribe Our Newsletter.</h3>
               <form className="newsletter-form">
                 <input type="email" placeholder="Email" />
-                <button type="submit" onClick={(e) => e.preventDefault()}>Book Now →</button>
+                <button type="button" onClick={() => window.open('https://play.google.com/store/apps/details?id=com.rydon24.user', '_blank')}>Book Now →</button>
               </form>
             </div>
           </div>
@@ -229,31 +239,31 @@ function LandingPage() {
           <div className="footer-col-2">
             <h3>Quick Links</h3>
             <ul>
-              <li><a href="/terms" onClick={handleRedirect('/terms')}>Terms & Conditions</a></li>
-              <li><a href="/privacy" onClick={handleRedirect('/privacy')}>Privacy Policy</a></li>
-              <li><a href="/refund" onClick={handleRedirect('/refund')}>Refund Policy</a></li>
-              <li><a href="/cancellation" onClick={handleRedirect('/cancellation')}>Cancellation Policy</a></li>
-              <li><a href="/contact" onClick={handleRedirect('/contact')}>Contact Us</a></li>
-              <li><a href="/about" onClick={handleRedirect('/about')}>About Us</a></li>
+              <li><Link to="/terms">Terms & Conditions</Link></li>
+              <li><Link to="/privacy">Privacy Policy</Link></li>
+              <li><Link to="/refund">Refund Policy</Link></li>
+              <li><Link to="/cancellation">Cancellation Policy</Link></li>
+              <li><Link to="/contact">Contact Us</Link></li>
+              <li><Link to="/about">About Us</Link></li>
             </ul>
           </div>
           <div className="footer-col-3">
             <h3>Our Services</h3>
             <ul>
-              <li><a href="/services" onClick={handleRedirect('/services')}>City Rides</a></li>
-              <li><a href="/services" onClick={handleRedirect('/services')}>Airport transfers</a></li>
-              <li><a href="/services" onClick={handleRedirect('/services')}>Outstation Trips</a></li>
-              <li><a href="/services" onClick={handleRedirect('/services')}>Parcel Delivery</a></li>
-              <li><a href="/services" onClick={handleRedirect('/services')}>Bike Taxis</a></li>
-              <li><a href="/contact" onClick={handleRedirect('/contact')}>24/7 Customer Support</a></li>
+              <li><Link to="/services">City Rides</Link></li>
+              <li><Link to="/services">Airport transfers</Link></li>
+              <li><Link to="/services">Outstation Trips</Link></li>
+              <li><Link to="/services">Parcel Delivery</Link></li>
+              <li><Link to="/services">Bike Taxis</Link></li>
+              <li><Link to="/contact">24/7 Customer Support</Link></li>
             </ul>
           </div>
         </div>
 
         <div className="footer-bottom-bar">
           <div className="footer-legal">
-            <a href="/privacy" onClick={handleRedirect('/privacy')}>Privacy Policy</a>
-            <a href="/terms" onClick={handleRedirect('/terms')}>Terms & Conditions</a>
+            <Link to="/privacy">Privacy Policy</Link>
+            <Link to="/terms">Terms & Conditions</Link>
           </div>
           <div className="footer-copyright">
             Copyright 2026 © All Right Reserved Design by Rydon24
