@@ -11,6 +11,7 @@ import {
   createOwnerFleetDriver,
   deleteCurrentDriverAccount,
   deleteServiceCenterVehicle,
+  updateServiceCenterVehicle,
   deleteDriverEmergencyContact,
   claimDriverIncentiveReward,
   goOffline,
@@ -134,7 +135,13 @@ driverRouter.get(
 );
 driverRouter.post(
   "/fcm-token",
-  authenticate(["driver"]),
+  authenticate([
+    "driver",
+    "owner",
+    "bus_driver",
+    "service_center",
+    "service_center_staff",
+  ]),
   asyncHandler(saveDriverFcmToken),
 );
 driverRouter.get(
@@ -243,6 +250,11 @@ driverRouter.post(
   "/service-center/vehicles",
   authenticate(["service_center"]),
   asyncHandler(createServiceCenterVehicle),
+);
+driverRouter.patch(
+  "/service-center/vehicles/:vehicleId",
+  authenticate(["service_center"]),
+  asyncHandler(updateServiceCenterVehicle),
 );
 driverRouter.delete(
   "/service-center/vehicles/:vehicleId",

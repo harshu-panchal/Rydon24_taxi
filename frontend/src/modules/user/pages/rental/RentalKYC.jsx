@@ -1,9 +1,18 @@
-import React, { useState, useRef } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Upload, CheckCircle2, ChevronRight, ShieldCheck, X } from 'lucide-react';
+import { uploadService } from '../../../../shared/services/uploadService';
 
 const IS_KYC_DONE = false;
+
+const fileToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Unable to read selected image'));
+    reader.readAsDataURL(file);
+  });
 
 const RentalKYC = () => {
   const navigate = useNavigate();
@@ -11,13 +20,22 @@ const RentalKYC = () => {
   const state = location.state || {};
   if (!state.vehicle) { navigate('/rental'); return null; }
 
+  const existingKycDocuments = useMemo(() => state.rentalKyc?.documents || {}, [state.rentalKyc]);
+
   const [dlImage, setDlImage] = useState(null);
-  const [dlPreview, setDlPreview] = useState(null);
+  const [dlPreview, setDlPreview] = useState(existingKycDocuments.drivingLicense?.imageUrl || null);
   const [aadhaarImage, setAadhaarImage] = useState(null);
-  const [aadhaarPreview, setAadhaarPreview] = useState(null);
+  const [aadhaarPreview, setAadhaarPreview] = useState(existingKycDocuments.aadhaarCard?.imageUrl || null);
   
   const [uploading, setUploading] = useState(false);
-  const [done, setDone] = useState(IS_KYC_DONE);
+  const [done, setDone] = useState(
+    Boolean(
+      existingKycDocuments.drivingLicense?.imageUrl &&
+      existingKycDocuments.aadhaarCard?.imageUrl,
+    ) || IS_KYC_DONE,
+  );
+  const [error, setError] = useState('');
+  const [uploadedDocuments, setUploadedDocuments] = useState(existingKycDocuments);
   const dlInputRef = useRef();
   const aadhaarInputRef = useRef();
 
@@ -33,10 +51,55 @@ const RentalKYC = () => {
     setAadhaarPreview(URL.createObjectURL(file));
   };
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     if ((!dlImage || !aadhaarImage) && !done) return;
     setUploading(true);
-    setTimeout(() => { setUploading(false); setDone(true); }, 1500);
+    setError('');
+
+    try {
+      const nextDocuments = {
+        ...uploadedDocuments,
+      };
+
+      if (dlImage) {
+        const dlDataUrl = await fileToDataUrl(dlImage);
+        const drivingLicenseUpload = await uploadService.uploadImage(dlDataUrl, 'rental-kyc');
+        const drivingLicenseUrl = drivingLicenseUpload?.url || drivingLicenseUpload?.secureUrl || '';
+        if (!drivingLicenseUrl) {
+          throw new Error('Driving license upload failed');
+        }
+        nextDocuments.drivingLicense = {
+          imageUrl: drivingLicenseUrl,
+          fileName: dlImage.name || 'driving-license',
+          uploadedAt: new Date().toISOString(),
+        };
+      }
+
+      if (aadhaarImage) {
+        const aadhaarDataUrl = await fileToDataUrl(aadhaarImage);
+        const aadhaarUpload = await uploadService.uploadImage(aadhaarDataUrl, 'rental-kyc');
+        const aadhaarUrl = aadhaarUpload?.url || aadhaarUpload?.secureUrl || '';
+        if (!aadhaarUrl) {
+          throw new Error('Aadhaar upload failed');
+        }
+        nextDocuments.aadhaarCard = {
+          imageUrl: aadhaarUrl,
+          fileName: aadhaarImage.name || 'aadhaar-card',
+          uploadedAt: new Date().toISOString(),
+        };
+      }
+
+      setUploadedDocuments(nextDocuments);
+      setDlPreview(nextDocuments.drivingLicense?.imageUrl || dlPreview);
+      setAadhaarPreview(nextDocuments.aadhaarCard?.imageUrl || aadhaarPreview);
+      setDone(true);
+      setDlImage(null);
+      setAadhaarImage(null);
+    } catch (uploadError) {
+      setError(uploadError?.message || 'Unable to upload KYC documents');
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
@@ -144,7 +207,7 @@ const RentalKYC = () => {
 
         {/* Upload button (only if BOTH images selected but not yet verified) */}
         <AnimatePresence>
-          {dlPreview && aadhaarPreview && !done && (
+          {(dlPreview && aadhaarPreview && !done) || ((dlImage || aadhaarImage) && !done) ? (
             <motion.button initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               whileTap={{ scale: 0.97 }} onClick={handleUpload} disabled={uploading}
               className="w-full bg-blue-600 text-white py-3.5 rounded-[16px] text-[13px] font-black flex items-center justify-center gap-2 shadow-[0_6px_16px_rgba(37,99,235,0.25)]">
@@ -154,13 +217,25 @@ const RentalKYC = () => {
                 <><Upload size={14} strokeWidth={3} /> Submit Documents</>
               )}
             </motion.button>
-          )}
+          ) : null}
         </AnimatePresence>
+
+        {error ? (
+          <p className="text-center text-[12px] font-bold text-rose-500">{error}</p>
+        ) : null}
       </div>
 
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 pb-6 pt-3 bg-gradient-to-t from-[#EEF2F7] via-[#F3F4F6]/95 to-transparent pointer-events-none z-30">
         <motion.button whileTap={{ scale: 0.98 }} disabled={!done}
-          onClick={() => navigate('/rental/deposit', { state: { ...state } })}
+          onClick={() => navigate('/rental/deposit', {
+            state: {
+              ...state,
+              rentalKyc: {
+                completedAt: new Date().toISOString(),
+                documents: uploadedDocuments,
+              },
+            },
+          })}
           className={`pointer-events-auto w-full py-4 rounded-[18px] text-[15px] font-black text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] flex items-center justify-center gap-2 transition-all ${done ? 'bg-slate-900' : 'bg-slate-300'}`}>
           Continue to Deposit <ChevronRight size={17} strokeWidth={3} className="opacity-50" />
         </motion.button>

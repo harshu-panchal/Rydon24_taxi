@@ -137,6 +137,16 @@ const ownerSchema = new mongoose.Schema(
       default: 'pending',
       trim: true,
     },
+    fcmTokenWeb: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    fcmTokenMobile: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     wallet: {
       balance: {
         type: Number,

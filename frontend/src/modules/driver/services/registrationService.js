@@ -184,6 +184,9 @@ export const getServiceCenterVehicles = () =>
 export const createServiceCenterVehicle = (payload) =>
   api.post("/drivers/service-center/vehicles", payload, withDriverAuth());
 
+export const updateServiceCenterVehicle = (vehicleId, payload) =>
+  api.patch(`/drivers/service-center/vehicles/${vehicleId}`, payload, withDriverAuth());
+
 export const deleteServiceCenterVehicle = (vehicleId) =>
   api.delete(`/drivers/service-center/vehicles/${vehicleId}`, withDriverAuth());
 

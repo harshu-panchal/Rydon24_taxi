@@ -770,6 +770,18 @@ const serializeRentalBookingRequest = (item = {}) => ({
   contactPhone: item.contactPhone || '',
   contactEmail: item.contactEmail || '',
   kycCompleted: Boolean(item.kycCompleted),
+  kycDocuments: {
+    drivingLicense: {
+      imageUrl: item.kycDocuments?.drivingLicense?.imageUrl || '',
+      fileName: item.kycDocuments?.drivingLicense?.fileName || '',
+      uploadedAt: item.kycDocuments?.drivingLicense?.uploadedAt || null,
+    },
+    aadhaarCard: {
+      imageUrl: item.kycDocuments?.aadhaarCard?.imageUrl || '',
+      fileName: item.kycDocuments?.aadhaarCard?.fileName || '',
+      uploadedAt: item.kycDocuments?.aadhaarCard?.uploadedAt || null,
+    },
+  },
   assignedVehicle: {
     vehicleId: item.assignedVehicle?.vehicleId ? String(item.assignedVehicle.vehicleId) : '',
     name: item.assignedVehicle?.name || '',
@@ -2484,6 +2496,19 @@ export const createRentalBookingRequest = async (req, res) => {
   const selectedPackage = payload.selectedPackage || {};
   const serviceLocation = payload.serviceLocation || {};
   const paymentPayload = payload.payment || {};
+  const kycDocumentsPayload = payload.kycDocuments || {};
+  const normalizedDrivingLicenseUrl = toCleanString(
+    kycDocumentsPayload.drivingLicense?.imageUrl ||
+      kycDocumentsPayload.drivingLicense?.secureUrl ||
+      kycDocumentsPayload.drivingLicense?.url ||
+      '',
+  );
+  const normalizedAadhaarUrl = toCleanString(
+    kycDocumentsPayload.aadhaarCard?.imageUrl ||
+      kycDocumentsPayload.aadhaarCard?.secureUrl ||
+      kycDocumentsPayload.aadhaarCard?.url ||
+      '',
+  );
   const requestedLocationId = toCleanString(serviceLocation.id || serviceLocation._id || serviceLocation.locationId || '');
   const allowedServiceStoreIds = Array.isArray(vehicle.serviceStoreIds)
     ? vehicle.serviceStoreIds.filter((item) => mongoose.Types.ObjectId.isValid(item))
@@ -2542,6 +2567,34 @@ export const createRentalBookingRequest = async (req, res) => {
     contactPhone: toCleanString(user.phone),
     contactEmail: toCleanString(user.email),
     kycCompleted,
+    kycDocuments: {
+      drivingLicense: {
+        imageUrl: normalizedDrivingLicenseUrl,
+        fileName: toCleanString(
+          kycDocumentsPayload.drivingLicense?.fileName || 'driving-license',
+        ),
+        uploadedAt:
+          normalizedDrivingLicenseUrl &&
+          kycDocumentsPayload.drivingLicense?.uploadedAt
+            ? new Date(kycDocumentsPayload.drivingLicense.uploadedAt)
+            : normalizedDrivingLicenseUrl
+              ? new Date()
+              : null,
+      },
+      aadhaarCard: {
+        imageUrl: normalizedAadhaarUrl,
+        fileName: toCleanString(
+          kycDocumentsPayload.aadhaarCard?.fileName || 'aadhaar-card',
+        ),
+        uploadedAt:
+          normalizedAadhaarUrl &&
+          kycDocumentsPayload.aadhaarCard?.uploadedAt
+            ? new Date(kycDocumentsPayload.aadhaarCard.uploadedAt)
+            : normalizedAadhaarUrl
+              ? new Date()
+              : null,
+      },
+    },
   };
 
   const request = await RentalBookingRequest.findOneAndUpdate(

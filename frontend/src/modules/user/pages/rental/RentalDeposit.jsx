@@ -48,6 +48,7 @@ const buildRentalBookingPayload = ({
   paymentMethodLabel,
   payment,
   kycCompleted: true,
+  kycDocuments: state.rentalKyc?.documents || null,
   selectedPackage: state.selectedPackage
     ? {
         id: state.selectedPackage.id || state.selectedPackage._id || '',

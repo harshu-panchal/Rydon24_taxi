@@ -51,6 +51,7 @@ import {
   ensureThirdPartySettings,
   listDriverNeededDocuments,
   listRentalVehicleTypes,
+  updateRentalVehicleType,
 } from "../../admin/services/adminService.js";
 import { assignPushTokenToEntity } from "../../services/pushTokenService.js";
 import {
@@ -1179,9 +1180,28 @@ const serializeServiceCenterBooking = (item = {}) => ({
     phone: item.userId?.phone || item.contactPhone || "",
     email: item.userId?.email || item.contactEmail || "",
   },
+  customerDocuments: {
+    drivingLicense: {
+      imageUrl: item.kycDocuments?.drivingLicense?.imageUrl || "",
+      fileName: item.kycDocuments?.drivingLicense?.fileName || "",
+      uploadedAt: item.kycDocuments?.drivingLicense?.uploadedAt || null,
+    },
+    aadhaarCard: {
+      imageUrl: item.kycDocuments?.aadhaarCard?.imageUrl || "",
+      fileName: item.kycDocuments?.aadhaarCard?.fileName || "",
+      uploadedAt: item.kycDocuments?.aadhaarCard?.uploadedAt || null,
+    },
+  },
   vehicleName: item.vehicleName || item.vehicleTypeId?.name || "",
   vehicleCategory: item.vehicleCategory || item.vehicleTypeId?.vehicleCategory || "",
   vehicleImage: item.vehicleImage || item.vehicleTypeId?.image || "",
+  vehicleCoverImage: item.vehicleTypeId?.coverImage || "",
+  vehicleGalleryImages: Array.isArray(item.vehicleTypeId?.galleryImages)
+    ? item.vehicleTypeId.galleryImages.filter(Boolean)
+    : [],
+  vehicleAmenities: Array.isArray(item.vehicleTypeId?.amenities)
+    ? item.vehicleTypeId.amenities.filter(Boolean)
+    : [],
   selectedPackage: {
     packageId: item.selectedPackage?.packageId || "",
     label: item.selectedPackage?.label || "",
@@ -1213,6 +1233,44 @@ const serializeServiceCenterBooking = (item = {}) => ({
     id: item.assignedStaffId ? String(item.assignedStaffId) : "",
     name: item.assignedStaffName || "",
     phone: item.assignedStaffPhone || "",
+  },
+  rentalInspection: {
+    beforeHandover: {
+      exteriorOk: item.rentalInspection?.beforeHandover?.exteriorOk === true,
+      interiorOk: item.rentalInspection?.beforeHandover?.interiorOk === true,
+      dashboardOk: item.rentalInspection?.beforeHandover?.dashboardOk === true,
+      tyresOk: item.rentalInspection?.beforeHandover?.tyresOk === true,
+      fuelOk: item.rentalInspection?.beforeHandover?.fuelOk === true,
+      documentsOk: item.rentalInspection?.beforeHandover?.documentsOk === true,
+    },
+    afterReturn: {
+      exteriorChecked: item.rentalInspection?.afterReturn?.exteriorChecked === true,
+      interiorChecked: item.rentalInspection?.afterReturn?.interiorChecked === true,
+      dashboardChecked: item.rentalInspection?.afterReturn?.dashboardChecked === true,
+      fuelChecked: item.rentalInspection?.afterReturn?.fuelChecked === true,
+      tyresChecked: item.rentalInspection?.afterReturn?.tyresChecked === true,
+      damageReviewed: item.rentalInspection?.afterReturn?.damageReviewed === true,
+    },
+    pickupNotes: item.rentalInspection?.pickupNotes || "",
+    returnNotes: item.rentalInspection?.returnNotes || "",
+    pickupMeterReading:
+      item.rentalInspection?.pickupMeterReading === null ||
+      item.rentalInspection?.pickupMeterReading === undefined
+        ? null
+        : Number(item.rentalInspection.pickupMeterReading),
+    returnMeterReading:
+      item.rentalInspection?.returnMeterReading === null ||
+      item.rentalInspection?.returnMeterReading === undefined
+        ? null
+        : Number(item.rentalInspection.returnMeterReading),
+    pickupFuelLevel: item.rentalInspection?.pickupFuelLevel || "",
+    returnFuelLevel: item.rentalInspection?.returnFuelLevel || "",
+    beforeConditionImages: Array.isArray(item.rentalInspection?.beforeConditionImages)
+      ? item.rentalInspection.beforeConditionImages.filter(Boolean)
+      : [],
+    afterConditionImages: Array.isArray(item.rentalInspection?.afterConditionImages)
+      ? item.rentalInspection.afterConditionImages.filter(Boolean)
+      : [],
   },
   serviceCenterNote: item.serviceCenterNote || "",
   status: item.status || "pending",
@@ -1620,26 +1678,82 @@ export const getDriverNotifications = async (req, res) => {
   });
 };
 
-export const saveDriverFcmToken = async (req, res) => {
-  const driver = await Driver.findById(req.auth?.sub);
+const DRIVER_PUSH_ROLE_MODEL_MAP = {
+  driver: Driver,
+  owner: Owner,
+  bus_driver: BusDriver,
+  service_center: ServiceStore,
+  service_center_staff: ServiceCenterStaff,
+};
 
-  if (!driver) {
-    throw new ApiError(404, "Driver not found");
+const resolvePushTokenEntityForRole = async (req) => {
+  const role = String(req.auth?.role || "").toLowerCase();
+  const Model = DRIVER_PUSH_ROLE_MODEL_MAP[role];
+
+  if (!Model) {
+    throw new ApiError(403, "Unsupported role for driver push notifications");
+  }
+
+  const entity = await Model.findById(req.auth?.sub);
+
+  if (!entity) {
+    throw new ApiError(404, "Authenticated account not found");
   }
 
   if (
-    driver.approve === false ||
-    String(driver.status || "").toLowerCase() === "pending"
+    role === "driver" &&
+    (entity.approve === false ||
+      String(entity.status || "").toLowerCase() === "pending")
   ) {
     throw new ApiError(403, "Driver account is pending approval");
   }
 
-  const saved = assignPushTokenToEntity(driver, {
+  if (
+    role === "owner" &&
+    (entity.active === false ||
+      entity.approve === false ||
+      String(entity.status || "").toLowerCase() === "pending")
+  ) {
+    throw new ApiError(403, "Owner account is pending approval");
+  }
+
+  if (
+    role === "bus_driver" &&
+    (entity.active === false ||
+      entity.approve === false ||
+      ["pending", "blocked"].includes(String(entity.status || "").toLowerCase()))
+  ) {
+    throw new ApiError(403, "Bus driver account is pending approval");
+  }
+
+  if (
+    role === "service_center" &&
+    (entity.active === false ||
+      String(entity.status || "").toLowerCase() === "inactive")
+  ) {
+    throw new ApiError(403, "Service center account is inactive");
+  }
+
+  if (
+    role === "service_center_staff" &&
+    (entity.active === false ||
+      String(entity.status || "").toLowerCase() === "inactive")
+  ) {
+    throw new ApiError(403, "Service center staff account is inactive");
+  }
+
+  return entity;
+};
+
+export const saveDriverFcmToken = async (req, res) => {
+  const entity = await resolvePushTokenEntityForRole(req);
+
+  const saved = assignPushTokenToEntity(entity, {
     token: req.body?.token,
     platform: req.body?.platform,
   });
 
-  await driver.save();
+  await entity.save();
 
   res.json({
     success: true,
@@ -1647,6 +1761,7 @@ export const saveDriverFcmToken = async (req, res) => {
       message: "FCM token saved successfully",
       platform: saved.platform,
       field: saved.fieldName,
+      role: String(req.auth?.role || "").toLowerCase(),
     },
   });
 };
@@ -2073,6 +2188,40 @@ export const deleteServiceCenterVehicle = async (req, res) => {
   });
 };
 
+export const updateServiceCenterVehicle = async (req, res) => {
+  const access = await resolveAuthenticatedServiceCenterAccess(req);
+  const center = access?.center;
+
+  if (!center?._id || !access?.canManageVehicles) {
+    throw new ApiError(403, "Service center access is required");
+  }
+
+  const vehicle = await RentalVehicleType.findById(req.params.vehicleId).lean();
+
+  if (!vehicle) {
+    throw new ApiError(404, "Rental vehicle type not found");
+  }
+
+  const storeIds = Array.isArray(vehicle.serviceStoreIds)
+    ? vehicle.serviceStoreIds.map((item) => String(item))
+    : [];
+
+  if (!storeIds.includes(String(center._id))) {
+    throw new ApiError(403, "You can only manage vehicles assigned to your service center");
+  }
+
+  const updated = await updateRentalVehicleType(req.params.vehicleId, {
+    ...req.body,
+    transport_type: "rental",
+    serviceStoreIds: [String(center._id)],
+  });
+
+  res.json({
+    success: true,
+    data: updated,
+  });
+};
+
 export const getServiceCenterStaffMembers = async (req, res) => {
   const access = await resolveAuthenticatedServiceCenterAccess(req);
   const center = access?.center;
@@ -2169,7 +2318,7 @@ export const getServiceCenterBookings = async (req, res) => {
 
   const bookings = await RentalBookingRequest.find(query)
     .populate("userId", "name phone email")
-    .populate("vehicleTypeId", "name vehicleCategory image")
+    .populate("vehicleTypeId", "name vehicleCategory image coverImage galleryImages amenities")
     .sort({ createdAt: -1 })
     .lean();
 
@@ -2208,7 +2357,7 @@ export const updateServiceCenterBooking = async (req, res) => {
 
   const booking = await RentalBookingRequest.findById(bookingId)
     .populate("userId", "name phone email")
-    .populate("vehicleTypeId", "name vehicleCategory image");
+    .populate("vehicleTypeId", "name vehicleCategory image coverImage galleryImages amenities");
 
   if (!booking) {
     throw new ApiError(404, "Rental booking request not found");
@@ -2258,6 +2407,96 @@ export const updateServiceCenterBooking = async (req, res) => {
     booking.serviceCenterNote = String(req.body.serviceCenterNote || "").trim();
   }
 
+  if (req.body?.rentalInspection && typeof req.body.rentalInspection === "object") {
+    const inspection = req.body.rentalInspection;
+
+    if (inspection.beforeHandover && typeof inspection.beforeHandover === "object") {
+      booking.rentalInspection = booking.rentalInspection || {};
+      booking.rentalInspection.beforeHandover = booking.rentalInspection.beforeHandover || {};
+
+      const beforeKeys = [
+        "exteriorOk",
+        "interiorOk",
+        "dashboardOk",
+        "tyresOk",
+        "fuelOk",
+        "documentsOk",
+      ];
+
+      beforeKeys.forEach((key) => {
+        if (inspection.beforeHandover[key] !== undefined) {
+          booking.rentalInspection.beforeHandover[key] = inspection.beforeHandover[key] === true;
+        }
+      });
+    }
+
+    if (inspection.afterReturn && typeof inspection.afterReturn === "object") {
+      booking.rentalInspection = booking.rentalInspection || {};
+      booking.rentalInspection.afterReturn = booking.rentalInspection.afterReturn || {};
+
+      const afterKeys = [
+        "exteriorChecked",
+        "interiorChecked",
+        "dashboardChecked",
+        "fuelChecked",
+        "tyresChecked",
+        "damageReviewed",
+      ];
+
+      afterKeys.forEach((key) => {
+        if (inspection.afterReturn[key] !== undefined) {
+          booking.rentalInspection.afterReturn[key] = inspection.afterReturn[key] === true;
+        }
+      });
+    }
+
+    if (inspection.pickupNotes !== undefined) {
+      booking.rentalInspection = booking.rentalInspection || {};
+      booking.rentalInspection.pickupNotes = String(inspection.pickupNotes || "").trim();
+    }
+
+    if (inspection.returnNotes !== undefined) {
+      booking.rentalInspection = booking.rentalInspection || {};
+      booking.rentalInspection.returnNotes = String(inspection.returnNotes || "").trim();
+    }
+
+    if (inspection.pickupMeterReading !== undefined) {
+      booking.rentalInspection = booking.rentalInspection || {};
+      const value = String(inspection.pickupMeterReading ?? "").trim();
+      booking.rentalInspection.pickupMeterReading = value ? Number(value) : null;
+    }
+
+    if (inspection.returnMeterReading !== undefined) {
+      booking.rentalInspection = booking.rentalInspection || {};
+      const value = String(inspection.returnMeterReading ?? "").trim();
+      booking.rentalInspection.returnMeterReading = value ? Number(value) : null;
+    }
+
+    if (inspection.pickupFuelLevel !== undefined) {
+      booking.rentalInspection = booking.rentalInspection || {};
+      booking.rentalInspection.pickupFuelLevel = String(inspection.pickupFuelLevel || "").trim();
+    }
+
+    if (inspection.returnFuelLevel !== undefined) {
+      booking.rentalInspection = booking.rentalInspection || {};
+      booking.rentalInspection.returnFuelLevel = String(inspection.returnFuelLevel || "").trim();
+    }
+
+    if (inspection.beforeConditionImages !== undefined) {
+      booking.rentalInspection = booking.rentalInspection || {};
+      booking.rentalInspection.beforeConditionImages = Array.isArray(inspection.beforeConditionImages)
+        ? inspection.beforeConditionImages.map((item) => String(item || "").trim()).filter(Boolean)
+        : [];
+    }
+
+    if (inspection.afterConditionImages !== undefined) {
+      booking.rentalInspection = booking.rentalInspection || {};
+      booking.rentalInspection.afterConditionImages = Array.isArray(inspection.afterConditionImages)
+        ? inspection.afterConditionImages.map((item) => String(item || "").trim()).filter(Boolean)
+        : [];
+    }
+  }
+
   if (req.body?.status !== undefined) {
     const nextStatus = String(req.body.status || "").trim();
     const allowedStatuses = ["pending", "confirmed", "assigned", "completed", "cancelled", "end_requested"];
@@ -2271,6 +2510,31 @@ export const updateServiceCenterBooking = async (req, res) => {
       }
       if (!["assigned", "confirmed", "completed", "end_requested"].includes(nextStatus)) {
         throw new ApiError(403, "Staff have limited status update access");
+      }
+    }
+
+    if (nextStatus === "completed") {
+      const returnMeterReading = Number(booking.rentalInspection?.returnMeterReading);
+      const returnFuelLevel = String(booking.rentalInspection?.returnFuelLevel || "").trim();
+      const returnNotes = String(booking.rentalInspection?.returnNotes || "").trim();
+      const afterConditionImages = Array.isArray(booking.rentalInspection?.afterConditionImages)
+        ? booking.rentalInspection.afterConditionImages.filter(Boolean)
+        : [];
+
+      if (!Number.isFinite(returnMeterReading) || returnMeterReading < 0) {
+        throw new ApiError(400, "Return meter reading is required before completing the booking");
+      }
+
+      if (!returnFuelLevel) {
+        throw new ApiError(400, "Return fuel level is required before completing the booking");
+      }
+
+      if (!afterConditionImages.length) {
+        throw new ApiError(400, "At least one after-condition photo is required before completing the booking");
+      }
+
+      if (!returnNotes) {
+        throw new ApiError(400, "Return condition notes are required before completing the booking");
       }
     }
 

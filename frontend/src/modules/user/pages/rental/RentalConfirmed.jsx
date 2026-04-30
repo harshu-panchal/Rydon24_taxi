@@ -28,6 +28,7 @@ const buildRentalBookingPayload = ({
     currency: 'INR',
   },
   kycCompleted: true,
+  kycDocuments: state.rentalKyc?.documents || null,
   selectedPackage: state.selectedPackage
     ? {
         id: state.selectedPackage.id || state.selectedPackage._id || '',

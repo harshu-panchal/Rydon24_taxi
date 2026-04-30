@@ -29,6 +29,16 @@ const serviceCenterStaffSchema = new mongoose.Schema(
       enum: ['active', 'inactive'],
       default: 'active',
     },
+    fcmTokenWeb: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    fcmTokenMobile: {
+      type: String,
+      default: '',
+      trim: true,
+    },
   },
   { timestamps: true },
 );

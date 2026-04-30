@@ -188,6 +188,40 @@ const rentalBookingRequestSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    kycDocuments: {
+      drivingLicense: {
+        imageUrl: {
+          type: String,
+          default: '',
+          trim: true,
+        },
+        fileName: {
+          type: String,
+          default: '',
+          trim: true,
+        },
+        uploadedAt: {
+          type: Date,
+          default: null,
+        },
+      },
+      aadhaarCard: {
+        imageUrl: {
+          type: String,
+          default: '',
+          trim: true,
+        },
+        fileName: {
+          type: String,
+          default: '',
+          trim: true,
+        },
+        uploadedAt: {
+          type: Date,
+          default: null,
+        },
+      },
+    },
     assignedVehicle: {
       vehicleId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -208,6 +242,62 @@ const rentalBookingRequestSchema = new mongoose.Schema(
         type: String,
         default: '',
         trim: true,
+      },
+    },
+    rentalInspection: {
+      beforeHandover: {
+        exteriorOk: { type: Boolean, default: false },
+        interiorOk: { type: Boolean, default: false },
+        dashboardOk: { type: Boolean, default: false },
+        tyresOk: { type: Boolean, default: false },
+        fuelOk: { type: Boolean, default: false },
+        documentsOk: { type: Boolean, default: false },
+      },
+      afterReturn: {
+        exteriorChecked: { type: Boolean, default: false },
+        interiorChecked: { type: Boolean, default: false },
+        dashboardChecked: { type: Boolean, default: false },
+        fuelChecked: { type: Boolean, default: false },
+        tyresChecked: { type: Boolean, default: false },
+        damageReviewed: { type: Boolean, default: false },
+      },
+      pickupNotes: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      returnNotes: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      pickupMeterReading: {
+        type: Number,
+        default: null,
+        min: 0,
+      },
+      returnMeterReading: {
+        type: Number,
+        default: null,
+        min: 0,
+      },
+      pickupFuelLevel: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      returnFuelLevel: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      beforeConditionImages: {
+        type: [String],
+        default: [],
+      },
+      afterConditionImages: {
+        type: [String],
+        default: [],
       },
     },
     serviceCenterIds: {

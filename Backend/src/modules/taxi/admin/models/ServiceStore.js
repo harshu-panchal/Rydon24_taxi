@@ -62,6 +62,16 @@ const serviceStoreSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    fcmTokenWeb: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    fcmTokenMobile: {
+      type: String,
+      default: '',
+      trim: true,
+    },
   },
   {
     timestamps: true,
