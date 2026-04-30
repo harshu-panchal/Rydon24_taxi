@@ -13,6 +13,7 @@ let oscillatorTimeoutId = null;
 let oscillatorIntervalId = null;
 let userHasInteracted = false;
 let interactionListenersBound = false;
+let unlockInFlight = null;
 
 const markUserInteraction = () => {
     userHasInteracted = true;
@@ -297,20 +298,29 @@ const tryPlayAlertAudio = () => {
 export const unlockRideRequestAlertSound = () => {
     markUserInteraction();
     bindInteractionListeners();
+
+    if (isUnlocked) {
+        return Promise.resolve();
+    }
+
+    if (unlockInFlight) {
+        return unlockInFlight;
+    }
+
     const audio = getAlertAudio();
     const previousVolume = audio.volume;
     audio.volume = 0;
     bindLifecycleListeners();
     getAudioContext()?.resume?.().catch?.(() => {});
-    pulseOscillator();
 
-    audio.play()
+    unlockInFlight = audio.play()
         .then(() => {
             audio.pause();
             audio.currentTime = 0;
             audio.volume = previousVolume;
             isUnlocked = true;
             clearRetryTimeout();
+            unlockInFlight = null;
 
             if (shouldKeepPlaying) {
                 audio.currentTime = 0;
@@ -321,9 +331,15 @@ export const unlockRideRequestAlertSound = () => {
         })
         .catch(() => {
             audio.volume = previousVolume;
-            startOscillatorLoop();
-            scheduleRetry(500);
+            unlockInFlight = null;
+
+            if (shouldKeepPlaying) {
+                startOscillatorLoop();
+                scheduleRetry(500);
+            }
         });
+
+    return unlockInFlight;
 };
 
 export const playRideRequestAlertSound = () => {

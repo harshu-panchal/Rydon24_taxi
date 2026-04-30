@@ -53,6 +53,7 @@ const BusServiceDetails = () => {
     [catalog, id],
   );
   const stops = bus?.route?.stops || [];
+  const returnStops = bus?.returnRoute?.stops || [];
   const pickupStops = stops.filter((stop) => stop.stopType === 'pickup' || stop.stopType === 'both');
   const dropStops = stops.filter((stop) => stop.stopType === 'drop' || stop.stopType === 'both');
 
@@ -119,6 +120,27 @@ const BusServiceDetails = () => {
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <div className="space-y-6">
+          {(bus.coverImage || (bus.galleryImages || []).length > 0) ? (
+            <div className="rounded-[32px] border border-slate-100 bg-white p-8 shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Bus Media</p>
+              {bus.coverImage ? (
+                <div className="mt-5 overflow-hidden rounded-[24px] bg-slate-50">
+                  <img src={bus.coverImage} alt={bus.busName || 'Bus cover'} className="h-[320px] w-full object-cover" />
+                </div>
+              ) : null}
+
+              {(bus.galleryImages || []).length > 0 ? (
+                <div className="mt-5 grid gap-4 md:grid-cols-3">
+                  {bus.galleryImages.map((image, index) => (
+                    <div key={`${bus.id}-gallery-${index}`} className="overflow-hidden rounded-[22px] bg-slate-50">
+                      <img src={image} alt={`${bus.busName || 'Bus'} gallery ${index + 1}`} className="h-40 w-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="rounded-[32px] border border-slate-100 bg-white p-8 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Route Overview</p>
             <h2 className="mt-3 text-2xl font-black text-slate-900">
@@ -162,6 +184,33 @@ const BusServiceDetails = () => {
                 </div>
               ))}
             </div>
+
+            {bus.returnRouteEnabled ? (
+              <div className="mt-8 rounded-[28px] border border-emerald-100 bg-emerald-50/70 p-6">
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-600">Return Route</p>
+                <h3 className="mt-3 text-xl font-black text-slate-900">
+                  {bus.returnRoute?.originCity || 'Destination'} to {bus.returnRoute?.destinationCity || 'Origin'}
+                </h3>
+                <p className="mt-1 text-sm font-semibold text-slate-600">
+                  {bus.returnRoute?.routeName || 'Return path generated from the main route'}
+                </p>
+
+                <div className="mt-5 grid gap-4 md:grid-cols-3">
+                  <div className="rounded-2xl border border-emerald-100 bg-white/90 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Distance</p>
+                    <p className="mt-2 text-base font-black text-slate-900">{bus.returnRoute?.distanceKm || 'N/A'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-emerald-100 bg-white/90 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Duration</p>
+                    <p className="mt-2 text-base font-black text-slate-900">{bus.returnRoute?.durationHours || 'N/A'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-emerald-100 bg-white/90 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Stops</p>
+                    <p className="mt-2 text-base font-black text-slate-900">{returnStops.length}</p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">

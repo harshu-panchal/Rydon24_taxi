@@ -136,6 +136,40 @@ const busCancellationRuleSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const busReviewSchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TaxiUser',
+      required: true,
+      index: true,
+    },
+    bookingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TaxiBusBooking',
+      required: true,
+      index: true,
+    },
+    rating: {
+      type: Number,
+      min: 1,
+      max: 5,
+      required: true,
+    },
+    comment: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: 500,
+    },
+    reviewedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: true },
+);
+
 const busServiceSchema = new mongoose.Schema(
   {
     operatorName: {
@@ -222,6 +256,20 @@ const busServiceSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    image: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    coverImage: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    galleryImages: {
+      type: [String],
+      default: [],
+    },
     blueprint: {
       templateKey: {
         type: String,
@@ -268,6 +316,41 @@ const busServiceSchema = new mongoose.Schema(
         default: [],
       },
     },
+    returnRouteEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    returnRoute: {
+      routeName: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      originCity: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      destinationCity: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      distanceKm: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      durationHours: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      stops: {
+        type: [busStopSchema],
+        default: [],
+      },
+    },
     schedules: {
       type: [busScheduleSchema],
       default: [],
@@ -275,6 +358,26 @@ const busServiceSchema = new mongoose.Schema(
     capacity: {
       type: Number,
       default: 0,
+    },
+    rating: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
+    },
+    ratingCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    totalRatingScore: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    reviews: {
+      type: [busReviewSchema],
+      default: [],
     },
     status: {
       type: String,

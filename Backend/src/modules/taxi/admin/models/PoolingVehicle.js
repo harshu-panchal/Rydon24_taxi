@@ -53,7 +53,6 @@ const poolingVehicleSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-poolingVehicleSchema.index({ vehicleNumber: 1 });
 poolingVehicleSchema.index({ status: 1 });
 
 export const PoolingVehicle =

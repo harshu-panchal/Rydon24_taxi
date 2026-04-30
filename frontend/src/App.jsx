@@ -80,6 +80,7 @@ const IntercityConfirm = lazy(() => import('./modules/user/pages/intercity/Inter
 const BusHome = lazy(() => import('./modules/user/pages/bus/BusHome'));
 const BusList = lazy(() => import('./modules/user/pages/bus/BusList'));
 const BusSeats = lazy(() => import('./modules/user/pages/bus/BusSeats'));
+const BusPreview = lazy(() => import('./modules/user/pages/bus/BusPreview'));
 const BusDetails = lazy(() => import('./modules/user/pages/bus/BusDetails'));
 const BusConfirm = lazy(() => import('./modules/user/pages/bus/BusConfirm'));
 
@@ -107,6 +108,7 @@ const ProfileSettings = lazy(() => import('./modules/user/pages/profile/ProfileS
 const PaymentSettings = lazy(() => import('./modules/user/pages/profile/PaymentSettings'));
 const AddressSettings = lazy(() => import('./modules/user/pages/profile/AddressSettings'));
 const BusBookings = lazy(() => import('./modules/user/pages/profile/BusBookings'));
+const BusBookingDetail = lazy(() => import('./modules/user/pages/profile/BusBookingDetail'));
 // Driver Module - Common
 import DriverLayout from './modules/driver/components/DriverLayout';
 
@@ -751,7 +753,8 @@ function App() {
               <Route path="/taxi/user/bus" element={<BusHome />} />
               <Route path="/taxi/user/bus/list" element={<BusList />} />
               <Route path="/taxi/user/bus/seats" element={<BusSeats />} />
-              <Route path="/taxi/user/bus/details" element={<BusDetails />} />
+              <Route path="/taxi/user/bus/details" element={<BusPreview />} />
+              <Route path="/taxi/user/bus/checkout" element={<BusDetails />} />
               <Route path="/taxi/user/bus/confirm" element={<BusConfirm />} />
               <Route path="/taxi/user/tours" element={<ComingSoon />} />
 
@@ -780,6 +783,10 @@ function App() {
               <Route
                 path="/taxi/user/profile/bus-bookings"
                 element={<BusBookings />}
+              />
+              <Route
+                path="/taxi/user/profile/bus-bookings/:id"
+                element={<BusBookingDetail />}
               />
               <Route
                 path="/taxi/user/profile/notifications"

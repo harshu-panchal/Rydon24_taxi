@@ -180,14 +180,14 @@ const BusDetails = () => {
           <div className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Full Name</label>
-              <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3">
-                <User size={16} className="text-slate-400" />
+              <div className="flex min-w-0 items-center gap-3 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3">
+                <User size={16} className="shrink-0 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Enter full name"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  className="flex-1 bg-transparent text-sm font-bold text-slate-900 focus:outline-none placeholder:text-slate-300"
+                  className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 focus:outline-none placeholder:text-slate-300"
                 />
               </div>
             </div>
@@ -231,28 +231,28 @@ const BusDetails = () => {
           <div className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Mobile Number</label>
-              <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3">
-                <Phone size={16} className="text-slate-400" />
+              <div className="flex min-w-0 items-center gap-3 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3">
+                <Phone size={16} className="shrink-0 text-slate-400" />
                 <input
                   type="tel"
                   placeholder="Mobile number"
                   value={phone}
                   onChange={(event) => setPhone(event.target.value)}
-                  className="flex-1 bg-transparent text-sm font-bold text-slate-900 focus:outline-none placeholder:text-slate-300"
+                  className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 focus:outline-none placeholder:text-slate-300"
                 />
               </div>
             </div>
 
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Email ID</label>
-              <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3">
-                <Mail size={16} className="text-slate-400" />
+              <div className="flex min-w-0 items-center gap-3 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3">
+                <Mail size={16} className="shrink-0 text-slate-400" />
                 <input
                   type="email"
                   placeholder="Email address"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  className="flex-1 bg-transparent text-sm font-bold text-slate-900 focus:outline-none placeholder:text-slate-300"
+                  className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 focus:outline-none placeholder:text-slate-300"
                 />
               </div>
             </div>

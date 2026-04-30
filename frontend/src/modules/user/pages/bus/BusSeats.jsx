@@ -214,7 +214,7 @@ const BusSeats = () => {
           disabled={selectedSeats.length === 0 || !!error || loading}
           whileTap={{ scale: 0.98 }}
           onClick={() =>
-            navigate(`${routePrefix}/bus/details`, {
+            navigate(`${routePrefix}/bus/checkout`, {
               state: {
                 ...state,
                 bus: seatLayout?.bus || bus,

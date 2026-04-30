@@ -163,11 +163,41 @@ const BUS_DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const normalizeBusTravelDate = (value) => {
   const rawValue = toCleanString(value);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(rawValue)) {
-    throw new ApiError(400, 'travelDate must be in YYYY-MM-DD format');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(rawValue)) {
+    return rawValue;
   }
 
-  return rawValue;
+  const leadingDateMatch = rawValue.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s].*)?$/);
+  if (leadingDateMatch) {
+    return leadingDateMatch[1];
+  }
+
+  const parsed = new Date(rawValue);
+  if (!Number.isNaN(parsed.getTime())) {
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  throw new ApiError(400, 'travelDate must be in YYYY-MM-DD format');
+};
+
+const tryNormalizeBusTravelDate = (...values) => {
+  for (const value of values) {
+    const rawValue = toCleanString(value);
+    if (!rawValue) {
+      continue;
+    }
+
+    try {
+      return normalizeBusTravelDate(rawValue);
+    } catch {
+      continue;
+    }
+  }
+
+  return '';
 };
 
 const getBusTravelDayLabel = (travelDate) => {
@@ -207,6 +237,197 @@ const isScheduleAvailableOnDate = (schedule, travelDate) => {
   }
 
   return activeDays.includes(getBusTravelDayLabel(travelDate));
+};
+
+const parseBusDateTime = (travelDate, timeValue) => {
+  const date = tryNormalizeBusTravelDate(travelDate);
+  const rawTime = toCleanString(timeValue);
+
+  if (!date || !rawTime) {
+    return null;
+  }
+
+  const dateMatch = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!dateMatch) {
+    return null;
+  }
+
+  const year = Number(dateMatch[1]);
+  const monthIndex = Number(dateMatch[2]) - 1;
+  const day = Number(dateMatch[3]);
+  const createIstDate = (hours, minutes) => {
+    if (
+      !Number.isInteger(year) ||
+      !Number.isInteger(monthIndex) ||
+      !Number.isInteger(day) ||
+      !Number.isInteger(hours) ||
+      !Number.isInteger(minutes)
+    ) {
+      return null;
+    }
+
+    const utcMillis = Date.UTC(year, monthIndex, day, hours, minutes) - ((5 * 60) + 30) * 60 * 1000;
+    const parsed = new Date(utcMillis);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const time24Match = rawTime.match(/^(\d{1,2}):(\d{2})$/);
+  if (time24Match) {
+    const hours = Number(time24Match[1]);
+    const minutes = Number(time24Match[2]);
+    if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+      return createIstDate(hours, minutes);
+    }
+  }
+
+  const time12Match = rawTime.match(/^(\d{1,2}):(\d{2})\s*([AP]M)$/i);
+  if (time12Match) {
+    let hours = Number(time12Match[1]);
+    const minutes = Number(time12Match[2]);
+    const meridiem = time12Match[3].toUpperCase();
+
+    if (hours >= 1 && hours <= 12 && minutes >= 0 && minutes <= 59) {
+      if (meridiem === 'PM' && hours !== 12) hours += 12;
+      if (meridiem === 'AM' && hours === 12) hours = 0;
+      return createIstDate(hours, minutes);
+    }
+  }
+
+  return null;
+};
+
+const normalizeBusCancellationRules = (rules = []) =>
+  (Array.isArray(rules) ? rules : [])
+    .map((rule, index) => ({
+      id: toCleanString(rule?.id) || `rule-${index + 1}`,
+      label: toCleanString(rule?.label) || `Rule ${index + 1}`,
+      hoursBeforeDeparture: Math.max(0, Number(rule?.hoursBeforeDeparture || 0)),
+      refundType: ['percentage', 'fixed', 'none'].includes(String(rule?.refundType || '').toLowerCase())
+        ? String(rule.refundType).toLowerCase()
+        : 'none',
+      refundValue: Math.max(0, Number(rule?.refundValue || 0)),
+      notes: toCleanString(rule?.notes),
+    }))
+    .sort((a, b) => b.hoursBeforeDeparture - a.hoursBeforeDeparture);
+
+const computeBusCancellationQuote = ({ booking, busService, now = new Date(), travelDateOverride = '' }) => {
+  const schedule = findBusSchedule(busService, booking?.scheduleId);
+  const departureTime = schedule?.departureTime || booking?.routeSnapshot?.departureTime || '';
+  const resolvedTravelDate = tryNormalizeBusTravelDate(
+    travelDateOverride,
+    booking?.travelDate,
+  );
+  const departureDateTime = parseBusDateTime(resolvedTravelDate, departureTime);
+  const rules = normalizeBusCancellationRules(busService?.cancellationRules);
+  const amount = Math.max(0, Number(booking?.amount || 0));
+
+  if (!departureDateTime || Number.isNaN(departureDateTime.getTime())) {
+    return {
+      allowed: false,
+      reason: 'Departure time is unavailable',
+      departureDateTime: null,
+      hoursBeforeDeparture: null,
+      appliedRuleId: '',
+      appliedRuleLabel: '',
+      refundType: 'none',
+      refundValue: 0,
+      refundAmount: 0,
+      chargeAmount: amount,
+      notes: '',
+    };
+  }
+
+  const hoursBeforeDeparture = Math.round((((departureDateTime.getTime() - now.getTime()) / 3600000) + Number.EPSILON) * 100) / 100;
+  if (hoursBeforeDeparture <= 0) {
+    return {
+      allowed: false,
+      reason: 'Bus departure time has passed',
+      departureDateTime,
+      hoursBeforeDeparture,
+      appliedRuleId: '',
+      appliedRuleLabel: '',
+      refundType: 'none',
+      refundValue: 0,
+      refundAmount: 0,
+      chargeAmount: amount,
+      notes: '',
+    };
+  }
+
+  const matchedRule = rules.find((rule) => hoursBeforeDeparture >= rule.hoursBeforeDeparture) || null;
+  let refundAmount = 0;
+
+  if (matchedRule) {
+    if (matchedRule.refundType === 'percentage') {
+      refundAmount = Math.round(amount * Math.min(100, matchedRule.refundValue) / 100 * 100) / 100;
+    } else if (matchedRule.refundType === 'fixed') {
+      refundAmount = Math.min(amount, Math.round(matchedRule.refundValue * 100) / 100);
+    }
+  }
+
+  const chargeAmount = Math.max(0, Math.round((amount - refundAmount) * 100) / 100);
+
+  return {
+    allowed: true,
+    reason: '',
+    departureDateTime,
+    hoursBeforeDeparture,
+    appliedRuleId: matchedRule?.id || '',
+    appliedRuleLabel: matchedRule?.label || '',
+    refundType: matchedRule?.refundType || 'none',
+    refundValue: matchedRule?.refundValue || 0,
+    refundAmount,
+    chargeAmount,
+    notes: matchedRule?.notes || '',
+  };
+};
+
+const buildBusPartialCancellationQuote = ({
+  booking,
+  busService,
+  seatIds = [],
+  now = new Date(),
+  travelDateOverride = '',
+}) => {
+  const bookingSnapshot =
+    booking && typeof booking.toObject === 'function'
+      ? booking.toObject()
+      : booking;
+  const selectedSeatIds = [...new Set((Array.isArray(seatIds) ? seatIds : []).map((item) => toCleanString(item)).filter(Boolean))];
+  const totalSeatIds = Array.isArray(bookingSnapshot?.seatIds)
+    ? bookingSnapshot.seatIds.map((item) => toCleanString(item)).filter(Boolean)
+    : [];
+  const seatCount = totalSeatIds.length;
+  const selectedCount = selectedSeatIds.length;
+
+  if (seatCount === 0 || selectedCount === 0) {
+    return {
+      allowed: false,
+      reason: 'No seats selected for cancellation',
+      departureDateTime: null,
+      hoursBeforeDeparture: null,
+      appliedRuleId: '',
+      appliedRuleLabel: '',
+      refundType: 'none',
+      refundValue: 0,
+      refundAmount: 0,
+      chargeAmount: 0,
+      notes: '',
+    };
+  }
+
+  const perSeatAmount = Math.round((Number(bookingSnapshot?.amount || 0) / seatCount) * 100) / 100;
+  const partialAmount = Math.round(perSeatAmount * selectedCount * 100) / 100;
+
+  return computeBusCancellationQuote({
+    booking: {
+      ...bookingSnapshot,
+      amount: partialAmount,
+    },
+    busService,
+    now,
+    travelDateOverride,
+  });
 };
 
 const ensureBusServiceEnabled = async () => {
@@ -268,11 +489,26 @@ const serializeBusSearchResult = ({ busService, schedule, availableSeats, travel
   availableSeats: Math.max(0, Number(availableSeats || 0)),
   price: Number(busService.seatPrice || 0),
   fareCurrency: busService.fareCurrency || 'INR',
+  rating: Number(busService.rating || 0),
+  ratingCount: Number(busService.ratingCount || 0),
   amenities: Array.isArray(busService.amenities) ? busService.amenities : [],
   boardingPolicy: busService.boardingPolicy || '',
   cancellationPolicy: busService.cancellationPolicy || '',
+  cancellationRules: normalizeBusCancellationRules(busService.cancellationRules),
   registrationNumber: busService.registrationNumber || '',
   busColor: busService.busColor || '#1f2937',
+  image: busService.image || busService.coverImage || '',
+  coverImage: busService.coverImage || busService.image || '',
+  galleryImages: Array.isArray(busService.galleryImages) ? busService.galleryImages.filter(Boolean) : [],
+  luggagePolicy: busService.luggagePolicy || '',
+  driverName: busService.driverName || '',
+  driverPhone: busService.driverPhone || '',
+  route: {
+    routeName: busService.route?.routeName || '',
+    originCity: busService.route?.originCity || '',
+    destinationCity: busService.route?.destinationCity || '',
+    stops: Array.isArray(busService.route?.stops) ? busService.route.stops : [],
+  },
 });
 
 export const getIntercityPackageCatalog = async (_req, res) => {
@@ -344,7 +580,43 @@ const serializeBusRouteSuggestion = (busService) => ({
   operator: busService.operatorName || '',
 });
 
-const serializeBusBooking = (booking) => ({
+const serializeBusBooking = (booking, busService = null) => {
+  const quote = busService ? computeBusCancellationQuote({ booking, busService }) : null;
+  const schedule = busService ? findBusSchedule(busService, booking?.scheduleId) : null;
+  const arrivalTime = schedule?.arrivalTime || booking?.routeSnapshot?.arrivalTime || '';
+  const arrivalDateTime = parseBusDateTime(booking?.travelDate, arrivalTime);
+  const tripCompleted = Boolean(arrivalDateTime && arrivalDateTime.getTime() < Date.now());
+  const persistedCancellation = booking.cancellation || {};
+  const cancelledSeats = Array.isArray(booking.cancelledSeats) ? booking.cancelledSeats : [];
+  const cancelledSeatIdSet = new Set(
+    cancelledSeats.map((item) => toCleanString(item?.seatId)).filter(Boolean),
+  );
+  const originalSeatIds = Array.isArray(booking.seatIds) ? booking.seatIds : [];
+  const originalSeatLabels = Array.isArray(booking.seatLabels) ? booking.seatLabels : [];
+  const activeSeats = originalSeatIds
+    .map((seatId, index) => ({
+      seatId,
+      seatLabel: originalSeatLabels[index] || seatId,
+    }))
+    .filter((item) => !cancelledSeatIdSet.has(toCleanString(item.seatId)));
+  const totalRefundedAmount = cancelledSeats.reduce(
+    (sum, item) => sum + Math.max(0, Number(item?.refundAmount || 0)),
+    0,
+  );
+  const totalChargedAmount = cancelledSeats.reduce(
+    (sum, item) => sum + Math.max(0, Number(item?.chargeAmount || 0)),
+    0,
+  );
+  const totalSeatCount = originalSeatIds.length;
+  const activeSeatCount = activeSeats.length;
+  const perSeatAmount = totalSeatCount > 0
+    ? Math.round((Number(booking.amount || 0) / totalSeatCount) * 100) / 100
+    : 0;
+  const reviewEntry = Array.isArray(busService?.reviews)
+    ? busService.reviews.find((item) => String(item?.bookingId || '') === String(booking?._id || ''))
+    : null;
+
+  return {
   id: String(booking._id),
   bookingCode: booking.bookingCode || '',
   status: booking.status || 'pending',
@@ -365,6 +637,58 @@ const serializeBusBooking = (booking) => ({
     status: booking.payment?.status || 'pending',
     paidAt: booking.payment?.paidAt || null,
   },
+  cancelledAt: booking.cancelledAt || null,
+  cancellation: {
+    allowed: quote ? quote.allowed && String(booking.status || '') === 'confirmed' : Boolean(persistedCancellation.allowed),
+    reason: quote?.reason || '',
+    appliedRuleId: persistedCancellation.appliedRuleId || quote?.appliedRuleId || '',
+    appliedRuleLabel: persistedCancellation.appliedRuleLabel || quote?.appliedRuleLabel || '',
+    refundType: persistedCancellation.refundType || quote?.refundType || 'none',
+    refundValue: Number(persistedCancellation.refundValue ?? quote?.refundValue ?? 0),
+    hoursBeforeDeparture: Number(
+      persistedCancellation.hoursBeforeDeparture ?? quote?.hoursBeforeDeparture ?? 0,
+    ),
+    refundAmount: Number(persistedCancellation.refundAmount ?? quote?.refundAmount ?? 0),
+    chargeAmount: Number(persistedCancellation.chargeAmount ?? quote?.chargeAmount ?? 0),
+    notes: persistedCancellation.notes || quote?.notes || '',
+    departureDateTime: quote?.departureDateTime || null,
+  },
+  cancellationPolicy: {
+    text: busService?.cancellationPolicy || '',
+    rules: normalizeBusCancellationRules(busService?.cancellationRules),
+  },
+  review: {
+    canRate: tripCompleted,
+    tripCompleted,
+    completedAt: arrivalDateTime || null,
+    averageRating: Number(busService?.rating || 0),
+    ratingCount: Number(busService?.ratingCount || 0),
+    userRating: reviewEntry ? Number(reviewEntry.rating || 0) : 0,
+    userComment: reviewEntry?.comment || '',
+    reviewedAt: reviewEntry?.reviewedAt || null,
+  },
+  seatSummary: {
+    total: totalSeatCount,
+    active: activeSeatCount,
+    cancelled: cancelledSeats.length,
+  },
+  activeSeatIds: activeSeats.map((item) => item.seatId),
+  activeSeatLabels: activeSeats.map((item) => item.seatLabel),
+  cancelledSeats: cancelledSeats.map((item) => ({
+    seatId: item.seatId || '',
+    seatLabel: item.seatLabel || item.seatId || '',
+    cancelledAt: item.cancelledAt || null,
+    refundAmount: Number(item.refundAmount || 0),
+    chargeAmount: Number(item.chargeAmount || 0),
+    refundStatus: item.refundStatus || '',
+    refundId: item.refundId || '',
+    refundProcessedAt: item.refundProcessedAt || null,
+    notes: item.notes || '',
+  })),
+  totalRefundedAmount: Math.round(totalRefundedAmount * 100) / 100,
+  totalChargedAmount: Math.round(totalChargedAmount * 100) / 100,
+  perSeatAmount,
+  hasPartialCancellation: cancelledSeats.length > 0 && activeSeatCount > 0,
   bus: {
     operator: booking.routeSnapshot?.operatorName || '',
     busName: booking.routeSnapshot?.busName || '',
@@ -376,7 +700,8 @@ const serializeBusBooking = (booking) => ({
     toCity: booking.routeSnapshot?.destinationCity || '',
   },
   createdAt: booking.createdAt || null,
-});
+  };
+};
 
 const serializeRentalQuoteRequest = (item = {}) => ({
   id: String(item._id || item.id || ''),
@@ -1775,6 +2100,275 @@ export const verifyBusBookingPayment = async (req, res) => {
   });
 };
 
+export const getMyBusBookingById = async (req, res) => {
+  await ensureBusServiceEnabled();
+  await cleanupExpiredBusSeatHolds();
+
+  const bookingId = String(req.params?.id || '').trim();
+  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+    throw new ApiError(400, 'Valid bus booking id is required');
+  }
+
+  const booking = await BusBooking.findOne({
+    _id: bookingId,
+    userId: req.auth?.sub,
+  }).lean();
+
+  if (!booking) {
+    throw new ApiError(404, 'Bus booking not found');
+  }
+
+  const busService = booking.busServiceId
+    ? await BusService.findById(booking.busServiceId)
+        .select('cancellationPolicy cancellationRules schedules route.originCity route.destinationCity rating ratingCount reviews')
+        .lean()
+    : null;
+
+  res.status(200).json({
+    success: true,
+    data: serializeBusBooking(booking, busService),
+  });
+};
+
+export const submitMyBusBookingReview = async (req, res) => {
+  await ensureBusServiceEnabled();
+
+  const bookingId = String(req.params?.id || '').trim();
+  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+    throw new ApiError(400, 'Valid bus booking id is required');
+  }
+
+  const rating = Number(req.body?.rating || 0);
+  const comment = toCleanString(req.body?.comment);
+
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    throw new ApiError(400, 'rating must be an integer between 1 and 5');
+  }
+
+  const booking = await BusBooking.findOne({
+    _id: bookingId,
+    userId: req.auth?.sub,
+  }).lean();
+
+  if (!booking) {
+    throw new ApiError(404, 'Bus booking not found');
+  }
+
+  const busService = booking.busServiceId
+    ? await BusService.findById(booking.busServiceId)
+    : null;
+
+  if (!busService) {
+    throw new ApiError(404, 'Bus service not found');
+  }
+
+  const schedule = findBusSchedule(busService, booking.scheduleId);
+  const arrivalTime = schedule?.arrivalTime || booking?.routeSnapshot?.arrivalTime || '';
+  const arrivalDateTime = parseBusDateTime(booking.travelDate, arrivalTime);
+
+  if (!arrivalDateTime || Number.isNaN(arrivalDateTime.getTime())) {
+    throw new ApiError(409, 'Bus arrival time is unavailable, so rating is not open yet');
+  }
+
+  if (arrivalDateTime.getTime() > Date.now()) {
+    throw new ApiError(409, 'You can rate this bus after the trip is completed');
+  }
+
+  const existingReviewIndex = Array.isArray(busService.reviews)
+    ? busService.reviews.findIndex((item) => String(item?.bookingId || '') === bookingId)
+    : -1;
+
+  if (existingReviewIndex >= 0) {
+    const existingReview = busService.reviews[existingReviewIndex];
+    busService.totalRatingScore = Math.max(0, Number(busService.totalRatingScore || 0) - Number(existingReview.rating || 0) + rating);
+    busService.reviews[existingReviewIndex].rating = rating;
+    busService.reviews[existingReviewIndex].comment = comment;
+    busService.reviews[existingReviewIndex].reviewedAt = new Date();
+  } else {
+    busService.reviews.push({
+      userId: req.auth?.sub,
+      bookingId,
+      rating,
+      comment,
+      reviewedAt: new Date(),
+    });
+    busService.ratingCount = Number(busService.ratingCount || 0) + 1;
+    busService.totalRatingScore = Number(busService.totalRatingScore || 0) + rating;
+  }
+
+  busService.rating = Number((Number(busService.totalRatingScore || 0) / Math.max(1, Number(busService.ratingCount || 0))).toFixed(1));
+  await busService.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'Bus rating saved successfully',
+    data: serializeBusBooking(booking, busService.toObject()),
+  });
+};
+
+export const cancelMyBusBooking = async (req, res) => {
+  await ensureBusServiceEnabled();
+  await cleanupExpiredBusSeatHolds();
+
+  const bookingId = String(req.params?.id || '').trim();
+  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+    throw new ApiError(400, 'Valid bus booking id is required');
+  }
+
+  const booking = await BusBooking.findOne({
+    _id: bookingId,
+    userId: req.auth?.sub,
+  });
+
+  if (!booking) {
+    throw new ApiError(404, 'Bus booking not found');
+  }
+
+  if (String(booking.status || '') === 'cancelled') {
+    return res.status(200).json({
+      success: true,
+      data: serializeBusBooking(booking),
+      message: 'Bus booking was already cancelled',
+    });
+  }
+
+  if (String(booking.status || '') !== 'confirmed') {
+    throw new ApiError(409, 'Only confirmed bus bookings can be cancelled');
+  }
+
+  const busService = await BusService.findById(booking.busServiceId).lean();
+  if (!busService) {
+    throw new ApiError(404, 'Bus service not found for this booking');
+  }
+
+  const selectedSeatIds = Array.isArray(req.body?.seatIds) && req.body.seatIds.length > 0
+    ? [...new Set(req.body.seatIds.map((item) => toCleanString(item)).filter(Boolean))]
+    : [];
+  const originalSeatIds = Array.isArray(booking.seatIds) ? booking.seatIds : [];
+  const originalSeatLabels = Array.isArray(booking.seatLabels) ? booking.seatLabels : [];
+  const cancelledSeats = Array.isArray(booking.cancelledSeats) ? booking.cancelledSeats : [];
+  const cancelledSeatIds = new Set(
+    cancelledSeats.map((item) => toCleanString(item?.seatId)).filter(Boolean),
+  );
+  const activeSeats = originalSeatIds
+    .map((seatId, index) => ({
+      seatId: toCleanString(seatId),
+      seatLabel: originalSeatLabels[index] || seatId,
+    }))
+    .filter((item) => item.seatId && !cancelledSeatIds.has(item.seatId));
+  const seatsToCancel = selectedSeatIds.length > 0
+    ? activeSeats.filter((item) => selectedSeatIds.includes(item.seatId))
+    : activeSeats;
+
+  if (seatsToCancel.length === 0) {
+    throw new ApiError(400, 'Select at least one active seat to cancel');
+  }
+
+  if (selectedSeatIds.length > 0 && seatsToCancel.length !== selectedSeatIds.length) {
+    throw new ApiError(409, 'Some selected seats are already cancelled or not part of this booking');
+  }
+
+  const cancellationQuote = buildBusPartialCancellationQuote({
+    booking,
+    busService,
+    seatIds: seatsToCancel.map((item) => item.seatId),
+    travelDateOverride: req.body?.travelDate || req.body?.date,
+  });
+  if (!cancellationQuote.allowed) {
+    throw new ApiError(409, cancellationQuote.reason || 'This booking can no longer be cancelled');
+  }
+
+  const cancelledAt = new Date();
+  let refundPayload = null;
+
+  if (cancellationQuote.refundAmount > 0) {
+    const paymentId = toCleanString(booking.payment?.paymentId);
+    if (!paymentId) {
+      throw new ApiError(409, 'This booking cannot be refunded because the payment reference is missing');
+    }
+
+    const { keyId, keySecret } = await resolveRazorpayCredentials();
+    refundPayload = await razorpayRequest({
+      method: 'POST',
+      path: `/payments/${paymentId}/refund`,
+      body: {
+        amount: Math.round(cancellationQuote.refundAmount * 100),
+        notes: {
+          bookingId: String(booking._id),
+          bookingCode: booking.bookingCode || '',
+          cancelledSeats: seatsToCancel.map((item) => item.seatLabel || item.seatId).join(', '),
+        },
+      },
+      keyId,
+      keySecret,
+    });
+  }
+
+  const perSeatRefundAmount = seatsToCancel.length > 0
+    ? Math.round((cancellationQuote.refundAmount / seatsToCancel.length) * 100) / 100
+    : 0;
+  const perSeatChargeAmount = seatsToCancel.length > 0
+    ? Math.round((cancellationQuote.chargeAmount / seatsToCancel.length) * 100) / 100
+    : 0;
+
+  booking.cancelledSeats = [
+    ...cancelledSeats,
+    ...seatsToCancel.map((item, index) => ({
+      seatId: item.seatId,
+      seatLabel: item.seatLabel,
+      cancelledAt,
+      refundAmount: index === seatsToCancel.length - 1
+        ? Math.max(0, Math.round((cancellationQuote.refundAmount - (perSeatRefundAmount * (seatsToCancel.length - 1))) * 100) / 100)
+        : perSeatRefundAmount,
+      chargeAmount: index === seatsToCancel.length - 1
+        ? Math.max(0, Math.round((cancellationQuote.chargeAmount - (perSeatChargeAmount * (seatsToCancel.length - 1))) * 100) / 100)
+        : perSeatChargeAmount,
+      refundStatus: refundPayload ? (refundPayload.status || 'processed') : 'not_applicable',
+      refundId: refundPayload?.id || '',
+      refundProcessedAt: refundPayload?.created_at ? new Date(Number(refundPayload.created_at) * 1000) : cancelledAt,
+      notes: cancellationQuote.notes || '',
+    })),
+  ];
+
+  const remainingActiveSeatCount = activeSeats.length - seatsToCancel.length;
+  booking.status = remainingActiveSeatCount <= 0 ? 'cancelled' : 'confirmed';
+  booking.cancelledAt = remainingActiveSeatCount <= 0 ? cancelledAt : null;
+  booking.cancellation = {
+    allowed: remainingActiveSeatCount > 0,
+    appliedRuleId: cancellationQuote.appliedRuleId,
+    appliedRuleLabel: cancellationQuote.appliedRuleLabel,
+    refundType: cancellationQuote.refundType,
+    refundValue: cancellationQuote.refundValue,
+    hoursBeforeDeparture: cancellationQuote.hoursBeforeDeparture,
+    refundAmount: cancellationQuote.refundAmount,
+    chargeAmount: cancellationQuote.chargeAmount,
+    notes: cancellationQuote.notes,
+  };
+  booking.payment.status = refundPayload
+    ? (remainingActiveSeatCount <= 0 ? 'refunded' : 'partially_refunded')
+    : (remainingActiveSeatCount <= 0 ? 'cancelled' : booking.payment.status || 'paid');
+  await booking.save();
+
+  await BusSeatHold.deleteMany({
+    bookingId: booking._id,
+    status: { $in: ['held', 'booked'] },
+    seatId: { $in: seatsToCancel.map((item) => item.seatId) },
+  });
+
+  res.status(200).json({
+    success: true,
+    data: serializeBusBooking(booking, busService),
+    message:
+      cancellationQuote.refundAmount > 0
+        ? (remainingActiveSeatCount <= 0
+          ? 'Bus booking cancelled successfully and Razorpay refund was initiated.'
+          : 'Selected seats cancelled successfully and Razorpay refund was initiated.')
+        : (remainingActiveSeatCount <= 0
+          ? 'Bus booking cancelled successfully.'
+          : 'Selected seats cancelled successfully.'),
+  });
+};
+
 export const createRentalQuoteRequest = async (req, res) => {
   const payload = req.body || {};
   const vehicleTypeId = String(payload.vehicleTypeId || '').trim();
@@ -2050,12 +2644,20 @@ export const listMyBusBookings = async (req, res) => {
       .lean(),
   ]);
 
+  const busServiceIds = [...new Set(items.map((item) => String(item.busServiceId || '')).filter(Boolean))];
+  const busServices = busServiceIds.length > 0
+    ? await BusService.find({ _id: { $in: busServiceIds } })
+        .select('cancellationRules schedules route.originCity route.destinationCity')
+        .lean()
+    : [];
+  const busServiceMap = new Map(busServices.map((item) => [String(item._id), item]));
+
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   res.status(200).json({
     success: true,
     data: {
-      results: items.map(serializeBusBooking),
+      results: items.map((item) => serializeBusBooking(item, busServiceMap.get(String(item.busServiceId || '')) || null)),
       pagination: {
         page,
         limit,

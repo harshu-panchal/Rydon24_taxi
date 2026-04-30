@@ -7,12 +7,14 @@ import {
   Clock3,
   CopyPlus,
   Eye,
+  ImagePlus,
   Search,
   MapPin,
   Plus,
   Route,
   Save,
   Trash2,
+  Upload,
   XCircle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -76,6 +78,44 @@ const blankCancellationRule = () => ({
   refundValue: 0,
   notes: '',
 });
+
+const swapStopType = (stopType = 'pickup') => {
+  if (stopType === 'pickup') return 'drop';
+  if (stopType === 'drop') return 'pickup';
+  return 'both';
+};
+
+const buildMirroredReturnRoute = (route = {}) => ({
+  routeName:
+    route.originCity || route.destinationCity
+      ? `Return: ${route.destinationCity || 'Destination'} to ${route.originCity || 'Origin'}`
+      : '',
+  originCity: route.destinationCity || '',
+  destinationCity: route.originCity || '',
+  distanceKm: route.distanceKm || '',
+  durationHours: route.durationHours || '',
+  stops: Array.isArray(route.stops)
+    ? route.stops
+        .slice()
+        .reverse()
+        .map((stop, index) => ({
+          id: stop.id || `return-stop-${index + 1}`,
+          city: stop.city || '',
+          pointName: stop.pointName || '',
+          stopType: swapStopType(stop.stopType),
+          arrivalTime: stop.departureTime || '',
+          departureTime: stop.arrivalTime || '',
+        }))
+    : [],
+});
+
+const fileToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 
 const SeatCell = ({ cell, onToggle }) => {
   if (!cell || cell.kind !== 'seat') {
@@ -257,7 +297,24 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
         ...current.route,
         [field]: value,
       },
+      returnRoute: current.returnRouteEnabled
+        ? buildMirroredReturnRoute({
+            ...current.route,
+            [field]: value,
+          })
+        : current.returnRoute,
     }));
+  };
+
+  const toggleReturnRoute = () => {
+    setDraft((current) => {
+      const nextEnabled = !current.returnRouteEnabled;
+      return {
+        ...current,
+        returnRouteEnabled: nextEnabled,
+        returnRoute: nextEnabled ? buildMirroredReturnRoute(current.route) : current.returnRoute,
+      };
+    });
   };
 
   const toggleAmenity = (amenity) => {
@@ -268,6 +325,53 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
 
       return { ...current, amenities: nextAmenities };
     });
+  };
+
+  const handleImageChange = async (event, field) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const result = await fileToDataUrl(file);
+      updateDraft(field, result);
+      if (field === 'coverImage' || field === 'image') {
+        updateDraft('image', result);
+        updateDraft('coverImage', result);
+      }
+    } catch {
+      toast.error('Failed to read selected image');
+    } finally {
+      event.target.value = '';
+    }
+  };
+
+  const handleGalleryImagesChange = async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+
+    try {
+      const results = await Promise.all(files.map((file) => fileToDataUrl(file)));
+      setDraft((current) => ({
+        ...current,
+        galleryImages: [
+          ...(Array.isArray(current.galleryImages) ? current.galleryImages : []),
+          ...results.filter(Boolean),
+        ],
+      }));
+    } catch {
+      toast.error('Failed to read one or more gallery images');
+    } finally {
+      event.target.value = '';
+    }
+  };
+
+  const removeGalleryImage = (indexToRemove) => {
+    setDraft((current) => ({
+      ...current,
+      galleryImages: (Array.isArray(current.galleryImages) ? current.galleryImages : []).filter(
+        (_, index) => index !== indexToRemove,
+      ),
+    }));
   };
 
   const switchBlueprintTemplate = (templateKey) => {
@@ -304,17 +408,33 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
         ...current.route,
         stops: current.route.stops.map((stop) => (stop.id === stopId ? { ...stop, [field]: value } : stop)),
       },
+      returnRoute: current.returnRouteEnabled
+        ? buildMirroredReturnRoute({
+            ...current.route,
+            stops: current.route.stops.map((stop) => (stop.id === stopId ? { ...stop, [field]: value } : stop)),
+          })
+        : current.returnRoute,
     }));
   };
 
   const addStop = () => {
-    setDraft((current) => ({
-      ...current,
-      route: {
-        ...current.route,
-        stops: [...current.route.stops, blankStop()],
-      },
-    }));
+    setDraft((current) => {
+      const nextStop = blankStop();
+      const nextStops = [...current.route.stops, nextStop];
+      return {
+        ...current,
+        route: {
+          ...current.route,
+          stops: nextStops,
+        },
+        returnRoute: current.returnRouteEnabled
+          ? buildMirroredReturnRoute({
+              ...current.route,
+              stops: nextStops,
+            })
+          : current.returnRoute,
+      };
+    });
   };
 
   const removeStop = (stopId) => {
@@ -324,6 +444,12 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
         ...current.route,
         stops: current.route.stops.filter((stop) => stop.id !== stopId),
       },
+      returnRoute: current.returnRouteEnabled
+        ? buildMirroredReturnRoute({
+            ...current.route,
+            stops: current.route.stops.filter((stop) => stop.id !== stopId),
+          })
+        : current.returnRoute,
     }));
   };
 
@@ -1120,6 +1246,73 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
                 <input className={fieldClassName} value={draft.fareCurrency} onChange={(event) => updateDraft('fareCurrency', event.target.value)} placeholder="INR" />
               </div>
               <div className="md:col-span-2">
+                <label className={labelClassName}>Bus Main Image</label>
+                <div className="rounded-[28px] border border-dashed border-slate-300 p-4">
+                  <div className="group relative flex min-h-[240px] items-center justify-center overflow-hidden rounded-[24px] bg-slate-50">
+                    {draft.coverImage ? (
+                      <>
+                        <img src={draft.coverImage} alt={draft.busName || 'Bus cover'} className="h-full w-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            updateDraft('image', '');
+                            updateDraft('coverImage', '');
+                          }}
+                          className="absolute right-3 top-3 rounded-xl bg-white p-2 text-rose-500 shadow-sm transition hover:bg-rose-500 hover:text-white"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </>
+                    ) : (
+                      <label className="flex cursor-pointer flex-col items-center gap-3 text-center">
+                        <input type="file" accept="image/*" className="hidden" onChange={(event) => handleImageChange(event, 'coverImage')} />
+                        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-orange-500 shadow-sm">
+                          <Upload size={20} />
+                        </span>
+                        <span className="text-sm font-bold text-slate-700">Upload main bus image</span>
+                        <span className="text-xs font-medium text-slate-400">This becomes the primary preview for the bus card and details page.</span>
+                      </label>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="md:col-span-2">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <label className={labelClassName}>Bus Gallery Images</label>
+                    <p className="text-xs font-medium text-slate-500">Add extra interior or exterior images for the bus details page.</p>
+                  </div>
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-xs font-bold text-white shadow-sm">
+                    <ImagePlus size={14} />
+                    Add Gallery Images
+                    <input type="file" accept="image/*" multiple className="hidden" onChange={handleGalleryImagesChange} />
+                  </label>
+                </div>
+
+                {(draft.galleryImages || []).length ? (
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {draft.galleryImages.map((image, index) => (
+                      <div key={`bus-gallery-${index}`} className="rounded-[22px] border border-slate-200 bg-slate-50 p-2">
+                        <div className="relative overflow-hidden rounded-[18px]">
+                          <img src={image} alt={`${draft.busName || 'Bus'} gallery ${index + 1}`} className="h-32 w-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => removeGalleryImage(index)}
+                            className="absolute right-2 top-2 rounded-lg bg-white/95 p-1.5 text-rose-500 shadow-sm transition hover:bg-rose-500 hover:text-white"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm font-semibold text-slate-500">
+                    No gallery images added yet.
+                  </div>
+                )}
+              </div>
+              <div className="md:col-span-2">
                 <label className={labelClassName}>Amenities</label>
                 <div className="flex flex-wrap gap-2">
                   {AMENITY_OPTIONS.map((amenity) => {
@@ -1301,6 +1494,35 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
               </button>
             </div>
 
+            <div className="mb-6 rounded-[28px] border border-slate-200 bg-slate-50/70 p-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Return Route</p>
+                  <h3 className="mt-1 text-base font-black text-slate-900">Auto-create mirrored return path</h3>
+                  <p className="mt-1 text-xs font-medium text-slate-500">
+                    When enabled, the return path flips origin and destination, reverses stops, and swaps pickup/drop roles automatically.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={toggleReturnRoute}
+                  className={`inline-flex items-center gap-3 rounded-full px-4 py-3 text-xs font-black uppercase tracking-[0.18em] transition ${
+                    draft.returnRouteEnabled
+                      ? 'bg-slate-900 text-white shadow-lg'
+                      : 'border border-slate-200 bg-white text-slate-600'
+                  }`}
+                >
+                  <span
+                    className={`h-2.5 w-2.5 rounded-full ${
+                      draft.returnRouteEnabled ? 'bg-emerald-400' : 'bg-slate-300'
+                    }`}
+                  />
+                  {draft.returnRouteEnabled ? 'Return On' : 'Return Off'}
+                </button>
+              </div>
+            </div>
+
             <div className="grid gap-5 md:grid-cols-2">
               <div>
                 <label className={labelClassName}>Route Name</label>
@@ -1322,6 +1544,36 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
                 <input className={fieldClassName} value={draft.route.destinationCity} onChange={(event) => updateRouteField('destinationCity', event.target.value)} placeholder="Bhopal" />
               </div>
             </div>
+
+            {draft.returnRouteEnabled ? (
+              <div className="mt-6 rounded-[28px] border border-emerald-100 bg-emerald-50/70 p-5">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">Generated Return Route</p>
+                    <h3 className="mt-1 text-base font-black text-slate-900">
+                      {draft.returnRoute.originCity || 'Destination'} to {draft.returnRoute.destinationCity || 'Origin'}
+                    </h3>
+                    <p className="mt-1 text-xs font-medium text-slate-600">
+                      {draft.returnRoute.routeName || 'Return route name will be generated automatically.'}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-emerald-100 bg-white/90 px-4 py-3 text-sm font-bold text-slate-900">
+                    {draft.returnRoute.stops.length} return stops
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <div className="rounded-2xl border border-emerald-100 bg-white/90 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Return From</p>
+                    <p className="mt-2 text-sm font-black text-slate-900">{draft.returnRoute.originCity || 'Not generated yet'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-emerald-100 bg-white/90 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Return To</p>
+                    <p className="mt-2 text-sm font-black text-slate-900">{draft.returnRoute.destinationCity || 'Not generated yet'}</p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-6 space-y-4">
               {draft.route.stops.map((stop, index) => (

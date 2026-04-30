@@ -16,6 +16,15 @@ const VAPID_KEY = String(import.meta.env.VITE_FIREBASE_VAPID_KEY || '').trim();
 
 let messagingSupportPromise = null;
 
+const isDriverPendingApprovalScreen = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const pathname = String(window.location.pathname || '').toLowerCase();
+  return pathname === '/taxi/driver/registration-status' || pathname === '/taxi/driver/status';
+};
+
 const hasFirebaseConfig = () =>
   Object.values(FIREBASE_CONFIG).every((value) => String(value || '').trim());
 
@@ -63,7 +72,7 @@ const getAuthenticatedRoles = () => {
     roles.push('user');
   }
 
-  if (getLocalDriverToken()) {
+  if (getLocalDriverToken() && !isDriverPendingApprovalScreen()) {
     roles.push('driver');
   }
 

@@ -63,7 +63,6 @@ const poolingBookingSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-poolingBookingSchema.index({ bookingId: 1 });
 poolingBookingSchema.index({ user: 1 });
 poolingBookingSchema.index({ route: 1 });
 poolingBookingSchema.index({ travelDate: 1 });

@@ -56,6 +56,15 @@ const createEmptyCell = () => ({
   kind: 'aisle',
 });
 
+const createEmptyRoute = () => ({
+  routeName: '',
+  originCity: '',
+  destinationCity: '',
+  distanceKm: '',
+  durationHours: '',
+  stops: [],
+});
+
 const createLowerDeckSeater = (rows = 10, deckCode = 'L') =>
   Array.from({ length: rows }, (_, index) => {
     const rowNumber = index + 1;
@@ -150,6 +159,9 @@ export const createBusDraft = () => ({
   cancellationRules: createDefaultCancellationRules(),
   luggagePolicy: 'One cabin bag and one check-in bag per passenger.',
   amenities: [...DEFAULT_AMENITIES],
+  image: '',
+  coverImage: '',
+  galleryImages: [],
   blueprint: createBlueprintFromTemplate('sleeper_2_1'),
   route: {
     routeName: '',
@@ -176,6 +188,8 @@ export const createBusDraft = () => ({
       },
     ],
   },
+  returnRouteEnabled: false,
+  returnRoute: createEmptyRoute(),
   schedules: [
     {
       id: createId('schedule'),
@@ -211,10 +225,23 @@ const normalizeCatalog = (catalog = []) =>
             ? bus.route.stops
             : fallbackDraft.route.stops,
       },
+      returnRouteEnabled: Boolean(bus.returnRouteEnabled),
+      returnRoute: {
+        ...createEmptyRoute(),
+        ...fallbackDraft.returnRoute,
+        ...bus.returnRoute,
+        stops:
+          Array.isArray(bus.returnRoute?.stops) && bus.returnRoute.stops.length > 0
+            ? bus.returnRoute.stops
+            : [],
+      },
       schedules:
         Array.isArray(bus.schedules) && bus.schedules.length > 0 ? bus.schedules : fallbackDraft.schedules,
       amenities:
         Array.isArray(bus.amenities) && bus.amenities.length > 0 ? bus.amenities : fallbackDraft.amenities,
+      image: bus.image || bus.coverImage || '',
+      coverImage: bus.coverImage || bus.image || '',
+      galleryImages: Array.isArray(bus.galleryImages) ? bus.galleryImages.filter(Boolean) : [],
       cancellationRules:
         Array.isArray(bus.cancellationRules) && bus.cancellationRules.length > 0
           ? bus.cancellationRules

@@ -31,6 +31,53 @@ const passengerSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const cancelledSeatSchema = new mongoose.Schema(
+  {
+    seatId: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    seatLabel: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    cancelledAt: {
+      type: Date,
+      default: null,
+    },
+    refundAmount: {
+      type: Number,
+      default: 0,
+    },
+    chargeAmount: {
+      type: Number,
+      default: 0,
+    },
+    refundStatus: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    refundId: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    refundProcessedAt: {
+      type: Date,
+      default: null,
+    },
+    notes: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+  },
+  { _id: false },
+);
+
 const busBookingSchema = new mongoose.Schema(
   {
     userId: {
@@ -125,6 +172,25 @@ const busBookingSchema = new mongoose.Schema(
       signature: { type: String, default: '' },
       status: { type: String, default: 'pending' },
       paidAt: { type: Date, default: null },
+    },
+    cancelledAt: {
+      type: Date,
+      default: null,
+    },
+    cancellation: {
+      allowed: { type: Boolean, default: false },
+      appliedRuleId: { type: String, default: '' },
+      appliedRuleLabel: { type: String, default: '' },
+      refundType: { type: String, default: '' },
+      refundValue: { type: Number, default: 0 },
+      hoursBeforeDeparture: { type: Number, default: 0 },
+      refundAmount: { type: Number, default: 0 },
+      chargeAmount: { type: Number, default: 0 },
+      notes: { type: String, default: '' },
+    },
+    cancelledSeats: {
+      type: [cancelledSeatSchema],
+      default: [],
     },
     notes: {
       type: String,

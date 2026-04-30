@@ -269,6 +269,19 @@ const normalizeBusServicePayload = (payload = {}, existing = {}) => {
         : [],
   };
 
+  const returnRoute = {
+    routeName: sanitizeBusText(payload.returnRoute?.routeName, existing.returnRoute?.routeName || ''),
+    originCity: sanitizeBusText(payload.returnRoute?.originCity, existing.returnRoute?.originCity || ''),
+    destinationCity: sanitizeBusText(payload.returnRoute?.destinationCity, existing.returnRoute?.destinationCity || ''),
+    distanceKm: sanitizeBusText(payload.returnRoute?.distanceKm, existing.returnRoute?.distanceKm || ''),
+    durationHours: sanitizeBusText(payload.returnRoute?.durationHours, existing.returnRoute?.durationHours || ''),
+    stops: Array.isArray(payload.returnRoute?.stops)
+      ? payload.returnRoute.stops.map((stop, index) => normalizeBusStop(stop, index))
+      : Array.isArray(existing.returnRoute?.stops)
+        ? existing.returnRoute.stops.map((stop, index) => normalizeBusStop(stop, index))
+        : [],
+  };
+
   const schedules = Array.isArray(payload.schedules)
     ? payload.schedules.map((schedule, index) => normalizeBusSchedule(schedule, index))
     : Array.isArray(existing.schedules)
@@ -312,8 +325,20 @@ const normalizeBusServicePayload = (payload = {}, existing = {}) => {
       : Array.isArray(existing.amenities)
         ? existing.amenities
         : [],
+    image: sanitizeBusText(payload.image, existing.image || ''),
+    coverImage: sanitizeBusText(
+      payload.coverImage,
+      payload.image || existing.coverImage || existing.image || '',
+    ),
+    galleryImages: Array.isArray(payload.galleryImages)
+      ? payload.galleryImages.map((item) => sanitizeBusText(item)).filter(Boolean)
+      : Array.isArray(existing.galleryImages)
+        ? existing.galleryImages.map((item) => sanitizeBusText(item)).filter(Boolean)
+        : [],
     blueprint,
     route,
+    returnRouteEnabled: Boolean(payload.returnRouteEnabled ?? existing.returnRouteEnabled ?? false),
+    returnRoute,
     schedules,
     capacity,
     status: ['draft', 'active', 'paused'].includes(payload.status) ? payload.status : existing.status || 'draft',
@@ -342,6 +367,9 @@ const serializeBusService = (item = {}) => ({
     : [],
   luggagePolicy: item.luggagePolicy || '',
   amenities: Array.isArray(item.amenities) ? item.amenities : [],
+  image: item.image || item.coverImage || '',
+  coverImage: item.coverImage || item.image || '',
+  galleryImages: Array.isArray(item.galleryImages) ? item.galleryImages.filter(Boolean) : [],
   blueprint: {
     templateKey: item.blueprint?.templateKey || 'seater_2_2',
     lowerDeck: normalizeBusDeck(item.blueprint?.lowerDeck || []),
@@ -355,6 +383,17 @@ const serializeBusService = (item = {}) => ({
     durationHours: item.route?.durationHours || '',
     stops: Array.isArray(item.route?.stops)
       ? item.route.stops.map((stop, index) => normalizeBusStop(stop, index))
+      : [],
+  },
+  returnRouteEnabled: Boolean(item.returnRouteEnabled),
+  returnRoute: {
+    routeName: item.returnRoute?.routeName || '',
+    originCity: item.returnRoute?.originCity || '',
+    destinationCity: item.returnRoute?.destinationCity || '',
+    distanceKm: item.returnRoute?.distanceKm || '',
+    durationHours: item.returnRoute?.durationHours || '',
+    stops: Array.isArray(item.returnRoute?.stops)
+      ? item.returnRoute.stops.map((stop, index) => normalizeBusStop(stop, index))
       : [],
   },
   schedules: Array.isArray(item.schedules)
