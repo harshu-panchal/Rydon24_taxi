@@ -125,6 +125,12 @@ const WORKSPACE_TABS = [
   { id: 'bookings', label: 'Bookings', Icon: ClipboardList },
 ];
 
+const STOP_TYPE_TONE = {
+  pickup: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  drop: 'bg-rose-50 text-rose-700 border-rose-200',
+  both: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+};
+
 const getCalendarMatrix = (value) => {
   const sourceDate = value instanceof Date ? value : parseDateKey(value) || new Date();
   const year = sourceDate.getFullYear();
@@ -152,6 +158,12 @@ const getCalendarMatrix = (value) => {
 
   return cells;
 };
+
+const countBlueprintSeats = (blueprint = {}) =>
+  ['lowerDeck', 'upperDeck']
+    .flatMap((deckKey) => (Array.isArray(blueprint?.[deckKey]) ? blueprint[deckKey] : []))
+    .flatMap((row) => (Array.isArray(row) ? row : []))
+    .filter((cell) => cell?.kind === 'seat').length;
 
 const SeatDeck = ({ title, rows, selectedSeatIds, onToggle }) => {
   if (!rows?.length) return null;
@@ -221,6 +233,7 @@ const StatCard = ({ label, value, tone = 'light', Icon }) => (
 const BusDriverHome = () => {
   const navigate = useNavigate();
   const calendarPopoverRef = useRef(null);
+  const runDetailsPopoverRef = useRef(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [profile, setProfile] = useState(null);
   const [layout, setLayout] = useState(null);
@@ -241,6 +254,7 @@ const BusDriverHome = () => {
   const [scheduleDrafts, setScheduleDrafts] = useState([]);
   const [isSavingSchedules, setIsSavingSchedules] = useState(false);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [isRunDetailsOpen, setIsRunDetailsOpen] = useState(false);
   const [passenger, setPassenger] = useState({
     name: '',
     age: '',
@@ -252,6 +266,9 @@ const BusDriverHome = () => {
 
   const busService = profile?.busService || null;
   const schedules = Array.isArray(busService?.schedules) ? busService.schedules : [];
+  const routeStops = Array.isArray(busService?.route?.stops) ? busService.route.stops : [];
+  const pickupStops = routeStops.filter((stop) => stop?.stopType === 'pickup' || stop?.stopType === 'both');
+  const dropStops = routeStops.filter((stop) => stop?.stopType === 'drop' || stop?.stopType === 'both');
   const selectedSchedule =
     schedules.find((item) => item.id === selectedScheduleId) || schedules[0] || null;
   const persistedScheduleIds = useMemo(
@@ -426,13 +443,53 @@ const BusDriverHome = () => {
     };
   }, [isCalendarOpen]);
 
+  useEffect(() => {
+    if (!isRunDetailsOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (runDetailsPopoverRef.current && !runDetailsPopoverRef.current.contains(event.target)) {
+        setIsRunDetailsOpen(false);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setIsRunDetailsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isRunDetailsOpen]);
+
   const selectedFare = useMemo(
     () => selectedSeats.length * Number(busService?.seatPrice || 0),
     [selectedSeats, busService?.seatPrice],
   );
+  const totalSeatCount = useMemo(() => countBlueprintSeats(layout?.blueprint), [layout?.blueprint]);
+  const occupiedSeatCount = useMemo(
+    () => Math.max(0, totalSeatCount - Number(layout?.availableSeats ?? 0)),
+    [layout?.availableSeats, totalSeatCount],
+  );
 
   const todaysManualReservations = useMemo(
     () => bookings.filter((item) => item.bookingSource === 'bus_driver').length,
+    [bookings],
+  );
+  const occupiedSeatLabels = useMemo(
+    () =>
+      bookings
+        .flatMap((booking) => (Array.isArray(booking?.seatLabels) ? booking.seatLabels : []))
+        .filter(Boolean),
     [bookings],
   );
 
@@ -610,6 +667,7 @@ const BusDriverHome = () => {
         notes: '',
       });
       setSelectedSeats([]);
+      setIsRunDetailsOpen(false);
       setActiveTab('bookings');
       await refreshDesk();
     } catch (error) {
@@ -634,13 +692,17 @@ const BusDriverHome = () => {
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl bg-slate-50 p-4">
+          <button
+            type="button"
+            onClick={() => setIsRunDetailsOpen(true)}
+            className="rounded-2xl bg-slate-50 p-4 text-left transition hover:bg-slate-100 active:scale-[0.99]"
+          >
             <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400"><MapPin size={14} /> Route</p>
             <p className="mt-2 text-sm font-black text-slate-900">
               {busService.route?.originCity || 'Origin'} to {busService.route?.destinationCity || 'Destination'}
             </p>
             <p className="mt-1 text-sm text-slate-500">{busService.route?.routeName || 'Standard route'}</p>
-          </div>
+          </button>
           <div className="rounded-2xl bg-slate-50 p-4">
             <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400"><Phone size={14} /> Driver Contact</p>
             <p className="mt-2 text-sm font-black text-slate-900">{busService.driverName || profile?.name}</p>
@@ -653,6 +715,112 @@ const BusDriverHome = () => {
         <StatCard label="Today's Bookings" value={bookings.length} Icon={Ticket} />
         <StatCard label="Manual Reserves" value={todaysManualReservations} tone="dark" Icon={Users} />
       </div>
+
+      <button
+        type="button"
+        onClick={() => setIsRunDetailsOpen(true)}
+        className="w-full rounded-[28px] border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-slate-300"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Today's Bus Details</p>
+            <h3 className="mt-2 text-xl font-black text-slate-900">{selectedSchedule?.label || busService.busName || 'Assigned run'}</h3>
+            <p className="mt-1 text-sm font-medium text-slate-500">
+              {formatDisplayDate(travelDate)} {selectedSchedule?.departureTime ? `· ${selectedSchedule.departureTime}` : ''}
+            </p>
+          </div>
+          <div className="rounded-2xl bg-slate-950 px-4 py-3 text-white">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/60">Tap To Open</p>
+            <p className="mt-1 text-sm font-black">Live Details</p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-4">
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Available</p>
+            <p className="mt-2 text-xl font-black text-slate-900">{layout?.availableSeats ?? 0}</p>
+          </div>
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Occupied</p>
+            <p className="mt-2 text-xl font-black text-slate-900">{occupiedSeatCount}</p>
+          </div>
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Stops</p>
+            <p className="mt-2 text-xl font-black text-slate-900">{routeStops.length}</p>
+          </div>
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Selected</p>
+            <p className="mt-2 text-xl font-black text-slate-900">{selectedSeats.length}</p>
+          </div>
+        </div>
+      </button>
+
+      <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Route Stops</p>
+          </div>
+        
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Pickup Stops</p>
+            <p className="mt-2 text-xl font-black text-slate-900">{pickupStops.length}</p>
+          </div>
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Drop Stops</p>
+            <p className="mt-2 text-xl font-black text-slate-900">{dropStops.length}</p>
+          </div>
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Route Name</p>
+            <p className="mt-2 text-sm font-black text-slate-900">{busService.route?.routeName || 'Standard route'}</p>
+          </div>
+        </div>
+
+        {routeStops.length ? (
+          <div className="mt-4 space-y-3">
+            {routeStops.map((stop, index) => {
+              const stopTone = STOP_TYPE_TONE[stop?.stopType] || 'bg-slate-100 text-slate-600 border-slate-200';
+
+              return (
+                <article
+                  key={stop?.id || `route-stop-${index}`}
+                  className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-indigo-600 shadow-sm">
+                        <MapPin size={16} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-black text-slate-900">{stop?.city || 'City not set'}</p>
+                        <p className="mt-1 text-sm text-slate-600">{stop?.pointName || 'Point not set'}</p>
+                        {stop?.landmark ? (
+                          <p className="mt-1 text-xs font-medium text-slate-500">{stop.landmark}</p>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 text-right">
+                      <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${stopTone}`}>
+                        {stop?.stopType || 'stop'}
+                      </span>
+                      <p className="mt-2 text-xs font-semibold text-slate-500">
+                        {stop?.arrivalTime || '--:--'} to {stop?.departureTime || '--:--'}
+                      </p>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-medium text-slate-500">
+            No stops are configured yet in admin for this bus service.
+          </div>
+        )}
+      </section>
 
       <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Quick Actions</p>
@@ -1158,6 +1326,236 @@ const BusDriverHome = () => {
 
   return (
     <div className="min-h-screen bg-[#f6f7fb] px-4 pb-28 pt-6" style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>
+      {isRunDetailsOpen ? (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/45 p-4">
+          <div ref={runDetailsPopoverRef} className="mx-auto w-full max-w-4xl rounded-[32px] border border-slate-200 bg-[#f6f7fb] p-4 shadow-[0_30px_80px_rgba(15,23,42,0.28)]">
+            <section className="rounded-[28px] bg-[#10213b] p-5 text-white shadow-[0_24px_60px_rgba(15,23,42,0.22)]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Today's Bus Run</p>
+                  <h2 className="mt-2 text-2xl font-black">{busService?.busName || 'Assigned Bus'}</h2>
+                  <p className="mt-1 text-sm text-white/70">
+                    {formatDisplayDate(travelDate)} · {selectedSchedule?.label || 'Schedule'} · {selectedSchedule?.departureTime || '--:--'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsRunDetailsOpen(false)}
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-white transition active:scale-95"
+                >
+                  <XCircle size={18} />
+                </button>
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-4">
+                <div className="rounded-2xl bg-white/8 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/50">Available</p>
+                  <p className="mt-2 text-2xl font-black">{layout?.availableSeats ?? 0}</p>
+                </div>
+                <div className="rounded-2xl bg-white/8 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/50">Occupied</p>
+                  <p className="mt-2 text-2xl font-black">{occupiedSeatCount}</p>
+                </div>
+                <div className="rounded-2xl bg-white/8 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/50">Stops</p>
+                  <p className="mt-2 text-2xl font-black">{routeStops.length}</p>
+                </div>
+                <div className="rounded-2xl bg-white/8 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/50">Selected</p>
+                  <p className="mt-2 text-2xl font-black">{selectedSeats.length}</p>
+                </div>
+              </div>
+            </section>
+
+            <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+              <div className="space-y-4">
+                <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Run Overview</p>
+                      <h3 className="mt-2 text-lg font-black text-slate-900">
+                        {busService?.route?.originCity || 'Origin'} to {busService?.route?.destinationCity || 'Destination'}
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-500">{busService?.route?.routeName || 'Standard route'}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={refreshDesk}
+                      className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-700"
+                    >
+                      <RefreshCcw size={18} />
+                    </button>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl bg-slate-50 p-4">
+                      <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400"><Phone size={14} /> Driver</p>
+                      <p className="mt-2 text-sm font-black text-slate-900">{busService?.driverName || profile?.name}</p>
+                      <p className="mt-1 text-sm text-slate-500">{busService?.driverPhone || profile?.phone}</p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 p-4">
+                      <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400"><Clock3 size={14} /> Trip Window</p>
+                      <p className="mt-2 text-sm font-black text-slate-900">{selectedSchedule?.departureTime || '--:--'} to {selectedSchedule?.arrivalTime || '--:--'}</p>
+                      <p className="mt-1 text-sm text-slate-500">{selectedSchedule?.status || 'active'}</p>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Seat Blueprint</p>
+                      <h3 className="mt-2 text-lg font-black text-slate-900">Add or remove seats live</h3>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 px-3 py-2 text-right">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Reserve Fare</p>
+                      <p className="mt-1 text-lg font-black text-slate-900">{formatCurrency(selectedFare, busService?.fareCurrency)}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 space-y-4">
+                    <SeatDeck
+                      title="Lower Deck"
+                      rows={layout?.blueprint?.lowerDeck || []}
+                      selectedSeatIds={selectedSeats.map((seat) => seat.id)}
+                      onToggle={handleToggleSeat}
+                    />
+                    <SeatDeck
+                      title="Upper Deck"
+                      rows={layout?.blueprint?.upperDeck || []}
+                      selectedSeatIds={selectedSeats.map((seat) => seat.id)}
+                      onToggle={handleToggleSeat}
+                    />
+                  </div>
+
+                  {selectedSeats.length ? (
+                    <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Selected Seats</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {selectedSeats.map((seat) => (
+                          <button
+                            key={`selected-seat-${seat.id}`}
+                            type="button"
+                            onClick={() => handleToggleSeat(seat)}
+                            className="rounded-full bg-slate-950 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-white"
+                          >
+                            {seat.label} · Remove
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </section>
+              </div>
+
+              <div className="space-y-4">
+                <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Stops</p>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+                    <div className="rounded-2xl bg-slate-50 p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Pickup Stops</p>
+                      <p className="mt-2 text-xl font-black text-slate-900">{pickupStops.length}</p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Drop Stops</p>
+                      <p className="mt-2 text-xl font-black text-slate-900">{dropStops.length}</p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Occupied Labels</p>
+                      <p className="mt-2 text-sm font-black text-slate-900">{occupiedSeatLabels.length || 0}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {routeStops.length ? routeStops.map((stop, index) => {
+                      const stopTone = STOP_TYPE_TONE[stop?.stopType] || 'bg-slate-100 text-slate-600 border-slate-200';
+
+                      return (
+                        <article key={stop?.id || `modal-route-stop-${index}`} className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-black text-slate-900">{stop?.city || 'City not set'}</p>
+                              <p className="mt-1 text-sm text-slate-600">{stop?.pointName || 'Point not set'}</p>
+                            </div>
+                            <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${stopTone}`}>
+                              {stop?.stopType || 'stop'}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-xs font-semibold text-slate-500">{stop?.arrivalTime || '--:--'} to {stop?.departureTime || '--:--'}</p>
+                        </article>
+                      );
+                    }) : (
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-medium text-slate-500">
+                        No stops are configured yet in admin for this bus service.
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+                  <h3 className="text-sm font-black text-slate-900">Reserve Seats Right Here</h3>
+                  <div className="mt-4 grid gap-3">
+                    <input
+                      value={passenger.name}
+                      onChange={(event) => setPassenger((current) => ({ ...current, name: event.target.value }))}
+                      placeholder="Passenger name"
+                      className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-900 outline-none"
+                    />
+                    <input
+                      value={passenger.phone}
+                      onChange={(event) => setPassenger((current) => ({ ...current, phone: event.target.value.replace(/\D/g, '').slice(0, 10) }))}
+                      placeholder="Passenger phone"
+                      className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-900 outline-none"
+                    />
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <input
+                        value={passenger.age}
+                        onChange={(event) => setPassenger((current) => ({ ...current, age: event.target.value.replace(/\D/g, '').slice(0, 3) }))}
+                        placeholder="Age"
+                        className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-900 outline-none"
+                      />
+                      <select
+                        value={passenger.gender}
+                        onChange={(event) => setPassenger((current) => ({ ...current, gender: event.target.value }))}
+                        className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-900 outline-none"
+                      >
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <input
+                      value={passenger.email}
+                      onChange={(event) => setPassenger((current) => ({ ...current, email: event.target.value }))}
+                      placeholder="Passenger email"
+                      className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-900 outline-none"
+                    />
+                    <textarea
+                      value={passenger.notes}
+                      onChange={(event) => setPassenger((current) => ({ ...current, notes: event.target.value }))}
+                      placeholder="Notes for this reservation"
+                      className="min-h-[92px] rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={submitting || !selectedSeats.length}
+                    onClick={handleReserve}
+                    className={`mt-4 flex h-12 w-full items-center justify-center rounded-2xl text-sm font-black transition ${
+                      submitting || !selectedSeats.length
+                        ? 'bg-slate-200 text-slate-500'
+                        : 'bg-slate-950 text-white shadow-lg'
+                    }`}
+                  >
+                    {submitting ? 'Reserving Seats...' : 'Reserve Selected Seats'}
+                  </button>
+                </section>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {isCalendarOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4">
           <div
