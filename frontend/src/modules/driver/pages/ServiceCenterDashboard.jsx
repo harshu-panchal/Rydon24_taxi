@@ -29,13 +29,11 @@ import { uploadService } from '../../../shared/services/uploadService';
 import {
   clearDriverAuthState,
   createServiceCenterStaff,
-  createServiceCenterVehicle,
   deleteServiceCenterVehicle,
   getCurrentDriver,
   getServiceCenterBookings,
   getServiceCenterStaff,
   getServiceCenterVehicles,
-  updateServiceCenterVehicle,
   updateServiceCenterBooking,
 } from '../services/registrationService';
 
@@ -109,21 +107,6 @@ const getCompletionRequirements = (booking) => {
 
   return missing;
 };
-
-const buildVehicleForm = () => ({
-  name: '',
-  short_description: '',
-  description: '',
-  vehicleCategory: 'Car',
-  capacity: '4',
-  luggageCapacity: '2',
-  image: '',
-  amenities: 'AC, GPS, Charging Port',
-  price6: '799',
-  price12: '1299',
-  price24: '1999',
-  status: 'active',
-});
 
 const buildStaffForm = () => ({
   name: '',
@@ -228,15 +211,11 @@ const ServiceCenterDashboard = () => {
     canAssignBookings: false,
   });
   const [loading, setLoading] = useState(true);
-  const [savingVehicle, setSavingVehicle] = useState(false);
   const [savingStaff, setSavingStaff] = useState(false);
   const [updatingBookingId, setUpdatingBookingId] = useState('');
   const [uploadingConditionSection, setUploadingConditionSection] = useState('');
-  const [showVehicleForm, setShowVehicleForm] = useState(false);
   const [showStaffForm, setShowStaffForm] = useState(false);
-  const [editingVehicleId, setEditingVehicleId] = useState('');
   const [error, setError] = useState('');
-  const [vehicleForm, setVehicleForm] = useState(buildVehicleForm);
   const [staffForm, setStaffForm] = useState(buildStaffForm);
   const [previewImage, setPreviewImage] = useState('');
   const [bookingDraft, setBookingDraft] = useState({
@@ -476,65 +455,8 @@ const ServiceCenterDashboard = () => {
     navigate('/taxi/driver/login', { replace: true });
   };
 
-  const handleVehicleChange = (field, value) => {
-    setVehicleForm((current) => ({ ...current, [field]: value }));
-  };
-
   const handleStaffChange = (field, value) => {
     setStaffForm((current) => ({ ...current, [field]: value }));
-  };
-
-  const handleCreateVehicle = async () => {
-    if (!vehicleForm.name.trim()) {
-      setError('Vehicle name is required');
-      return;
-    }
-
-    setSavingVehicle(true);
-    setError('');
-
-    try {
-      const payload = {
-        transport_type: 'rental',
-        name: vehicleForm.name.trim(),
-        short_description: vehicleForm.short_description.trim(),
-        description: vehicleForm.description.trim(),
-        vehicleCategory: vehicleForm.vehicleCategory.trim() || 'Car',
-        image: vehicleForm.image.trim(),
-        coverImage: vehicleForm.image.trim(),
-        capacity: Number(vehicleForm.capacity || 4),
-        luggageCapacity: Number(vehicleForm.luggageCapacity || 0),
-        amenities: vehicleForm.amenities.split(',').map((item) => item.trim()).filter(Boolean),
-        pricing: [
-          { id: 'pkg-6h', label: '6 Hours', durationHours: 6, price: Number(vehicleForm.price6 || 0), includedKm: 60, extraHourPrice: 120, extraKmPrice: 12, active: true },
-          { id: 'pkg-12h', label: '12 Hours', durationHours: 12, price: Number(vehicleForm.price12 || 0), includedKm: 120, extraHourPrice: 110, extraKmPrice: 11, active: true },
-          { id: 'pkg-24h', label: '24 Hours', durationHours: 24, price: Number(vehicleForm.price24 || 0), includedKm: 240, extraHourPrice: 95, extraKmPrice: 10, active: true },
-        ],
-        status: vehicleForm.status,
-      };
-
-      if (editingVehicleId) {
-        const response = await updateServiceCenterVehicle(editingVehicleId, payload);
-        const updated = unwrap(response);
-        setVehicles((current) =>
-          current.map((item) =>
-            String(item.id || item._id) === String(editingVehicleId) ? updated : item,
-          ),
-        );
-      } else {
-        const response = await createServiceCenterVehicle(payload);
-        const created = unwrap(response);
-        setVehicles((current) => [created, ...current]);
-      }
-
-      setVehicleForm(buildVehicleForm());
-      setEditingVehicleId('');
-      setShowVehicleForm(false);
-    } catch (err) {
-      setError(err?.message || (editingVehicleId ? 'Unable to update vehicle' : 'Unable to create vehicle'));
-    } finally {
-      setSavingVehicle(false);
-    }
   };
 
   const handleDeleteVehicle = async (vehicleId) => {
@@ -581,40 +503,16 @@ const ServiceCenterDashboard = () => {
     }
   };
 
-  const closeVehicleForm = () => {
-    setShowVehicleForm(false);
-    setEditingVehicleId('');
-    setVehicleForm(buildVehicleForm());
-  };
-
   const openCreateVehicleForm = () => {
-    setEditingVehicleId('');
-    setVehicleForm(buildVehicleForm());
-    setShowVehicleForm(true);
+    navigate('/taxi/driver/service-center/vehicles/new');
   };
 
   const openVehicleEditor = (vehicle) => {
-    const pricing = Array.isArray(vehicle?.pricing) ? vehicle.pricing : [];
-    const sixHour = pricing.find((item) => Number(item?.durationHours) === 6);
-    const twelveHour = pricing.find((item) => Number(item?.durationHours) === 12);
-    const twentyFourHour = pricing.find((item) => Number(item?.durationHours) === 24);
-
-    setEditingVehicleId(String(vehicle?.id || vehicle?._id || ''));
-    setVehicleForm({
-      name: vehicle?.name || '',
-      short_description: vehicle?.short_description || '',
-      description: vehicle?.description || '',
-      vehicleCategory: vehicle?.vehicleCategory || 'Car',
-      capacity: String(vehicle?.capacity ?? 4),
-      luggageCapacity: String(vehicle?.luggageCapacity ?? 0),
-      image: vehicle?.image || vehicle?.coverImage || '',
-      amenities: Array.isArray(vehicle?.amenities) ? vehicle.amenities.join(', ') : '',
-      price6: String(sixHour?.price ?? 0),
-      price12: String(twelveHour?.price ?? 0),
-      price24: String(twentyFourHour?.price ?? 0),
-      status: vehicle?.status === 'inactive' ? 'inactive' : 'active',
-    });
-    setShowVehicleForm(true);
+    const id = vehicle?.id || vehicle?._id;
+    if (!id) {
+      return;
+    }
+    navigate(`/taxi/driver/service-center/vehicles/${id}`);
   };
 
   const patchBookingLocal = (bookingId, patch) => {
@@ -1565,93 +1463,6 @@ const ServiceCenterDashboard = () => {
           </motion.div>
         ) : null}
 
-        {showVehicleForm ? (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-slate-950/40 p-4 backdrop-blur-sm">
-            <div className="mx-auto flex min-h-full max-w-3xl items-center justify-center">
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="max-h-[92vh] w-full overflow-y-auto rounded-[30px] bg-white p-6 shadow-[0_28px_100px_rgba(15,23,42,0.22)]">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-2xl font-bold tracking-[-0.04em] text-slate-950">
-                      {editingVehicleId ? 'Vehicle Details' : 'Add Rental Vehicle'}
-                    </h3>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {editingVehicleId
-                        ? 'View and edit the complete vehicle setup for this service-center listing.'
-                        : 'This vehicle will be assigned directly to your service center.'}
-                    </p>
-                  </div>
-                  <button type="button" onClick={closeVehicleForm} className="rounded-2xl border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50">
-                    <X size={18} />
-                  </button>
-                </div>
-
-                <div className="mt-6 grid gap-5 md:grid-cols-2">
-                  <div className="md:col-span-2">
-                    <label className={labelClass}>Vehicle Name</label>
-                    <input value={vehicleForm.name} onChange={(event) => handleVehicleChange('name', event.target.value)} className={inputClass} placeholder="Swift Dzire Rental" />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Category</label>
-                    <input value={vehicleForm.vehicleCategory} onChange={(event) => handleVehicleChange('vehicleCategory', event.target.value)} className={inputClass} placeholder="Car" />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Image URL</label>
-                    <input value={vehicleForm.image} onChange={(event) => handleVehicleChange('image', event.target.value)} className={inputClass} placeholder="https://..." />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Capacity</label>
-                    <input type="number" min="1" value={vehicleForm.capacity} onChange={(event) => handleVehicleChange('capacity', event.target.value)} className={inputClass} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Luggage Capacity</label>
-                    <input type="number" min="0" value={vehicleForm.luggageCapacity} onChange={(event) => handleVehicleChange('luggageCapacity', event.target.value)} className={inputClass} />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className={labelClass}>Short Description</label>
-                    <input value={vehicleForm.short_description} onChange={(event) => handleVehicleChange('short_description', event.target.value)} className={inputClass} placeholder="Comfortable city rental" />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className={labelClass}>Description</label>
-                    <textarea rows={4} value={vehicleForm.description} onChange={(event) => handleVehicleChange('description', event.target.value)} className={`${inputClass} resize-none`} placeholder="Add details about this rental vehicle" />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className={labelClass}>Amenities</label>
-                    <input value={vehicleForm.amenities} onChange={(event) => handleVehicleChange('amenities', event.target.value)} className={inputClass} placeholder="AC, GPS, Charging Port" />
-                  </div>
-                  <div>
-                    <label className={labelClass}>6 Hour Price</label>
-                    <input type="number" min="0" value={vehicleForm.price6} onChange={(event) => handleVehicleChange('price6', event.target.value)} className={inputClass} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>12 Hour Price</label>
-                    <input type="number" min="0" value={vehicleForm.price12} onChange={(event) => handleVehicleChange('price12', event.target.value)} className={inputClass} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>24 Hour Price</label>
-                    <input type="number" min="0" value={vehicleForm.price24} onChange={(event) => handleVehicleChange('price24', event.target.value)} className={inputClass} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Status</label>
-                    <select value={vehicleForm.status} onChange={(event) => handleVehicleChange('status', event.target.value)} className={inputClass}>
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="mt-6 flex items-center justify-end gap-3">
-                  <button type="button" onClick={closeVehicleForm} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">
-                    Cancel
-                  </button>
-                  <button type="button" disabled={savingVehicle} onClick={handleCreateVehicle} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60">
-                    {savingVehicle ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-                    {editingVehicleId ? 'Save Changes' : 'Save Vehicle'}
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          </motion.div>
-        ) : null}
       </AnimatePresence>
     </div>
   );
