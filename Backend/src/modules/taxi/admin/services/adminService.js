@@ -166,6 +166,14 @@ const normalizeVehicleTransportType = (value = '') => {
   return 'taxi';
 };
 
+const normalizeDeliveryCategory = (value = '') => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'trucks') return 'trucks';
+  if (normalized === '2wheeler' || normalized === '2_wheeler' || normalized === 'two_wheeler') return '2wheeler';
+  if (normalized === 'movers' || normalized === 'packers_movers' || normalized === 'packers-and-movers') return 'movers';
+  return '';
+};
+
 const BUS_DAY_OPTIONS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const sanitizeBusText = (value = '', fallback = '') =>
@@ -4617,6 +4625,7 @@ export const listVehicleTypes = async (queryParams = {}) => {
     ...item,
     icon: item.map_icon || item.icon || item.image || '',
     map_icon: item.map_icon || item.icon || item.image || '',
+    delivery_category: item.delivery_category || '',
   }));
 
   return {
@@ -4642,6 +4651,7 @@ export const listVehicleCatalog = async () => {
     id: String(item._id),
     icon: item.map_icon || item.icon || item.image || '',
     map_icon: item.map_icon || item.icon || item.image || '',
+    delivery_category: item.delivery_category || '',
     supported_vehicles: Array.isArray(item.supported_other_vehicle_types)
       ? item.supported_other_vehicle_types.map((v) => String(v)).join(',')
       : '',
@@ -4671,7 +4681,7 @@ export const listPublicVehicleCatalog = async () => {
   }
 
   const items = await Vehicle.find()
-    .select('name short_description description transport_type icon_types capacity image icon map_icon status active')
+    .select('name short_description description transport_type icon_types delivery_category capacity image icon map_icon status active')
     .sort({ createdAt: -1 })
     .lean();
 
@@ -4683,6 +4693,7 @@ export const listPublicVehicleCatalog = async () => {
     description: item.description || '',
     transport_type: item.transport_type || 'taxi',
     icon_types: item.icon_types || 'car',
+    delivery_category: item.delivery_category || '',
     capacity: Number(item.capacity || 0),
     image: item.image || '',
     map_icon: item.map_icon || item.icon || item.image || '',
@@ -4749,6 +4760,9 @@ export const createVehicleType = async (payload) => {
     size: payload.size ?? '',
     is_taxi: payload.is_taxi || transportType,
     is_accept_share_ride: Number(payload.is_accept_share_ride || 0) ? 1 : 0,
+    delivery_category: ['delivery', 'both'].includes(transportType)
+      ? normalizeDeliveryCategory(payload.delivery_category)
+      : '',
     image: payload.image ?? mapIcon,
     icon: mapIcon,
     map_icon: mapIcon,
@@ -4810,6 +4824,11 @@ export const updateVehicleType = async (id, payload) => {
   }
   if (payload.is_accept_share_ride !== undefined) {
     vehicle.is_accept_share_ride = Number(payload.is_accept_share_ride || 0) ? 1 : 0;
+  }
+  if (payload.delivery_category !== undefined || payload.transport_type !== undefined) {
+    vehicle.delivery_category = ['delivery', 'both'].includes(vehicle.transport_type)
+      ? normalizeDeliveryCategory(payload.delivery_category ?? vehicle.delivery_category)
+      : '';
   }
   if (payload.status !== undefined) {
     vehicle.status = Number(payload.status) ? 1 : 0;

@@ -132,6 +132,11 @@ const mergeDriverSnapshot = (baseDriver = {}, incomingDriver = {}) => ({
 const ParcelTracking = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const routePrefix = useMemo(
+    () => (location.pathname.startsWith('/taxi/user') ? '/taxi/user' : ''),
+    [location.pathname],
+  );
+  const userHomeRoute = routePrefix || '/taxi/user';
   const storedRide = useMemo(() => getCurrentRide(), []);
   const state = useMemo(() => location.state || storedRide || {}, [location.state, storedRide]);
   const [rideRealtime, setRideRealtime] = useState(null);
@@ -176,7 +181,7 @@ const ParcelTracking = () => {
       if (String(payload.rideId) === String(rideId)) {
         const nextStatus = String(payload.liveStatus || payload.status).toLowerCase();
         if (COMPLETED_TRACKING_STATUSES.has(nextStatus)) {
-          navigate('/ride/complete', { state: { ...state, ...payload, status: nextStatus } });
+          navigate(`${routePrefix}/ride/complete`, { state: { ...state, ...payload, status: nextStatus } });
         }
         setRideRealtime(prev => ({ ...prev, status: nextStatus }));
       }
@@ -192,7 +197,7 @@ const ParcelTracking = () => {
       socketService.off('ride:driver-location:updated', onLocationUpdated);
       socketService.off('ride:status:updated', onStatusUpdated);
     };
-  }, [rideId, navigate, state]);
+  }, [rideId, navigate, routePrefix, state]);
 
   // Route Path Update
   useEffect(() => {
@@ -257,7 +262,7 @@ const ParcelTracking = () => {
 
       {/* Header Overlays */}
       <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="absolute top-8 left-4 right-4 z-10 flex gap-3">
-        <button onClick={() => navigate('/')} className="w-12 h-12 bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl border border-white/80 flex items-center justify-center text-gray-900">
+        <button onClick={() => navigate(userHomeRoute, { replace: true })} className="w-12 h-12 bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl border border-white/80 flex items-center justify-center text-gray-900">
           <ChevronLeft size={20} strokeWidth={2.5} />
         </button>
         <div className="flex-1 bg-white/90 backdrop-blur-xl rounded-2xl p-3 shadow-xl border border-white/80 flex items-center gap-3">
@@ -328,9 +333,9 @@ const ParcelTracking = () => {
           {/* Action Grid */}
           <div className="grid grid-cols-4 gap-3">
             <ActionButton icon={Phone} label="Call" onClick={handleCall} />
-            <ActionButton icon={MessageCircle} label="Chat" onClick={() => navigate('/ride/chat', { state: { rideId, peer: driver } })} />
+            <ActionButton icon={MessageCircle} label="Chat" onClick={() => navigate(`${routePrefix}/ride/chat`, { state: { rideId, peer: driver } })} />
             <ActionButton icon={Share2} label="Share" onClick={handleShare} />
-            <ActionButton icon={ShieldCheck} label="Safety" onClick={() => navigate('/support')} color="indigo" />
+            <ActionButton icon={ShieldCheck} label="Safety" onClick={() => navigate(`${routePrefix}/support`)} color="indigo" />
           </div>
 
           {/* Trip Footer */}
@@ -370,7 +375,7 @@ const ParcelTracking = () => {
                   onClick={() => {
                     api.patch(`/rides/${rideId}/cancel`).finally(() => {
                       clearCurrentRide();
-                      navigate('/');
+                      navigate(userHomeRoute, { replace: true });
                     });
                   }}
                   className="w-full bg-red-500 text-white py-5 rounded-[24px] text-sm font-black uppercase tracking-widest shadow-xl shadow-red-500/20"

@@ -124,6 +124,20 @@ const pickParcelVehicles = (types = [], preferredType = '') => {
 const findVehicleById = (types = [], vehicleId = '') =>
   types.find((type) => String(type?._id || type?.id) === String(vehicleId || '')) || null;
 
+const findVehiclesByIds = (types = [], vehicleIds = []) => {
+  const wantedIds = new Set(
+    (Array.isArray(vehicleIds) ? vehicleIds : [])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean),
+  );
+
+  if (!wantedIds.size) {
+    return [];
+  }
+
+  return types.filter((type) => wantedIds.has(String(type?._id || type?.id || '')));
+};
+
 const isVehicleCompatibleWithGoodsType = (vehicle, goodsTypeFor = '') => {
   const allowedLabels = String(goodsTypeFor || 'both')
     .split(',')
@@ -191,6 +205,11 @@ const ParcelSearchingDriver = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const routeState = useMemo(() => location.state || {}, [location.state]);
+  const routePrefix = useMemo(
+    () => (location.pathname.startsWith('/taxi/user') ? '/taxi/user' : ''),
+    [location.pathname],
+  );
+  const userHomeRoute = routePrefix || '/taxi/user';
   const [stage, setStage] = useState(STAGES.SEARCHING);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [otp] = useState(generateOTP);
@@ -220,7 +239,7 @@ const ParcelSearchingDriver = () => {
 
   useEffect(() => {
     if (!searchNonce) {
-      navigate('/', { replace: true });
+      navigate(userHomeRoute, { replace: true });
       return;
     }
 
@@ -236,10 +255,10 @@ const ParcelSearchingDriver = () => {
     if (sessionStorage.getItem(nonceKey)) {
       const activeRide = getCurrentRide();
       if (isActiveCurrentRide(activeRide)) {
-        navigate('/parcel/tracking', { replace: true, state: activeRide });
+        navigate(`${routePrefix}/parcel/tracking`, { replace: true, state: activeRide });
         return;
       }
-      navigate('/', { replace: true });
+      navigate(userHomeRoute, { replace: true });
       return;
     }
 
@@ -253,7 +272,7 @@ const ParcelSearchingDriver = () => {
       }, 0);
       ACTIVE_SEARCH_NONCE_CLEANUPS.set(searchNonce, cleanupId);
     };
-  }, [navigate, searchNonce]);
+  }, [navigate, routePrefix, searchNonce, userHomeRoute]);
 
   useEffect(() => {
     if (cleanupDelayRef.current) {
@@ -270,7 +289,7 @@ const ParcelSearchingDriver = () => {
     }
 
     if (!searchNonce) {
-      navigate('/', { replace: true });
+      navigate(userHomeRoute, { replace: true });
       return undefined;
     }
 
@@ -306,7 +325,7 @@ const ParcelSearchingDriver = () => {
       clearInterval(activeRidePollRef.current);
       clearTimeout(searchTimeoutRef.current);
       setTimeout(() => {
-        navigate('/parcel/tracking', { replace: true, state: nextRide });
+        navigate(`${routePrefix}/parcel/tracking`, { replace: true, state: nextRide });
       }, 1800);
     };
 
@@ -410,10 +429,14 @@ const ParcelSearchingDriver = () => {
 
         const vehicleCatalog = unwrap(vehicleCatalogResponse);
         const vehicleTypes = vehicleCatalog?.vehicle_types || vehicleCatalog?.results || (Array.isArray(vehicleCatalog) ? vehicleCatalog : []);
+        const requestedVehicles = findVehiclesByIds(vehicleTypes, routeState.selectedVehicleIds);
         const requestedVehicle = findVehicleById(vehicleTypes, routeState.selectedVehicleId);
-        const selectedVehicleTypes = requestedVehicle && isVehicleCompatibleWithGoodsType(requestedVehicle, preferredVehicleType)
-          ? [requestedVehicle]
-          : pickParcelVehicles(vehicleTypes, preferredVehicleType);
+        const requestedVehicleTypes = requestedVehicles.filter((vehicle) => isVehicleCompatibleWithGoodsType(vehicle, preferredVehicleType));
+        const selectedVehicleTypes = requestedVehicleTypes.length > 0
+          ? requestedVehicleTypes
+          : requestedVehicle && isVehicleCompatibleWithGoodsType(requestedVehicle, preferredVehicleType)
+            ? [requestedVehicle]
+            : pickParcelVehicles(vehicleTypes, preferredVehicleType);
         const selectedVehicleType = selectedVehicleTypes[0];
         const selectedVehicleTypeIds = selectedVehicleTypes.map((type) => type?._id || type?.id).filter(Boolean);
 
@@ -514,11 +537,11 @@ const ParcelSearchingDriver = () => {
         cleanupSearchRef.current?.();
       }, 0);
     };
-  }, [navigate, otp, preferredVehicleType, routeState, searchNonce]);
+  }, [navigate, otp, preferredVehicleType, routePrefix, routeState, searchNonce, userHomeRoute]);
 
   const handleCancel = () => {
     clearInterval(activeRidePollRef.current);
-    navigate('/');
+    navigate(userHomeRoute, { replace: true });
   };
 
   const isSearching = stage === STAGES.SEARCHING;
@@ -701,8 +724,8 @@ const ParcelSearchingDriver = () => {
               >
                 <div className="flex gap-4">
                   <ActionBtn icon={Phone} label="Call" onClick={() => window.open(`tel:${driver.phone}`)} />
-                  <ActionBtn icon={MessageCircle} label="Chat" onClick={() => navigate('/ride/chat', { state: { driver } })} />
-                  <ActionBtn icon={Shield} label="Safety" onClick={() => navigate('/support')} color="bg-indigo-50 text-indigo-600 border-indigo-100" />
+                      <ActionBtn icon={MessageCircle} label="Chat" onClick={() => navigate(`${routePrefix}/ride/chat`, { state: { driver } })} />
+                      <ActionBtn icon={Shield} label="Safety" onClick={() => navigate(`${routePrefix}/support`)} color="bg-indigo-50 text-indigo-600 border-indigo-100" />
                 </div>
 
                 <Motion.div 

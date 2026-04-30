@@ -430,6 +430,10 @@ const ContactDetailsSheet = ({
 const SenderReceiverDetails = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const routePrefix = useMemo(
+    () => (location.pathname.startsWith('/taxi/user') ? '/taxi/user' : ''),
+    [location.pathname],
+  );
   const { isLoaded: isGoogleMapsLoaded } = useAppGoogleMapsLoader();
   const parcelState = location.state || {};
   const storedUser = useMemo(() => readStoredUserInfo(), []);
@@ -665,7 +669,7 @@ const SenderReceiverDetails = () => {
       return;
     }
 
-    navigate('/parcel/searching', {
+    navigate(`${routePrefix}/parcel/searching`, {
       state: {
         ...parcelState,
         pickup,
@@ -684,6 +688,8 @@ const SenderReceiverDetails = () => {
           category: parcelState.parcelType || 'Parcel',
           weight: parcelState.weight || 'Under 5kg',
           description: parcelState.description || '',
+          deliveryCategory: parcelState.deliveryCategory || parcelState.parcel?.deliveryCategory || '',
+          goodsTypeFor: parcelState.goodsTypeFor || parcelState.parcel?.goodsTypeFor || '',
           deliveryScope: parcelState.deliveryScope || 'city',
           isOutstation: Boolean(parcelState.isOutstation || parcelState.deliveryScope === 'outstation'),
           senderName,

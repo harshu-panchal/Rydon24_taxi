@@ -85,6 +85,8 @@ const normalizeParcelPayload = (parcel = {}) => ({
   category: String(parcel.category || '').trim(),
   weight: String(parcel.weight || '').trim(),
   description: String(parcel.description || '').trim(),
+  deliveryCategory: String(parcel.deliveryCategory || parcel.delivery_category || '').trim().toLowerCase(),
+  goodsTypeFor: String(parcel.goodsTypeFor || parcel.goods_type_for || '').trim(),
   deliveryScope: String(parcel.deliveryScope || (parcel.isOutstation ? 'outstation' : 'city')).trim().toLowerCase() === 'outstation'
     ? 'outstation'
     : 'city',

@@ -16,6 +16,27 @@ import moversImg from '@/assets/images/delivery/movers.png';
 
 const Motion = motion;
 
+const DELIVERY_CATEGORY_OPTIONS = [
+  {
+    id: 'trucks',
+    title: 'Trucks',
+    img: trucksImg,
+    searchTokens: ['truck', 'lcv', 'hcv', 'mcv', 'loader'],
+  },
+  {
+    id: '2wheeler',
+    title: '2 Wheeler',
+    img: bikeImg,
+    searchTokens: ['bike', 'scooter', 'cycle', '2-wheeler'],
+  },
+  {
+    id: 'movers',
+    title: 'Packers & Movers',
+    img: moversImg,
+    searchTokens: ['mover', 'packers'],
+  }
+];
+
 const ParcelType = () => {
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,49 +61,36 @@ const ParcelType = () => {
   }, []);
 
   const handleCategorySelect = (category) => {
-    // Group vehicles by category tokens
-    const filteredVehicles = vehicleTypes.filter(v => {
-        const name = String(v.name || '').toLowerCase();
-        const iconType = String(v.icon_types || '').toLowerCase();
-        const tokens = category.searchTokens;
-        return tokens.some(token => name.includes(token) || iconType.includes(token));
+    const filteredVehicles = vehicleTypes.filter((vehicle) => {
+      const configuredCategory = String(vehicle.delivery_category || '').trim().toLowerCase();
+      if (configuredCategory) {
+        return configuredCategory === category.id;
+      }
+
+      const name = String(vehicle.name || '').toLowerCase();
+      const iconType = String(vehicle.icon_types || '').toLowerCase();
+      return category.searchTokens.some((token) => name.includes(token) || iconType.includes(token));
     });
 
     if (loading || vehicleTypes.length === 0) return;
 
     const selectedVehicle = filteredVehicles[0] || vehicleTypes[0];
+    const selectedVehicleIds = filteredVehicles.length
+      ? filteredVehicles.map((vehicle) => vehicle?._id || vehicle?.id).filter(Boolean)
+      : [selectedVehicle?._id || selectedVehicle?.id].filter(Boolean);
 
     navigate('/taxi/user/parcel/details', {
       state: {
         parcelType: 'General Parcel',
         selectedVehicle: selectedVehicle,
         selectedVehicleId: selectedVehicle?._id || selectedVehicle?.id,
+        selectedVehicleIds,
         category: category.id,
+        deliveryCategory: category.id,
         pickup: pickupAddress
       },
     });
   };
-
-  const deliveryCategories = [
-    { 
-      id: 'trucks', 
-      title: 'Trucks', 
-      img: trucksImg, 
-      searchTokens: ['truck', 'lcv', 'hcv', 'mcv', 'loader'] 
-    },
-    { 
-      id: '2wheeler', 
-      title: '2 Wheeler', 
-      img: bikeImg, 
-      searchTokens: ['bike', 'scooter', 'cycle', '2-wheeler'] 
-    },
-    { 
-      id: 'movers', 
-      title: 'Packers & Movers', 
-      img: moversImg, 
-      searchTokens: ['mover', 'packers'] 
-    }
-  ];
 
   return (
     <div className="min-h-screen bg-[#F5F8FF] max-w-lg mx-auto flex flex-col font-sans relative overflow-x-hidden">
@@ -121,7 +129,7 @@ const ParcelType = () => {
         
         {/* Category Grid */}
         <div className="grid grid-cols-3 gap-3 mb-8">
-          {deliveryCategories.map((cat, idx) => (
+          {DELIVERY_CATEGORY_OPTIONS.map((cat, idx) => (
             <motion.button
               key={cat.id}
               initial={{ opacity: 0, scale: 0.9 }}

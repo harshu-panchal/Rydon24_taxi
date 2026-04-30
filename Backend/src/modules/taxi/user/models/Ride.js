@@ -116,6 +116,64 @@ const rideSchema = new mongoose.Schema(
         trim: true,
       },
     },
+    parcel: {
+      category: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      weight: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      description: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      deliveryCategory: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      goodsTypeFor: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      deliveryScope: {
+        type: String,
+        enum: ['city', 'outstation'],
+        default: 'city',
+        lowercase: true,
+        trim: true,
+      },
+      isOutstation: {
+        type: Boolean,
+        default: false,
+      },
+      senderName: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      senderMobile: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      receiverName: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      receiverMobile: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+    },
     scheduledAt: {
       type: Date,
       default: null,
@@ -313,54 +371,6 @@ const rideSchema = new mongoose.Schema(
     walletSettledAt: {
       type: Date,
       default: null,
-    },
-    parcel: {
-      category: {
-        type: String,
-        default: '',
-        trim: true,
-      },
-      weight: {
-        type: String,
-        default: '',
-        trim: true,
-      },
-      description: {
-        type: String,
-        default: '',
-        trim: true,
-      },
-      deliveryScope: {
-        type: String,
-        enum: ['city', 'outstation'],
-        default: 'city',
-        lowercase: true,
-        trim: true,
-      },
-      isOutstation: {
-        type: Boolean,
-        default: false,
-      },
-      senderName: {
-        type: String,
-        default: '',
-        trim: true,
-      },
-      senderMobile: {
-        type: String,
-        default: '',
-        trim: true,
-      },
-      receiverName: {
-        type: String,
-        default: '',
-        trim: true,
-      },
-      receiverMobile: {
-        type: String,
-        default: '',
-        trim: true,
-      },
     },
     promo: {
       code: {

@@ -105,6 +105,16 @@ const deliverySchema = new mongoose.Schema(
         default: '',
         trim: true,
       },
+      deliveryCategory: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      goodsTypeFor: {
+        type: String,
+        default: '',
+        trim: true,
+      },
       deliveryScope: {
         type: String,
         enum: ['city', 'outstation'],

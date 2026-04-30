@@ -16,6 +16,13 @@ const VEHICLE_ICON_TYPES = [
   'suv',
 ];
 
+const DELIVERY_CATEGORY_TYPES = [
+  '',
+  'trucks',
+  '2wheeler',
+  'movers',
+];
+
 const vehicleSchema = new mongoose.Schema(
   {
     name: {
@@ -68,6 +75,12 @@ const vehicleSchema = new mongoose.Schema(
       type: Number,
       enum: [0, 1],
       default: 0,
+    },
+    delivery_category: {
+      type: String,
+      enum: DELIVERY_CATEGORY_TYPES,
+      default: '',
+      trim: true,
     },
     image: {
       type: String,

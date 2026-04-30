@@ -31,6 +31,9 @@ import LuxuryIcon from '../../../../assets/icons/Luxury.png';
 import PremiumIcon from '../../../../assets/icons/Premium.png';
 import SuvIcon from '../../../../assets/icons/SUV.png';
 import MapBackground from '../../../../assets/map_image.png';
+import trucksImg from '@/assets/images/delivery/trucks.png';
+import bikeImg from '@/assets/images/delivery/bike.png';
+import moversImg from '@/assets/images/delivery/movers.png';
 
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-orange-300 focus:ring-2 focus:ring-orange-100';
 const labelClass = 'mb-2 block text-[12px] font-bold text-slate-700';
@@ -107,11 +110,33 @@ const defaultFormData = {
   size: '',
   is_taxi: 'taxi',
   is_accept_share_ride: 0,
+  delivery_category: '',
   status: 1,
   active: true,
   supported_other_vehicle_types: [],
   vehicle_preference: [],
 };
+
+const DELIVERY_CATEGORY_OPTIONS = [
+  {
+    id: 'trucks',
+    title: 'Trucks',
+    image: trucksImg,
+    description: 'Heavy goods, loaders, and cargo-style delivery vehicles.',
+  },
+  {
+    id: '2wheeler',
+    title: '2 Wheeler',
+    image: bikeImg,
+    description: 'Fast lightweight parcel bikes and two-wheel delivery options.',
+  },
+  {
+    id: 'movers',
+    title: 'Packers & Movers',
+    image: moversImg,
+    description: 'Home shifting, helper-based, and larger move services.',
+  },
+];
 
 const TRANSPORT_TYPE_OPTIONS = [
   { id: 'taxi', name: 'taxi', display_name: 'Ride' },
@@ -289,6 +314,7 @@ const VehicleType = ({ mode: propMode }) => {
               size: String(selectedVehicle.size || ''),
               is_taxi: selectedVehicle.is_taxi || 'taxi',
               is_accept_share_ride: Number(selectedVehicle.is_accept_share_ride || 0),
+              delivery_category: String(selectedVehicle.delivery_category || ''),
               status: Number(selectedVehicle.status ?? (selectedVehicle.active !== false ? 1 : 0)),
               active: selectedVehicle.active !== false && Number(selectedVehicle.status ?? 1) !== 0,
               supported_other_vehicle_types: Array.isArray(selectedVehicle.supported_other_vehicle_types)
@@ -346,6 +372,11 @@ const VehicleType = ({ mode: propMode }) => {
     [vehiclePreferences],
   );
 
+  const showsDeliveryCategorySelector = useMemo(
+    () => ['delivery', 'both'].includes(normalizeTransportType(formData.transport_type)),
+    [formData.transport_type],
+  );
+
   const updateForm = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -365,6 +396,10 @@ const VehicleType = ({ mode: propMode }) => {
     setErrorMessage('');
 
     try {
+      if (showsDeliveryCategorySelector && !formData.delivery_category) {
+        throw new Error('Choose a delivery category for this delivery-enabled vehicle type.');
+      }
+
       const payload = {
         name: formData.name.trim(),
         short_description: formData.short_description.trim(),
@@ -379,6 +414,7 @@ const VehicleType = ({ mode: propMode }) => {
         size: formData.size,
         is_taxi: normalizeTaxiMode(formData.is_taxi || formData.transport_type),
         is_accept_share_ride: Number(formData.is_accept_share_ride || 0),
+        delivery_category: showsDeliveryCategorySelector ? formData.delivery_category : '',
         status: formData.active ? 1 : 0,
         active: formData.active,
         supported_other_vehicle_types: sanitizeObjectIdList(formData.supported_other_vehicle_types),
@@ -586,7 +622,17 @@ const VehicleType = ({ mode: propMode }) => {
         <div className="grid grid-cols-1 gap-8 p-6 lg:grid-cols-2 lg:p-8">
           <div>
             <label className={labelClass}>Transport Type *</label>
-            <select value={formData.transport_type} onChange={(e) => updateForm('transport_type', e.target.value)} className={inputClass}>
+            <select
+              value={formData.transport_type}
+              onChange={(e) => {
+                const nextTransportType = e.target.value;
+                updateForm('transport_type', nextTransportType);
+                if (!['delivery', 'both'].includes(normalizeTransportType(nextTransportType))) {
+                  updateForm('delivery_category', '');
+                }
+              }}
+              className={inputClass}
+            >
                <option value="">Select Transport Type</option>
                {transportTypeOptions.map((t) => (
                  <option key={t.id || t._id || t.name} value={t.name}>{t.display_name}</option>
@@ -605,6 +651,48 @@ const VehicleType = ({ mode: propMode }) => {
               ))}
             </select>
           </div>
+
+          {showsDeliveryCategorySelector ? (
+            <div className="lg:col-span-2">
+              <label className={labelClass}>Delivery Category *</label>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                {DELIVERY_CATEGORY_OPTIONS.map((option) => {
+                  const selected = formData.delivery_category === option.id;
+
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => updateForm('delivery_category', option.id)}
+                      className={`rounded-[24px] border p-4 text-left transition-all ${
+                        selected
+                          ? 'border-[#0047AB] bg-[#EEF4FF] shadow-md'
+                          : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+                      }`}
+                    >
+                      <div className="rounded-[20px] bg-slate-50 p-3">
+                        <img src={option.image} alt={option.title} className="mx-auto h-24 w-full object-contain" />
+                      </div>
+                      <div className="mt-4 flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-black text-slate-900">{option.title}</p>
+                          <p className="mt-1 text-xs font-medium leading-5 text-slate-500">{option.description}</p>
+                        </div>
+                        <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                          selected ? 'border-[#0047AB] bg-[#0047AB] text-white' : 'border-slate-300 bg-white'
+                        }`}>
+                          {selected ? <CheckCircle2 size={12} /> : null}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                This decides which delivery card this vehicle type appears under in the user parcel flow.
+              </p>
+            </div>
+          ) : null}
 
           <div>
             <label className={labelClass}>Preview Image</label>
