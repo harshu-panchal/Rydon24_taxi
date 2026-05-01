@@ -2996,6 +2996,7 @@ export const listUserWalletHistory = async (id) => {
 
   return {
     balance: wallet?.balance || 0,
+    refundWallet: wallet?.refundWallet || 0,
     results: (wallet?.transactions || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map(t => ({
       _id: String(t._id),
       amount: t.amount,
@@ -3024,7 +3025,7 @@ export const adjustUserWallet = async (id, payload = {}) => {
 
   let wallet = await UserWallet.findOne({ userId: id });
   if (!wallet) {
-    wallet = new UserWallet({ userId: id, balance: 0, transactions: [] });
+    wallet = new UserWallet({ userId: id, balance: 0, refundWallet: 0, transactions: [] });
   }
 
   const currentBalance = wallet.balance || 0;

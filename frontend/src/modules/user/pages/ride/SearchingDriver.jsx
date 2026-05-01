@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ShieldCheck, Phone, MessageCircle, Shield, CheckCircle2, Navigation, AlertTriangle, Star, MapPin } from 'lucide-react';
+import { X, ShieldCheck, Phone, MessageCircle, Shield, CheckCircle2, Navigation, AlertTriangle, Star, MapPin, Calendar, Clock3, LoaderCircle } from 'lucide-react';
 import { GoogleMap, Marker, OverlayView, Polyline } from '@react-google-maps/api';
 import { socketService } from '../../../../shared/api/socket';
 import api from '../../../../shared/api/axiosInstance';
@@ -153,6 +153,25 @@ const normalizeDriver = (driver = {}) => ({
 
 const formatCurrency = (amount) => `Rs ${Math.round(Number(amount) || 0)}`;
 
+const formatScheduledDateTime = (value) => {
+  if (!value) {
+    return 'Scheduled';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Scheduled';
+  }
+
+  return parsed.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 const SearchingDriver = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -171,6 +190,8 @@ const SearchingDriver = () => {
     bidStepAmount: Number(routeState.bidStepAmount || 10),
   }));
   const [bidActionLoading, setBidActionLoading] = useState(false);
+  const [scheduledStatus, setScheduledStatus] = useState(() => (routeState.scheduledAt ? 'saving' : 'idle'));
+  const [scheduledError, setScheduledError] = useState('');
   const timerRef = useRef(null);
   const activeRidePollRef = useRef(null);
   const requestStartedRef = useRef(false);
@@ -190,6 +211,7 @@ const SearchingDriver = () => {
   const activeRideIdRef = useRef('');
   const searchNonce = String(routeState.searchNonce || '');
   const isBiddingRide = biddingSummary.bookingMode === 'bidding';
+  const isScheduledRide = Boolean(routeState.scheduledAt);
 
   const { isLoaded } = useAppGoogleMapsLoader();
 
@@ -222,6 +244,10 @@ const SearchingDriver = () => {
   const availableVehicleMarkers = useMemo(
     () => buildAvailableVehicleMarkers(pickupPos, nearbyVehicleCount),
     [nearbyVehicleCount, pickupPos],
+  );
+  const formattedScheduledTime = useMemo(
+    () => formatScheduledDateTime(routeState.scheduledAt),
+    [routeState.scheduledAt],
   );
 
   const loadRideBids = async (rideId) => {
@@ -542,6 +568,7 @@ const SearchingDriver = () => {
           bookingMode: routeState.bookingMode || 'normal',
           userMaxBidFare: routeState.userMaxBidFare || routeState.fare || routeState.vehicle?.price || 22,
           bidStepAmount: routeState.bidStepAmount || 10,
+          scheduledAt: routeState.scheduledAt || null,
         }, rideRequestConfig);
 
         if (disposed) {
@@ -561,6 +588,11 @@ const SearchingDriver = () => {
             bidStepAmount: Number(ride?.bidStepAmount || routeState.bidStepAmount || 10),
           });
           loadRideBids(rideId).catch(() => {});
+        }
+        if (isScheduledRide) {
+          setScheduledStatus('scheduled');
+          setSearchStatus('Your ride has been scheduled successfully.');
+          return;
         }
         const socket = socketService.connect({ role: 'user', token: userToken });
 
@@ -610,6 +642,12 @@ const SearchingDriver = () => {
       } catch (error) {
         console.error('[searching-driver] Ride creation error:', error);
         if (!disposed) {
+          if (isScheduledRide) {
+            setScheduledStatus('error');
+            setScheduledError(error?.message || 'Could not schedule this ride.');
+            setSearchStatus(error?.message || 'Could not schedule this ride.');
+            return;
+          }
           setSearchStatus(error?.message || 'Could not create ride request. Redirecting...');
           setTimeout(() => {
              if (!disposed) navigate(userHomeRoute, { replace: true });
@@ -623,7 +661,7 @@ const SearchingDriver = () => {
         cleanupSearchRef.current?.();
       }, 0);
     };
-  }, [navigate, routePrefix, routeState, searchNonce, selectedVehicleTypeId, userHomeRoute]);
+  }, [isScheduledRide, navigate, routePrefix, routeState, searchNonce, selectedVehicleTypeId, userHomeRoute]);
 
   const handleCancel = async () => {
     clearTimeout(timerRef.current);
@@ -685,6 +723,53 @@ const SearchingDriver = () => {
 
   const isSearching = stage === STAGES.SEARCHING;
   const isAccepted  = stage === STAGES.ACCEPTED || stage === STAGES.COMPLETING;
+
+  if (isScheduledRide) {
+    return (
+      <div className="min-h-screen max-w-lg mx-auto flex items-center justify-center bg-slate-950 px-6">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full rounded-[32px] border border-white/10 bg-white/5 px-6 py-8 text-center shadow-2xl"
+        >
+          <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] ${
+            scheduledStatus === 'scheduled' ? 'bg-emerald-600/20 text-emerald-400' :
+            scheduledStatus === 'error' ? 'bg-rose-600/20 text-rose-400' : 'bg-blue-600/20 text-blue-400'
+          }`}>
+            {scheduledStatus === 'scheduled' ? <CheckCircle2 size={26} /> : scheduledStatus === 'error' ? <AlertTriangle size={26} /> : <LoaderCircle size={26} className="animate-spin" />}
+          </div>
+          <h1 className="mt-5 text-[22px] font-black text-white">
+            {scheduledStatus === 'scheduled' ? 'Ride scheduled' : scheduledStatus === 'error' ? 'Scheduling failed' : 'Scheduling your ride'}
+          </h1>
+          <p className="mt-2 text-[13px] font-bold text-white/55">
+            {scheduledStatus === 'scheduled'
+              ? 'Your booking has been saved. Drivers will be notified automatically at the scheduled time.'
+              : scheduledStatus === 'error'
+                ? (scheduledError || 'Could not schedule this ride.')
+                : 'Saving your booking and preparing automatic driver notification.'}
+          </p>
+          <div className="mt-6 rounded-[24px] border border-white/10 bg-white/5 px-4 py-4 text-left">
+            <div className="flex items-center gap-3 text-white">
+              <Calendar size={16} className="text-blue-300" />
+              <span className="text-sm font-bold">Scheduled For</span>
+            </div>
+            <p className="mt-2 text-lg font-black text-white">{formattedScheduledTime}</p>
+            <div className="mt-4 flex items-center gap-3 text-white/65">
+              <Clock3 size={15} />
+              <span className="text-xs font-bold uppercase tracking-[0.16em]">{routeState.pickup || 'Pickup'} to {routeState.drop || 'Drop'}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate(userHomeRoute, { replace: true })}
+            className="mt-6 h-12 w-full rounded-[18px] bg-white text-sm font-black uppercase tracking-[0.16em] text-slate-900"
+          >
+            {scheduledStatus === 'error' ? 'Back to Home' : 'Done'}
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 max-w-lg mx-auto relative font-['Plus_Jakarta_Sans'] overflow-hidden">

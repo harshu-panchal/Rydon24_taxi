@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Users, X, Banknote, CreditCard, ChevronDown, ChevronRight, LoaderCircle } from 'lucide-react';
+import { ArrowLeft, Users, X, Banknote, CreditCard, ChevronDown, ChevronRight, Clock3, LoaderCircle } from 'lucide-react';
 import { GoogleMap, MarkerF, PolylineF } from '@react-google-maps/api';
 import api from '../../../../shared/api/axiosInstance';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../../admin/utils/googleMaps';
@@ -526,6 +526,46 @@ const formatDistanceLabel = (distanceMeters) => {
 
 const formatCurrency = (amount) => `₹${Math.round(Number(amount) || 0)}`;
 
+const pad = (value) => String(value).padStart(2, '0');
+
+const formatDateTimeInputValue = (date) => {
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
+const getMinScheduledDateTime = () => {
+  const next = new Date(Date.now() + 60 * 60 * 1000);
+  return formatDateTimeInputValue(next);
+};
+
+const getMaxScheduledDateTime = () => {
+  const nextWeek = new Date();
+  nextWeek.setDate(nextWeek.getDate() + 7);
+  return formatDateTimeInputValue(nextWeek);
+};
+
+const formatScheduledDisplay = (value) => {
+  if (!value) {
+    return 'Pick date & time';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Pick date & time';
+  }
+
+  return parsed.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 const formatAvailabilityLine = (availability) => {
   if (!availability?.totalDrivers) {
     return 'Not available right now';
@@ -594,11 +634,19 @@ const ScrollIndicator = ({ show }) => (
 );
 
 const SelectVehicle = () => {
+  const location = useLocation();
+  const routeState = location.state || {};
   const [vehicles, setVehicles] = useState([]);
   const [availabilityByVehicleId, setAvailabilityByVehicleId] = useState({});
   const [selected, setSelected] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showBidModal, setShowBidModal] = useState(false);
+  const [rideMode, setRideMode] = useState(() => (location.state?.rideMode === 'schedule' ? 'schedule' : 'now'));
+  const [scheduledAt, setScheduledAt] = useState(() => (
+    location.state?.scheduledAt ? String(location.state.scheduledAt).slice(0, 16) : getMinScheduledDateTime()
+  ));
+  const [scheduleError, setScheduleError] = useState('');
   const [showPromo, setShowPromo] = useState(true);
   const [bidStepCount, setBidStepCount] = useState(2);
   const [isLoadingVehicles, setIsLoadingVehicles] = useState(true);
@@ -607,8 +655,6 @@ const SelectVehicle = () => {
   const [driverLoadError, setDriverLoadError] = useState('');
   const [pricingRules, setPricingRules] = useState([]);
   const [isLoadingPricingRules, setIsLoadingPricingRules] = useState(true);
-  const location = useLocation();
-  const routeState = location.state || {};
   const [tripMetrics, setTripMetrics] = useState(() => {
     if (
       Number.isFinite(Number(routeState?.estimatedDistanceMeters))
@@ -625,6 +671,7 @@ const SelectVehicle = () => {
   const [isResolvingTripMetrics, setIsResolvingTripMetrics] = useState(true);
   const [showScrollArrow, setShowScrollArrow] = useState(false);
   const scrollRef = React.useRef(null);
+  const scheduledAtInputRef = useRef(null);
   const navigate = useNavigate();
   const pickup = routeState.pickup || 'Pipaliyahana, Indore';
   const drop = routeState.drop || 'Vijay Nagar, Indore';
@@ -636,6 +683,8 @@ const SelectVehicle = () => {
   const pickupPosition = useMemo(() => toLatLng(pickupCoords), [pickupCoords]);
   const dropPosition = useMemo(() => toLatLng(dropCoords, null), [dropCoords]);
   const { isLoaded: isMapLoaded, loadError: mapLoadError } = useAppGoogleMapsLoader();
+  const minScheduledAt = useMemo(() => getMinScheduledDateTime(), []);
+  const maxScheduledAt = useMemo(() => getMaxScheduledDateTime(), []);
 
   const handleScroll = () => {
     if (!scrollRef.current) return;
@@ -643,6 +692,21 @@ const SelectVehicle = () => {
     const hasMore = scrollTop + clientHeight < scrollHeight - 8;
     setShowScrollArrow(hasMore);
   };
+
+  useEffect(() => {
+    if (!scheduledAt) {
+      return;
+    }
+
+    if (scheduledAt < minScheduledAt) {
+      setScheduledAt(minScheduledAt);
+      return;
+    }
+
+    if (scheduledAt > maxScheduledAt) {
+      setScheduledAt(maxScheduledAt);
+    }
+  }, [maxScheduledAt, minScheduledAt, scheduledAt]);
 
   useEffect(() => {
     let active = true;
@@ -853,6 +917,7 @@ const SelectVehicle = () => {
 
   const selectedVehicle = useMemo(() => pricedVehicles.find((v) => v.id === selected), [pricedVehicles, selected]);
   const selectedAvailability = selectedVehicle ? (availabilityByVehicleId[selectedVehicle.id] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
+  const canProceed = Boolean(selectedVehicle) && !isFarePending && (rideMode === 'schedule' || Boolean(selectedAvailability.totalDrivers));
   const selectedBidStepAmount = Number(selectedVehicle?.bidStepAmount || 10);
   const selectedBidSteps = Number(selectedVehicle?.maxBidSteps || 5);
   const selectedBidIncrement = (selectedVehicle?.supportsBidding ? bidStepCount : 0) * selectedBidStepAmount;
@@ -954,11 +1019,22 @@ const SelectVehicle = () => {
     };
   }, [pickupCoords, vehicles]);
 
-  const handleBook = () => {
+  const openPicker = (inputRef) => {
+    if (typeof inputRef.current?.showPicker === 'function') {
+      inputRef.current.showPicker();
+      return;
+    }
+
+    inputRef.current?.focus();
+    inputRef.current?.click();
+  };
+
+  const proceedToBooking = () => {
     if (!selectedVehicle) {
       return;
     }
 
+    setShowBidModal(false);
     navigate(`${routePrefix}/ride/searching`, {
       state: {
         pickup,
@@ -981,10 +1057,51 @@ const SelectVehicle = () => {
         bidIncrement: selectedVehicle.supportsBidding ? selectedBidIncrement : 0,
         estimatedDistanceMeters: tripMetrics.distanceMeters,
         estimatedDurationMinutes: tripMetrics.durationMinutes,
+        rideMode,
+        scheduledAt: rideMode === 'schedule' ? new Date(scheduledAt).toISOString() : null,
         allowedPaymentMethods,
         searchNonce: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       },
     });
+  };
+
+  const handleBook = () => {
+    if (!selectedVehicle) {
+      return;
+    }
+
+    if (rideMode === 'schedule') {
+      const parsedSchedule = new Date(scheduledAt);
+
+      if (!scheduledAt || Number.isNaN(parsedSchedule.getTime())) {
+        setScheduleError('Choose a valid schedule date and time.');
+        return;
+      }
+
+      if (parsedSchedule.getTime() <= Date.now() + 60 * 1000) {
+        setScheduleError('Schedule time must be at least 1 minute ahead.');
+        return;
+      }
+
+      if (scheduledAt < minScheduledAt) {
+        setScheduleError('Schedule time cannot be earlier than now.');
+        return;
+      }
+
+      if (scheduledAt > maxScheduledAt) {
+        setScheduleError('Advance booking is available for up to 7 days only.');
+        return;
+      }
+    }
+
+    setScheduleError('');
+
+    if (selectedVehicle.supportsBidding) {
+      setShowBidModal(true);
+      return;
+    }
+
+    proceedToBooking();
   };
 
   return (
@@ -1101,6 +1218,7 @@ const SelectVehicle = () => {
             const availability = availabilityByVehicleId[v.id] || DEFAULT_AVAILABILITY;
             const badge = getAvailabilityBadge(availability) || v.badge;
             const isUnavailable = !availability.totalDrivers;
+            const canSelectVehicle = rideMode === 'schedule' || !isUnavailable;
 
             return (
               <motion.button
@@ -1111,14 +1229,14 @@ const SelectVehicle = () => {
                 transition={{ duration: 0.4, delay: i * 0.04, ease: [0.23, 1, 0.32, 1] }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => {
-                  if (!isUnavailable) {
+                  if (canSelectVehicle) {
                     setSelected(v.id);
                   }
                 }}
                 className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[24px] border-2 transition-all text-left relative overflow-hidden min-h-[74px] ${
                   isSelected
                     ? 'bg-orange-50/50 border-orange-500 shadow-[0_12px_24px_-8px_rgba(249,115,22,0.22)]'
-                    : isUnavailable
+                    : isUnavailable && rideMode !== 'schedule'
                       ? 'bg-slate-100/60 border-transparent opacity-60'
                       : 'bg-white border-slate-50 shadow-[0_2px_8px_rgba(15,23,42,0.02)] hover:border-slate-200'
                 }`}
@@ -1160,10 +1278,14 @@ const SelectVehicle = () => {
                   <p className="text-[10px] font-bold text-slate-400 leading-tight truncate max-w-[140px]">{v.sublabel}</p>
                   <div className="flex items-center gap-1.5 mt-1 border-t border-slate-50 pt-0.5">
                     <div className={`w-1 h-1 rounded-full ${isUnavailable ? 'bg-slate-300' : 'bg-emerald-500 animate-pulse'}`} />
-                    <p className={`text-[9px] font-bold truncate flex-1 ${isUnavailable ? 'text-slate-400' : 'text-slate-600'}`}>
-                      {isUnavailable ? 'Unavailable' : formatAvailabilityLine(availability)}
+                    <p className={`text-[9px] font-bold truncate flex-1 ${isUnavailable && rideMode !== 'schedule' ? 'text-slate-400' : 'text-slate-600'}`}>
+                      {isUnavailable
+                        ? rideMode === 'schedule'
+                          ? 'Can be scheduled for later'
+                          : 'Unavailable'
+                        : formatAvailabilityLine(availability)}
                     </p>
-                    {!isUnavailable && !isFarePending && tripMetrics.distanceMeters > 0 && (
+                    {(!isUnavailable || rideMode === 'schedule') && !isFarePending && tripMetrics.distanceMeters > 0 && (
                       <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter shrink-0 bg-slate-100 px-1 py-0.5 rounded">
                         {tripMetrics.durationMinutes || 1}m
                       </span>
@@ -1203,6 +1325,67 @@ const SelectVehicle = () => {
         </div>
 
         <div className="shrink-0 border-t border-slate-100 bg-white/80 backdrop-blur-xl px-5 pb-6 pt-3.5 space-y-3.5 shadow-[0_-12px_40px_rgba(15,23,42,0.08)]">
+          <div className="rounded-[20px] border border-slate-100 bg-slate-50/60 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Ride time</p>
+                <p className="mt-1 text-[13px] font-bold text-slate-900">
+                  {rideMode === 'schedule' ? formatScheduledDisplay(scheduledAt) : 'Ride now'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextMode = rideMode === 'schedule' ? 'now' : 'schedule';
+                  setRideMode(nextMode);
+                  if (nextMode === 'schedule') {
+                    openPicker(scheduledAtInputRef);
+                  } else {
+                    setScheduleError('');
+                  }
+                }}
+                className={`flex h-11 items-center gap-2 rounded-[16px] border px-3.5 text-[11px] font-black uppercase tracking-[0.14em] transition-all ${
+                  rideMode === 'schedule'
+                    ? 'border-blue-100 bg-blue-50 text-blue-600'
+                    : 'border-slate-200 bg-white text-slate-600'
+                }`}
+              >
+                <Clock3 size={16} strokeWidth={2.4} />
+                {rideMode === 'schedule' ? 'Scheduled' : 'Schedule'}
+              </button>
+            </div>
+
+            {rideMode === 'schedule' ? (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => openPicker(scheduledAtInputRef)}
+                  className="flex w-full items-center justify-between rounded-[16px] border border-blue-100 bg-white px-4 py-3 text-left text-[13px] font-bold text-slate-800 shadow-sm"
+                >
+                  <span>{formatScheduledDisplay(scheduledAt)}</span>
+                  <ChevronRight size={16} className="text-slate-300" />
+                </button>
+                <input
+                  ref={scheduledAtInputRef}
+                  type="datetime-local"
+                  value={scheduledAt}
+                  min={minScheduledAt}
+                  max={maxScheduledAt}
+                  onChange={(event) => {
+                    setScheduledAt(event.target.value);
+                    setScheduleError('');
+                  }}
+                  className="sr-only"
+                />
+                {scheduleError ? (
+                  <p className="mt-2 text-[11px] font-bold text-rose-500">{scheduleError}</p>
+                ) : (
+                  <p className="mt-2 text-[11px] font-medium text-slate-500">Drivers will be notified automatically at the scheduled time.</p>
+                )}
+              </div>
+            ) : null}
+          </div>
+
           <motion.button
             whileTap={{ scale: 0.98 }}
             onClick={() => setShowPaymentModal(true)}
@@ -1223,41 +1406,13 @@ const SelectVehicle = () => {
             </div>
           </motion.button>
 
-          {selectedVehicle?.supportsBidding ? (
-            <div className="rounded-[20px] border border-orange-100 bg-orange-50/60 px-4 py-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-500">Bid Range</p>
-                  <p className="mt-1 text-[13px] font-bold text-slate-900">Choose the highest fare you are willing to accept.</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Max fare</p>
-                  <p className="mt-1 text-[18px] font-black text-slate-900">{formatCurrency(selectedBidCeiling)}</p>
-                </div>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={selectedBidSteps}
-                step={1}
-                value={Math.min(bidStepCount, selectedBidSteps)}
-                onChange={(event) => setBidStepCount(Number(event.target.value || 0))}
-                className="mt-3 h-2 w-full cursor-pointer accent-orange-500"
-              />
-              <div className="mt-2 flex items-center justify-between text-[11px] font-bold text-slate-500">
-                <span>Base {formatCurrency(selectedVehicle.price)}</span>
-                <span>Increment {formatCurrency(selectedBidIncrement)}</span>
-              </div>
-            </div>
-          ) : null}
-
           <motion.button
-            whileHover={selectedVehicle && selectedAvailability.totalDrivers && !isFarePending ? { scale: 1.01, translateY: -2 } : {}}
-            whileTap={selectedVehicle && selectedAvailability.totalDrivers && !isFarePending ? { scale: 0.98 } : undefined}
-            disabled={!selectedVehicle || !selectedAvailability.totalDrivers || isFarePending}
+            whileHover={canProceed ? { scale: 1.01, translateY: -2 } : {}}
+            whileTap={canProceed ? { scale: 0.98 } : undefined}
+            disabled={!canProceed}
             onClick={handleBook}
             className={`w-full py-4 rounded-[20px] text-[15px] font-extrabold shadow-xl transition-all duration-300 uppercase tracking-tight flex items-center justify-center gap-3 ${
-              selectedVehicle && selectedAvailability.totalDrivers && !isFarePending
+              canProceed
                 ? 'bg-[#f8e001] text-slate-900 shadow-[0_12px_28px_-4px_rgba(248,224,1,0.4)] active:shadow-none'
                 : 'bg-slate-200 text-slate-400 shadow-none cursor-not-allowed'
             }`}
@@ -1265,12 +1420,28 @@ const SelectVehicle = () => {
             {selectedVehicle
               ? isFarePending
                 ? 'Calculating fare...'
+                : selectedVehicle.supportsBidding
+                ? (
+                  <>
+                    <span>{`Request Bid for ${selectedVehicle.name}`}</span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-slate-900/20" />
+                    <span>{formatCurrency(selectedBidCeiling)}</span>
+                  </>
+                )
+                : rideMode === 'schedule'
+                ? (
+                  <>
+                    <span>{`Schedule ${selectedVehicle.name}`}</span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-slate-900/20" />
+                    <span>{formatCurrency(selectedVehicle.supportsBidding ? selectedBidCeiling : selectedVehicle.price)}</span>
+                  </>
+                )
                 : selectedAvailability.totalDrivers
                 ? (
                   <>
-                    <span>{selectedVehicle.supportsBidding ? `Request ${selectedVehicle.name}` : `Book ${selectedVehicle.name}`}</span>
+                    <span>{`Book ${selectedVehicle.name}`}</span>
                     <div className="w-1.5 h-1.5 rounded-full bg-slate-900/20" />
-                    <span>{formatCurrency(selectedVehicle.supportsBidding ? selectedBidCeiling : selectedVehicle.price)}</span>
+                    <span>{formatCurrency(selectedVehicle.price)}</span>
                   </>
                 )
                 : `${selectedVehicle.name} Unavailable`
@@ -1280,8 +1451,80 @@ const SelectVehicle = () => {
       </div>
 
       <AnimatePresence>
+        {showBidModal && selectedVehicle?.supportsBidding && (
+          <React.Fragment key="bid-modal">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowBidModal(false)}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] max-w-lg mx-auto"
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 26, stiffness: 320 }}
+              className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white rounded-t-[28px] px-5 pt-4 pb-10 z-[101]"
+            >
+              <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-5" />
+              <p className="text-[10px] font-bold uppercase tracking-wider text-orange-500 mb-1">Bid fare</p>
+              <h3 className="text-[18px] font-bold text-slate-900">Choose your max fare</h3>
+              <p className="mt-1 text-[12px] font-bold text-slate-500">
+                Drivers can send offers up to this amount for {selectedVehicle.name}.
+              </p>
+
+              <div className="mt-5 rounded-[20px] border border-orange-100 bg-orange-50/60 px-4 py-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-500">Bid Range</p>
+                    <p className="mt-1 text-[13px] font-bold text-slate-900">Adjust the fare ceiling before sending the request.</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Max fare</p>
+                    <p className="mt-1 text-[20px] font-black text-slate-900">{formatCurrency(selectedBidCeiling)}</p>
+                  </div>
+                </div>
+
+                <input
+                  type="range"
+                  min={0}
+                  max={selectedBidSteps}
+                  step={1}
+                  value={Math.min(bidStepCount, selectedBidSteps)}
+                  onChange={(event) => setBidStepCount(Number(event.target.value || 0))}
+                  className="mt-4 h-2 w-full cursor-pointer accent-orange-500"
+                />
+
+                <div className="mt-3 flex items-center justify-between text-[11px] font-bold text-slate-500">
+                  <span>Base {formatCurrency(selectedVehicle.price)}</span>
+                  <span>Increment {formatCurrency(selectedBidIncrement)}</span>
+                </div>
+              </div>
+
+              <div className="mt-5 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowBidModal(false)}
+                  className="flex-1 rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-[13px] font-black uppercase tracking-[0.14em] text-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={proceedToBooking}
+                  className="flex-1 rounded-[18px] bg-[#f8e001] px-4 py-3 text-[13px] font-black uppercase tracking-[0.14em] text-slate-900 shadow-[0_12px_28px_-4px_rgba(248,224,1,0.4)]"
+                >
+                  Send Bid
+                </button>
+              </div>
+            </motion.div>
+          </React.Fragment>
+        )}
+
+        <AnimatePresence>
         {showPaymentModal && (
-          <>
+          <React.Fragment key="payment-modal">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1330,8 +1573,9 @@ const SelectVehicle = () => {
                 ))}
               </div>
             </motion.div>
-          </>
+          </React.Fragment>
         )}
+        </AnimatePresence>
       </AnimatePresence>
     </div>
   );

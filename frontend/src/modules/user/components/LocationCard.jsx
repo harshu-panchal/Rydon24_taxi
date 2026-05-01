@@ -105,7 +105,7 @@ const LocationCard = ({ location = 'Fetching location...' }) => {
         <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar pb-1">
           {quickPlaces.map((place, index) => (
             <motion.button
-              key={place}
+              key={`${String(place || '').trim() || 'place'}-${index}`}
               type="button"
               onClick={() => navigate('/ride/select-location')}
               className="shrink-0 rounded-full border border-slate-200 bg-white px-4 py-2 text-[12px] font-black text-slate-600 transition-all active:scale-95"

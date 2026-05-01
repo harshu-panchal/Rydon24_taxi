@@ -69,6 +69,13 @@ const formatTravelDate = (value) => {
 };
 
 const normalizeCity = (value = '') => value.trim().toLowerCase();
+const getListKey = (value, index, prefix) => `${String(value || '').trim() || prefix}-${index}`;
+const getRouteKey = (route, index) => {
+  const fromCity = String(route?.fromCity || '').trim();
+  const toCity = String(route?.toCity || '').trim();
+  const operatorName = String(route?.operatorName || '').trim();
+  return `${fromCity || 'from'}-${toCity || 'to'}-${operatorName || index}`;
+};
 
 const BusHome = () => {
   const navigate = useNavigate();
@@ -123,8 +130,11 @@ const BusHome = () => {
     const cities = new Set();
 
     routeSuggestions.forEach((route) => {
-      if (route.fromCity) cities.add(route.fromCity.trim());
-      if (route.toCity) cities.add(route.toCity.trim());
+      const fromCity = String(route?.fromCity || '').trim();
+      const toCity = String(route?.toCity || '').trim();
+
+      if (fromCity) cities.add(fromCity);
+      if (toCity) cities.add(toCity);
     });
 
     return Array.from(cities).sort((left, right) => left.localeCompare(right));
@@ -410,8 +420,8 @@ const BusHome = () => {
           </div>
 
           <datalist id="bus-route-cities">
-            {cityOptions.map((city) => (
-              <option key={city} value={city} />
+            {cityOptions.map((city, index) => (
+              <option key={getListKey(city, index, 'city')} value={city} />
             ))}
           </datalist>
 
@@ -463,9 +473,9 @@ const BusHome = () => {
           </div>
 
           <div className="space-y-3">
-            {featuredRoutes.map((route) => (
+            {featuredRoutes.map((route, index) => (
               <button
-                key={`${route.fromCity}-${route.toCity}`}
+                key={getRouteKey(route, index)}
                 type="button"
                 onClick={() => fillRoute(route)}
                 className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-4 text-left shadow-sm active:scale-[0.99] transition-transform"

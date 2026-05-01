@@ -70,8 +70,8 @@ const PromoBanners = () => {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        {rotatingCards.map((card) => (
-          <PromoCard key={card.title} {...card} onNavigate={navigate} />
+        {rotatingCards.map((card, index) => (
+          <PromoCard key={`${String(card.title || '').trim() || 'promo'}-${index}`} {...card} onNavigate={navigate} />
         ))}
       </div>
 

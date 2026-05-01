@@ -73,7 +73,11 @@ const normalizeMoneyAmount = (value) => {
 
 const ensureUserWallet = async (userId) => {
   if (!userId) return;
-  await UserWallet.updateOne({ userId }, { $setOnInsert: { userId } }, { upsert: true });
+  await UserWallet.updateOne(
+    { userId },
+    { $setOnInsert: { userId, balance: 0, refundWallet: 0, transactions: [] } },
+    { upsert: true },
+  );
 };
 
 const serializeUserWalletTransaction = (entry = {}) => ({
@@ -90,6 +94,7 @@ const buildUserWalletPayload = (wallet) => {
 
   return {
     balance: Number(wallet?.balance || 0),
+    refundWallet: Number(wallet?.refundWallet || 0),
     currency: 'INR',
     recentTransactions: transactions
       .slice()
@@ -1253,7 +1258,7 @@ export const getUserWallet = async (req, res) => {
   }
 
   await ensureUserWallet(userId);
-  const wallet = await UserWallet.findOne({ userId }).select('balance transactions').slice('transactions', -10).lean();
+  const wallet = await UserWallet.findOne({ userId }).select('balance refundWallet transactions').slice('transactions', -10).lean();
   const transactions = Array.isArray(wallet?.transactions) ? wallet.transactions : [];
 
   res.json({
@@ -1289,11 +1294,14 @@ export const topupUserWallet = async (req, res) => {
   );
 
   const updatedWallet = await UserWallet.findOne({ userId }).select('balance transactions').slice('transactions', -10).lean();
+  const updatedWalletWithRefund = updatedWallet
+    ? { ...updatedWallet, refundWallet: Number(updatedWallet.refundWallet || 0) }
+    : updatedWallet;
   const transactions = Array.isArray(updatedWallet?.transactions) ? updatedWallet.transactions : [];
 
   res.status(201).json({
     success: true,
-    data: buildUserWalletPayload({ ...updatedWallet, transactions }),
+    data: buildUserWalletPayload({ ...updatedWalletWithRefund, transactions }),
   });
 };
 
@@ -1363,7 +1371,7 @@ export const transferUserWallet = async (req, res) => {
     throw new ApiError(500, 'Transfer failed');
   }
 
-  const wallet = await UserWallet.findOne({ userId: senderId }).select('balance transactions').slice('transactions', -10).lean();
+  const wallet = await UserWallet.findOne({ userId: senderId }).select('balance refundWallet transactions').slice('transactions', -10).lean();
 
   const transactions = Array.isArray(wallet?.transactions) ? wallet.transactions : [];
 
@@ -1470,7 +1478,7 @@ export const transferUserWalletToDriver = async (req, res) => {
     }).catch(() => {});
 
     const refreshedWallet = await UserWallet.findOne({ userId: senderId })
-      .select('balance transactions')
+      .select('balance refundWallet transactions')
       .slice('transactions', -10)
       .lean();
 
@@ -1635,7 +1643,7 @@ export const verifyRazorpayWalletTopup = async (req, res) => {
     );
   }
 
-  const wallet = await UserWallet.findOne({ userId }).select('balance transactions').slice('transactions', -10).lean();
+  const wallet = await UserWallet.findOne({ userId }).select('balance refundWallet transactions').slice('transactions', -10).lean();
   if (!wallet) {
     throw new ApiError(404, 'User not found');
   }

@@ -27,6 +27,7 @@ import {
   getDriverEmergencyContacts,
   getDriverIncentives,
   getDriverNotifications,
+  getDriverScheduledRides,
   getServiceCenterBookings,
   getServiceCenterStaffMembers,
   getServiceCenterVehicles,
@@ -132,6 +133,11 @@ driverRouter.get(
   "/notifications",
   authenticate(["driver"]),
   asyncHandler(getDriverNotifications),
+);
+driverRouter.get(
+  "/scheduled-rides",
+  authenticate(["driver"]),
+  asyncHandler(getDriverScheduledRides),
 );
 driverRouter.post(
   "/fcm-token",

@@ -46,6 +46,12 @@ const ServiceGrid = () => {
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const getServiceKey = (service, index) => {
+    const label = String(service?.label || '').trim();
+    const path = String(service?.path || '').trim();
+    return label || path ? `${label || 'service'}-${path || index}` : `service-${index}`;
+  };
+
   const getPath = (module) => {
     if (module.transport_type === 'delivery') return '/taxi/user/parcel/type';
     if (module.service_type === 'rental') return '/taxi/user/rental';
@@ -132,8 +138,8 @@ const ServiceGrid = () => {
           {loading ? (
              [...Array(4)].map((_, i) => <ServiceTile key={i} loading />)
           ) : (
-            services.map((service) => (
-              <ServiceTile key={service.label} {...service} />
+            services.map((service, index) => (
+              <ServiceTile key={getServiceKey(service, index)} {...service} />
             ))
           )}
         </div>

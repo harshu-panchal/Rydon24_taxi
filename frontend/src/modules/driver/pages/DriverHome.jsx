@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Bell, 
+    CalendarClock,
     Camera,
     Navigation, 
     Wallet, 
@@ -48,8 +49,9 @@ import SuvIcon from '@/assets/icons/SUV.png';
 
 import { socketService } from '../../../shared/api/socket';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../admin/utils/googleMaps';
-import { getCurrentDriver, getDriverDocumentTemplates, getDriverNotifications, getLocalDriverToken } from '../services/registrationService';
+import { getCurrentDriver, getDriverDocumentTemplates, getDriverNotifications, getDriverScheduledRides, getLocalDriverToken } from '../services/registrationService';
 import { addLocalDriverNotification, getUnreadDriverNotificationCount, getVisibleDriverNotifications } from '../utils/notificationState';
+import { getScheduledRideCountdown } from '../utils/scheduledRideTime';
 import {
     playRideRequestAlertSound,
     stopRideRequestAlertSound,
@@ -231,6 +233,74 @@ const formatPoint = (point, fallback) => {
     return fallback;
 };
 
+const formatScheduledDateTime = (value) => {
+    if (!value) {
+        return 'Schedule time not available';
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return 'Schedule time not available';
+    }
+
+    return date.toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+};
+
+const formatDistanceLabel = (meters) => {
+    const value = Number(meters || 0);
+    if (!Number.isFinite(value) || value <= 0) {
+        return 'Nearby';
+    }
+
+    if (value < 1000) {
+        return `${Math.round(value)} m`;
+    }
+
+    return `${(value / 1000).toFixed(1)} km`;
+};
+
+const formatFareLabel = (value) => {
+    const amount = Number(value || 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+        return 'Rs 0';
+    }
+
+    return `Rs ${amount}`;
+};
+
+const createScheduledRidePreview = (ride) => ({
+    rideId: ride.rideId,
+    type: ride.type || ride.serviceType || 'ride',
+    fare: formatFareLabel(ride.fare || ride.baseFare),
+    distance: formatDistanceLabel(ride.estimatedDistanceMeters),
+    payment: ride.paymentMethod || 'cash',
+    pickup: ride.pickupAddress || 'Pickup point',
+    drop: ride.dropAddress || 'Drop point',
+    scheduledAt: ride.scheduledAt || null,
+    customer: {
+        name: ride.user?.name || 'Customer',
+        phone: ride.user?.phone || '',
+    },
+    raw: {
+        fare: ride.fare,
+        baseFare: ride.baseFare,
+        bookingMode: ride.bookingMode || 'normal',
+        parcel: ride.parcel || null,
+        intercity: ride.intercity || null,
+        user: ride.user || null,
+        pickupAddress: ride.pickupAddress || '',
+        dropAddress: ride.dropAddress || '',
+        scheduledAt: ride.scheduledAt || null,
+        ride,
+    },
+});
+
 const normalizeJobType = (job = {}) => {
     const value = String(job.type || job.serviceType || 'ride').toLowerCase();
     if (value === 'parcel') return 'parcel';
@@ -409,6 +479,12 @@ const DriverHome = () => {
     const [statusMessage, setStatusMessage] = useState('');
     const [socketStatus, setSocketStatus] = useState('offline');
     const [notificationCount, setNotificationCount] = useState(0);
+    const [scheduledRideCount, setScheduledRideCount] = useState(0);
+    const [scheduledRides, setScheduledRides] = useState([]);
+    const [isScheduleSheetOpen, setIsScheduleSheetOpen] = useState(false);
+    const [isScheduleLoading, setIsScheduleLoading] = useState(false);
+    const [selectedScheduledRide, setSelectedScheduledRide] = useState(null);
+    const [scheduleNow, setScheduleNow] = useState(() => Date.now());
     const [acceptingRideId, setAcceptingRideId] = useState('');
     const [isHydratingDriver, setIsHydratingDriver] = useState(true);
     const [isTogglingDuty, setIsTogglingDuty] = useState(false);
@@ -484,6 +560,26 @@ const DriverHome = () => {
         }
     }, []);
 
+    const loadScheduledRides = useCallback(async () => {
+        setIsScheduleLoading(true);
+
+        try {
+            const response = await getDriverScheduledRides({ limit: 20 });
+            const results = response?.data?.results || [];
+            const nextScheduledRides = results
+                .filter((ride) => ride?.scheduledAt)
+                .sort((firstRide, secondRide) => new Date(firstRide.scheduledAt).getTime() - new Date(secondRide.scheduledAt).getTime());
+
+            setScheduledRides(nextScheduledRides);
+            setScheduledRideCount(nextScheduledRides.length);
+        } catch {
+            setScheduledRides([]);
+            setScheduledRideCount(0);
+        } finally {
+            setIsScheduleLoading(false);
+        }
+    }, []);
+
 
     useEffect(() => {
         const unlock = () => unlockRideRequestAlertSound();
@@ -499,17 +595,38 @@ const DriverHome = () => {
 
     useEffect(() => {
         refreshNotificationCount();
+        loadScheduledRides();
 
         const handleFocus = () => {
             refreshNotificationCount();
+            loadScheduledRides();
         };
+        const refreshInterval = window.setInterval(() => {
+            refreshNotificationCount();
+            loadScheduledRides();
+        }, 30000);
 
         window.addEventListener('focus', handleFocus);
 
         return () => {
+            window.clearInterval(refreshInterval);
             window.removeEventListener('focus', handleFocus);
         };
-    }, [refreshNotificationCount]);
+    }, [loadScheduledRides, refreshNotificationCount]);
+
+    useEffect(() => {
+        if (scheduledRides.length === 0) {
+            return undefined;
+        }
+
+        const interval = window.setInterval(() => {
+            setScheduleNow(Date.now());
+        }, 1000);
+
+        return () => {
+            window.clearInterval(interval);
+        };
+    }, [scheduledRides.length]);
 
     useEffect(() => {
         // Automatically show modal if driver is blocked and tries to open the app
@@ -1525,6 +1642,13 @@ const DriverHome = () => {
                 onDecline={handleDecline}
                 onSubmitBid={handleSubmitBid}
             />
+            <IncomingRideRequest
+                visible={Boolean(selectedScheduledRide)}
+                requestData={selectedScheduledRide}
+                mode="preview"
+                onClose={() => setSelectedScheduledRide(null)}
+                onDecline={() => setSelectedScheduledRide(null)}
+            />
 
             <LowBalanceModal 
                 isOpen={showLowBalanceModal}
@@ -1668,6 +1792,105 @@ const DriverHome = () => {
                 )}
             </AnimatePresence>
 
+            <AnimatePresence>
+                {isScheduleSheetOpen && (
+                    <>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 z-[74] bg-slate-950/45 backdrop-blur-sm"
+                            onClick={() => setIsScheduleSheetOpen(false)}
+                        />
+                        <motion.div
+                            initial={{ y: '100%' }}
+                            animate={{ y: 0 }}
+                            exit={{ y: '100%' }}
+                            transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+                            className="absolute inset-x-0 bottom-0 z-[75] max-h-[78vh] rounded-t-[30px] border border-white/70 bg-white px-5 pb-6 pt-5 shadow-[0_-24px_60px_rgba(15,23,42,0.24)]"
+                        >
+                            <div className="mx-auto h-1.5 w-14 rounded-full bg-slate-200" />
+                            <div className="mt-4 flex items-start justify-between gap-3">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-500">Schedule</p>
+                                    <h3 className="mt-1 text-[22px] font-black tracking-tight text-slate-950">Scheduled rides</h3>
+                                    <p className="mt-1 text-[12px] font-semibold text-slate-500">Upcoming scheduled requests available for this driver.</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsScheduleSheetOpen(false)}
+                                    className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 bg-slate-50 text-slate-500 active:scale-95"
+                                >
+                                    <ChevronRight size={18} className="rotate-45" />
+                                </button>
+                            </div>
+
+                            <div className="mt-4 max-h-[58vh] overflow-y-auto space-y-3 pr-1">
+                                {isScheduleLoading ? (
+                                    Array.from({ length: 3 }).map((_, index) => (
+                                        <div key={index} className="animate-pulse rounded-[22px] border border-slate-100 bg-slate-50 px-4 py-4">
+                                            <div className="h-3 w-1/2 rounded-full bg-slate-200" />
+                                            <div className="mt-3 h-2.5 w-full rounded-full bg-slate-100" />
+                                            <div className="mt-2 h-2.5 w-4/5 rounded-full bg-slate-100" />
+                                        </div>
+                                    ))
+                                ) : scheduledRides.length === 0 ? (
+                                    <div className="rounded-[24px] border border-slate-100 bg-slate-50 px-5 py-10 text-center">
+                                        <div className="mx-auto grid h-16 w-16 place-items-center rounded-[22px] bg-white text-slate-300 shadow-sm">
+                                            <CalendarClock size={28} strokeWidth={1.8} />
+                                        </div>
+                                        <p className="mt-4 text-[16px] font-black text-slate-700">No scheduled rides yet</p>
+                                        <p className="mt-1 text-[12px] font-bold text-slate-400">Scheduled bookings will show here when they are assigned.</p>
+                                    </div>
+                                ) : (
+                                    scheduledRides.map((ride) => (
+                                        <button
+                                            key={ride.rideId}
+                                            type="button"
+                                            onClick={() => setSelectedScheduledRide(createScheduledRidePreview(ride))}
+                                            className="w-full rounded-[22px] border border-slate-100 bg-slate-50 px-4 py-4 text-left shadow-sm transition-all active:scale-[0.99]"
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-blue-100 text-blue-600">
+                                                    <CalendarClock size={18} strokeWidth={2.2} />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <p className="truncate text-[14px] font-black text-slate-950">
+                                                                {ride.type === 'parcel' ? 'Scheduled delivery' : ride.type === 'intercity' ? 'Scheduled intercity ride' : 'Scheduled ride'}
+                                                            </p>
+                                                            <p className="mt-1 text-[10px] font-black uppercase tracking-[0.16em] text-blue-500">
+                                                                {formatScheduledDateTime(ride.scheduledAt)}
+                                                            </p>
+                                                            <p className="mt-1 text-[11px] font-black text-emerald-600">
+                                                                {getScheduledRideCountdown(ride.scheduledAt, scheduleNow)}
+                                                            </p>
+                                                        </div>
+                                                        <span className="rounded-full bg-white px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-slate-500">
+                                                            {formatFareLabel(ride.fare || ride.baseFare)}
+                                                        </span>
+                                                    </div>
+                                                    <p className="mt-3 text-[11px] font-bold text-slate-500 line-clamp-1">
+                                                        {ride.user?.name || 'Customer'}{ride.user?.phone ? ` • ${ride.user.phone}` : ''}
+                                                    </p>
+                                                    <p className="mt-2 text-[11px] font-bold text-slate-700 line-clamp-1">
+                                                        Pickup: {ride.pickupAddress || 'Pickup point'}
+                                                    </p>
+                                                    <p className="mt-1 text-[11px] font-bold text-slate-700 line-clamp-1">
+                                                        Drop: {ride.dropAddress || 'Drop point'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    ))
+                                )}
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+
             {/* --- TOP FLOATING UI --- */}
             <div className="fixed top-0 left-0 right-0 p-5 pt-12 flex items-start justify-end z-40 pointer-events-none max-w-md mx-auto">
                 {/* Earnings Pill */}
@@ -1680,6 +1903,21 @@ const DriverHome = () => {
                         {Number(walletSummary.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                 </div>
+
+                <button
+                    onClick={() => {
+                        loadScheduledRides();
+                        setIsScheduleSheetOpen(true);
+                    }}
+                    className="absolute left-0 relative w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-900 active:scale-90 transition-all pointer-events-auto border border-slate-100"
+                >
+                    <CalendarClock size={22} />
+                    {scheduledRideCount > 0 ? (
+                        <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-blue-600 border-2 border-white text-white text-[10px] font-black flex items-center justify-center shadow-sm">
+                            {scheduledRideCount > 99 ? '99+' : scheduledRideCount}
+                        </span>
+                    ) : null}
+                </button>
 
                 {/* Notification Button */}
                 <button 

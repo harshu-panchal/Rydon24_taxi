@@ -84,7 +84,7 @@ const ensureUserWallet = async (userId, session = null) => {
   if (!userId) return;
   await UserWallet.updateOne(
     { userId },
-    { $setOnInsert: { userId } },
+    { $setOnInsert: { userId, balance: 0, refundWallet: 0, transactions: [] } },
     { upsert: true, ...(session ? { session } : {}) },
   );
 };

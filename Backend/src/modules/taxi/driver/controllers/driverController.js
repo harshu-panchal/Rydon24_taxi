@@ -44,7 +44,7 @@ import {
 import { verifyAccessToken } from "../../services/tokenService.js";
 import { clearDriverActiveRideIfStale } from "../../services/rideService.js";
 import { getWalletSettings } from "../../services/appSettingsService.js";
-import { RIDE_STATUS } from "../../constants/index.js";
+import { RIDE_LIVE_STATUS, RIDE_STATUS } from "../../constants/index.js";
 import {
   createRentalVehicleType,
   deleteRentalVehicleType,
@@ -1365,6 +1365,43 @@ const serializeDriverNotification = (item = {}) => ({
   createdAt: item.createdAt || null,
 });
 
+const serializeDriverScheduledRide = (ride = {}) => ({
+  rideId: String(ride._id || ""),
+  type: ride.serviceType || "ride",
+  serviceType: ride.serviceType || "ride",
+  status: ride.status || RIDE_STATUS.SEARCHING,
+  liveStatus: ride.liveStatus || RIDE_LIVE_STATUS.SEARCHING,
+  fare: Number(ride.fare || 0),
+  baseFare: Number(ride.baseFare || ride.fare || 0),
+  bookingMode: ride.bookingMode || "normal",
+  estimatedDistanceMeters: Number(ride.estimatedDistanceMeters || 0),
+  estimatedDurationMinutes: Number(ride.estimatedDurationMinutes || 0),
+  paymentMethod: ride.paymentMethod || "cash",
+  pickupLocation: ride.pickupLocation || null,
+  pickupAddress: ride.pickupAddress || "",
+  dropLocation: ride.dropLocation || null,
+  dropAddress: ride.dropAddress || "",
+  scheduledAt: ride.scheduledAt || null,
+  parcel: ride.parcel || null,
+  intercity: ride.intercity || null,
+  vehicleTypeId: ride.vehicleTypeId ? String(ride.vehicleTypeId) : null,
+  vehicleTypeIds: Array.isArray(ride.dispatchVehicleTypeIds)
+    ? ride.dispatchVehicleTypeIds.map((item) => String(item))
+    : [],
+  serviceLocationId: ride.service_location_id ? String(ride.service_location_id) : null,
+  transportType: ride.transport_type || "taxi",
+  user: ride.userId
+    ? {
+        id: String(ride.userId._id || ""),
+        name: ride.userId.name || "Customer",
+        phone: ride.userId.phone || "",
+        countryCode: ride.userId.countryCode || "",
+      }
+    : null,
+  createdAt: ride.createdAt || null,
+  updatedAt: ride.updatedAt || null,
+});
+
 export const registerDriver = async (req, res) => {
   const { name, phone, password, vehicleType, location } = req.body;
 
@@ -1688,6 +1725,91 @@ export const getDriverNotifications = async (req, res) => {
     success: true,
     data: {
       results: notifications.map(serializeDriverNotification),
+    },
+  });
+};
+
+export const getDriverScheduledRides = async (req, res) => {
+  const driver = await Driver.findById(req.auth.sub)
+    .select("service_location_id vehicleTypeId")
+    .lean();
+
+  if (!driver) {
+    throw new ApiError(404, "Driver not found");
+  }
+
+  const safePage = Math.max(1, Number(req.query?.page) || 1);
+  const safeLimit = Math.min(100, Math.max(1, Number(req.query?.limit) || 20));
+  const query = {
+    scheduledAt: { $ne: null, $gte: new Date() },
+    status: RIDE_STATUS.SEARCHING,
+    liveStatus: RIDE_LIVE_STATUS.SEARCHING,
+    ...(driver.service_location_id ? { service_location_id: driver.service_location_id } : {}),
+    $or: [
+      { driverId: null },
+      { driverId: req.auth.sub },
+    ],
+  };
+
+  if (driver.vehicleTypeId) {
+    query.$and = [
+      {
+        $or: [
+          { vehicleTypeId: driver.vehicleTypeId },
+          { dispatchVehicleTypeIds: driver.vehicleTypeId },
+        ],
+      },
+    ];
+  }
+
+  const [rides, totalCount] = await Promise.all([
+    Ride.find(query)
+      .sort({ scheduledAt: 1, createdAt: -1 })
+      .skip((safePage - 1) * safeLimit)
+      .limit(safeLimit)
+      .select([
+        "serviceType",
+        "status",
+        "liveStatus",
+        "fare",
+        "baseFare",
+        "bookingMode",
+        "estimatedDistanceMeters",
+        "estimatedDurationMinutes",
+        "paymentMethod",
+        "pickupLocation",
+        "pickupAddress",
+        "dropLocation",
+        "dropAddress",
+        "scheduledAt",
+        "parcel",
+        "intercity",
+        "vehicleTypeId",
+        "dispatchVehicleTypeIds",
+        "service_location_id",
+        "transport_type",
+        "userId",
+        "createdAt",
+        "updatedAt",
+      ].join(" "))
+      .populate("userId", "name phone countryCode")
+      .lean(),
+    Ride.countDocuments(query),
+  ]);
+
+  res.json({
+    success: true,
+    data: {
+      results: rides.map(serializeDriverScheduledRide),
+      totalCount,
+      pagination: {
+        page: safePage,
+        limit: safeLimit,
+        total: totalCount,
+        totalPages: Math.max(1, Math.ceil(totalCount / safeLimit)),
+        hasNextPage: safePage * safeLimit < totalCount,
+        hasPrevPage: safePage > 1,
+      },
     },
   });
 };

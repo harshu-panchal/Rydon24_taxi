@@ -35,7 +35,6 @@ const PhoneRegistration = () => {
         : [
             { id: 'driver', label: 'Driver', Icon: UserRound },
             { id: 'owner', label: 'Owner', Icon: Briefcase },
-            { id: 'bus_driver', label: 'Bus', Icon: ShieldCheck },
         ];
     
     const modeConfig = useMemo(() => {

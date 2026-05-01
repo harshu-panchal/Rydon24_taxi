@@ -162,14 +162,17 @@ export const deleteCurrentDriverAccount = () =>
   api.delete("/drivers/me", withDriverAuth());
 export const requestDriverAccountDeletion = (reason) =>
   api.post("/drivers/me/delete-request", { reason }, withDriverAuth());
-export const getDriverNotifications = () =>
-  api.get("/drivers/notifications", withDriverAuth());
+export const getDriverNotifications = (params = {}) =>
+  api.get("/drivers/notifications", withDriverAuth({ params }));
+export const getDriverScheduledRides = (params = {}) =>
+  api.get("/drivers/scheduled-rides", withDriverAuth({ params }));
 export const deleteDriverNotification = (id) =>
   api.delete(`/drivers/notifications/${id}`, withDriverAuth());
 export const clearAllDriverNotifications = () =>
   api.delete("/drivers/notifications", withDriverAuth());
 export const getDriverEmergencyContacts = () =>
   api.get("/drivers/emergency-contacts", withDriverAuth());
+
 export const saveDriverFcmToken = (token, platform) =>
   api.post("/drivers/fcm-token", { token, platform }, withDriverAuth());
 export const addDriverEmergencyContact = (payload) =>

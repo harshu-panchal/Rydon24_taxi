@@ -1,16 +1,43 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Calendar, ChevronRight, Clock3, Info, MapPin, Users } from 'lucide-react';
 
+const pad = (value) => String(value).padStart(2, '0');
+
+const formatDateInputValue = (date) => {
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  return `${year}-${month}-${day}`;
+};
+
+const formatDateTimeInputValue = (date) => {
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
 const getTomorrowLocalDateTime = () => {
   const next = new Date(Date.now() + 60 * 60 * 1000);
-  const year = next.getFullYear();
-  const month = String(next.getMonth() + 1).padStart(2, '0');
-  const day = String(next.getDate()).padStart(2, '0');
-  const hours = String(next.getHours()).padStart(2, '0');
-  const minutes = String(next.getMinutes()).padStart(2, '0');
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
+  return formatDateTimeInputValue(next);
+};
+
+const getTodayLocalDate = () => formatDateInputValue(new Date());
+
+const getMaxAdvanceDate = () => {
+  const nextWeek = new Date();
+  nextWeek.setDate(nextWeek.getDate() + 7);
+  return formatDateInputValue(nextWeek);
+};
+
+const getMaxAdvanceDateTime = () => {
+  const nextWeek = new Date();
+  nextWeek.setDate(nextWeek.getDate() + 7);
+  return formatDateTimeInputValue(nextWeek);
 };
 
 const getVehicleIcon = (type = {}) => {
@@ -81,6 +108,12 @@ const IntercityVehicle = () => {
   const [passengers, setPassengers] = useState(1);
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
   const [scheduleError, setScheduleError] = useState('');
+  const travelDateInputRef = useRef(null);
+  const scheduledAtInputRef = useRef(null);
+  const minTravelDate = useMemo(() => getTodayLocalDate(), []);
+  const maxTravelDate = useMemo(() => getMaxAdvanceDate(), []);
+  const minScheduledAt = useMemo(() => getTomorrowLocalDateTime(), []);
+  const maxScheduledAt = useMemo(() => getMaxAdvanceDateTime(), []);
 
   const vehicles = useMemo(
     () =>
@@ -114,11 +147,47 @@ const IntercityVehicle = () => {
     setPassengers((current) => Math.min(Math.max(current, 1), selectedVehicle.seats));
   }, [selectedVehicle]);
 
+  useEffect(() => {
+    if (travelDate < minTravelDate) {
+      setTravelDate(minTravelDate);
+      return;
+    }
+
+    if (travelDate > maxTravelDate) {
+      setTravelDate(maxTravelDate);
+    }
+  }, [maxTravelDate, minTravelDate, travelDate]);
+
+  useEffect(() => {
+    if (!scheduledAt) {
+      return;
+    }
+
+    if (scheduledAt < minScheduledAt) {
+      setScheduledAt(minScheduledAt);
+      return;
+    }
+
+    if (scheduledAt > maxScheduledAt) {
+      setScheduledAt(maxScheduledAt);
+    }
+  }, [maxScheduledAt, minScheduledAt, scheduledAt]);
+
   if (!fromCity || !toCity) {
     return null;
   }
 
   const finalFare = selectedVehicle ? calculateFare(selectedVehicle, tripType) : 0;
+
+  const openPicker = (inputRef) => {
+    if (typeof inputRef.current?.showPicker === 'function') {
+      inputRef.current.showPicker();
+      return;
+    }
+
+    inputRef.current?.focus();
+    inputRef.current?.click();
+  };
 
   const handleContinue = () => {
     if (!selectedVehicle) return;
@@ -130,8 +199,28 @@ const IntercityVehicle = () => {
         return;
       }
 
+      if (!travelDate || travelDate < minTravelDate) {
+        setScheduleError('Travel date cannot be earlier than today.');
+        return;
+      }
+
+      if (travelDate > maxTravelDate) {
+        setScheduleError('Advance booking is available for up to 7 days only.');
+        return;
+      }
+
       if (parsedSchedule.getTime() <= Date.now() + 60 * 1000) {
         setScheduleError('Schedule time must be at least 1 minute ahead.');
+        return;
+      }
+
+      if (scheduledAt < minScheduledAt) {
+        setScheduleError('Schedule time cannot be earlier than now.');
+        return;
+      }
+
+      if (scheduledAt > maxScheduledAt) {
+        setScheduleError('Advance booking is available for up to 7 days only.');
         return;
       }
     }
@@ -253,21 +342,53 @@ const IntercityVehicle = () => {
           {rideMode === 'schedule' ? (
             <div className="mt-4">
               <label className="mb-2 block text-sm font-medium text-slate-700">Travel date</label>
-              <input
-                type="date"
-                min={new Date().toISOString().split('T')[0]}
-                value={travelDate}
-                onChange={(event) => setTravelDate(event.target.value)}
-                className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none focus:border-blue-500"
-              />
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => openPicker(travelDateInputRef)}
+                  className="flex h-12 w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 text-left text-sm text-slate-900 outline-none transition focus:border-blue-500"
+                >
+                  <span>{travelDate || 'Select travel date'}</span>
+                  <Calendar size={16} className="text-slate-400" />
+                </button>
+                <input
+                  ref={travelDateInputRef}
+                  type="date"
+                  min={minTravelDate}
+                  max={maxTravelDate}
+                  value={travelDate}
+                  onChange={(event) => {
+                    setTravelDate(event.target.value);
+                    setScheduleError('');
+                  }}
+                  className="pointer-events-none absolute inset-0 opacity-0"
+                  tabIndex={-1}
+                />
+              </div>
               <label className="mb-2 mt-4 block text-sm font-medium text-slate-700">Pickup time</label>
-              <input
-                type="datetime-local"
-                min={getTomorrowLocalDateTime()}
-                value={scheduledAt}
-                onChange={(event) => setScheduledAt(event.target.value)}
-                className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm text-slate-900 outline-none focus:border-blue-500"
-              />
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => openPicker(scheduledAtInputRef)}
+                  className="flex h-12 w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 text-left text-sm text-slate-900 outline-none transition focus:border-blue-500"
+                >
+                  <span>{scheduledAt ? scheduledAt.replace('T', ' ') : 'Select pickup time'}</span>
+                  <Clock3 size={16} className="text-slate-400" />
+                </button>
+                <input
+                  ref={scheduledAtInputRef}
+                  type="datetime-local"
+                  min={minScheduledAt}
+                  max={maxScheduledAt}
+                  value={scheduledAt}
+                  onChange={(event) => {
+                    setScheduledAt(event.target.value);
+                    setScheduleError('');
+                  }}
+                  className="pointer-events-none absolute inset-0 opacity-0"
+                  tabIndex={-1}
+                />
+              </div>
               {scheduleError ? (
                 <p className="mt-2 text-sm font-medium text-rose-500">{scheduleError}</p>
               ) : (
