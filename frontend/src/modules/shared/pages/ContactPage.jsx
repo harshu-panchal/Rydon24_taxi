@@ -40,7 +40,7 @@ const ContactPage = () => {
                 <p className="text-gray-500 mb-6 leading-relaxed">
                     Call our toll-free line anytime for immediate assistance with your rides or accounts.
                 </p>
-                <p className="text-3xl font-black text-[#1a1a1a]">+234 80 1000 000</p>
+                <p className="text-3xl font-black text-[#1a1a1a]">7409129517</p>
             </div>
 
             <div className="bg-white p-10 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center text-center">
@@ -51,7 +51,7 @@ const ContactPage = () => {
                 <p className="text-gray-500 mb-6 leading-relaxed">
                     Prefer writing? Send us an email and our team will get back to you within 2 hours.
                 </p>
-                <p className="text-2xl font-bold text-[#FFB300]">support@rydon24.com</p>
+                <p className="text-2xl font-bold text-[#FFB300]">supportrydon24@gmail.com</p>
             </div>
 
             <div className="bg-white p-10 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center text-center">
@@ -60,7 +60,7 @@ const ContactPage = () => {
                 </div>
                 <h3 className="text-2xl font-bold mb-4">Headquarters</h3>
                 <p className="text-gray-500 mb-6 leading-relaxed">
-                    123 Mobility Avenue,<br/>Tech District, City Center,<br/>State 10001
+                    Office No. 110,<br/>B. K Tower, H-65, Sec-63,<br/>Noida 201301
                 </p>
             </div>
 

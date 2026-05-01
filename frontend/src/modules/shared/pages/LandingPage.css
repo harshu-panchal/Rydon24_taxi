@@ -52,7 +52,7 @@ body {
 
 .new-top-bar {
   position: relative;
-  z-index: 10;
+  z-index: 100;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -67,6 +67,10 @@ body {
   text-decoration: none;
 }
 
+.mobile-only-logo {
+  display: none;
+}
+
 .new-top-contacts {
   display: flex;
   gap: 2rem;
@@ -77,7 +81,7 @@ body {
 
 .new-main-header {
   position: relative;
-  z-index: 10;
+  z-index: 100;
   padding: 0;
 }
 
@@ -98,6 +102,7 @@ body {
   background-color: #FFB300;
   clip-path: polygon(40px 0, 100% 0, 100% 100%, 0 100%);
   z-index: -1;
+  pointer-events: none;
 }
 
 .new-nav-links {
@@ -105,6 +110,9 @@ body {
   gap: 2rem;
   height: 60px;
   align-items: center;
+  position: relative;
+  z-index: 50;
+  pointer-events: auto;
 }
 
 .new-nav-link {
@@ -129,6 +137,10 @@ body {
   height: 60px;
   display: flex;
   align-items: center;
+}
+
+.mobile-menu-btn {
+  display: none;
 }
 
 .new-hero-section {
@@ -192,6 +204,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
 }
 
 .new-hero-ribbon {
@@ -634,6 +647,8 @@ body {
     flex-direction: column;
     text-align: center;
     padding-top: 2rem;
+    height: auto;
+    padding-bottom: 2rem;
   }
   .new-hero-left {
     margin-bottom: 2rem;
@@ -671,56 +686,172 @@ body {
 
 @media (max-width: 768px) {
   .new-top-bar {
-    padding: 0 2rem;
-  }
-  .new-nav-links {
     display: none;
   }
+  .mobile-only-logo {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 900;
+    text-decoration: none;
+    color: #1a1a1a;
+  }
+  .new-top-contacts {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    gap: 1rem;
+  }
+  .new-logo {
+    font-size: 1.5rem;
+  }
+  .new-nav-container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  .new-nav-bg-slant {
+    left: 0;
+    width: 100%;
+    clip-path: none;
+  }
+  .new-hero-section {
+    padding: 2rem 1.5rem;
+  }
   .new-hero-title {
-    font-size: 2.5rem;
+    font-size: 2.2rem;
+    margin-bottom: 1rem;
+  }
+  .new-hero-desc {
+    font-size: 0.95rem;
+    margin-bottom: 1.5rem;
+  }
+  .new-hero-graphic {
+    height: 300px;
   }
   .subscriptions-grid {
     grid-template-columns: 1fr;
-    gap: 5rem;
+    gap: 4.5rem;
+    padding-top: 1rem;
+  }
+  .sub-card {
+    padding: 2rem 1.5rem 5.5rem;
+  }
+  .sub-card-image {
+    width: 130px;
+    height: 130px;
+    bottom: -40px;
   }
   .benefits-grid {
     grid-template-columns: 1fr;
+    gap: 2rem;
+    margin-top: 2rem;
+  }
+  .benefit-icon {
+    width: 60px;
+    height: 60px;
+  }
+  .benefit-icon svg {
+    width: 30px;
+    height: 30px;
   }
   .subscriptions-section, .benefits-section {
-    padding: 4rem 2rem;
+    padding: 3rem 1.5rem;
   }
   .footer-newsletter-banner {
     flex-direction: column;
-    margin-top: -50px;
+    margin-top: -40px;
   }
   .newsletter-bg-slant {
     display: none;
   }
+  .newsletter-content {
+    padding: 2rem 1.5rem;
+  }
+  .newsletter-title {
+    font-size: 1.6rem;
+    margin-bottom: 1rem;
+  }
   .footer-main-content {
     grid-template-columns: 1fr;
     gap: 2rem;
+    padding: 2rem 1.5rem;
   }
   .footer-bottom-bar {
     flex-direction: column;
     gap: 1rem;
     text-align: center;
+    margin: 0 1.5rem;
+    padding: 1.5rem 0;
+  }
+  
+  .mobile-menu-btn {
+    display: block;
+    background: transparent;
+    border: none;
+    color: var(--text-dark);
+    font-size: 2rem;
+    cursor: pointer;
+    margin-left: 1rem;
+    padding: 0;
+  }
+
+  .new-nav-links {
+    display: none;
+    position: absolute;
+    top: 60px;
+    left: 0;
+    width: 100%;
+    height: auto;
+    background-color: var(--text-light);
+    flex-direction: column;
+    padding: 0;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    z-index: 100;
+  }
+
+  .new-nav-links.mobile-open {
+    display: flex;
+  }
+
+  .new-nav-link {
+    color: var(--text-dark);
+    padding: 1rem 1.5rem;
+    width: 100%;
+    text-align: left;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .new-nav-link:hover, .new-nav-link.active {
+    background-color: #f9f9f9;
+    color: var(--primary-yellow);
   }
 }
 
 @media (max-width: 480px) {
   .new-hero-title {
-    font-size: 2rem;
+    font-size: 1.8rem;
   }
-  .new-book-btn {
-    padding: 0 1rem;
-    font-size: 0.9rem;
+  .new-hero-action-btn {
+    padding: 0.8rem 1.5rem;
+    font-size: 1rem;
+  }
+  .hidden-mobile {
+    display: none;
   }
   .newsletter-form {
     flex-direction: column;
+  }
+  .newsletter-form input, .newsletter-form button {
+    width: 100%;
+    padding: 1rem;
+    border-radius: 4px;
   }
   .benefit-item {
     flex-direction: column;
     align-items: center;
     text-align: center;
+  }
+  .new-top-contacts {
+    flex-direction: column;
+    gap: 0.3rem;
+    align-items: center;
   }
 }
