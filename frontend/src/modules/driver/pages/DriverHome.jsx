@@ -1184,6 +1184,8 @@ const DriverHome = () => {
                     requestId: data.rideId,
                     rideId: data.rideId,
                     acceptRejectDurationSeconds: data.acceptRejectDurationSeconds || data.expiresInSeconds,
+                    bookingMode: data.bookingMode || 'normal',
+                    bidding: data.bidding || { enabled: false },
                     raw: data,
                 };
                 setCurrentRequest(request);
@@ -1222,6 +1224,42 @@ const DriverHome = () => {
                 }
                 acceptingRideIdRef.current = '';
                 setAcceptingRideId('');
+            };
+
+            const onRideBidSubmitted = ({ rideId }) => {
+                if (!rideId || rideId !== acceptingRideIdRef.current) {
+                    return;
+                }
+
+                setAcceptingRideId('');
+                setStatusMessage('Bid submitted. Waiting for rider response.');
+            };
+
+            const onRideBiddingUpdated = (payload = {}) => {
+                if (!payload?.rideId) {
+                    return;
+                }
+
+                setCurrentRequest((current) => {
+                    if (!current?.rideId || current.rideId !== payload.rideId) {
+                        return current;
+                    }
+
+                    return {
+                        ...current,
+                        raw: {
+                            ...(current.raw || {}),
+                            bookingMode: payload.bookingMode || current.raw?.bookingMode || 'bidding',
+                            bidding: {
+                                ...(current.raw?.bidding || {}),
+                                enabled: true,
+                                baseFare: payload.baseFare || current.raw?.bidding?.baseFare || current.raw?.baseFare || current.raw?.fare || 0,
+                                userMaxBidFare: payload.userMaxBidFare || current.raw?.bidding?.userMaxBidFare || current.raw?.userMaxBidFare || 0,
+                                bidStepAmount: payload.bidStepAmount || current.raw?.bidding?.bidStepAmount || 10,
+                            },
+                        },
+                    };
+                });
             };
 
             const openAcceptedRide = async (payload) => {
@@ -1308,6 +1346,8 @@ const DriverHome = () => {
             socketService.on('rideRequestClosed', onRideRequestClosed);
             socketService.on('errorMessage', onSocketError);
             socketService.on('rideAccepted', openAcceptedRide);
+            socketService.on('rideBidSubmitted', onRideBidSubmitted);
+            socketService.on('rideBiddingUpdated', onRideBiddingUpdated);
             socketService.on('driver:wallet:updated', onWalletUpdated);
             console.info('[driver-home] socket listeners registered');
             socket.on('connect', onSocketConnect);
@@ -1341,6 +1381,8 @@ const DriverHome = () => {
                 socketService.off('rideRequestClosed', onRideRequestClosed);
                 socketService.off('errorMessage', onSocketError);
                 socketService.off('rideAccepted', openAcceptedRide);
+                socketService.off('rideBidSubmitted', onRideBidSubmitted);
+                socketService.off('rideBiddingUpdated', onRideBiddingUpdated);
                 socketService.off('driver:wallet:updated', onWalletUpdated);
                 socket.off('connect', onSocketConnect);
                 socket.off('disconnect', onSocketDisconnect);
@@ -1460,6 +1502,18 @@ const DriverHome = () => {
         setShowRequest(false);
     };
 
+    const handleSubmitBid = (bidFare) => {
+        if (!currentRequest?.rideId || acceptingRideId) {
+            return;
+        }
+
+        acceptingRideIdRef.current = currentRequest.rideId;
+        setAcceptingRideId(currentRequest.rideId);
+        setStatusMessage('Submitting bid...');
+        stopRideRequestAlertSound();
+        socketService.emit('submitRideBid', { rideId: currentRequest.rideId, bidFare });
+    };
+
     return (
         <div className="h-screen w-full bg-[#E5E7EB] font-sans select-none overflow-hidden relative text-slate-900 border-x border-slate-200 shadow-2xl max-w-md mx-auto">
             {/* Overlay for Ride Request Modal */}
@@ -1469,6 +1523,7 @@ const DriverHome = () => {
                 isAccepting={Boolean(acceptingRideId)}
                 onAccept={handleAccept} 
                 onDecline={handleDecline}
+                onSubmitBid={handleSubmitBid}
             />
 
             <LowBalanceModal 

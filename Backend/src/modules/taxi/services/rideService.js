@@ -7,6 +7,7 @@ import { Vehicle } from '../admin/models/Vehicle.js';
 import { Driver } from '../driver/models/Driver.js';
 import { ensureDriverWalletCanAcceptRide, settleCompletedRideWallet } from '../driver/services/walletService.js';
 import { Delivery } from '../user/models/Delivery.js';
+import { RideBid } from '../user/models/RideBid.js';
 import { Ride } from '../user/models/Ride.js';
 import { User } from '../user/models/User.js';
 import { applyPromoToRideInTransaction } from './promoService.js';
@@ -80,6 +81,8 @@ const normalizeServiceType = (serviceType) => {
 
 const normalizeAddress = (value = '') => String(value || '').trim();
 const generateRideOtp = () => String(Math.floor(1000 + Math.random() * 9000));
+const DEFAULT_BID_STEP_AMOUNT = 10;
+const DEFAULT_MAX_BID_STEPS = 5;
 
 const normalizeParcelPayload = (parcel = {}) => ({
   category: String(parcel.category || '').trim(),
@@ -140,6 +143,72 @@ const normalizeVehicleKeys = (vehicles = []) => {
 
   return [...new Set(keys.map(normalizeVehicleKey).filter(Boolean))];
 };
+
+const normalizeBidStepAmount = (value) => {
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount > 0 ? Math.round(amount) : DEFAULT_BID_STEP_AMOUNT;
+};
+
+const normalizeBidFareCeiling = ({ baseFare, requestedFare, bidStepAmount }) => {
+  const safeBaseFare = Math.max(0, Math.round(Number(baseFare || 0)));
+  const safeStep = normalizeBidStepAmount(bidStepAmount);
+  const safeRequestedFare = Number.isFinite(Number(requestedFare))
+    ? Math.max(safeBaseFare, Math.round(Number(requestedFare)))
+    : safeBaseFare + (DEFAULT_MAX_BID_STEPS * safeStep);
+  const increments = Math.max(0, Math.round((safeRequestedFare - safeBaseFare) / safeStep));
+
+  return safeBaseFare + (increments * safeStep);
+};
+
+const normalizeRideBidAmount = ({ ride, bidFare }) => {
+  const safeBidFare = Math.round(Number(bidFare || 0));
+  const baseFare = Math.max(0, Math.round(Number(ride?.baseFare || ride?.fare || 0)));
+  const bidStepAmount = normalizeBidStepAmount(ride?.bidStepAmount);
+  const userMaxBidFare = Math.max(baseFare, Math.round(Number(ride?.userMaxBidFare || baseFare)));
+
+  if (!Number.isFinite(safeBidFare) || safeBidFare < baseFare) {
+    throw new ApiError(400, 'Bid fare must be at least the base fare');
+  }
+
+  if (safeBidFare > userMaxBidFare) {
+    throw new ApiError(400, 'Bid fare exceeds rider ceiling');
+  }
+
+  const delta = safeBidFare - baseFare;
+  if (delta % bidStepAmount !== 0) {
+    throw new ApiError(400, `Bid fare must increase in Rs ${bidStepAmount} steps`);
+  }
+
+  return {
+    bidFare: safeBidFare,
+    incrementAmount: delta,
+  };
+};
+
+const serializeRideBid = (bid) => ({
+  id: String(bid._id),
+  rideId: String(bid.rideId?._id || bid.rideId),
+  driverId: String(bid.driverId?._id || bid.driverId),
+  bidFare: Number(bid.bidFare || 0),
+  incrementAmount: Number(bid.incrementAmount || 0),
+  status: String(bid.status || 'pending'),
+  createdAt: bid.createdAt || null,
+  updatedAt: bid.updatedAt || null,
+  driver: bid.driverId && typeof bid.driverId === 'object'
+    ? {
+        id: String(bid.driverId._id),
+        name: bid.driverId.name || '',
+        phone: bid.driverId.phone || '',
+        profileImage: bid.driverId.profileImage || '',
+        vehicleType: bid.driverId.vehicleType || '',
+        vehicleNumber: bid.driverId.vehicleNumber || '',
+        vehicleColor: bid.driverId.vehicleColor || '',
+        vehicleMake: bid.driverId.vehicleMake || '',
+        vehicleModel: bid.driverId.vehicleModel || '',
+        rating: bid.driverId.rating || '',
+      }
+    : null,
+});
 
 export const normalizeAllowedRidePaymentMethods = (paymentTypes = []) => {
   const rawItems = Array.isArray(paymentTypes)
@@ -291,6 +360,9 @@ export const createRideRecord = async ({
   service_location_id,
   transport_type,
   scheduledAt,
+  bookingMode,
+  userMaxBidFare,
+  bidStepAmount,
 }) => {
   const user = await User.findById(userId);
 
@@ -316,7 +388,7 @@ export const createRideRecord = async ({
 
   const primaryVehicleTypeId = dispatchVehicleTypeIds[0] || null;
   const primaryVehicle = primaryVehicleTypeId
-    ? await Vehicle.findById(primaryVehicleTypeId).select('icon map_icon image').lean()
+    ? await Vehicle.findById(primaryVehicleTypeId).select('icon map_icon image dispatch_type').lean()
     : null;
   const resolvedVehicleIconUrl = String(
     vehicleIconUrl || primaryVehicle?.map_icon || primaryVehicle?.icon || primaryVehicle?.image || '',
@@ -335,6 +407,21 @@ export const createRideRecord = async ({
   const effectivePaymentMethod = allowedPaymentMethods.includes(normalizedPaymentMethod)
     ? normalizedPaymentMethod
     : (allowedPaymentMethods[0] || 'cash');
+  const supportsBidding = ['bidding', 'both'].includes(String(primaryVehicle?.dispatch_type || '').trim().toLowerCase());
+  const effectiveBookingMode =
+    supportsBidding && String(bookingMode || '').trim().toLowerCase() === 'normal'
+      ? 'normal'
+      : supportsBidding
+        ? 'bidding'
+        : 'normal';
+  const effectiveBidStepAmount = normalizeBidStepAmount(bidStepAmount);
+  const effectiveUserMaxBidFare = effectiveBookingMode === 'bidding'
+    ? normalizeBidFareCeiling({
+        baseFare: safeFare,
+        requestedFare: userMaxBidFare,
+        bidStepAmount: effectiveBidStepAmount,
+      })
+    : safeFare;
   const pricingSnapshot = {
     setPriceId: pricingRule?._id || null,
     admin_commission_type_from_driver: Number(pricingRule?.admin_commission_type_from_driver ?? 1),
@@ -366,6 +453,11 @@ export const createRideRecord = async ({
       dropLocation: toPoint(dropCoords, 'drop'),
       dropAddress: normalizeAddress(dropAddress),
       fare: safeFare,
+      baseFare: safeFare,
+      bookingMode: effectiveBookingMode,
+      biddingStatus: effectiveBookingMode === 'bidding' ? 'open' : 'none',
+      bidStepAmount: effectiveBidStepAmount,
+      userMaxBidFare: effectiveUserMaxBidFare,
       estimatedDistanceMeters: safeEstimatedDistanceMeters,
       estimatedDurationMinutes: safeEstimatedDurationMinutes,
       paymentMethod: effectivePaymentMethod,
@@ -409,6 +501,11 @@ export const createRideRecord = async ({
             dropLocation: toPoint(dropCoords, 'drop'),
             dropAddress: normalizeAddress(dropAddress),
             fare: safeFare,
+            baseFare: safeFare,
+            bookingMode: effectiveBookingMode,
+            biddingStatus: effectiveBookingMode === 'bidding' ? 'open' : 'none',
+            bidStepAmount: effectiveBidStepAmount,
+            userMaxBidFare: effectiveUserMaxBidFare,
             estimatedDistanceMeters: safeEstimatedDistanceMeters,
             estimatedDurationMinutes: safeEstimatedDurationMinutes,
             paymentMethod: effectivePaymentMethod,
@@ -495,6 +592,12 @@ export const serializeRideRealtime = (ride) => ({
   status: ride.status,
   liveStatus: ride.liveStatus,
   fare: ride.fare,
+  baseFare: Number(ride.baseFare || ride.fare || 0),
+  bookingMode: ride.bookingMode || 'normal',
+  biddingStatus: ride.biddingStatus || 'none',
+  bidStepAmount: Number(ride.bidStepAmount || DEFAULT_BID_STEP_AMOUNT),
+  userMaxBidFare: Number(ride.userMaxBidFare || ride.fare || 0),
+  acceptedBidId: ride.acceptedBidId ? String(ride.acceptedBidId) : null,
   estimatedDistanceMeters: ride.estimatedDistanceMeters || 0,
   estimatedDurationMinutes: ride.estimatedDurationMinutes || 0,
   paymentMethod: ride.paymentMethod,
@@ -627,6 +730,12 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
       'status',
       'liveStatus',
       'fare',
+      'baseFare',
+      'bookingMode',
+      'biddingStatus',
+      'bidStepAmount',
+      'userMaxBidFare',
+      'acceptedBidId',
       'estimatedDistanceMeters',
       'estimatedDurationMinutes',
       'paymentMethod',
@@ -676,6 +785,12 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
     status: ride.status,
     liveStatus: ride.liveStatus,
     fare: ride.fare,
+    baseFare: Number(ride.baseFare || ride.fare || 0),
+    bookingMode: ride.bookingMode || 'normal',
+    biddingStatus: ride.biddingStatus || 'none',
+    bidStepAmount: Number(ride.bidStepAmount || DEFAULT_BID_STEP_AMOUNT),
+    userMaxBidFare: Number(ride.userMaxBidFare || ride.fare || 0),
+    acceptedBidId: ride.acceptedBidId ? String(ride.acceptedBidId) : null,
     estimatedDistanceMeters: ride.estimatedDistanceMeters || 0,
     estimatedDurationMinutes: ride.estimatedDurationMinutes || 0,
     paymentMethod: ride.paymentMethod,
@@ -730,6 +845,10 @@ export const acceptRideAssignment = async ({ rideId, driverId }) => {
 
       if (!ride) {
         throw new ApiError(409, 'Ride is no longer available for acceptance');
+      }
+
+      if (ride.bookingMode === 'bidding') {
+        throw new ApiError(409, 'Bidding rides must be won through bid acceptance');
       }
 
       const driverVehicleFilter = await buildDriverVehicleAcceptFilter(ride);
@@ -925,6 +1044,201 @@ export const updateRideDriverLocation = async ({ rideId, driverId, coordinates, 
     speed: ride.lastDriverLocation.speed,
     updatedAt: ride.lastDriverLocation.updatedAt,
   };
+};
+
+export const listRideBidsForUser = async ({ rideId, userId }) => {
+  const ride = await Ride.findOne({ _id: rideId, userId }).select(
+    '_id userId status liveStatus fare baseFare bookingMode biddingStatus bidStepAmount userMaxBidFare acceptedBidId',
+  );
+
+  if (!ride) {
+    throw new ApiError(404, 'Ride not found');
+  }
+
+  const bids = await RideBid.find({ rideId: ride._id })
+    .populate('driverId', 'name phone profileImage vehicleType vehicleNumber vehicleColor vehicleMake vehicleModel rating')
+    .sort({ bidFare: 1, createdAt: 1 });
+
+  return {
+    ride: serializeRideRealtime(ride),
+    bids: bids.map(serializeRideBid),
+  };
+};
+
+export const submitRideBid = async ({ rideId, driverId, bidFare }) => {
+  const ride = await Ride.findById(rideId).select(
+    '_id userId driverId vehicleTypeId dispatchVehicleTypeIds status liveStatus fare baseFare bookingMode biddingStatus bidStepAmount userMaxBidFare',
+  );
+
+  if (!ride) {
+    throw new ApiError(404, 'Ride not found');
+  }
+
+  if (ride.status !== RIDE_STATUS.SEARCHING || ride.liveStatus !== RIDE_LIVE_STATUS.SEARCHING) {
+    throw new ApiError(409, 'Ride is no longer open for bidding');
+  }
+
+  if (ride.bookingMode !== 'bidding' || ride.biddingStatus !== 'open') {
+    throw new ApiError(409, 'Ride is not open for bidding');
+  }
+
+  const driverVehicleFilter = await buildDriverVehicleAcceptFilter(ride);
+  const driver = await Driver.findOne({
+    _id: driverId,
+    isOnline: true,
+    isOnRide: false,
+    'wallet.isBlocked': { $ne: true },
+    ...driverVehicleFilter,
+  }).select('name phone profileImage vehicleType vehicleNumber vehicleColor vehicleMake vehicleModel rating');
+
+  if (!driver) {
+    throw new ApiError(409, 'Driver is unavailable to bid on this ride');
+  }
+
+  const normalizedBid = normalizeRideBidAmount({ ride, bidFare });
+
+  const bid = await RideBid.findOneAndUpdate(
+    { rideId: ride._id, driverId },
+    {
+      rideId: ride._id,
+      userId: ride.userId,
+      driverId,
+      bidFare: normalizedBid.bidFare,
+      incrementAmount: normalizedBid.incrementAmount,
+      status: 'pending',
+    },
+    {
+      upsert: true,
+      returnDocument: 'after',
+      setDefaultsOnInsert: true,
+    },
+  ).populate('driverId', 'name phone profileImage vehicleType vehicleNumber vehicleColor vehicleMake vehicleModel rating');
+
+  return {
+    ride: serializeRideRealtime(ride),
+    bid: serializeRideBid(bid),
+  };
+};
+
+export const increaseRideBidCeiling = async ({ rideId, userId, incrementSteps = 1 }) => {
+  const ride = await Ride.findOne({
+    _id: rideId,
+    userId,
+    status: RIDE_STATUS.SEARCHING,
+    liveStatus: RIDE_LIVE_STATUS.SEARCHING,
+  });
+
+  if (!ride) {
+    throw new ApiError(404, 'Active ride not found');
+  }
+
+  if (ride.bookingMode !== 'bidding' || ride.biddingStatus !== 'open') {
+    throw new ApiError(409, 'Ride is not open for bid increases');
+  }
+
+  const safeSteps = Math.max(1, Math.round(Number(incrementSteps || 1)));
+  const safeStepAmount = normalizeBidStepAmount(ride.bidStepAmount);
+  ride.userMaxBidFare = Math.max(
+    Number(ride.baseFare || ride.fare || 0),
+    Number(ride.userMaxBidFare || ride.fare || 0) + (safeSteps * safeStepAmount),
+  );
+  await ride.save();
+
+  return serializeRideRealtime(ride);
+};
+
+export const acceptRideBidAssignment = async ({ rideId, bidId, userId }) => {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const session = await mongoose.startSession();
+
+    try {
+      session.startTransaction();
+
+      const ride = await Ride.findOne({
+        _id: rideId,
+        userId,
+        status: RIDE_STATUS.SEARCHING,
+        liveStatus: RIDE_LIVE_STATUS.SEARCHING,
+        bookingMode: 'bidding',
+        biddingStatus: 'open',
+        driverId: null,
+      }).session(session);
+
+      if (!ride) {
+        throw new ApiError(409, 'Ride is no longer available for bid acceptance');
+      }
+
+      const bid = await RideBid.findOne({
+        _id: bidId,
+        rideId: ride._id,
+        status: 'pending',
+      }).session(session);
+
+      if (!bid) {
+        throw new ApiError(404, 'Bid not found');
+      }
+
+      const driverVehicleFilter = await buildDriverVehicleAcceptFilter(ride);
+      const driver = await Driver.findOne({
+        _id: bid.driverId,
+        isOnline: true,
+        isOnRide: false,
+        'wallet.isBlocked': { $ne: true },
+        ...driverVehicleFilter,
+      }).session(session);
+
+      if (!driver) {
+        throw new ApiError(409, 'Driver is unavailable to accept this bid');
+      }
+
+      await ensureDriverWalletCanAcceptRide(driver, { session });
+
+      ride.driverId = driver._id;
+      ride.fare = Number(bid.bidFare || ride.fare || 0);
+      ride.acceptedBidId = bid._id;
+      ride.status = RIDE_STATUS.ACCEPTED;
+      ride.liveStatus = RIDE_LIVE_STATUS.ACCEPTED;
+      ride.biddingStatus = 'accepted';
+      ride.acceptedAt = new Date();
+      driver.isOnRide = true;
+      bid.status = 'accepted';
+
+      await ride.save({ session });
+      await driver.save({ session });
+      await bid.save({ session });
+      await RideBid.updateMany(
+        {
+          rideId: ride._id,
+          _id: { $ne: bid._id },
+          status: 'pending',
+        },
+        { status: 'rejected' },
+        { session },
+      );
+
+      await session.commitTransaction();
+      await syncDeliveryWithRide(ride);
+
+      return ride;
+    } catch (error) {
+      lastError = error;
+      await session.abortTransaction();
+
+      const isTransient =
+        typeof error?.hasErrorLabel === 'function' &&
+        (error.hasErrorLabel('TransientTransactionError') || error.hasErrorLabel('UnknownTransactionCommitResult'));
+
+      if (!isTransient || attempt === 2) {
+        throw error;
+      }
+    } finally {
+      session.endSession();
+    }
+  }
+
+  throw lastError || new ApiError(500, 'Failed to accept ride bid');
 };
 
 export const submitRideFeedback = async ({ rideId, userId, rating, comment = '', tipAmount = 0 }) => {

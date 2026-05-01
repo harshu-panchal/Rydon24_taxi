@@ -226,6 +226,40 @@ const rideSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    baseFare: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    bookingMode: {
+      type: String,
+      enum: ['normal', 'bidding'],
+      default: 'normal',
+      lowercase: true,
+      trim: true,
+    },
+    biddingStatus: {
+      type: String,
+      enum: ['none', 'open', 'accepted', 'expired', 'cancelled'],
+      default: 'none',
+      lowercase: true,
+      trim: true,
+    },
+    bidStepAmount: {
+      type: Number,
+      default: 10,
+      min: 1,
+    },
+    userMaxBidFare: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    acceptedBidId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TaxiRideBid',
+      default: null,
+    },
     estimatedDistanceMeters: {
       type: Number,
       default: 0,

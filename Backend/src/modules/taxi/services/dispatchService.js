@@ -169,6 +169,19 @@ const emitRideRequestToDrivers = async ({
       vehicleIconType: ride.vehicleIconType,
       vehicleIconUrl: ride.vehicleIconUrl || '',
       fare: ride.fare,
+      baseFare: Number(ride.baseFare || ride.fare || 0),
+      bookingMode: ride.bookingMode || 'normal',
+      biddingStatus: ride.biddingStatus || 'none',
+      bidding: ride.bookingMode === 'bidding'
+        ? {
+            enabled: true,
+            baseFare: Number(ride.baseFare || ride.fare || 0),
+            userMaxBidFare: Number(ride.userMaxBidFare || ride.fare || 0),
+            bidStepAmount: Number(ride.bidStepAmount || 10),
+          }
+        : {
+            enabled: false,
+          },
       paymentMethod: ride.paymentMethod,
       parcel: ride.parcel || null,
       intercity: ride.intercity || null,
@@ -214,7 +227,11 @@ const closeRideAsUnmatched = async (rideId) => {
   const dispatchState = getDispatchState(rideId);
   const ride = await Ride.findOneAndUpdate(
     { _id: rideId, status: RIDE_STATUS.SEARCHING },
-    { status: RIDE_STATUS.CANCELLED, liveStatus: RIDE_LIVE_STATUS.CANCELLED },
+    {
+      status: RIDE_STATUS.CANCELLED,
+      liveStatus: RIDE_LIVE_STATUS.CANCELLED,
+      biddingStatus: 'expired',
+    },
     { returnDocument: 'after' },
   );
 
@@ -267,6 +284,9 @@ export const cancelRideByAdmin = async (rideId) => {
 
   ride.status = RIDE_STATUS.CANCELLED;
   ride.liveStatus = RIDE_LIVE_STATUS.CANCELLED;
+  if (ride.bookingMode === 'bidding') {
+    ride.biddingStatus = 'cancelled';
+  }
   await ride.save();
 
   if (ride.deliveryId) {
@@ -329,6 +349,9 @@ export const cancelRideByUser = async ({ rideId, userId }) => {
 
   ride.status = RIDE_STATUS.CANCELLED;
   ride.liveStatus = RIDE_LIVE_STATUS.CANCELLED;
+  if (ride.bookingMode === 'bidding') {
+    ride.biddingStatus = 'cancelled';
+  }
   await ride.save();
 
   if (ride.deliveryId) {
@@ -684,6 +707,15 @@ export const notifyRideAccepted = async (ride) => {
     acceptedAt: populatedRide.acceptedAt,
   });
 
+  emitToRoom(getDriverRoom(populatedRide.driverId._id), 'rideAccepted', {
+    rideId: String(populatedRide._id),
+    room: getRideRoom(populatedRide._id),
+    status: populatedRide.status,
+    liveStatus: populatedRide.liveStatus,
+    acceptedAt: populatedRide.acceptedAt,
+    otp: populatedRide.otp || '',
+  });
+
   emitToRoom(getRideRoom(populatedRide._id), 'rideRequestClosed', {
     rideId: String(populatedRide._id),
         acceptedDriverId: String(populatedRide.driverId._id),
@@ -714,4 +746,49 @@ export const notifyRideAccepted = async (ride) => {
   }).catch((error) => {
     console.error('Failed to send user ride-accepted push notification', error);
   });
+};
+
+export const notifyRideBidUpdated = async ({ ride, bid }) => {
+  const safeRide = ride?._id ? ride : await Ride.findById(ride?.rideId || ride);
+
+  if (!safeRide) {
+    return;
+  }
+
+  const payload = {
+    rideId: String(safeRide._id),
+    bookingMode: safeRide.bookingMode || 'normal',
+    biddingStatus: safeRide.biddingStatus || 'none',
+    userMaxBidFare: Number(safeRide.userMaxBidFare || safeRide.fare || 0),
+    bidStepAmount: Number(safeRide.bidStepAmount || 10),
+    bid,
+  };
+
+  emitToRoom(getUserRoom(safeRide.userId), 'rideBidUpdated', payload);
+  emitToRoom(getRideRoom(safeRide._id), 'rideBidUpdated', payload);
+};
+
+export const notifyRideBiddingUpdated = async (ride) => {
+  const safeRide = ride?._id ? ride : await Ride.findById(ride);
+
+  if (!safeRide) {
+    return;
+  }
+
+  const payload = {
+    rideId: String(safeRide._id),
+    bookingMode: safeRide.bookingMode || 'normal',
+    biddingStatus: safeRide.biddingStatus || 'none',
+    baseFare: Number(safeRide.baseFare || safeRide.fare || 0),
+    userMaxBidFare: Number(safeRide.userMaxBidFare || safeRide.fare || 0),
+    bidStepAmount: Number(safeRide.bidStepAmount || 10),
+  };
+
+  emitToRoom(getUserRoom(safeRide.userId), 'rideBiddingUpdated', payload);
+  emitToRoom(getRideRoom(safeRide._id), 'rideBiddingUpdated', payload);
+
+  const dispatchState = getDispatchState(safeRide._id);
+  for (const driverId of dispatchState.notifiedDriverIds) {
+    emitToDriver(driverId, 'rideBiddingUpdated', payload);
+  }
 };

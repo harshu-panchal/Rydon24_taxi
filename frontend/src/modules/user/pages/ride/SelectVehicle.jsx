@@ -554,6 +554,7 @@ const getAvailabilityBadge = (availability) => {
 
 const normalizeVehicleType = (type, index) => {
   const id = String(type?._id || type?.id || type?.name || index);
+  const dispatchType = String(type?.dispatch_type || 'normal').trim().toLowerCase();
 
   return {
     id,
@@ -567,6 +568,10 @@ const normalizeVehicleType = (type, index) => {
     badgeColor: 'bg-orange-50 text-orange-500 border-orange-100',
     sublabel: type?.short_description || type?.description || 'Available ride',
     price: getFallbackVehicleEstimate(type),
+    dispatchType,
+    supportsBidding: dispatchType === 'bidding' || dispatchType === 'both',
+    bidStepAmount: 10,
+    maxBidSteps: 5,
     raw: type,
   };
 };
@@ -595,6 +600,7 @@ const SelectVehicle = () => {
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showPromo, setShowPromo] = useState(true);
+  const [bidStepCount, setBidStepCount] = useState(2);
   const [isLoadingVehicles, setIsLoadingVehicles] = useState(true);
   const [isLoadingDrivers, setIsLoadingDrivers] = useState(false);
   const [vehicleLoadError, setVehicleLoadError] = useState('');
@@ -847,6 +853,10 @@ const SelectVehicle = () => {
 
   const selectedVehicle = useMemo(() => pricedVehicles.find((v) => v.id === selected), [pricedVehicles, selected]);
   const selectedAvailability = selectedVehicle ? (availabilityByVehicleId[selectedVehicle.id] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
+  const selectedBidStepAmount = Number(selectedVehicle?.bidStepAmount || 10);
+  const selectedBidSteps = Number(selectedVehicle?.maxBidSteps || 5);
+  const selectedBidIncrement = (selectedVehicle?.supportsBidding ? bidStepCount : 0) * selectedBidStepAmount;
+  const selectedBidCeiling = Number(selectedVehicle?.price || 0) + selectedBidIncrement;
   const allowedPaymentMethods = useMemo(
     () => normalizeAllowedPaymentMethods(selectedAvailability?.allowedPaymentMethods),
     [selectedAvailability?.allowedPaymentMethods],
@@ -872,6 +882,10 @@ const SelectVehicle = () => {
     const timer = setTimeout(handleScroll, 200);
     return () => clearTimeout(timer);
   }, [displayedVehicles, tripMetrics]);
+
+  useEffect(() => {
+    setBidStepCount(2);
+  }, [selected]);
 
   useEffect(() => {
     if (!hasAvailabilityResults || !displayedVehicles.length) {
@@ -960,6 +974,11 @@ const SelectVehicle = () => {
         vehicleIconUrl: selectedVehicle.vehicleIconUrl || selectedVehicle.icon,
         paymentMethod,
         fare: selectedVehicle.price,
+        baseFare: selectedVehicle.price,
+        bookingMode: selectedVehicle.supportsBidding ? 'bidding' : 'normal',
+        bidStepAmount: selectedBidStepAmount,
+        userMaxBidFare: selectedVehicle.supportsBidding ? selectedBidCeiling : selectedVehicle.price,
+        bidIncrement: selectedVehicle.supportsBidding ? selectedBidIncrement : 0,
         estimatedDistanceMeters: tripMetrics.distanceMeters,
         estimatedDurationMinutes: tripMetrics.durationMinutes,
         allowedPaymentMethods,
@@ -1204,6 +1223,34 @@ const SelectVehicle = () => {
             </div>
           </motion.button>
 
+          {selectedVehicle?.supportsBidding ? (
+            <div className="rounded-[20px] border border-orange-100 bg-orange-50/60 px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-500">Bid Range</p>
+                  <p className="mt-1 text-[13px] font-bold text-slate-900">Choose the highest fare you are willing to accept.</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Max fare</p>
+                  <p className="mt-1 text-[18px] font-black text-slate-900">{formatCurrency(selectedBidCeiling)}</p>
+                </div>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={selectedBidSteps}
+                step={1}
+                value={Math.min(bidStepCount, selectedBidSteps)}
+                onChange={(event) => setBidStepCount(Number(event.target.value || 0))}
+                className="mt-3 h-2 w-full cursor-pointer accent-orange-500"
+              />
+              <div className="mt-2 flex items-center justify-between text-[11px] font-bold text-slate-500">
+                <span>Base {formatCurrency(selectedVehicle.price)}</span>
+                <span>Increment {formatCurrency(selectedBidIncrement)}</span>
+              </div>
+            </div>
+          ) : null}
+
           <motion.button
             whileHover={selectedVehicle && selectedAvailability.totalDrivers && !isFarePending ? { scale: 1.01, translateY: -2 } : {}}
             whileTap={selectedVehicle && selectedAvailability.totalDrivers && !isFarePending ? { scale: 0.98 } : undefined}
@@ -1221,9 +1268,9 @@ const SelectVehicle = () => {
                 : selectedAvailability.totalDrivers
                 ? (
                   <>
-                    <span>Book {selectedVehicle.name}</span>
+                    <span>{selectedVehicle.supportsBidding ? `Request ${selectedVehicle.name}` : `Book ${selectedVehicle.name}`}</span>
                     <div className="w-1.5 h-1.5 rounded-full bg-slate-900/20" />
-                    <span>{formatCurrency(selectedVehicle.price)}</span>
+                    <span>{formatCurrency(selectedVehicle.supportsBidding ? selectedBidCeiling : selectedVehicle.price)}</span>
                   </>
                 )
                 : `${selectedVehicle.name} Unavailable`

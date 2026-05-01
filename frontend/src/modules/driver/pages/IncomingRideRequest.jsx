@@ -43,7 +43,7 @@ const getRequestDurationSeconds = (data) => {
     : DEFAULT_ACCEPT_REJECT_SECONDS;
 };
 
-const IncomingRideRequest = ({ visible, onAccept, onDecline, requestData, isAccepting = false }) => {
+const IncomingRideRequest = ({ visible, onAccept, onDecline, onSubmitBid, requestData, isAccepting = false }) => {
   const requestDurationSeconds = getRequestDurationSeconds(requestData);
   const [timer, setTimer] = useState(requestDurationSeconds);
   const data = requestData;
@@ -96,6 +96,13 @@ const IncomingRideRequest = ({ visible, onAccept, onDecline, requestData, isAcce
     .filter(Boolean)
     .join(' ')
     .trim() || data.raw?.user?.phone || '';
+  const isBidding = Boolean(data.raw?.bidding?.enabled) || String(data.raw?.bookingMode || '').toLowerCase() === 'bidding';
+  const bidBaseFare = Number(data.raw?.bidding?.baseFare || data.raw?.baseFare || data.raw?.fare || 0);
+  const bidMaxFare = Number(data.raw?.bidding?.userMaxBidFare || data.raw?.userMaxBidFare || bidBaseFare);
+  const bidStepAmount = Number(data.raw?.bidding?.bidStepAmount || 10);
+  const bidOptions = isBidding
+    ? Array.from({ length: Math.max(1, Math.floor((bidMaxFare - bidBaseFare) / bidStepAmount) + 1) }, (_, index) => bidBaseFare + (index * bidStepAmount))
+    : [];
 
   return (
     <AnimatePresence mode="wait">
@@ -235,14 +242,40 @@ const IncomingRideRequest = ({ visible, onAccept, onDecline, requestData, isAcce
               >
                 <X size={24} />
               </button>
-              <button
-                type="button"
-                onClick={() => onAccept(data)}
-                disabled={isAccepting}
-                className={`flex h-[58px] items-center justify-center rounded-[18px] ${accentClass} px-5 text-[13px] font-black uppercase tracking-[0.16em] ${isParcel || isIntercity ? 'text-slate-950' : 'text-white'} shadow-[0_14px_30px_rgba(37,99,235,0.28)] transition-all active:scale-95 disabled:opacity-70`}
-              >
-                {isAccepting ? 'Accepting...' : 'Accept ride'}
-              </button>
+              {isBidding ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    {bidOptions.slice(0, 6).map((bidValue) => (
+                      <button
+                        key={bidValue}
+                        type="button"
+                        onClick={() => onSubmitBid?.(bidValue)}
+                        disabled={isAccepting}
+                        className="rounded-[14px] border border-orange-200 bg-orange-50 px-2 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-orange-600 disabled:opacity-60"
+                      >
+                        Rs {bidValue}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onSubmitBid?.(bidBaseFare)}
+                    disabled={isAccepting}
+                    className={`flex h-[58px] w-full items-center justify-center rounded-[18px] ${accentClass} px-5 text-[13px] font-black uppercase tracking-[0.16em] ${isParcel || isIntercity ? 'text-slate-950' : 'text-white'} shadow-[0_14px_30px_rgba(37,99,235,0.28)] transition-all active:scale-95 disabled:opacity-70`}
+                  >
+                    {isAccepting ? 'Submitting...' : 'Send Bid'}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onAccept(data)}
+                  disabled={isAccepting}
+                  className={`flex h-[58px] items-center justify-center rounded-[18px] ${accentClass} px-5 text-[13px] font-black uppercase tracking-[0.16em] ${isParcel || isIntercity ? 'text-slate-950' : 'text-white'} shadow-[0_14px_30px_rgba(37,99,235,0.28)] transition-all active:scale-95 disabled:opacity-70`}
+                >
+                  {isAccepting ? 'Accepting...' : 'Accept ride'}
+                </button>
+              )}
             </div>
 
             <p className="mt-3 flex items-center justify-center gap-1.5 text-[10px] font-bold text-slate-400">

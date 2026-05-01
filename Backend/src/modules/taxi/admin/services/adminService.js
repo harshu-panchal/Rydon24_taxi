@@ -4697,7 +4697,7 @@ export const listPublicVehicleCatalog = async () => {
   }
 
   const items = await Vehicle.find()
-    .select('name short_description description transport_type icon_types delivery_category capacity image icon map_icon status active')
+    .select('name short_description description transport_type dispatch_type icon_types delivery_category capacity image icon map_icon status active')
     .sort({ createdAt: -1 })
     .lean();
 
@@ -4708,6 +4708,7 @@ export const listPublicVehicleCatalog = async () => {
     short_description: item.short_description || '',
     description: item.description || '',
     transport_type: item.transport_type || 'taxi',
+    dispatch_type: item.dispatch_type || 'normal',
     icon_types: item.icon_types || 'car',
     delivery_category: item.delivery_category || '',
     delivery_distance_pricing: normalizeDeliveryDistancePricing(item.delivery_distance_pricing),

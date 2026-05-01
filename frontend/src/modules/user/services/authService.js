@@ -92,4 +92,8 @@ export const userAuthService = {
   deleteNotification: (id) => api.delete(`/users/notifications/${id}`, withUserAuth()),
   clearAllNotifications: () => api.delete('/users/notifications', withUserAuth()),
   saveFcmToken: (token, platform) => api.post('/users/fcm-token', { token, platform }, withUserAuth()),
+  getRideBids: (rideId) => api.get(`/rides/${rideId}/bids`, withUserAuth()),
+  acceptRideBid: (rideId, bidId) => api.post(`/rides/${rideId}/bids/${bidId}/accept`, {}, withUserAuth()),
+  increaseRideBidCeiling: (rideId, incrementSteps = 1) =>
+    api.patch(`/rides/${rideId}/bids/ceiling`, { incrementSteps }, withUserAuth()),
 };

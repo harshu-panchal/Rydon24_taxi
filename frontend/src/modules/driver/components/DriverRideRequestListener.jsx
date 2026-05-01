@@ -162,6 +162,8 @@ const DriverRideRequestListener = () => {
                 acceptRejectDurationSeconds: data.acceptRejectDurationSeconds || data.expiresInSeconds,
                 requestExpiresAt: data.requestExpiresAt || null,
                 customer: data.user || null,
+                bookingMode: data.bookingMode || 'normal',
+                bidding: data.bidding || { enabled: false },
                 raw: data,
             };
 
@@ -186,6 +188,36 @@ const DriverRideRequestListener = () => {
             }
             acceptingRideIdRef.current = '';
             setAcceptingRideId('');
+        };
+
+        const onRideBidSubmitted = ({ rideId }) => {
+            if (!rideId || rideId !== acceptingRideIdRef.current) return;
+            setAcceptingRideId('');
+        };
+
+        const onRideBiddingUpdated = (payload = {}) => {
+            if (!payload?.rideId) return;
+
+            setCurrentRequest((current) => {
+                if (!current?.rideId || current.rideId !== payload.rideId) {
+                    return current;
+                }
+
+                return {
+                    ...current,
+                    raw: {
+                        ...(current.raw || {}),
+                        bookingMode: payload.bookingMode || current.raw?.bookingMode || 'bidding',
+                        bidding: {
+                            ...(current.raw?.bidding || {}),
+                            enabled: true,
+                            baseFare: payload.baseFare || current.raw?.bidding?.baseFare || current.raw?.baseFare || current.raw?.fare || 0,
+                            userMaxBidFare: payload.userMaxBidFare || current.raw?.bidding?.userMaxBidFare || current.raw?.userMaxBidFare || 0,
+                            bidStepAmount: payload.bidStepAmount || current.raw?.bidding?.bidStepAmount || 10,
+                        },
+                    },
+                };
+            });
         };
 
         const openAcceptedRide = async (payload) => {
@@ -235,12 +267,16 @@ const DriverRideRequestListener = () => {
         socketService.on('rideRequestClosed', onRideRequestClosed);
         socketService.on('errorMessage', onSocketError);
         socketService.on('rideAccepted', openAcceptedRide);
+        socketService.on('rideBidSubmitted', onRideBidSubmitted);
+        socketService.on('rideBiddingUpdated', onRideBiddingUpdated);
 
         return () => {
             socketService.off('rideRequest', onRideRequest);
             socketService.off('rideRequestClosed', onRideRequestClosed);
             socketService.off('errorMessage', onSocketError);
             socketService.off('rideAccepted', openAcceptedRide);
+            socketService.off('rideBidSubmitted', onRideBidSubmitted);
+            socketService.off('rideBiddingUpdated', onRideBiddingUpdated);
         };
     }, [activeOnRoute, fetchActiveJob, navigate]);
 
@@ -261,6 +297,15 @@ const DriverRideRequestListener = () => {
         setCurrentRequest(null);
     }, [currentRequest]);
 
+    const handleSubmitBid = useCallback((bidFare) => {
+        if (!currentRequest?.rideId || acceptingRideId) return;
+
+        acceptingRideIdRef.current = currentRequest.rideId;
+        setAcceptingRideId(currentRequest.rideId);
+        stopRideRequestAlertSound();
+        socketService.emit('submitRideBid', { rideId: currentRequest.rideId, bidFare });
+    }, [acceptingRideId, currentRequest]);
+
     return (
         <IncomingRideRequest
             visible={activeOnRoute && Boolean(currentRequest)}
@@ -268,6 +313,7 @@ const DriverRideRequestListener = () => {
             isAccepting={Boolean(acceptingRideId)}
             onAccept={handleAccept}
             onDecline={handleDecline}
+            onSubmitBid={handleSubmitBid}
         />
     );
 };

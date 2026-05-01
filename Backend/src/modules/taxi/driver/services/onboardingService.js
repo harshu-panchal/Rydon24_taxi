@@ -53,6 +53,7 @@ const matchesDocumentRole = (accountType, role) => {
 const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000));
 
 const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
+const isTruthy = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
 const getStaticDriverOtpConfig = () => ({
   phone: normalizePhone(env.sms?.staticOtpPhone || ''),
   otp: String(env.sms?.staticOtpCode || '').trim(),
@@ -60,6 +61,14 @@ const getStaticDriverOtpConfig = () => ({
 const resolveDriverOnboardingOtpForPhone = (phone) => {
   const normalizedPhone = normalizePhone(phone);
   const staticOtpConfig = getStaticDriverOtpConfig();
+  const defaultOtpEnabled = isTruthy(env.sms?.useDefaultOtp);
+
+  if (defaultOtpEnabled && staticOtpConfig.otp) {
+    return {
+      otp: staticOtpConfig.otp,
+      isStatic: true,
+    };
+  }
 
   if (staticOtpConfig.phone && staticOtpConfig.otp && normalizedPhone === staticOtpConfig.phone) {
     return {

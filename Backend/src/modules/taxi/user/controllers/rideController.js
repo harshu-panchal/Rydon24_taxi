@@ -8,18 +8,27 @@ import { WalletTransaction } from '../../driver/models/WalletTransaction.js';
 import { applyDriverWalletAdjustment, serializeDriverWallet } from '../../driver/services/walletService.js';
 import { RIDE_LIVE_STATUS, RIDE_STATUS } from '../../constants/index.js';
 import {
+  acceptRideBidAssignment,
   createRideRecord,
   ensureRideParticipantAccess,
   getAllowedRidePaymentMethodsForPricing,
   getActiveRideForIdentity,
   getRideDetails,
   getRideRoom,
+  increaseRideBidCeiling,
+  listRideBidsForUser,
   listRideHistoryForIdentity,
   serializeRideRealtime,
   submitRideFeedback,
   updateRideLifecycle,
 } from '../../services/rideService.js';
-import { cancelRideByUser, emitToDriver, startDispatchFlow } from '../../services/dispatchService.js';
+import {
+  cancelRideByUser,
+  emitToDriver,
+  notifyRideAccepted,
+  notifyRideBiddingUpdated,
+  startDispatchFlow,
+} from '../../services/dispatchService.js';
 import { getTipSettings } from '../../services/appSettingsService.js';
 import { Ride } from '../models/Ride.js';
 import { UserWallet } from '../models/UserWallet.js';
@@ -313,7 +322,7 @@ const razorpayRequest = async ({ method, path, body, keyId, keySecret }) => {
 };
 
 export const createRide = async (req, res) => {
-  const { pickup, drop, pickupAddress, dropAddress, fare, estimatedDistanceMeters, estimatedDurationMinutes, vehicleTypeId, vehicleIconType, vehicleIconUrl, paymentMethod, serviceType, intercity, promo_code, service_location_id, transport_type, scheduledAt } =
+  const { pickup, drop, pickupAddress, dropAddress, fare, estimatedDistanceMeters, estimatedDurationMinutes, vehicleTypeId, vehicleTypeIds, vehicleIconType, vehicleIconUrl, paymentMethod, serviceType, intercity, promo_code, service_location_id, transport_type, scheduledAt, bookingMode, userMaxBidFare, bidStepAmount } =
     req.body;
 
   if (!pickup || !drop) {
@@ -330,6 +339,7 @@ export const createRide = async (req, res) => {
     estimatedDistanceMeters: Number(estimatedDistanceMeters || 0),
     estimatedDurationMinutes: Number(estimatedDurationMinutes || 0),
     vehicleTypeId,
+    vehicleTypeIds,
     vehicleIconType,
     vehicleIconUrl,
     paymentMethod,
@@ -339,6 +349,9 @@ export const createRide = async (req, res) => {
     service_location_id,
     transport_type,
     scheduledAt,
+    bookingMode,
+    userMaxBidFare,
+    bidStepAmount,
   });
 
   await startDispatchFlow(ride);
@@ -1052,5 +1065,52 @@ export const listAvailableDrivers = async (req, res) => {
       allowedPaymentMethods,
       drivers: enrichedDrivers,
     },
+  });
+};
+
+export const getRideBids = async (req, res) => {
+  const result = await listRideBidsForUser({
+    rideId: req.params.rideId,
+    userId: req.auth.sub,
+  });
+
+  res.json({
+    success: true,
+    data: result,
+  });
+};
+
+export const acceptRideBid = async (req, res) => {
+  const ride = await acceptRideBidAssignment({
+    rideId: req.params.rideId,
+    bidId: req.params.bidId,
+    userId: req.auth.sub,
+  });
+
+  await notifyRideAccepted(ride);
+
+  res.json({
+    success: true,
+    data: {
+      rideId: String(ride._id),
+      status: ride.status,
+      liveStatus: ride.liveStatus,
+      acceptedAt: ride.acceptedAt,
+    },
+  });
+};
+
+export const updateRideBidCeiling = async (req, res) => {
+  const ride = await increaseRideBidCeiling({
+    rideId: req.params.rideId,
+    userId: req.auth.sub,
+    incrementSteps: req.body.incrementSteps,
+  });
+
+  await notifyRideBiddingUpdated(ride);
+
+  res.json({
+    success: true,
+    data: ride,
   });
 };

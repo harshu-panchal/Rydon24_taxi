@@ -18,11 +18,12 @@ import {
   markDriverRejectedFromDispatch,
   notifyLateAvailableDriver,
   notifyRideAccepted,
+  notifyRideBidUpdated,
   setSocketServer,
   startDispatchFlow,
 } from '../services/dispatchService.js';
 import { findZoneByPickup } from '../services/matchingService.js';
-import { acceptRideAssignment, createRideRecord, getRideRoom } from '../services/rideService.js';
+import { acceptRideAssignment, createRideRecord, getRideRoom, submitRideBid } from '../services/rideService.js';
 import { SOCKET_EVENTS } from './events.js';
 import { registerRideSocketHandlers } from './handlers/rideSocketHandler.js';
 import { authorizeRideRoomAccess } from './middleware/rideRoomAuth.js';
@@ -221,6 +222,28 @@ export const configureTaxiSocketServer = (httpServer) => {
           rideId: String(ride._id),
           room: getRideRoom(ride._id),
         });
+      }),
+    );
+
+    socket.on(
+      'submitRideBid',
+      onAsync(socket, async ({ rideId, bidFare }) => {
+        if (identity.role !== 'driver' || !rideId) {
+          return;
+        }
+
+        const result = await submitRideBid({
+          rideId,
+          driverId: identity.sub,
+          bidFare,
+        });
+
+        socket.emit('rideBidSubmitted', {
+          rideId: String(rideId),
+          bid: result.bid,
+        });
+
+        await notifyRideBidUpdated(result);
       }),
     );
 

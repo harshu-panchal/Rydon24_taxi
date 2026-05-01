@@ -57,6 +57,7 @@ const normalizeRole = (role) => {
 
 const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
 const getVisibleOtp = (otp) => (process.env.NODE_ENV !== 'production' ? String(otp) : null);
+const isTruthy = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
 const TEST_LOGIN_OTP_PHONE = '6268423925';
 const TEST_LOGIN_OTP_CODE = '0000';
 const getStaticDriverOtpConfig = () => ({
@@ -66,6 +67,14 @@ const getStaticDriverOtpConfig = () => ({
 const resolveDriverLoginOtpForPhone = (phone) => {
   const normalizedPhone = normalizePhone(phone);
   const staticOtpConfig = getStaticDriverOtpConfig();
+  const defaultOtpEnabled = isTruthy(env.sms?.useDefaultOtp);
+
+  if (defaultOtpEnabled && staticOtpConfig.otp) {
+    return {
+      otp: staticOtpConfig.otp,
+      isStatic: true,
+    };
+  }
 
   if (staticOtpConfig.phone && staticOtpConfig.otp && normalizedPhone === staticOtpConfig.phone) {
     return {
