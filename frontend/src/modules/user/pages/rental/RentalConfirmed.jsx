@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { CheckCircle2, MapPin, Clock, Camera, Home, Upload } from 'lucide-react';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 import { userService } from '../../services/userService';
-import { saveCurrentRide } from '../../services/currentRideService';
+import { saveCurrentRide, clearCurrentRide } from '../../services/currentRideService';
 
 const buildRentalBookingPayload = ({
   state,
@@ -60,6 +60,12 @@ const RentalConfirmed = () => {
 
   const activeRentalRide = state?.serviceType === 'rental' && state?.rideId ? state : null;
   const isCompletedRentalRide = Boolean(activeRentalRide?.completedAt || state?.summaryMode === 'completed');
+  
+  useEffect(() => {
+    if (isCompletedRentalRide) {
+      clearCurrentRide();
+    }
+  }, [isCompletedRentalRide]);
   const isEndRequestPending = String(activeRentalRide?.status || '').toLowerCase() === 'end_requested' && !isCompletedRentalRide;
   const [distanceToHub, setDistanceToHub] = useState(null);
   const [locationError, setLocationError] = useState(null);
@@ -516,10 +522,10 @@ const RentalConfirmed = () => {
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 pb-6 pt-3 bg-gradient-to-t from-[#EEF2F7] via-[#F3F4F6]/95 to-transparent pointer-events-none z-30">
         <motion.button
           whileTap={{ scale: 0.98 }}
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/taxi/user')}
           className="pointer-events-auto w-full bg-slate-900 py-4 rounded-[18px] text-[15px] font-black text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] flex items-center justify-center gap-2"
         >
-          <Home size={16} strokeWidth={2.5} /> Back to Home
+          <Home size={16} strokeWidth={2.5} /> Go to Home Dashboard
         </motion.button>
       </div>
     </div>

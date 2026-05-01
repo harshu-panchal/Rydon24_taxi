@@ -142,10 +142,10 @@ const SpiritualTripConfirm = () => {
           </div>
           <p className="text-[22px] font-black text-slate-900 tracking-tight text-right">{trip.fare}</p>
         </div>
-        <button onClick={() => navigate('/')}
-          className="pointer-events-auto w-full bg-purple-600 py-4 rounded-[18px] text-[15px] font-black text-white shadow-[0_8px_24px_rgba(147,51,234,0.25)] flex items-center justify-center transition-all active:scale-95 uppercase tracking-wide">
-          Back to Home
-        </button>
+        <motion.button onClick={() => navigate('/taxi/user')}
+          className="pointer-events-auto w-full bg-slate-900 py-4 rounded-[18px] text-[15px] font-black text-white shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95">
+          <Home size={16} strokeWidth={2.5} /> Go to Home Dashboard
+        </motion.button>
       </motion.div>
     </div>
   );

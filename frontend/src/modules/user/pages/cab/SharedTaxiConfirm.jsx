@@ -56,9 +56,9 @@ const SharedTaxiConfirm = () => {
             <p className="text-[20px] font-black text-slate-900">₹{total}</p>
           </div>
         </div>
-        <motion.button whileTap={{ scale: 0.98 }} onClick={() => navigate('/')}
-          className="w-full bg-slate-900 py-4 rounded-[18px] text-[15px] font-black text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] flex items-center justify-center gap-2">
-          Back to Home <ChevronRight size={17} strokeWidth={3} className="opacity-50" />
+        <motion.button onClick={() => navigate('/taxi/user')}
+          className="pointer-events-auto w-full bg-slate-900 py-4 rounded-[18px] text-[15px] font-black text-white shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95">
+          <Home size={16} strokeWidth={2.5} /> Go to Home Dashboard
         </motion.button>
       </div>
     );

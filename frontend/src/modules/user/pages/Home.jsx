@@ -68,6 +68,32 @@ const Home = () => {
     return isActiveCurrentRide(ride) ? ride : null;
   });
   const [clockNow, setClockNow] = useState(() => Date.now());
+  const [endingRide, setEndingRide] = useState(false);
+
+  const handleEndRide = async () => {
+    if (!currentRide?.rideId) return;
+
+    try {
+      setEndingRide(true);
+      const response = await userService.endRentalRide(currentRide.rideId);
+      const payload = response?.data || null;
+      const nextRideState = {
+        ...currentRide,
+        ...payload,
+        rideId: payload?.id || currentRide.rideId,
+        status: payload?.status || 'end_requested',
+        liveStatus: payload?.status || 'end_requested',
+      };
+      saveCurrentRide(nextRideState);
+      navigate(`${routePrefix}/rental/confirmed`, {
+        state: nextRideState,
+      });
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setEndingRide(false);
+    }
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('userToken') || localStorage.getItem('token');
@@ -132,6 +158,15 @@ const Home = () => {
         const rentalRide = rentalResponse?.id ? rentalResponse : (rentalResponse?.data || null);
 
         if (rentalRide?.id) {
+          const status = String(rentalRide.status || '').toLowerCase();
+          const isTerminal = ['completed', 'cancelled', 'delivered'].includes(status);
+
+          if (isTerminal) {
+            if (cancelled) return;
+            clearCurrentRide();
+            return;
+          }
+
           if (cancelled) return;
           saveCurrentRide({
             rideId: rentalRide.id,
@@ -186,7 +221,7 @@ const Home = () => {
     };
 
     syncCurrentRide();
-    const syncTimer = window.setInterval(syncCurrentRide, 10000);
+    const syncTimer = window.setInterval(syncCurrentRide, 4000);
     window.addEventListener('focus', handleWindowFocus);
     document.addEventListener('visibilitychange', handleWindowFocus);
 
@@ -289,59 +324,62 @@ const Home = () => {
       <div className="absolute top-52 left-[-60px] h-52 w-52 rounded-full bg-emerald-100/60 blur-3xl pointer-events-none" />
       <div className="absolute bottom-28 right-[-40px] h-40 w-40 rounded-full bg-blue-100/60 blur-3xl pointer-events-none" />
 
-      <AnimatePresence>
-        {currentRide && serviceType === 'rental' && (rideStage === 'assigned' || rideStage === 'end_requested') && (
-          <Motion.div
-            initial={{ y: -100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -100, opacity: 0 }}
-            className="fixed top-0 inset-x-0 z-[70] p-4 pointer-events-none"
-          >
-            <Motion.button
-              whileTap={{ scale: 0.98 }}
-              onClick={() => navigate(trackingPath, { state: currentRide })}
-              className="pointer-events-auto mx-auto max-w-[calc(32rem-2rem)] flex items-center justify-between gap-4 rounded-[24px] border border-white/40 bg-white/70 px-5 py-3 shadow-[0_20px_40px_rgba(0,0,0,0.08)] backdrop-blur-2xl"
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 shadow-lg">
-                  <img src={currentRideIcon} alt="" className="h-6 w-6 object-contain" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-1.5 w-1.5 rounded-full bg-orange-500 animate-pulse" />
-                    <p className="text-[10px] font-black uppercase tracking-widest text-orange-600">
-                      {rideStage === 'end_requested' ? 'Review Pending' : 'Live Rental'}
-                    </p>
-                  </div>
-                  <p className="text-[13px] font-black text-slate-900 leading-none mt-0.5">
-                    {currentRide.vehicle?.name || 'Rental Vehicle'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4">
-                <div className="text-right">
-                  <div className="flex items-center justify-end gap-1.5">
-                    <Clock3 size={11} className="text-slate-400" />
-                    <p className="text-[12px] font-black tabular-nums text-slate-900 tracking-tight">
-                      {rentalTimerLabel}
-                    </p>
-                  </div>
-                  <p className="text-[10px] font-bold text-emerald-600 mt-0.5">
-                    Rs {rentalCurrentCharge.toFixed(0)}
-                  </p>
-                </div>
-                <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
-                  <ChevronRight size={16} strokeWidth={3} />
-                </div>
-              </div>
-            </Motion.button>
-          </Motion.div>
-        )}
-      </AnimatePresence>
 
       <div className="relative z-10 space-y-4 pb-6">
         <HeaderGreeting />
+        
+        {/* Active Rental Dashboard - Only visible during active rentals */}
+        {serviceType === 'rental' && (
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mx-5 overflow-hidden rounded-[32px] border border-white/60 bg-white/50 p-5 shadow-[0_20px_40px_rgba(0,0,0,0.06)] backdrop-blur-2xl relative"
+          >
+            <div className="relative z-10 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-20 w-24 flex items-center justify-center shrink-0">
+                  <img src={currentRideIcon} alt="" className="h-full w-full object-contain scale-110" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                    {rideStage === 'end_requested' ? 'Review Pending' : 'Live Rental'}
+                  </p>
+                  <h2 className="text-[24px] font-black tracking-tight text-slate-900 leading-none mt-1">
+                    {rentalTimerLabel}
+                  </h2>
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <div className="h-1.5 w-1.5 rounded-full bg-orange-500 animate-pulse" />
+                    <p className="text-[12px] font-black text-slate-900">
+                      {currentRide.vehicle?.name || 'Assigned Vehicle'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="text-right space-y-2.5">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Current Fare</p>
+                  <p className="text-[18px] font-black text-slate-900 tracking-tight">Rs {rentalCurrentCharge.toFixed(0)}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEndRide();
+                  }}
+                  disabled={endingRide || rideStage === 'end_requested'}
+                  className="bg-slate-900 text-white text-[11px] font-black uppercase tracking-widest px-4 py-2.5 rounded-xl shadow-[0_8px_16px_rgba(15,23,42,0.2)] active:scale-95 disabled:opacity-50 disabled:grayscale transition-all"
+                >
+                  {endingRide ? 'Ending...' : rideStage === 'end_requested' ? 'Pending' : 'End Ride'}
+                </button>
+              </div>
+            </div>
+            
+            <div className="absolute -right-6 -bottom-6 h-24 w-24 rounded-full bg-orange-100/40 blur-3xl pointer-events-none" />
+            <div className="absolute -left-6 -top-6 h-24 w-24 rounded-full bg-emerald-100/40 blur-3xl pointer-events-none" />
+          </motion.div>
+        )}
+
         <ServiceGrid />
         <LocationMapSection />
         <ActionsSection />
