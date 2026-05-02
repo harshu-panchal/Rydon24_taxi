@@ -74,7 +74,7 @@ const AuthLayout = ({ children, title, subtitle }) => {
       </div>
 
       {/* Right side (Mobile-first login card) */}
-      <div className="flex-1 flex items-center justify-center p-4 md:p-12 relative w-full bg-white lg:bg-[#F8F9FB]">
+      <div className="flex-1 flex items-start lg:items-center justify-center p-4 md:p-12 pt-44 lg:pt-12 relative w-full bg-white lg:bg-[#F8F9FB]">
         {/* Mobile Header (Visible only on small screens) */}
         <div className="lg:hidden absolute top-8 left-0 right-0 flex flex-col items-center px-4 text-center">
             {appLogo ? (
@@ -88,13 +88,13 @@ const AuthLayout = ({ children, title, subtitle }) => {
                 <div className="w-5 h-5 bg-white rounded-md"></div>
               </div>
             )}
-            <span className="text-2xl font-black tracking-tighter text-black">{appName}</span>
+            <span className="text-2xl font-black tracking-tighter text-black pb-2">{appName}</span>
         </div>
 
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md bg-white rounded-[28px] md:rounded-[40px] p-8 md:p-12 shadow-[0_30px_70px_rgba(0,0,0,0.06)] border border-gray-100 mt-16 lg:mt-0"
+          className="w-full max-w-md bg-white rounded-[28px] md:rounded-[40px] p-8 md:p-12 shadow-[0_30px_70px_rgba(0,0,0,0.06)] border border-gray-100 lg:mt-0"
         >
           {title && (
             <div className="mb-10 text-center lg:text-left">
@@ -102,7 +102,7 @@ const AuthLayout = ({ children, title, subtitle }) => {
                 {title}
               </h1>
               {subtitle && (
-                <p className="text-gray-500 text-base font-medium mt-3 leading-relaxed">
+                <p className="text-gray-500 text-base font-medium mt-4 leading-relaxed">
                   {subtitle}
                 </p>
               )}
