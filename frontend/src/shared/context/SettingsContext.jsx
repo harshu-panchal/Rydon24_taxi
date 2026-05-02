@@ -1,11 +1,29 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../api/axiosInstance';
 
-const SettingsContext = createContext(null);
 let activeFaviconObjectUrl = '';
 const DEFAULT_ADMIN_THEME_COLOR = '#405189';
 const DEFAULT_LANDING_THEME_COLOR = '#0ab39c';
 const DEFAULT_SIDEBAR_TEXT_COLOR = '#cbd5e1';
+const DEFAULT_SETTINGS_CONTEXT = {
+  settings: {
+    general: {
+      app_name: '',
+      logo: '',
+      favicon: '',
+    },
+    customization: {
+      admin_theme_color: '',
+      currency_symbol: '',
+    },
+    transportRide: {
+      enable_bus_service: '0',
+    },
+  },
+  loading: true,
+  refreshSettings: () => {},
+};
+const SettingsContext = createContext(DEFAULT_SETTINGS_CONTEXT);
 
 const normalizeHexColor = (value, fallback = '') => {
   const trimmed = String(value || '').trim();
@@ -113,20 +131,7 @@ const buildFaviconHref = (faviconUrl = '') => {
 };
 
 export const SettingsProvider = ({ children }) => {
-  const [settings, setSettings] = useState({
-    general: {
-      app_name: '',
-      logo: '',
-      favicon: '',
-    },
-    customization: {
-      admin_theme_color: '',
-      currency_symbol: '',
-    },
-    transportRide: {
-      enable_bus_service: '0',
-    },
-  });
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS_CONTEXT.settings);
   const [loading, setLoading] = useState(true);
 
   const fetchSettings = async () => {
@@ -221,9 +226,5 @@ export const SettingsProvider = ({ children }) => {
 };
 
 export const useSettings = () => {
-  const context = useContext(SettingsContext);
-  if (!context) {
-    throw new Error('useSettings must be used within a SettingsProvider');
-  }
-  return context;
+  return useContext(SettingsContext);
 };

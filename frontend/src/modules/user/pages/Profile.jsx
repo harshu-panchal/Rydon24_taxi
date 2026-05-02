@@ -10,9 +10,22 @@ import BottomNavbar from '../components/BottomNavbar';
 import { clearLocalUserSession, getLocalUserToken, userAuthService } from '../services/authService';
 import { clearCurrentRide } from '../services/currentRideService';
 import { socketService } from '../../../shared/api/socket';
+import api from '../../../shared/api/axiosInstance';
 
 const MotionDiv = motion.div;
 const MotionButton = motion.button;
+
+const pickObject = (...values) => values.find((value) => value && typeof value === 'object' && !Array.isArray(value)) || {};
+
+const pickNumber = (...values) => {
+  for (const value of values) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return 0;
+};
 
 const menuSections = [
   {
@@ -70,20 +83,82 @@ const Profile = () => {
         } catch {
           stored = {};
         }
-        const response = await userAuthService.getCurrentUser();
-        const user = response?.data?.user || {};
+
+        const [profileResponse, walletResponse, ridesResponse] = await Promise.allSettled([
+          userAuthService.getCurrentUser(),
+          userAuthService.getWallet(),
+          api.get('/rides', { params: { page: 1, limit: 1 } }),
+        ]);
+
+        const profilePayload = profileResponse.status === 'fulfilled' ? profileResponse.value : {};
+        const walletPayload = walletResponse.status === 'fulfilled' ? walletResponse.value : {};
+        const ridesPayload = ridesResponse.status === 'fulfilled' ? ridesResponse.value : {};
+
+        const profileData = pickObject(
+          profilePayload?.data,
+          profilePayload?.result,
+          profilePayload,
+        );
+        const user = pickObject(
+          profileData?.user,
+          profileData?.data?.user,
+          profileData?.profile,
+          profileData,
+        );
+        const walletData = pickObject(
+          walletPayload?.data,
+          walletPayload?.wallet,
+          walletPayload,
+        );
+        const ridesData = pickObject(
+          ridesPayload?.data,
+          ridesPayload?.result,
+          ridesPayload,
+        );
+        const ridePagination = pickObject(ridesData?.pagination, ridesData?.data?.pagination);
+        const dynamicTripCount = pickNumber(
+          ridePagination.total,
+          ridesData?.total,
+          ridesData?.count,
+          user.totalRides,
+          user.total_trips,
+          user.totalTrips,
+          stored?.totalRides,
+        );
+        const dynamicWalletBalance = pickNumber(
+          walletData.balance,
+          walletData.walletBalance,
+          walletData.amount,
+          user.walletBalance,
+          user.wallet?.balance,
+          user.wallet_amount,
+          stored?.walletBalance,
+        );
+        const dynamicRating = pickNumber(
+          user.rating,
+          user.avgRating,
+          user.average_rating,
+          stored?.rating,
+          4.9,
+        );
         
         setProfile({
           name: user.name || stored?.name || 'User',
           phone: user.phone || stored?.phone || '',
-          profileImage: user.profileImage || stored?.profileImage || '',
+          profileImage: user.profileImage || user.profile_image || stored?.profileImage || '',
           stats: {
-            trips: user.totalRides || 0,
-            rating: user.rating || 4.9,
-            wallet: user.walletBalance || 0
+            trips: dynamicTripCount,
+            rating: dynamicRating,
+            wallet: dynamicWalletBalance,
           }
         });
-        localStorage.setItem('userInfo', JSON.stringify(user));
+        localStorage.setItem('userInfo', JSON.stringify({
+          ...stored,
+          ...user,
+          walletBalance: dynamicWalletBalance,
+          totalRides: dynamicTripCount,
+          rating: dynamicRating,
+        }));
       } catch (err) {
         console.error('Failed to load profile', err);
       }

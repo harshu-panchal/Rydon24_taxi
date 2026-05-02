@@ -701,7 +701,10 @@ const SelectVehicle = () => {
   const drop = routeState.drop || 'Vijay Nagar, Indore';
   const pickupCoords = useMemo(() => routeState.pickupCoords || [75.9048, 22.7039], [routeState.pickupCoords]);
   const dropCoords = useMemo(() => routeState.dropCoords || [75.8937, 22.7533], [routeState.dropCoords]);
-  const stops = routeState.stops || [];
+  const stops = useMemo(
+    () => (Array.isArray(routeState.stops) ? routeState.stops : []),
+    [routeState.stops],
+  );
   const serviceLocationId = routeState.service_location_id || routeState.serviceLocationId || '';
   const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
   const pickupPosition = useMemo(() => toLatLng(pickupCoords), [pickupCoords]);

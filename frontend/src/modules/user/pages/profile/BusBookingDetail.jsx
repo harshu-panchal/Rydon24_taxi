@@ -14,6 +14,7 @@ import {
   Ticket,
   MapPin,
   Clock,
+  CalendarDays,
   ChevronDown,
   Info
 } from 'lucide-react';
