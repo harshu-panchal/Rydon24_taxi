@@ -8,6 +8,7 @@ import { userAuthService } from '../../services/authService';
 const unwrap = (response) => response?.data?.data || response?.data || response;
 const PENDING_SIGNUP_PHONE_KEY = 'pendingUserSignupPhone';
 const PENDING_OTP_PHONE_KEY = 'pendingUserOtpPhone';
+const PENDING_SIGNUP_REFERRAL_CODE_KEY = 'pendingUserSignupReferralCode';
 const syncPushTokens = () => {
   window.__flushNativeFcmToken?.().catch?.(() => {});
   window.__registerBrowserFcmToken?.({ interactive: true }).catch?.(() => {});
@@ -29,6 +30,11 @@ const VerifyOTP = () => {
     sessionStorage.getItem(PENDING_SIGNUP_PHONE_KEY) ||
     '',
   ).replace(/\D/g, '').slice(-10);
+  const referralCode = String(
+    location.state?.referralCode ||
+    sessionStorage.getItem(PENDING_SIGNUP_REFERRAL_CODE_KEY) ||
+    '',
+  ).trim().toUpperCase();
   const [otp, setOtp] = useState(['', '', '', '']);
   const [timer, setTimer] = useState(30);
   const [loading, setLoading] = useState(false);
@@ -56,7 +62,10 @@ const VerifyOTP = () => {
 
     sessionStorage.setItem(PENDING_OTP_PHONE_KEY, phone);
     sessionStorage.setItem(PENDING_SIGNUP_PHONE_KEY, phone);
-  }, [navigate, phone]);
+    if (referralCode) {
+      sessionStorage.setItem(PENDING_SIGNUP_REFERRAL_CODE_KEY, referralCode);
+    }
+  }, [navigate, phone, referralCode]);
 
   useEffect(() => {
     let interval = null;
@@ -124,6 +133,7 @@ const VerifyOTP = () => {
         syncPushTokens();
         sessionStorage.removeItem(PENDING_OTP_PHONE_KEY);
         sessionStorage.removeItem(PENDING_SIGNUP_PHONE_KEY);
+        sessionStorage.removeItem(PENDING_SIGNUP_REFERRAL_CODE_KEY);
         setTimeout(() => navigate('/taxi/user', { replace: true }), 1200);
         return;
       }
@@ -139,13 +149,17 @@ const VerifyOTP = () => {
         syncPushTokens();
         sessionStorage.removeItem(PENDING_OTP_PHONE_KEY);
         sessionStorage.removeItem(PENDING_SIGNUP_PHONE_KEY);
+        sessionStorage.removeItem(PENDING_SIGNUP_REFERRAL_CODE_KEY);
         setTimeout(() => navigate('/taxi/user', { replace: true }), 1200);
         return;
       }
 
       sessionStorage.setItem(PENDING_OTP_PHONE_KEY, String(phone || ''));
       sessionStorage.setItem(PENDING_SIGNUP_PHONE_KEY, String(phone || ''));
-      setTimeout(() => navigate('/taxi/user/signup', { state: { phone, otpVerified: true } }), 1200);
+      if (referralCode) {
+        sessionStorage.setItem(PENDING_SIGNUP_REFERRAL_CODE_KEY, referralCode);
+      }
+      setTimeout(() => navigate('/taxi/user/signup', { state: { phone, otpVerified: true, referralCode } }), 1200);
     } catch (err) {
       setError(true);
       setErrorMessage(err?.message || 'The OTP you entered is incorrect. Please try again.');

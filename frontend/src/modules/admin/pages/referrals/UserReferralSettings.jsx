@@ -12,6 +12,8 @@ import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 
+const unwrap = (response) => response?.data?.data || response?.data || response || {};
+
 const UserReferralSettings = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -35,12 +37,13 @@ const UserReferralSettings = () => {
     const fetchSettings = async () => {
       try {
         const res = await adminService.getReferralSettings('user');
-        if (res.data) {
+        const payload = unwrap(res);
+        if (payload) {
           setSettings({
-            enabled: res.data.enabled ?? false,
-            type: res.data.type || 'instant_referrer',
-            amount: res.data.amount || 0,
-            ride_count: res.data.ride_count || 0,
+            enabled: payload.enabled ?? false,
+            type: payload.type || 'instant_referrer',
+            amount: payload.amount || 0,
+            ride_count: payload.ride_count || 0,
           });
         }
       } catch (err) {
@@ -56,8 +59,12 @@ const UserReferralSettings = () => {
   const handleUpdate = async () => {
     setSaving(true);
     try {
-      const res = await adminService.updateReferralSettings('user', settings);
-      if (res) {
+      const res = await adminService.updateReferralSettings('user', {
+        ...settings,
+        amount: Number(settings.amount || 0),
+        ride_count: Number(settings.ride_count || 0),
+      });
+      if (unwrap(res)) {
         setShowSuccess(true);
         toast.success('Referral settings updated successfully');
         setTimeout(() => setShowSuccess(false), 3000);

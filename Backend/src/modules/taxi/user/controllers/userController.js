@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { User } from '../models/User.js';
 import { UserWallet } from '../models/UserWallet.js';
+import { AdminBusinessSetting } from '../../admin/models/AdminBusinessSetting.js';
 import { Notification } from '../../admin/promotions/models/Notification.js';
 import { BusService } from '../../admin/models/BusService.js';
 import { Driver } from '../../driver/models/Driver.js';
@@ -39,6 +40,7 @@ const normalizePhone = (value) => {
 };
 
 const normalizeEmail = (value) => toCleanString(value).toLowerCase();
+const normalizeReferralCode = (value) => toCleanString(value).toUpperCase();
 
 const normalizeGender = (value) => {
   const gender = toCleanString(value).toLowerCase();
@@ -923,6 +925,106 @@ const generateUserReferralCode = (user) => {
   return `USR${phonePart}${idPart}`.replace(/\W/g, '');
 };
 
+const getUserReferralProgramSettings = async () => {
+  const setting = await AdminBusinessSetting.findOne({ scope: 'default' }).lean();
+  const userReferral = setting?.referral?.user || {};
+
+  return {
+    enabled: Boolean(userReferral.enabled),
+    type: String(userReferral.type || 'instant_referrer').trim().toLowerCase(),
+    amount: Math.max(0, Number(userReferral.amount || 0) || 0),
+    rideCount: Math.max(0, Number(userReferral.ride_count || 0) || 0),
+  };
+};
+
+const findUserByReferralCode = async (referralCode) => {
+  const normalizedCode = normalizeReferralCode(referralCode);
+
+  if (!normalizedCode) {
+    return null;
+  }
+
+  return User.findOne({ referralCode: normalizedCode });
+};
+
+const creditUserWalletByReference = async ({ userId, amount, title, referenceKey }) => {
+  const normalizedAmount = Math.max(0, Number(amount || 0) || 0);
+  const normalizedReferenceKey = toCleanString(referenceKey);
+
+  if (!userId || normalizedAmount <= 0 || !normalizedReferenceKey) {
+    return 'skipped';
+  }
+
+  await ensureUserWallet(userId);
+
+  const existingTransaction = await UserWallet.findOne({
+    userId,
+    'transactions.referenceKey': normalizedReferenceKey,
+  })
+    .select('_id')
+    .lean();
+
+  if (existingTransaction) {
+    return 'existing';
+  }
+
+  await UserWallet.updateOne(
+    { userId },
+    {
+      $inc: { balance: normalizedAmount },
+      $push: {
+        transactions: {
+          $each: [
+            {
+              kind: 'credit',
+              amount: normalizedAmount,
+              title: toCleanString(title) || 'Referral Reward',
+              referenceKey: normalizedReferenceKey,
+            },
+          ],
+          $slice: -50,
+        },
+      },
+    },
+  );
+
+  return 'credited';
+};
+
+const processSignupReferralRewards = async ({ user, referrer }) => {
+  if (!user?._id || !referrer?._id) {
+    return;
+  }
+
+  const settings = await getUserReferralProgramSettings();
+  if (!settings.enabled || settings.amount <= 0) {
+    return;
+  }
+
+  const referralType = settings.type;
+  const rewardBaseKey = `user-referral:signup:${String(user._id)}`;
+
+  if (referralType === 'instant_referrer' || referralType === 'instant_referrer_new') {
+    await creditUserWalletByReference({
+      userId: referrer._id,
+      amount: settings.amount,
+      title: `Referral reward for inviting ${user.phone}`,
+      referenceKey: `${rewardBaseKey}:referrer`,
+    });
+  }
+
+  if (referralType === 'instant_referrer_new') {
+    await creditUserWalletByReference({
+      userId: user._id,
+      amount: settings.amount,
+      title: 'Welcome referral reward',
+      referenceKey: `${rewardBaseKey}:new-user`,
+    });
+    user.referralRewardGrantedAt = user.referralRewardGrantedAt || new Date();
+    await user.save();
+  }
+};
+
 export const registerUser = async (req, res) => {
   const password = String(req.body.password || '');
   const name = toCleanString(req.body.name);
@@ -931,6 +1033,7 @@ export const registerUser = async (req, res) => {
   const countryCode = toCleanString(req.body.countryCode) || '+91';
   const gender = normalizeGender(req.body.gender);
   const profileImage = toCleanString(req.body.profileImage);
+  const referralCode = normalizeReferralCode(req.body.referralCode);
 
   validateName(name);
   validatePhone(phone);
@@ -946,6 +1049,12 @@ export const registerUser = async (req, res) => {
     throw new ApiError(409, 'Phone number is already registered');
   }
 
+  const referrer = referralCode ? await findUserByReferralCode(referralCode) : null;
+
+  if (referralCode && !referrer) {
+    throw new ApiError(400, 'Invalid referral code');
+  }
+
   const user = await User.create({
     name,
     phone,
@@ -953,8 +1062,19 @@ export const registerUser = async (req, res) => {
     email,
     gender,
     profileImage,
+    referredBy: referrer?._id || null,
     password: await hashPassword(password),
   });
+
+  if (!String(user.referralCode || '').trim()) {
+    user.referralCode = generateUserReferralCode(user);
+    await user.save();
+  }
+
+  if (referrer?._id) {
+    await User.updateOne({ _id: referrer._id }, { $inc: { referralCount: 1 } });
+    await processSignupReferralRewards({ user, referrer });
+  }
 
   res.status(201).json({
     success: true,
@@ -1025,6 +1145,7 @@ export const signupUser = async (req, res) => {
   const gender = normalizeGender(req.body.gender);
   const profileImage = toCleanString(req.body.profileImage);
   const password = String(req.body.password || '');
+  const referralCode = normalizeReferralCode(req.body.referralCode);
 
   validateName(name);
   validatePhone(phone);
@@ -1042,6 +1163,12 @@ export const signupUser = async (req, res) => {
     throw new ApiError(409, 'Phone number is already registered');
   }
 
+  const referrer = referralCode ? await findUserByReferralCode(referralCode) : null;
+
+  if (referralCode && !referrer) {
+    throw new ApiError(400, 'Invalid referral code');
+  }
+
   const user = await User.create({
     name,
     phone,
@@ -1051,7 +1178,19 @@ export const signupUser = async (req, res) => {
     profileImage,
     password: await hashPassword(password),
     isVerified: true,
+    referredBy: referrer?._id || null,
   });
+
+  if (!String(user.referralCode || '').trim()) {
+    user.referralCode = generateUserReferralCode(user);
+    await user.save();
+  }
+
+  if (referrer?._id) {
+    await User.updateOne({ _id: referrer._id }, { $inc: { referralCount: 1 } });
+    await processSignupReferralRewards({ user, referrer });
+  }
+
   await consumeUserSignupSession(signupSession);
 
   res.status(201).json({

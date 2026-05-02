@@ -138,6 +138,15 @@ const userSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    referredRideCompletionCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    referralRewardGrantedAt: {
+      type: Date,
+      default: null,
+    },
     isVerified: {
       type: Boolean,
       default: false,

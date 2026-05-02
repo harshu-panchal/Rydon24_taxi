@@ -145,7 +145,8 @@ const Referral = () => {
     if (!referralCode) {
       return;
     }
-    const shareText = `${bannerText}\nUse my referral code ${referralCode} to sign up.\n${window.location.origin}`;
+    const signupLink = `${window.location.origin}/taxi/user/signup?ref=${encodeURIComponent(referralCode)}`;
+    const shareText = `${bannerText}\nUse my referral code ${referralCode} to sign up.\n${signupLink}`;
 
     try {
       if (navigator.share) {

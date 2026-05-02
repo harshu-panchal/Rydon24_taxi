@@ -13,6 +13,7 @@ const fieldInputClassName =
   'w-full bg-transparent border-none text-[16px] font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none';
 
 const PENDING_SIGNUP_PHONE_KEY = 'pendingUserSignupPhone';
+const PENDING_SIGNUP_REFERRAL_CODE_KEY = 'pendingUserSignupReferralCode';
 const syncPushTokens = () => {
   window.__flushNativeFcmToken?.().catch?.(() => {});
   window.__registerBrowserFcmToken?.({ interactive: true }).catch?.(() => {});
@@ -21,7 +22,11 @@ const syncPushTokens = () => {
 const Signup = () => {
   const location = useLocation();
   const { settings } = useSettings();
+  const referralCodeFromQuery = new URLSearchParams(location.search).get('ref') || '';
   const preservedPhone = typeof window !== 'undefined' ? sessionStorage.getItem(PENDING_SIGNUP_PHONE_KEY) || '' : '';
+  const preservedReferralCode = typeof window !== 'undefined'
+    ? sessionStorage.getItem(PENDING_SIGNUP_REFERRAL_CODE_KEY) || ''
+    : '';
   const initialPhone = String(location.state?.phone || preservedPhone || '').replace(/\D/g, '').slice(-10);
   const [formData, setFormData] = useState({
     phone: initialPhone,
@@ -30,6 +35,7 @@ const Signup = () => {
     password: '',
     gender: 'prefer-not-to-say',
     profileImage: '',
+    referralCode: String(location.state?.referralCode || referralCodeFromQuery || preservedReferralCode || '').trim().toUpperCase(),
   });
   const [loading, setLoading] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
@@ -48,6 +54,16 @@ const Signup = () => {
       sessionStorage.setItem(PENDING_SIGNUP_PHONE_KEY, formData.phone);
     }
   }, [formData.phone, isValidPhone, step]);
+
+  useEffect(() => {
+    const normalizedReferralCode = String(formData.referralCode || '').trim().toUpperCase();
+
+    if (normalizedReferralCode) {
+      sessionStorage.setItem(PENDING_SIGNUP_REFERRAL_CODE_KEY, normalizedReferralCode);
+    } else {
+      sessionStorage.removeItem(PENDING_SIGNUP_REFERRAL_CODE_KEY);
+    }
+  }, [formData.referralCode]);
 
   useEffect(() => {
     if (location.state?.otpVerified) {
@@ -109,6 +125,7 @@ const Signup = () => {
       navigate('/taxi/user/verify-otp', {
         state: {
           phone: formData.phone,
+          referralCode: formData.referralCode,
         },
       });
     } catch (err) {
@@ -133,6 +150,7 @@ const Signup = () => {
         password: formData.password,
         gender: formData.gender,
         profileImage: overrides.profileImage ?? formData.profileImage,
+        referralCode: formData.referralCode,
       });
       const payload = response?.data || {};
 
@@ -142,6 +160,7 @@ const Signup = () => {
       localStorage.setItem('userInfo', JSON.stringify(payload.user || {}));
       syncPushTokens();
       sessionStorage.removeItem(PENDING_SIGNUP_PHONE_KEY);
+      sessionStorage.removeItem(PENDING_SIGNUP_REFERRAL_CODE_KEY);
       navigate('/taxi/user', { replace: true });
     } catch (err) {
       const message = err?.message || 'Signup failed. Please try again.';
@@ -358,6 +377,24 @@ const Signup = () => {
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="ml-1 text-xs font-bold uppercase tracking-widest text-slate-600">Referral Code (Optional)</label>
+            <div className={fieldShellClassName}>
+              <User size={18} className="text-slate-500" />
+              <input
+                type="text"
+                placeholder="Enter referral code"
+                className={fieldInputClassName}
+                value={formData.referralCode}
+                onChange={(e) => setFormData((current) => ({
+                  ...current,
+                  referralCode: e.target.value.trim().toUpperCase(),
+                }))}
+              />
+            </div>
+            <p className="ml-1 text-xs font-medium text-slate-500">If someone shared a referral link, the code should already be filled in.</p>
           </div>
 
           <div className="space-y-2">

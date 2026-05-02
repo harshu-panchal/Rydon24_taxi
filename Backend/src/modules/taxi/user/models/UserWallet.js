@@ -37,6 +37,11 @@ const walletTransactionSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    referenceKey: {
+      type: String,
+      default: '',
+      trim: true,
+    },
   },
   { _id: true, timestamps: true },
 );

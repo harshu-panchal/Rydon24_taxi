@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { ApiError } from '../../../utils/ApiError.js';
 import { normalizePoint, toPoint } from '../../../utils/geo.js';
 import { RIDE_LIVE_STATUS, RIDE_STATUS } from '../constants/index.js';
+import { AdminBusinessSetting } from '../admin/models/AdminBusinessSetting.js';
 import { SetPrice } from '../admin/models/SetPrice.js';
 import { Vehicle } from '../admin/models/Vehicle.js';
 import { Driver } from '../driver/models/Driver.js';
@@ -10,6 +11,7 @@ import { Delivery } from '../user/models/Delivery.js';
 import { RideBid } from '../user/models/RideBid.js';
 import { Ride } from '../user/models/Ride.js';
 import { User } from '../user/models/User.js';
+import { UserWallet } from '../user/models/UserWallet.js';
 import { applyPromoToRideInTransaction } from './promoService.js';
 import { getTipSettings } from './appSettingsService.js';
 
@@ -77,6 +79,143 @@ const normalizeRidePaymentMethod = (paymentMethod) => (
 const normalizeServiceType = (serviceType) => {
   const normalized = String(serviceType || 'ride').trim().toLowerCase();
   return ['parcel', 'intercity'].includes(normalized) ? normalized : 'ride';
+};
+
+const ensureUserWallet = async (userId) => {
+  if (!userId) {
+    return;
+  }
+
+  await UserWallet.updateOne(
+    { userId },
+    { $setOnInsert: { userId, balance: 0, refundWallet: 0, transactions: [] } },
+    { upsert: true },
+  );
+};
+
+const getUserReferralProgramSettings = async () => {
+  const setting = await AdminBusinessSetting.findOne({ scope: 'default' }).lean();
+  const userReferral = setting?.referral?.user || {};
+
+  return {
+    enabled: Boolean(userReferral.enabled),
+    type: String(userReferral.type || 'instant_referrer').trim().toLowerCase(),
+    amount: Math.max(0, Number(userReferral.amount || 0) || 0),
+    rideCount: Math.max(0, Number(userReferral.ride_count || 0) || 0),
+  };
+};
+
+const creditUserWalletByReference = async ({ userId, amount, title, referenceKey }) => {
+  const normalizedAmount = Math.max(0, Number(amount || 0) || 0);
+  const normalizedReferenceKey = String(referenceKey || '').trim();
+
+  if (!userId || normalizedAmount <= 0 || !normalizedReferenceKey) {
+    return 'skipped';
+  }
+
+  await ensureUserWallet(userId);
+
+  const existingTransaction = await UserWallet.findOne({
+    userId,
+    'transactions.referenceKey': normalizedReferenceKey,
+  })
+    .select('_id')
+    .lean();
+
+  if (existingTransaction) {
+    return 'existing';
+  }
+
+  await UserWallet.updateOne(
+    { userId },
+    {
+      $inc: { balance: normalizedAmount },
+      $push: {
+        transactions: {
+          $each: [
+            {
+              kind: 'credit',
+              amount: normalizedAmount,
+              title: String(title || 'Referral Reward').trim(),
+              referenceKey: normalizedReferenceKey,
+            },
+          ],
+          $slice: -50,
+        },
+      },
+    },
+  );
+
+  return 'credited';
+};
+
+const processCompletedRideReferralReward = async (ride) => {
+  if (!ride?.userId) {
+    return;
+  }
+
+  const referredUser = await User.findById(ride.userId)
+    .select('phone referredBy referredRideCompletionCount referralRewardGrantedAt')
+    .lean();
+
+  if (!referredUser?.referredBy || referredUser?.referralRewardGrantedAt) {
+    return;
+  }
+
+  const settings = await getUserReferralProgramSettings();
+  const isConditionalProgram =
+    settings.enabled &&
+    ['conditional_referrer', 'conditional_referrer_new'].includes(settings.type);
+
+  if (!isConditionalProgram) {
+    return;
+  }
+
+  const completedRideCount = await Ride.countDocuments({
+    userId: ride.userId,
+    status: RIDE_STATUS.COMPLETED,
+    serviceType: { $in: ['ride', 'intercity'] },
+  });
+
+  const requiredRideCount = Math.max(1, settings.rideCount || 1);
+
+  await User.updateOne(
+    { _id: ride.userId },
+    { $set: { referredRideCompletionCount: completedRideCount } },
+  );
+
+  if (completedRideCount < requiredRideCount || settings.amount <= 0) {
+    return;
+  }
+
+  const rewardBaseKey = `user-referral:completed:${String(ride.userId)}:${requiredRideCount}`;
+  const referrerResult = await creditUserWalletByReference({
+    userId: referredUser.referredBy,
+    amount: settings.amount,
+    title: `Referral reward after ${completedRideCount} completed rides by ${referredUser.phone || 'referred user'}`,
+    referenceKey: `${rewardBaseKey}:referrer`,
+  });
+
+  let newUserResult = 'skipped';
+  if (settings.type === 'conditional_referrer_new') {
+    newUserResult = await creditUserWalletByReference({
+      userId: ride.userId,
+      amount: settings.amount,
+      title: `Referral completion reward after ${completedRideCount} rides`,
+      referenceKey: `${rewardBaseKey}:new-user`,
+    });
+  }
+
+  const rewardSatisfied =
+    ['credited', 'existing'].includes(referrerResult) &&
+    (settings.type !== 'conditional_referrer_new' || ['credited', 'existing'].includes(newUserResult));
+
+  if (rewardSatisfied) {
+    await User.updateOne(
+      { _id: ride.userId },
+      { $set: { referralRewardGrantedAt: new Date(), referredRideCompletionCount: completedRideCount } },
+    );
+  }
 };
 
 const normalizeAddress = (value = '') => String(value || '').trim();
@@ -1137,6 +1276,7 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
     ]);
 
     walletUpdate = await settleCompletedRideWallet({ rideId: ride._id });
+    await processCompletedRideReferralReward(ride);
   }
 
   const populatedRide = await populateRideRealtime(ride._id);
