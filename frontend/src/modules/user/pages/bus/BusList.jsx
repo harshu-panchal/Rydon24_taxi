@@ -57,6 +57,10 @@ const getNumericValue = (value, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const getBusCompany = (bus) =>
+  String(bus?.operator || bus?.busName || bus?.travels || bus?.company || '')
+    .trim();
+
 const getBusRating = (bus) => getNumericValue(bus?.rating, 0);
 const getBusRatingCount = (bus) => getNumericValue(bus?.ratingCount, 0);
 const hasBusRating = (bus) => getBusRatingCount(bus) > 0;
@@ -96,6 +100,7 @@ const BusList = () => {
   const [sortBy, setSortBy] = useState('recommended');
   const [showDealsOnly, setShowDealsOnly] = useState(false);
   const [showHighlyRatedOnly, setShowHighlyRatedOnly] = useState(false);
+  const [selectedCompany, setSelectedCompany] = useState('all');
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const sortMenuRef = useRef(null);
 
@@ -161,6 +166,18 @@ const BusList = () => {
     [sortBy],
   );
 
+  const busCompanies = useMemo(() => {
+    const uniqueCompanies = Array.from(
+      new Set(
+        (Array.isArray(buses) ? buses : [])
+          .map((bus) => getBusCompany(bus))
+          .filter(Boolean),
+      ),
+    );
+
+    return uniqueCompanies.sort((left, right) => left.localeCompare(right));
+  }, [buses]);
+
   const visibleBuses = useMemo(() => {
     const nextBuses = Array.isArray(buses) ? [...buses] : [];
     const filteredBuses = nextBuses.filter((bus) => {
@@ -169,6 +186,10 @@ const BusList = () => {
       }
 
       if (showHighlyRatedOnly && !isHighlyRatedBus(bus)) {
+        return false;
+      }
+
+      if (selectedCompany !== 'all' && getBusCompany(bus) !== selectedCompany) {
         return false;
       }
 
@@ -193,7 +214,7 @@ const BusList = () => {
     }
 
     return filteredBuses;
-  }, [buses, showDealsOnly, showHighlyRatedOnly, sortBy]);
+  }, [buses, selectedCompany, showDealsOnly, showHighlyRatedOnly, sortBy]);
 
   const handleSelect = (bus) => {
     navigate(`${routePrefix}/bus/details`, {
@@ -249,7 +270,7 @@ const BusList = () => {
           <div className="rounded-3xl border border-slate-100 bg-white p-12 text-center shadow-sm">
             <h2 className="text-xl font-bold text-slate-900">No buses found</h2>
             <p className="mt-2 text-sm font-medium text-slate-500">
-              {showDealsOnly || showHighlyRatedOnly || sortBy !== 'recommended'
+              {showDealsOnly || showHighlyRatedOnly || sortBy !== 'recommended' || selectedCompany !== 'all'
                 ? 'Try changing your filters to see more buses.'
                 : 'Try searching for a different date or route.'}
             </p>
@@ -283,9 +304,9 @@ const BusList = () => {
               </div>
             </div>
 
-            <div className="relative pb-1">
+            <div ref={sortMenuRef} className="relative pb-1">
               <div className="flex gap-2 overflow-x-auto">
-                <div ref={sortMenuRef} className="shrink-0">
+                <div className="shrink-0">
                   <button
                     type="button"
                     onClick={() => setIsSortMenuOpen((current) => !current)}
@@ -325,8 +346,7 @@ const BusList = () => {
 
               {isSortMenuOpen ? (
                 <div
-                  ref={sortMenuRef}
-                  className="absolute left-0 top-[calc(100%+0.5rem)] z-20 w-64 rounded-[20px] border border-slate-200 bg-white p-2 shadow-[0_18px_48px_rgba(15,23,42,0.14)]"
+                  className="absolute left-0 top-[calc(100%+0.5rem)] z-20 w-[min(20rem,calc(100vw-2rem))] rounded-[20px] border border-slate-200 bg-white p-2 shadow-[0_18px_48px_rgba(15,23,42,0.14)]"
                 >
                   <p className="px-3 pb-2 pt-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
                     Sort buses by
@@ -352,6 +372,48 @@ const BusList = () => {
                       );
                     })}
                   </div>
+
+                  {busCompanies.length > 0 ? (
+                    <>
+                      <div className="mx-1 my-2 h-px bg-slate-100" />
+                      <p className="px-3 pb-2 pt-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                        Bus company
+                      </p>
+                      <div className="max-h-56 space-y-1 overflow-y-auto">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCompany('all')}
+                          className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-xs font-bold transition ${
+                            selectedCompany === 'all'
+                              ? 'bg-slate-900 text-white'
+                              : 'bg-white text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span>All companies</span>
+                          {selectedCompany === 'all' ? <Check size={14} /> : null}
+                        </button>
+                        {busCompanies.map((company) => {
+                          const isActive = selectedCompany === company;
+
+                          return (
+                            <button
+                              key={company}
+                              type="button"
+                              onClick={() => setSelectedCompany(company)}
+                              className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-xs font-bold transition ${
+                                isActive
+                                  ? 'bg-slate-900 text-white'
+                                  : 'bg-white text-slate-700 hover:bg-slate-50'
+                              }`}
+                            >
+                              <span className="truncate pr-3">{company}</span>
+                              {isActive ? <Check size={14} className="shrink-0" /> : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -398,12 +460,12 @@ const BusList = () => {
                     <Clock3 size={13} className="text-slate-400" />
                     <span>{bus.type}</span>
                     <span>•</span>
-                    <span>{bus.busName || bus.operator}</span>
+                    <span>{bus.busName || getBusCompany(bus)}</span>
                   </div>
 
                   <div className="mt-3 flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <h3 className="truncate text-[15px] font-black text-slate-900">{bus.operator}</h3>
+                      <h3 className="truncate text-[15px] font-black text-slate-900">{getBusCompany(bus) || 'Bus Service'}</h3>
                       <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">
                         {topAmenities.length > 0 ? topAmenities.join(' • ') : (bus.routeName || `${fromCity} to ${toCity}`)}
                       </p>
