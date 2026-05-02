@@ -10,6 +10,10 @@ import {
   CreditCard,
   Zap,
   Ticket,
+  CalendarDays,
+  MapPin,
+  Receipt,
+  CircleCheckBig,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { userService } from '../../services/userService';
@@ -46,6 +50,19 @@ const formatTravelDate = (value) => {
 
 const unwrapPayload = (response) => response?.data?.data || response?.data || response || {};
 
+const formatDateTime = (dateValue, scheduleLabel = '') => {
+  const parsed = new Date(dateValue);
+  const formattedDate = Number.isNaN(parsed.getTime())
+    ? formatTravelDate(dateValue)
+    : parsed.toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      });
+
+  return scheduleLabel ? `${formattedDate} • ${scheduleLabel}` : formattedDate;
+};
+
 const PoolingConfirm = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -53,6 +70,7 @@ const PoolingConfirm = () => {
 
   const [isBooking, setIsBooking] = useState(false);
   const [isBooked, setIsBooked] = useState(false);
+  const [confirmedBooking, setConfirmedBooking] = useState(null);
 
   if (!route || !vehicle || !schedule?.id || !pickupStop?.id || !dropStop?.id) {
     return (
@@ -116,7 +134,7 @@ const PoolingConfirm = () => {
         },
         handler: async (response) => {
           try {
-            await userService.verifyPoolingBookingPayment({
+            const verifyResponse = await userService.verifyPoolingBookingPayment({
               ...response,
               routeId: route._id,
               vehicleId: vehicle._id,
@@ -126,13 +144,11 @@ const PoolingConfirm = () => {
               pickupStopId: pickupStop.id,
               dropStopId: dropStop.id,
             });
+            const booking = unwrapPayload(verifyResponse);
 
+            setConfirmedBooking(booking);
             setIsBooked(true);
             toast.success('Pooling booking confirmed');
-
-            setTimeout(() => {
-              navigate('/taxi/user');
-            }, 2500);
           } catch (verifyError) {
             const message =
               verifyError?.response?.data?.message ||
@@ -168,54 +184,138 @@ const PoolingConfirm = () => {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="fixed inset-0 z-[100] mx-auto flex max-w-lg flex-col items-center justify-center bg-white p-6 text-center"
+            className="min-h-screen bg-slate-50 px-5 pb-10 pt-8"
           >
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'spring', damping: 12, stiffness: 200 }}
-              className="relative mb-10"
-            >
-              <div className="absolute inset-0 animate-ping rounded-full bg-emerald-100/50" />
-              <div className="relative flex h-32 w-32 items-center justify-center rounded-full bg-emerald-50 text-emerald-500">
-                <CheckCircle2 size={64} />
-              </div>
-            </motion.div>
-            <h1 className="text-3xl font-black tracking-tight text-slate-900">Ride Confirmed!</h1>
-            <p className="mt-4 max-w-xs text-sm font-bold leading-relaxed text-slate-500">
-              Your online payment is complete and your pooling ride to{' '}
-              <span className="text-slate-900">{route.destinationLabel}</span> is secured.
-            </p>
+            <div className="overflow-hidden rounded-[36px] border border-emerald-100 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
+              <div className="bg-gradient-to-br from-emerald-500 via-emerald-500 to-teal-500 px-6 pb-8 pt-7 text-white">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: 'spring', damping: 12, stiffness: 200 }}
+                  className="mb-5 inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-white/15 backdrop-blur-md"
+                >
+                  <CircleCheckBig size={34} />
+                </motion.div>
 
-            <div className="mt-12 w-full rounded-3xl border border-slate-100 bg-slate-50 p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Booking Status</p>
-                <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black uppercase text-emerald-600">
-                  Paid
-                </span>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white shadow-sm">
-                  <Car size={20} className="text-slate-900" />
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-100">Booking Confirmed</p>
+                    <h1 className="mt-2 text-3xl font-black tracking-tight">Pooling ride secured</h1>
+                    <p className="mt-3 max-w-[250px] text-sm font-semibold leading-relaxed text-emerald-50">
+                      Your seat reservation and online payment are confirmed for this shared ride.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-white/15 px-4 py-3 text-right backdrop-blur-md">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-emerald-100">Booking ID</p>
+                    <p className="mt-1 text-sm font-black">{confirmedBooking?.bookingId || 'CONFIRMED'}</p>
+                  </div>
                 </div>
-                <div className="text-left">
-                  <p className="text-xs font-black text-slate-900">{vehicle.name}</p>
-                  <p className="text-[10px] font-bold uppercase tracking-tighter text-slate-400">
-                    {vehicle.vehicleNumber}
-                  </p>
+              </div>
+
+              <div className="space-y-5 p-6">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-3xl border border-slate-100 bg-slate-50 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Travel Slot</p>
+                    <div className="mt-3 flex items-start gap-3">
+                      <CalendarDays size={18} className="mt-0.5 text-slate-500" />
+                      <div>
+                        <p className="text-sm font-black text-slate-900">
+                          {formatDateTime(confirmedBooking?.travelDate || travelDate, confirmedBooking?.scheduleId || schedule?.departureTime || '')}
+                        </p>
+                        <p className="mt-1 text-[11px] font-bold text-slate-500">Departure timing saved in your booking</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-3xl border border-slate-100 bg-slate-50 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Payment</p>
+                    <div className="mt-3 flex items-start gap-3">
+                      <Receipt size={18} className="mt-0.5 text-slate-500" />
+                      <div>
+                        <p className="text-sm font-black text-slate-900">Rs {confirmedBooking?.fare || totalFare}</p>
+                        <p className="mt-1 text-[11px] font-bold text-emerald-600">
+                          {(confirmedBooking?.paymentStatus || 'paid').toUpperCase()} via Razorpay
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[30px] border border-slate-100 bg-white p-5 shadow-sm">
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                      <Car size={22} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Vehicle Assigned</p>
+                      <p className="mt-2 text-lg font-black text-slate-900">{vehicle.name}</p>
+                      <p className="mt-1 text-xs font-bold uppercase tracking-wider text-slate-500">{vehicle.vehicleNumber}</p>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <span className="rounded-full bg-indigo-50 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-indigo-600">
+                          Seats: {(confirmedBooking?.selectedSeats || selectedSeats).join(', ')}
+                        </span>
+                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-600">
+                          {confirmedBooking?.seatsBooked || selectedSeats.length} Reserved
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[30px] border border-slate-100 bg-white p-5 shadow-sm">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Trip Route</p>
+                  <div className="mt-4 flex items-start gap-4">
+                    <div className="flex flex-col items-center pt-1">
+                      <div className="h-3.5 w-3.5 rounded-full border-2 border-emerald-500 bg-white" />
+                      <div className="h-12 w-0.5 border-l-2 border-dashed border-slate-200" />
+                      <div className="h-3.5 w-3.5 rounded-full bg-slate-900" />
+                    </div>
+                    <div className="flex-1 space-y-6">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Pickup</p>
+                        <p className="mt-1 text-sm font-black leading-relaxed text-slate-900">
+                          {confirmedBooking?.pickupLabel || pickupStop?.name || route.originLabel}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Drop</p>
+                        <p className="mt-1 text-sm font-black leading-relaxed text-slate-900">
+                          {confirmedBooking?.dropLabel || dropStop?.name || route.destinationLabel}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[30px] border border-slate-100 bg-slate-50 p-5">
+                  <div className="flex items-start gap-3">
+                    <MapPin size={18} className="mt-0.5 text-slate-500" />
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">What happens next</p>
+                      <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-700">
+                        Reach the pickup point before departure, keep your booking ID handy, and check your activity tab for this confirmed pooling trip.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/taxi/user/activity')}
+                    className="rounded-[22px] border border-slate-200 bg-white px-4 py-4 text-sm font-black text-slate-900 shadow-sm transition-all active:scale-[0.98]"
+                  >
+                    View Activity
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/taxi/user')}
+                    className="rounded-[22px] bg-slate-900 px-4 py-4 text-sm font-black text-white shadow-xl transition-all active:scale-[0.98]"
+                  >
+                    Go Home
+                  </button>
                 </div>
               </div>
             </div>
-
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-              className="mt-12 flex items-center gap-3 text-xs font-black text-indigo-600"
-            >
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
-              Moving to your dashboard...
-            </motion.div>
           </motion.div>
         ) : (
           <>

@@ -8,6 +8,7 @@ const ActivityCard = ({ type, title, address, date, time, status, statusTone, pr
   const [driverBroken, setDriverBroken] = useState(false);
   const resolvedVehicleImage = vehicleBroken ? (type === 'parcel' ? '/5_Parcel.png' : '/1_Bike.png') : vehicleImage;
   const resolvedDriverImage = driverBroken ? buildAvatarFallback(driverName) : driverImage;
+  const vehicleAlt = type === 'parcel' ? 'Parcel' : type === 'bus' ? 'Bus' : type === 'pooling' ? 'Pooling vehicle' : 'Vehicle';
 
   return (
     <motion.button
@@ -20,7 +21,7 @@ const ActivityCard = ({ type, title, address, date, time, status, statusTone, pr
         <div className="relative h-[64px] w-[64px] shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 sm:h-[72px] sm:w-[72px]">
           <img
             src={resolvedVehicleImage}
-            alt={type === 'ride' ? 'Vehicle' : 'Parcel'}
+            alt={vehicleAlt}
             className="h-full w-full object-cover"
             draggable={false}
             onError={() => setVehicleBroken(true)}

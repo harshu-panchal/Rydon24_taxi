@@ -13,7 +13,8 @@ import {
 } from '../components/activity/ActivityStates';
 import api from '../../../shared/api/axiosInstance';
 import userBusService from '../services/busService';
-import { normalizeBusBooking, normalizeRide, PAGE_SIZE, TABS } from '../components/activity/activityHelpers';
+import { userService } from '../services/userService';
+import { normalizeBusBooking, normalizePoolingBooking, normalizeRide, PAGE_SIZE, TABS } from '../components/activity/activityHelpers';
 
 const AGGREGATE_FETCH_LIMIT = 60;
 
@@ -51,6 +52,7 @@ const getRideCategoryForTab = (tab) => {
 const getHelperText = (tab) => {
   if (tab === 'Support') return 'Tickets and help requests';
   if (tab === 'Bus') return 'Your bus tickets, travel timings, and operator details';
+  if (tab === 'Pooling') return 'Shared pooling rides, seat reservations, and upcoming departures';
   if (tab === 'Outstation') return 'Long-distance trips and outstation deliveries';
   if (tab === 'Scheduled') return 'Bookings reserved for a later pickup time';
   return 'Your recent trips, deliveries, and bookings';
@@ -109,8 +111,18 @@ const Activity = () => {
           const bookings = Array.isArray(payload?.results) ? payload.results : [];
           nextActivities = bookings.map(normalizeBusBooking).filter((item) => item.id);
           nextPagination = payload?.pagination || null;
+        } else if (activeTab === 'Pooling') {
+          const response = await userService.getMyPoolingBookings();
+          const payload = getPayload(response);
+          const bookings = Array.isArray(payload) ? payload : Array.isArray(payload?.results) ? payload.results : [];
+          const localPage = buildLocalPagination(
+            sortLatestFirst(bookings.map(normalizePoolingBooking).filter((item) => item.id)),
+            currentPage,
+          );
+          nextActivities = localPage.results;
+          nextPagination = localPage.pagination;
         } else if (activeTab === 'All') {
-          const [ridesResponse, busResponse] = await Promise.all([
+          const [ridesResponse, busResponse, poolingResponse] = await Promise.all([
             api.get('/rides', {
               params: {
                 limit: AGGREGATE_FETCH_LIMIT,
@@ -121,15 +133,23 @@ const Activity = () => {
               page: 1,
               limit: AGGREGATE_FETCH_LIMIT,
             }),
+            userService.getMyPoolingBookings(),
           ]);
 
           const ridePayload = getPayload(ridesResponse);
           const busPayload = getPayload(busResponse);
+          const poolingPayload = getPayload(poolingResponse);
           const rides = Array.isArray(ridePayload?.results) ? ridePayload.results : [];
           const bookings = Array.isArray(busPayload?.results) ? busPayload.results : [];
+          const poolingBookings = Array.isArray(poolingPayload)
+            ? poolingPayload
+            : Array.isArray(poolingPayload?.results)
+              ? poolingPayload.results
+              : [];
           const merged = sortLatestFirst([
             ...rides.map(normalizeRide).filter((item) => item.id),
             ...bookings.map(normalizeBusBooking).filter((item) => item.id),
+            ...poolingBookings.map(normalizePoolingBooking).filter((item) => item.id),
           ]);
           const localPage = buildLocalPagination(merged, currentPage);
           nextActivities = localPage.results;
@@ -197,6 +217,8 @@ const Activity = () => {
   const handleItemClick = (item) => {
     if (item.type === 'bus') {
       navigate(`${routePrefix}/profile/bus-bookings/${item.id}`);
+    } else if (item.type === 'pooling') {
+      navigate(`${routePrefix}/pooling`);
     } else if (item.type === 'parcel') {
       navigate(`${routePrefix}/parcel/detail/${item.id}`);
     } else {
