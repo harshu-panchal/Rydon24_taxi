@@ -275,6 +275,15 @@ const formatFareLabel = (value) => {
     return `Rs ${amount}`;
 };
 
+const isScheduledRideForFuture = (value) => {
+    if (!value) {
+        return false;
+    }
+
+    const date = new Date(value);
+    return !Number.isNaN(date.getTime()) && date.getTime() > Date.now();
+};
+
 const createScheduledRidePreview = (ride) => ({
     rideId: ride.rideId,
     type: ride.type || ride.serviceType || 'ride',
@@ -1419,6 +1428,7 @@ const DriverHome = () => {
 
                 const activeRequest = currentRequestRef.current;
                 const nextType = activeRequest?.type || 'ride';
+                const scheduledAt = activeRequest?.raw?.scheduledAt || payload?.scheduledAt || null;
                 let currentJob = null;
 
                 try {
@@ -1431,6 +1441,12 @@ const DriverHome = () => {
                 stopRideRequestAlertSound();
                 acceptingRideIdRef.current = '';
                 setAcceptingRideId('');
+                if (isScheduledRideForFuture(scheduledAt)) {
+                    setStatusMessage(`Scheduled ride confirmed for ${formatScheduledDateTime(scheduledAt)}.`);
+                    loadScheduledRides();
+                    return;
+                }
+
                 setCompletedRides(prev => prev + 1);
                 navigate('/taxi/driver/active-trip', {
                     state: {
@@ -1547,7 +1563,7 @@ const DriverHome = () => {
             socketService.disconnect();
         }
         return undefined;
-    }, [clearRecoveryBurst, fetchActiveJob, isOnline, navigate, scheduleRecoveryBurst]);
+    }, [clearRecoveryBurst, fetchActiveJob, isOnline, loadScheduledRides, navigate, scheduleRecoveryBurst]);
 
     useEffect(() => {
         if (!isOnline) {

@@ -162,6 +162,7 @@ const emitRideRequestToDrivers = async ({
       pickupAddress: ride.pickupAddress || '',
       dropLocation: ride.dropLocation,
       dropAddress: ride.dropAddress || '',
+      scheduledAt: ride.scheduledAt || null,
       estimatedDistanceMeters: ride.estimatedDistanceMeters || 0,
       estimatedDurationMinutes: ride.estimatedDurationMinutes || 0,
       vehicleTypeId: ride.vehicleTypeId ? String(ride.vehicleTypeId) : null,

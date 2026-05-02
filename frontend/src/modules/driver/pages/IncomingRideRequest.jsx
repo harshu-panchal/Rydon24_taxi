@@ -130,9 +130,12 @@ const IncomingRideRequest = ({
 
   const isParcel = data.type === 'parcel';
   const isIntercity = data.type === 'intercity';
+  const isScheduledRequest = Boolean(scheduledAt);
   const title = isPreviewMode
     ? (isParcel ? 'Scheduled delivery' : isIntercity ? 'Scheduled intercity trip' : 'Scheduled ride')
-    : (isParcel ? 'New delivery request' : isIntercity ? 'New intercity request' : 'New ride request');
+    : (isScheduledRequest
+      ? (isParcel ? 'Scheduled delivery request' : isIntercity ? 'Scheduled intercity request' : 'Scheduled ride request')
+      : (isParcel ? 'New delivery request' : isIntercity ? 'New intercity request' : 'New ride request'));
   const intercityRoute = [data.raw?.intercity?.fromCity, data.raw?.intercity?.toCity].filter(Boolean).join(' to ');
   const category = data.raw?.parcel?.category || data.raw?.parcel?.weight || (isParcel ? 'Parcel delivery' : isIntercity ? intercityRoute || 'Intercity trip' : 'Passenger ride');
   const payment = normalizePayment(data.payment);
@@ -193,6 +196,10 @@ const IncomingRideRequest = ({
                   <p className="mt-0.5 truncate text-[12px] font-semibold text-white/55">{category}</p>
                   {isPreviewMode ? (
                     <p className="mt-1 truncate text-[10px] font-black uppercase tracking-[0.14em] text-white/35">
+                      Scheduled for {formatScheduledDateTime(scheduledAt)}
+                    </p>
+                  ) : isScheduledRequest ? (
+                    <p className="mt-1 truncate text-[10px] font-black uppercase tracking-[0.14em] text-emerald-300">
                       Scheduled for {formatScheduledDateTime(scheduledAt)}
                     </p>
                   ) : (
@@ -261,6 +268,22 @@ const IncomingRideRequest = ({
                     <p className="mt-1 text-[14px] font-black text-slate-950">{formatScheduledDateTime(scheduledAt)}</p>
                     <p className="mt-1 text-[11px] font-black text-blue-600">{scheduledCountdown}</p>
                     <p className="mt-1 text-[11px] font-bold text-slate-500">This request is stored for later dispatch and shown here with full details.</p>
+                  </div>
+                </div>
+              </div>
+            ) : isScheduledRequest ? (
+              <div className="mb-4 rounded-[18px] border border-emerald-100 bg-emerald-50 px-4 py-3">
+                <div className="flex items-start gap-3">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-[12px] bg-white text-emerald-600 shadow-sm">
+                    <Clock size={18} strokeWidth={2.3} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[8px] font-black uppercase tracking-[0.18em] text-emerald-600/80">Scheduled time</p>
+                    <p className="mt-1 text-[14px] font-black text-slate-950">{formatScheduledDateTime(scheduledAt)}</p>
+                    <p className="mt-1 text-[11px] font-black text-emerald-600">{scheduledCountdown}</p>
+                    <p className="mt-1 text-[11px] font-bold text-slate-500">
+                      This is a scheduled request. Accept only if you can commit to this pickup slot.
+                    </p>
                   </div>
                 </div>
               </div>

@@ -48,7 +48,13 @@ const formatPoint = (point, fallback) => {
         return `${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}`;
     }
 
-    return fallback;
+  return fallback;
+};
+
+const isScheduledRideForFuture = (value) => {
+  if (!value) return false;
+  const date = new Date(value);
+  return !Number.isNaN(date.getTime()) && date.getTime() > Date.now();
 };
 
 const normalizeJobType = (job = {}) => {
@@ -226,6 +232,7 @@ const DriverRideRequestListener = () => {
             stopRideRequestAlertSound();
             const activeRequest = requestRef.current;
             const nextType = activeRequest?.type || 'ride';
+            const scheduledAt = activeRequest?.raw?.scheduledAt || payload?.scheduledAt || null;
             let currentJob = null;
             let currentDriverCoords = null;
 
@@ -241,6 +248,9 @@ const DriverRideRequestListener = () => {
             setCurrentRequest(null);
             acceptingRideIdRef.current = '';
             setAcceptingRideId('');
+            if (isScheduledRideForFuture(scheduledAt)) {
+              return;
+            }
             navigate('/taxi/driver/active-trip', {
                 state: {
                     type: nextType,

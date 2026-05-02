@@ -122,6 +122,17 @@ const normalizeScheduledAt = (value) => {
 
 export const DRIVER_SCHEDULE_LOCK_WINDOW_MS = 30 * 60 * 1000;
 
+const getScheduledRideTimestamp = (ride = {}) => {
+  const scheduledAt = ride?.scheduledAt ? new Date(ride.scheduledAt) : null;
+  const time = scheduledAt?.getTime?.() || NaN;
+  return Number.isFinite(time) ? time : NaN;
+};
+
+export const isRideScheduledForFuture = (ride = {}, referenceTime = new Date()) => {
+  const scheduledTime = getScheduledRideTimestamp(ride);
+  return Number.isFinite(scheduledTime) && scheduledTime > new Date(referenceTime).getTime();
+};
+
 export const getDriverIdsBlockedByUpcomingScheduledRides = async (
   driverIds = [],
   { referenceTime = new Date(), lockWindowMs = DRIVER_SCHEDULE_LOCK_WINDOW_MS, session = null } = {},
@@ -737,13 +748,15 @@ export const getActiveRideForIdentity = async ({ role, entityId }) => {
   }
 
   if (role === 'driver') {
-    return Ride.findOne({
+    const rides = await Ride.find({
       driverId: entityId,
       status: { $in: activeRideStatuses },
     })
       .sort({ updatedAt: -1 })
       .populate('userId', 'name phone')
       .populate('driverId', 'name phone profileImage vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel vehicleImage rating');
+
+    return rides.find((ride) => !isRideScheduledForFuture(ride)) || null;
   }
 
   return null;
@@ -918,7 +931,7 @@ export const acceptRideAssignment = async ({ rideId, driverId }) => {
       ride.status = RIDE_STATUS.ACCEPTED;
       ride.liveStatus = RIDE_LIVE_STATUS.ACCEPTED;
       ride.acceptedAt = new Date();
-      driver.isOnRide = true;
+      driver.isOnRide = !isRideScheduledForFuture(ride);
 
       await ride.save({ session });
       await driver.save({ session });
@@ -1260,7 +1273,7 @@ export const acceptRideBidAssignment = async ({ rideId, bidId, userId }) => {
       ride.liveStatus = RIDE_LIVE_STATUS.ACCEPTED;
       ride.biddingStatus = 'accepted';
       ride.acceptedAt = new Date();
-      driver.isOnRide = true;
+      driver.isOnRide = !isRideScheduledForFuture(ride);
       bid.status = 'accepted';
 
       await ride.save({ session });
