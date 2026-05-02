@@ -3,6 +3,7 @@ import { Phone, ChevronRight, ShieldCheck, Briefcase, UserRound, Sparkles, Build
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
+    clearDriverRegistrationSession,
     getStoredDriverRegistrationSession,
     saveDriverRegistrationSession,
     sendDriverLoginOtp,
