@@ -43,9 +43,9 @@ export const userBusService = {
       params: { scheduleId, date: normalizeTravelDate(date) },
     }),
 
-  getMyBookings: ({ page = 1, limit = 10 } = {}) =>
+  getMyBookings: ({ page = 1, limit = 10, status = '', tripState = '' } = {}) =>
     api.get('/users/bus-bookings', {
-      params: { page, limit },
+      params: { page, limit, status, tripState },
     }),
 
   getBookingById: (bookingId) => api.get(`/users/bus-bookings/${bookingId}`),

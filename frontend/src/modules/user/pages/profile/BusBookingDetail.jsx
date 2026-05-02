@@ -1,7 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { ArrowLeft, CircleAlert, Loader2, ReceiptText, ShieldAlert, Star, Ticket } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  ArrowLeft, 
+  BusFront, 
+  CircleAlert, 
+  Loader2, 
+  Phone, 
+  ReceiptText, 
+  Route, 
+  ShieldAlert, 
+  Star, 
+  Ticket,
+  MapPin,
+  Clock,
+  ChevronDown,
+  Info
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import userBusService from '../../services/busService';
 
@@ -25,6 +40,19 @@ const formatDateTime = (value) => {
     hour: '2-digit',
     minute: '2-digit',
   });
+};
+
+const formatDurationCompact = (value = '') => {
+  const raw = String(value || '').trim();
+  if (!raw) return 'Direct';
+  return raw
+    .replace(/days?/gi, 'd')
+    .replace(/hours?/gi, 'h')
+    .replace(/hrs?/gi, 'h')
+    .replace(/minutes?/gi, 'm')
+    .replace(/mins?/gi, 'm')
+    .replace(/\s+/g, ' ')
+    .trim();
 };
 
 const unwrapPayload = (response) => response?.data?.data || response?.data || response || null;
@@ -164,259 +192,331 @@ const BusBookingDetail = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#fff7ed_0%,#fffbeb_18%,#f8fafc_100%)] max-w-lg mx-auto font-sans pb-12">
-      <header className="sticky top-0 z-20 border-b border-white/80 bg-white/90 px-5 pb-4 pt-10 shadow-[0_4px_20px_rgba(15,23,42,0.05)] backdrop-blur-md">
-        <div className="flex items-center gap-3">
+    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-sans pb-32">
+      {/* Header */}
+      <div className="bg-white px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-slate-100 shadow-sm">
+        <div className="flex items-center gap-4">
           <button
             type="button"
             onClick={() => navigate(`${routePrefix}/profile/bus-bookings`)}
-            className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-white/80 bg-white/90 shadow-sm"
+            className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-600 hover:bg-slate-100 transition-colors"
           >
-            <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
+            <ArrowLeft size={20} />
           </button>
           <div className="flex-1">
-            <p className="text-[9px] font-black uppercase tracking-[0.24em] text-slate-400">Bus Ticket</p>
-            <h1 className="text-[19px] font-black tracking-tight text-slate-900">Booking Details</h1>
+            <h1 className="text-lg font-bold text-slate-900">Ticket Details</h1>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Booking ID: {booking?.bookingCode || '...'}</p>
           </div>
         </div>
-      </header>
+      </div>
 
-      <div className="space-y-4 px-5 pt-5">
+      <div className="px-5 pt-6 space-y-6">
         {loading ? (
-          <div className="rounded-[22px] bg-white/90 p-8 text-center shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
-            <Loader2 size={24} className="mx-auto animate-spin text-orange-500" />
-            <p className="mt-3 text-[12px] font-black uppercase tracking-[0.22em] text-slate-500">Loading booking</p>
+          <div className="bg-white rounded-3xl p-12 text-center border border-slate-100 shadow-sm">
+            <Loader2 size={28} className="mx-auto animate-spin text-slate-400 mb-3" />
+            <p className="text-sm font-bold text-slate-900">Loading details...</p>
           </div>
         ) : null}
 
         {!loading && error ? (
-          <div className="rounded-[18px] border border-rose-100 bg-rose-50 px-4 py-3 text-[12px] font-bold text-rose-600">
-            {error}
+          <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 text-center">
+            <p className="text-sm font-bold text-rose-600">{error}</p>
           </div>
         ) : null}
 
-        {!loading && !error && booking ? (
-          <>
+        {(!loading && !error && booking) ? (
+          <div className="space-y-6">
+            {/* Ticket Card */}
             <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="overflow-hidden rounded-[24px] border border-white/80 bg-white/95 shadow-[0_8px_24px_rgba(15,23,42,0.06)]"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden"
             >
-              <div className="bg-slate-900 px-4 py-4 text-white">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-300">Booking Code</p>
-                <div className="mt-2 flex items-center justify-between gap-3">
-                  <p className="text-[17px] font-black">{booking.bookingCode}</p>
-                  <span className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em]">
+              <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">PNR Number</p>
+                  <p className="text-sm font-black tracking-widest">{booking.bookingCode}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Status</p>
+                  <div className="px-3 py-1 rounded-full bg-white/10 text-white border border-white/20 text-[10px] font-black uppercase tracking-wider">
                     {booking.status}
-                  </span>
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-4 p-4">
-                <div className="rounded-[18px] border border-slate-100 bg-slate-50 px-4 py-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-[18px] font-black text-slate-900">{booking.bus?.fromCity || 'From'} to {booking.bus?.toCity || 'To'}</p>
-                      <p className="mt-1 text-[12px] font-semibold text-slate-500">{booking.bus?.operator || 'Operator'} • {booking.bus?.type || 'Bus'}</p>
+              <div className="p-6 space-y-6">
+                {/* Route Header */}
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex-1">
+                    <p className="text-xl font-black text-slate-900 truncate">{booking.bus?.fromCity || 'From'}</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase mt-0.5">{booking.bus?.departure || '--:--'}</p>
+                  </div>
+                  <div className="flex flex-col items-center flex-1 px-2">
+                    <span className="text-[10px] font-black text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100">
+                      {formatDurationCompact(booking.bus?.duration)}
+                    </span>
+                    <div className="w-full h-[1px] border-t border-dashed border-slate-200 my-3" />
+                    <BusFront size={18} className="text-slate-300" />
+                  </div>
+                  <div className="flex-1 text-right">
+                    <p className="text-xl font-black text-slate-900 truncate">{booking.bus?.toCity || 'To'}</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase mt-0.5">{booking.bus?.arrival || '--:--'}</p>
+                  </div>
+                </div>
+
+                {/* Operator Info */}
+                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">Bus & Operator</p>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center text-white font-black">
+                      {String(booking.bus?.operator || 'B').charAt(0)}
                     </div>
-                    <div className="text-right">
-                      <p className="text-[12px] font-black text-slate-900">{booking.travelDate || 'NA'}</p>
-                      <p className="mt-1 text-[11px] font-semibold text-slate-500">{booking.bus?.departure || 'NA'} to {booking.bus?.arrival || 'NA'}</p>
+                    <div>
+                      <p className="text-sm font-black text-slate-900">{booking.bus?.operator || 'Bus Service'}</p>
+                      <p className="text-[11px] text-slate-500">{booking.bus?.type || 'Standard Service'}</p>
                     </div>
                   </div>
                 </div>
 
+                {/* Info Grid */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-[18px] border border-slate-100 px-3 py-3">
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Paid</p>
-                    <p className="mt-1 text-[15px] font-black text-slate-900">{formatMoney(booking.amount, booking.currency)}</p>
-                    <p className="mt-1 text-[11px] font-semibold text-slate-500">Booked on {formatDateTime(booking.createdAt)}</p>
+                  <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                    <div className="flex items-center gap-2 text-slate-400 mb-2">
+                      <CalendarDays size={14} />
+                      <p className="text-[9px] font-bold uppercase tracking-widest">Travel Date</p>
+                    </div>
+                    <p className="text-sm font-black text-slate-900">{booking.travelDate || 'NA'}</p>
                   </div>
-                  <div className="rounded-[18px] border border-slate-100 px-3 py-3">
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Refunded</p>
-                    <p className="mt-1 text-[15px] font-black text-slate-900">{formatMoney(booking.totalRefundedAmount, booking.currency)}</p>
-                    <p className="mt-1 text-[11px] font-semibold text-slate-500">{booking.seatSummary?.cancelled || 0} seat(s) cancelled</p>
+                  <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                    <div className="flex items-center gap-2 text-slate-400 mb-2">
+                      <Ticket size={14} />
+                      <p className="text-[9px] font-bold uppercase tracking-widest">Seat Count</p>
+                    </div>
+                    <p className="text-sm font-black text-slate-900">{activeSeatIds.length} Seats</p>
+                  </div>
+                </div>
+
+                {/* More Info */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                    <div className="flex items-center gap-2 text-slate-400 mb-2">
+                      <BusFront size={14} />
+                      <p className="text-[9px] font-bold uppercase tracking-widest">Bus Number</p>
+                    </div>
+                    <p className="text-sm font-black text-slate-900">{booking.bus?.registrationNumber || 'Pending'}</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                    <div className="flex items-center gap-2 text-slate-400 mb-2">
+                      <Phone size={14} />
+                      <p className="text-[9px] font-bold uppercase tracking-widest">Contact</p>
+                    </div>
+                    <p className="text-sm font-black text-slate-900">{booking.bus?.driverPhone || 'Assigned soon'}</p>
+                  </div>
+                </div>
+
+                {/* Locations */}
+                <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
+                  <div className="flex items-center gap-2 text-slate-400 mb-4">
+                    <Route size={14} />
+                    <p className="text-[9px] font-bold uppercase tracking-widest">Route Points</p>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="relative pl-6">
+                      <div className="absolute left-0 top-1.5 w-2 h-2 rounded-full bg-emerald-500" />
+                      <div className="absolute left-[3px] top-4 w-0.5 h-6 bg-slate-200" />
+                      <p className="text-[9px] font-bold text-emerald-600 uppercase mb-0.5">Pickup</p>
+                      <p className="text-sm font-black text-slate-900">{booking.bus?.pickupLocation || booking.bus?.fromCity}</p>
+                    </div>
+                    <div className="relative pl-6">
+                      <div className="absolute left-0 top-1.5 w-2 h-2 rounded-full bg-rose-500" />
+                      <p className="text-[9px] font-bold text-rose-600 uppercase mb-0.5">Dropoff</p>
+                      <p className="text-sm font-black text-slate-900">{booking.bus?.dropLocation || booking.bus?.toCity}</p>
+                    </div>
                   </div>
                 </div>
               </div>
             </motion.div>
 
-            <div className="rounded-[24px] border border-white/80 bg-white/95 p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)]">
-              <div className="flex items-center gap-2">
-                <Ticket size={15} className="text-orange-500" />
-                <h2 className="text-[15px] font-black text-slate-900">Seat Summary</h2>
+            {/* Seat Summary & Cancellation Section */}
+            <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <Ticket size={20} className="text-slate-900" />
+                <h2 className="text-lg font-black text-slate-900">Manage Seats</h2>
               </div>
 
-              <div className="mt-4 space-y-3">
+              <div className="space-y-3">
                 {activeSeatIds.map((seatId, index) => (
                   <label
                     key={seatId}
-                    className={`flex cursor-pointer items-center justify-between rounded-[18px] border px-4 py-3 transition ${
-                      selectedSeatIds.includes(seatId) ? 'border-orange-200 bg-orange-50' : 'border-slate-100 bg-slate-50'
-                    } ${!canCancel ? 'cursor-default opacity-70' : ''}`}
+                    className={`flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer ${
+                      selectedSeatIds.includes(seatId) 
+                        ? 'bg-slate-900 border-slate-900 text-white' 
+                        : 'bg-slate-50 border-slate-100 text-slate-900 hover:border-slate-200'
+                    } ${!canCancel ? 'opacity-70 cursor-not-allowed' : ''}`}
                   >
                     <div>
-                      <p className="text-[13px] font-black text-slate-900">{activeSeatLabels[index] || seatId}</p>
-                      <p className="mt-1 text-[11px] font-semibold text-slate-500">Active ticket • {formatMoney(booking.perSeatAmount, booking.currency)}</p>
+                      <p className="text-sm font-black">{activeSeatLabels[index] || seatId}</p>
+                      <p className={`text-[10px] font-bold ${selectedSeatIds.includes(seatId) ? 'text-slate-400' : 'text-slate-500'}`}>
+                        Active Seat • {formatMoney(booking.perSeatAmount, booking.currency)}
+                      </p>
                     </div>
                     <input
                       type="checkbox"
+                      className="hidden"
                       checked={selectedSeatIds.includes(seatId)}
                       disabled={!canCancel}
                       onChange={() => toggleSeat(seatId)}
-                      className="h-4 w-4 accent-orange-500"
                     />
+                    {canCancel && (
+                      <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
+                        selectedSeatIds.includes(seatId) ? 'bg-white border-white text-slate-900' : 'bg-white border-slate-200'
+                      }`}>
+                        {selectedSeatIds.includes(seatId) && <div className="w-2.5 h-2.5 bg-slate-900 rounded-sm" />}
+                      </div>
+                    )}
                   </label>
                 ))}
 
-                {Array.isArray(booking.cancelledSeats) && booking.cancelledSeats.length > 0 ? (
-                  <div className="space-y-2">
-                    <p className="pt-1 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Cancelled Seats</p>
+                {Array.isArray(booking.cancelledSeats) && booking.cancelledSeats.length > 0 && (
+                  <div className="pt-4 space-y-3">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Cancelled Seats</p>
                     {booking.cancelledSeats.map((seat) => (
-                      <div key={`${seat.seatId}-${seat.cancelledAt || ''}`} className="rounded-[16px] border border-slate-100 bg-slate-50 px-4 py-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-[13px] font-black text-slate-900">{seat.seatLabel || seat.seatId}</p>
-                            <p className="mt-1 text-[11px] font-semibold text-slate-500">Cancelled on {formatDateTime(seat.cancelledAt)}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-[12px] font-black text-emerald-600">{formatMoney(seat.refundAmount, booking.currency)}</p>
-                            <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">{seat.refundStatus || 'processed'}</p>
-                          </div>
+                      <div key={seat.seatId} className="p-4 rounded-2xl border border-slate-50 bg-slate-50/50 flex justify-between items-center">
+                        <div>
+                          <p className="text-sm font-black text-slate-400">{seat.seatLabel || seat.seatId}</p>
+                          <p className="text-[10px] text-slate-400">Cancelled {formatDateTime(seat.cancelledAt)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-black text-slate-400">{formatMoney(seat.refundAmount, booking.currency)}</p>
+                          <p className="text-[9px] font-bold uppercase text-slate-400">Refunded</p>
                         </div>
                       </div>
                     ))}
                   </div>
-                ) : null}
+                )}
               </div>
+
+              {/* Refund Preview */}
+              {selectedSeatIds.length > 0 && (
+                <motion.div 
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  className="mt-6 p-5 bg-slate-50 rounded-2xl border border-slate-100"
+                >
+                  <div className="flex items-center gap-2 mb-4 text-slate-900 font-black text-xs uppercase tracking-wider">
+                    <ReceiptText size={14} />
+                    Refund Preview
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Total</p>
+                      <p className="text-sm font-black text-slate-900">{formatMoney(selectionQuote.subtotal, booking.currency)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-bold text-emerald-600 uppercase mb-1">Refund</p>
+                      <p className="text-sm font-black text-emerald-600">{formatMoney(selectionQuote.refundAmount, booking.currency)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-bold text-rose-600 uppercase mb-1">Fee</p>
+                      <p className="text-sm font-black text-rose-600">{formatMoney(selectionQuote.chargeAmount, booking.currency)}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleCancelSeats}
+                    disabled={cancelling}
+                    className="w-full mt-5 py-4 bg-rose-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg shadow-rose-100 active:scale-[0.98] transition-transform"
+                  >
+                    {cancelling ? 'Processing...' : `Confirm Cancellation`}
+                  </button>
+                </motion.div>
+              )}
             </div>
 
-            <div className="rounded-[24px] border border-amber-100 bg-amber-50/80 p-4 shadow-[0_6px_18px_rgba(15,23,42,0.04)]">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-600">Bus Rating</p>
-                  <h2 className="mt-1 text-[15px] font-black text-slate-900">Rate your bus experience</h2>
+            {/* Rating Section */}
+            <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <Star size={20} className="text-slate-900" />
+                  <h2 className="text-lg font-black text-slate-900">Your Review</h2>
                 </div>
-                <div className="text-right">
-                  <p className="text-[16px] font-black text-slate-900">{Number(booking.review?.averageRating || 0).toFixed(1)}</p>
-                  <p className="text-[11px] font-semibold text-slate-500">{booking.review?.ratingCount || 0} ratings</p>
-                </div>
+                {booking.review?.averageRating && (
+                  <div className="flex items-center gap-1 bg-amber-50 px-2 py-1 rounded-full text-amber-600">
+                    <Star size={12} fill="currentColor" />
+                    <span className="text-xs font-black">{Number(booking.review.averageRating).toFixed(1)}</span>
+                  </div>
+                )}
               </div>
 
               {canRate ? (
-                <>
-                  <p className="mt-3 text-[12px] font-semibold text-slate-600">
-                    {booking.review?.userRating
-                      ? 'Your trip is completed. You can update your rating here.'
-                      : 'Your trip is completed. Share your rating for this bus.'}
-                  </p>
-                  <div className="mt-4 flex items-center gap-2">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-center gap-2">
                     {[1, 2, 3, 4, 5].map((score) => (
                       <button
                         key={score}
                         type="button"
                         onClick={() => setSelectedRating(score)}
-                        className="rounded-full p-1"
+                        className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${
+                          score <= selectedRating ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-200'
+                        }`}
                       >
-                        <Star
-                          size={24}
-                          className={score <= selectedRating ? 'text-amber-500' : 'text-amber-200'}
-                          fill={score <= selectedRating ? 'currentColor' : 'transparent'}
-                        />
+                        <Star size={24} fill={score <= selectedRating ? 'currentColor' : 'transparent'} />
                       </button>
                     ))}
                   </div>
                   <textarea
                     value={reviewComment}
-                    onChange={(event) => setReviewComment(event.target.value)}
-                    maxLength={500}
-                    placeholder="Tell us briefly how the bus journey was"
-                    className="mt-4 min-h-[96px] w-full rounded-[18px] border border-amber-100 bg-white/90 px-4 py-3 text-[13px] font-semibold text-slate-700 outline-none placeholder:text-slate-400"
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    placeholder="Tell us about your trip experience..."
+                    className="w-full min-h-[120px] bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-900 outline-none focus:border-slate-200 transition-colors"
                   />
                   <button
-                    type="button"
                     onClick={handleSubmitReview}
                     disabled={savingReview || !selectedRating}
-                    className="mt-4 inline-flex w-full items-center justify-center rounded-[18px] bg-slate-900 px-4 py-3 text-[12px] font-black uppercase tracking-[0.18em] text-white disabled:opacity-50"
+                    className="w-full py-4 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg shadow-slate-100 active:scale-[0.98] transition-transform"
                   >
-                    {savingReview ? 'Saving Rating...' : booking.review?.userRating ? 'Update Rating' : 'Submit Rating'}
+                    {savingReview ? 'Saving...' : 'Submit Review'}
                   </button>
-                </>
+                </div>
               ) : (
-                <div className="mt-4 rounded-[18px] border border-slate-200 bg-white/90 px-4 py-3 text-[11px] font-semibold text-slate-600">
-                  {booking.review?.tripCompleted
-                    ? 'Rating will open when booking details refresh.'
-                    : 'You can rate this bus after the travel date and trip time are completed.'}
+                <div className="bg-slate-50 rounded-2xl p-6 text-center border border-slate-100">
+                  <Info size={24} className="mx-auto text-slate-300 mb-2" />
+                  <p className="text-sm font-black text-slate-500">
+                    {booking.review?.tripCompleted 
+                      ? 'Review window is closed'
+                      : 'You can rate this trip after completion'}
+                  </p>
                 </div>
               )}
             </div>
 
-            <div className="rounded-[24px] border border-orange-100 bg-orange-50/80 p-4 shadow-[0_6px_18px_rgba(15,23,42,0.04)]">
-              <div className="flex items-center gap-2">
-                <ShieldAlert size={15} className="text-orange-500" />
-                <h2 className="text-[15px] font-black text-slate-900">Cancellation Policy</h2>
+            {/* Policy */}
+            <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <ShieldAlert size={20} className="text-slate-900" />
+                <h2 className="text-lg font-black text-slate-900">Policies</h2>
               </div>
-              {booking.cancellationPolicy?.text ? (
-                <p className="mt-3 text-[12px] font-semibold leading-5 text-slate-600">{booking.cancellationPolicy.text}</p>
-              ) : null}
-
-              <div className="mt-3 space-y-2">
+              <div className="space-y-4">
                 {(booking.cancellationPolicy?.rules || []).map((rule) => (
-                  <div key={rule.id} className="rounded-[16px] bg-white/90 px-4 py-3">
-                    <p className="text-[12px] font-black text-slate-900">{rule.label || 'Cancellation rule'}</p>
-                    <p className="mt-1 text-[11px] font-semibold text-slate-500">
-                      Cancel at least {Number(rule.hoursBeforeDeparture || 0).toFixed(0)} hrs before departure • {rule.refundType === 'percentage' ? `${rule.refundValue}% refund` : rule.refundType === 'fixed' ? `${formatMoney(rule.refundValue, booking.currency)} refund` : 'No refund'}
-                    </p>
-                    {rule.notes ? (
-                      <p className="mt-1 text-[11px] font-semibold text-slate-500">{rule.notes}</p>
-                    ) : null}
+                  <div key={rule.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <p className="text-sm font-black text-slate-900">{rule.label}</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Clock size={12} className="text-slate-400" />
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                        {rule.hoursBeforeDeparture}h Before Departure
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <ReceiptText size={12} className="text-slate-400" />
+                      <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">
+                        {rule.refundType === 'percentage' ? `${rule.refundValue}% Refund` : `${formatMoney(rule.refundValue, booking.currency)} Refund`}
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>
-
-              <div className="mt-4 rounded-[18px] border border-orange-100 bg-white/90 px-4 py-4">
-                <div className="flex items-center gap-2">
-                  <ReceiptText size={15} className="text-slate-700" />
-                  <p className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-500">Selected Seat Refund Preview</p>
-                </div>
-                <div className="mt-3 grid grid-cols-3 gap-3 text-center">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Fare</p>
-                    <p className="mt-1 text-[13px] font-black text-slate-900">{formatMoney(selectionQuote.subtotal, booking.currency)}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Refund</p>
-                    <p className="mt-1 text-[13px] font-black text-emerald-600">{formatMoney(selectionQuote.refundAmount, booking.currency)}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Charge</p>
-                    <p className="mt-1 text-[13px] font-black text-rose-500">{formatMoney(selectionQuote.chargeAmount, booking.currency)}</p>
-                  </div>
-                </div>
-                <p className="mt-3 text-[11px] font-semibold text-slate-500">
-                  {booking.cancellation?.hoursBeforeDeparture > 0
-                    ? `${Number(booking.cancellation.hoursBeforeDeparture).toFixed(1)} hrs left before departure.`
-                    : 'Cancellation window details are shown above.'}
-                </p>
-              </div>
-
-              {canCancel ? (
-                <button
-                  type="button"
-                  onClick={handleCancelSeats}
-                  disabled={cancelling || selectedSeatIds.length === 0}
-                  className="mt-4 inline-flex w-full items-center justify-center rounded-[18px] bg-slate-900 px-4 py-3 text-[12px] font-black uppercase tracking-[0.18em] text-white disabled:opacity-50"
-                >
-                  {cancelling ? 'Cancelling Seats...' : `Cancel ${selectedSeatIds.length || 0} Selected Seat(s)`}
-                </button>
-              ) : (
-                <div className="mt-4 flex items-start gap-2 rounded-[18px] border border-slate-200 bg-slate-100 px-4 py-3 text-[11px] font-semibold text-slate-600">
-                  <CircleAlert size={14} className="mt-0.5 shrink-0" />
-                  <span>This booking is not currently eligible for more cancellations.</span>
-                </div>
-              )}
             </div>
-          </>
+          </div>
         ) : null}
       </div>
     </div>

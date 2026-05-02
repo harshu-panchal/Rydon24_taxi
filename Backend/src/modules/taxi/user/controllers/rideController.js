@@ -401,6 +401,7 @@ export const listMyRides = async (req, res) => {
     entityId: req.auth.sub,
     limit: req.query.limit,
     page: req.query.page,
+    category: req.query.category,
   });
 
   res.json({

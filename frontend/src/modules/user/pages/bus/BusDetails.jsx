@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, User, Phone, Mail, ChevronRight, Check, Loader2 } from 'lucide-react';
 import userBusService from '../../services/busService';
+import { userAuthService } from '../../services/authService';
 
 const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
 
@@ -48,8 +49,93 @@ const BusDetails = () => {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [isPaying, setIsPaying] = useState(false);
+  const [travellerMode, setTravellerMode] = useState('self');
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileData, setProfileData] = useState(null);
 
   const unwrapPayload = (response) => response?.data?.data || response?.data || response || {};
+
+  useEffect(() => {
+    let active = true;
+
+    const storedProfile = (() => {
+      try {
+        return JSON.parse(localStorage.getItem('userInfo') || '{}');
+      } catch {
+        return {};
+      }
+    })();
+
+    const applyProfile = (profile = {}) => {
+      if (!active) {
+        return;
+      }
+
+      const nextProfile = {
+        name: String(profile?.name || '').trim(),
+        email: String(profile?.email || '').trim(),
+        phone: String(profile?.phone || '').trim(),
+      };
+
+      setProfileData(nextProfile);
+
+      if (travellerMode === 'self') {
+        setName(nextProfile.name || '');
+        setEmail(nextProfile.email || '');
+        setPhone(nextProfile.phone || '');
+      }
+    };
+
+    applyProfile(storedProfile);
+
+    const loadProfile = async () => {
+      try {
+        const response = await userAuthService.getCurrentUser();
+        const user = response?.data?.user || {};
+        const normalizedUser = {
+          name: user.name || storedProfile?.name || '',
+          email: user.email || storedProfile?.email || '',
+          phone: user.phone || storedProfile?.phone || '',
+        };
+
+        localStorage.setItem('userInfo', JSON.stringify({
+          ...storedProfile,
+          ...user,
+        }));
+        applyProfile(normalizedUser);
+      } catch {
+        applyProfile(storedProfile);
+      } finally {
+        if (active) {
+          setProfileLoading(false);
+        }
+      }
+    };
+
+    loadProfile();
+
+    return () => {
+      active = false;
+    };
+  }, [travellerMode]);
+
+  const applySelfProfile = () => {
+    setTravellerMode('self');
+    setName(profileData?.name || '');
+    setEmail(profileData?.email || '');
+    setPhone(profileData?.phone || '');
+    setError('');
+  };
+
+  const switchToSomeoneElse = () => {
+    setTravellerMode('other');
+    setName('');
+    setAge('');
+    setGender('Male');
+    setPhone('');
+    setEmail('');
+    setError('');
+  };
 
   if (!bus || !selectedSeats?.length) {
     navigate(`${routePrefix}/bus`, { replace: true });
@@ -175,7 +261,62 @@ const BusDetails = () => {
         </div>
 
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-6">
-          <h3 className="text-lg font-bold text-slate-900">Primary Passenger</h3>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Primary Passenger</h3>
+              <p className="mt-1 text-xs font-semibold text-slate-500">Choose who is travelling, then confirm the details below.</p>
+            </div>
+            {profileLoading ? (
+              <div className="flex items-center gap-2 rounded-full bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                <Loader2 size={12} className="animate-spin" /> Loading
+              </div>
+            ) : null}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={applySelfProfile}
+              className={`rounded-2xl border px-4 py-3 text-left transition-all ${
+                travellerMode === 'self'
+                  ? 'border-slate-900 bg-slate-900 text-white shadow-lg'
+                  : 'border-slate-200 bg-slate-50 text-slate-700'
+              }`}
+            >
+              <p className="text-[10px] font-black uppercase tracking-[0.18em]">Self</p>
+              <p className={`mt-1 text-sm font-black ${travellerMode === 'self' ? 'text-white' : 'text-slate-900'}`}>
+                Use my profile
+              </p>
+              <p className={`mt-1 text-[11px] font-semibold ${travellerMode === 'self' ? 'text-white/70' : 'text-slate-500'}`}>
+                Name, phone, and email auto-fill from your account.
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={switchToSomeoneElse}
+              className={`rounded-2xl border px-4 py-3 text-left transition-all ${
+                travellerMode === 'other'
+                  ? 'border-slate-900 bg-slate-900 text-white shadow-lg'
+                  : 'border-slate-200 bg-slate-50 text-slate-700'
+              }`}
+            >
+              <p className="text-[10px] font-black uppercase tracking-[0.18em]">Other</p>
+              <p className={`mt-1 text-sm font-black ${travellerMode === 'other' ? 'text-white' : 'text-slate-900'}`}>
+                Book for someone else
+              </p>
+              <p className={`mt-1 text-[11px] font-semibold ${travellerMode === 'other' ? 'text-white/70' : 'text-slate-500'}`}>
+                Enter passenger details manually.
+              </p>
+            </button>
+          </div>
+
+          {travellerMode === 'self' && profileData ? (
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-[12px] font-bold text-emerald-700">
+              {profileData.email
+                ? `Using ${profileData.email} for the ticket confirmation.`
+                : 'Profile phone and name are filled. Add an email if you want the e-ticket mailed too.'}
+            </div>
+          ) : null}
 
           <div className="space-y-4">
             <div className="space-y-1.5">

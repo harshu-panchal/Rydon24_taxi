@@ -3,10 +3,10 @@ import { motion } from 'framer-motion';
 import { Calendar, ChevronRight, Clock } from 'lucide-react';
 import { buildAvatarFallback } from './activityHelpers';
 
-const ActivityCard = ({ type, title, address, date, time, status, price, onClick, driverName, driverImage, vehicleImage }) => {
+const ActivityCard = ({ type, title, address, date, time, status, statusTone, price, onClick, driverName, driverImage, vehicleImage, eyebrow }) => {
   const [vehicleBroken, setVehicleBroken] = useState(false);
   const [driverBroken, setDriverBroken] = useState(false);
-  const resolvedVehicleImage = vehicleBroken ? (type === 'ride' ? '/1_Bike.png' : '/5_Parcel.png') : vehicleImage;
+  const resolvedVehicleImage = vehicleBroken ? (type === 'parcel' ? '/5_Parcel.png' : '/1_Bike.png') : vehicleImage;
   const resolvedDriverImage = driverBroken ? buildAvatarFallback(driverName) : driverImage;
 
   return (
@@ -14,10 +14,10 @@ const ActivityCard = ({ type, title, address, date, time, status, price, onClick
       type="button"
       whileTap={{ scale: 0.98 }}
       onClick={onClick}
-      className="w-full cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-colors hover:border-slate-300 active:translate-y-0"
+      className="w-full cursor-pointer rounded-2xl border border-slate-200 bg-white p-3.5 text-left shadow-sm transition-colors hover:border-slate-300 active:translate-y-0 sm:p-4"
     >
-      <div className="flex items-start gap-4">
-        <div className="relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+      <div className="flex items-start gap-3 sm:gap-4">
+        <div className="relative h-[64px] w-[64px] shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 sm:h-[72px] sm:w-[72px]">
           <img
             src={resolvedVehicleImage}
             alt={type === 'ride' ? 'Vehicle' : 'Parcel'}
@@ -36,19 +36,19 @@ const ActivityCard = ({ type, title, address, date, time, status, price, onClick
           </div>
         </div>
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h4 className="truncate text-[15px] font-semibold leading-tight text-slate-900">{title}</h4>
-              <p className="mt-1 truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                {type === 'parcel' ? 'Delivery booking' : driverName}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start gap-2 sm:gap-3">
+            <div className="min-w-0 flex-1">
+              <h4 className="line-clamp-2 break-words text-[14px] font-semibold leading-tight text-slate-900 sm:text-[15px]">{title}</h4>
+              <p className="mt-1 line-clamp-2 break-words text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 sm:text-[11px]">
+                {eyebrow || driverName}
               </p>
               <p className="mt-2 line-clamp-2 text-[12px] text-slate-600">{address}</p>
             </div>
-            <span className="shrink-0 text-[14px] font-semibold text-slate-900">Rs {price}</span>
+            <span className="shrink-0 whitespace-nowrap pl-1 text-[13px] font-semibold text-slate-900 sm:text-[14px]">Rs {price}</span>
           </div>
 
-          <div className="mt-3 flex items-center gap-3">
+          <div className="mt-3 flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] leading-none text-slate-400">
               <Calendar size={11} strokeWidth={2.4} />
               <span>{date}</span>
@@ -58,10 +58,10 @@ const ActivityCard = ({ type, title, address, date, time, status, price, onClick
               <span>{time}</span>
             </div>
             <span
-              className={`ml-auto rounded-full border px-2 py-1 text-[9px] font-semibold leading-none ${
-                status === 'Completed'
+              className={`rounded-full border px-2 py-1 text-[9px] font-semibold leading-none sm:ml-auto ${
+                statusTone === 'success'
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                  : status === 'Cancelled'
+                  : statusTone === 'danger'
                     ? 'bg-rose-50 text-rose-700 border-rose-100'
                     : 'bg-amber-50 text-amber-700 border-amber-100'
               }`}
@@ -71,7 +71,7 @@ const ActivityCard = ({ type, title, address, date, time, status, price, onClick
           </div>
         </div>
 
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-300">
+        <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-300">
           <ChevronRight size={16} strokeWidth={2.4} />
         </div>
       </div>

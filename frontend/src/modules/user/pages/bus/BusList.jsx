@@ -34,7 +34,14 @@ const formatTravelDate = (dateStr) => {
 const formatDurationBrief = (value = '') => {
   const raw = String(value || '').trim();
   if (!raw) return 'Direct';
-  return raw.replace(/hours?/i, 'h').replace(/mins?/i, 'm');
+  return raw
+    .replace(/days?/gi, 'd')
+    .replace(/hours?/gi, 'h')
+    .replace(/hrs?/gi, 'h')
+    .replace(/minutes?/gi, 'm')
+    .replace(/mins?/gi, 'm')
+    .replace(/\s+/g, ' ')
+    .trim();
 };
 
 const BusList = () => {

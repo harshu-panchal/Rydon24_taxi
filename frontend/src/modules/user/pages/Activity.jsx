@@ -12,7 +12,49 @@ import {
   ActivitySupportState,
 } from '../components/activity/ActivityStates';
 import api from '../../../shared/api/axiosInstance';
-import { normalizeRide, PAGE_SIZE, TABS } from '../components/activity/activityHelpers';
+import userBusService from '../services/busService';
+import { normalizeBusBooking, normalizeRide, PAGE_SIZE, TABS } from '../components/activity/activityHelpers';
+
+const AGGREGATE_FETCH_LIMIT = 60;
+
+const getPayload = (response) => response?.data?.data || response?.data || response || {};
+
+const buildLocalPagination = (items, page) => {
+  const total = items.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const safePage = Math.min(Math.max(Number(page) || 1, 1), totalPages);
+  const startIndex = (safePage - 1) * PAGE_SIZE;
+
+  return {
+    results: items.slice(startIndex, startIndex + PAGE_SIZE),
+    pagination: {
+      page: safePage,
+      limit: PAGE_SIZE,
+      total,
+      totalPages,
+      hasNextPage: safePage < totalPages,
+      hasPrevPage: safePage > 1,
+    },
+  };
+};
+
+const sortLatestFirst = (items = []) => [...items].sort((left, right) => Number(right.sortTimestamp || 0) - Number(left.sortTimestamp || 0));
+
+const getRideCategoryForTab = (tab) => {
+  if (tab === 'Rides') return 'rides';
+  if (tab === 'Parcels') return 'parcels';
+  if (tab === 'Outstation') return 'outstation';
+  if (tab === 'Scheduled') return 'scheduled';
+  return '';
+};
+
+const getHelperText = (tab) => {
+  if (tab === 'Support') return 'Tickets and help requests';
+  if (tab === 'Bus') return 'Your bus tickets, travel timings, and operator details';
+  if (tab === 'Outstation') return 'Long-distance trips and outstation deliveries';
+  if (tab === 'Scheduled') return 'Bookings reserved for a later pickup time';
+  return 'Your recent trips, deliveries, and bookings';
+};
 
 const Activity = () => {
   const [activeTab, setActiveTab] = useState('All');
@@ -36,32 +78,86 @@ const Activity = () => {
   useEffect(() => {
     let active = true;
 
-    const loadRideHistory = async () => {
+    const loadActivities = async () => {
       setLoading(true);
       setError('');
 
       try {
-        const response = await api.get('/rides', {
-          params: {
+        if (activeTab === 'Support') {
+          if (!active) return;
+          setActivities([]);
+          setPagination({
+            page: 1,
             limit: PAGE_SIZE,
-            page: currentPage,
-          },
-        });
-        const payload = response?.data || response || {};
+            total: 0,
+            totalPages: 1,
+            hasNextPage: false,
+            hasPrevPage: false,
+          });
+          return;
+        }
 
-        const rides = payload?.results || payload?.data?.results || [];
-        const nextPagination = payload?.pagination || payload?.data?.pagination || null;
+        let nextActivities = [];
+        let nextPagination = null;
+
+        if (activeTab === 'Bus') {
+          const response = await userBusService.getMyBookings({
+            page: currentPage,
+            limit: PAGE_SIZE,
+          });
+          const payload = getPayload(response);
+          const bookings = Array.isArray(payload?.results) ? payload.results : [];
+          nextActivities = bookings.map(normalizeBusBooking).filter((item) => item.id);
+          nextPagination = payload?.pagination || null;
+        } else if (activeTab === 'All') {
+          const [ridesResponse, busResponse] = await Promise.all([
+            api.get('/rides', {
+              params: {
+                limit: AGGREGATE_FETCH_LIMIT,
+                page: 1,
+              },
+            }),
+            userBusService.getMyBookings({
+              page: 1,
+              limit: AGGREGATE_FETCH_LIMIT,
+            }),
+          ]);
+
+          const ridePayload = getPayload(ridesResponse);
+          const busPayload = getPayload(busResponse);
+          const rides = Array.isArray(ridePayload?.results) ? ridePayload.results : [];
+          const bookings = Array.isArray(busPayload?.results) ? busPayload.results : [];
+          const merged = sortLatestFirst([
+            ...rides.map(normalizeRide).filter((item) => item.id),
+            ...bookings.map(normalizeBusBooking).filter((item) => item.id),
+          ]);
+          const localPage = buildLocalPagination(merged, currentPage);
+          nextActivities = localPage.results;
+          nextPagination = localPage.pagination;
+        } else {
+          const response = await api.get('/rides', {
+            params: {
+              limit: PAGE_SIZE,
+              page: currentPage,
+              category: getRideCategoryForTab(activeTab),
+            },
+          });
+          const payload = getPayload(response);
+          const rides = Array.isArray(payload?.results) ? payload.results : [];
+          nextActivities = rides.map(normalizeRide).filter((ride) => ride.id);
+          nextPagination = payload?.pagination || null;
+        }
 
         if (!active) {
           return;
         }
 
-        setActivities(rides.map(normalizeRide).filter((ride) => ride.id));
+        setActivities(nextActivities);
         setPagination(nextPagination || {
           page: currentPage,
           limit: PAGE_SIZE,
-          total: rides.length,
-          totalPages: Math.max(1, Math.ceil(rides.length / PAGE_SIZE)),
+          total: nextActivities.length,
+          totalPages: Math.max(1, Math.ceil(nextActivities.length / PAGE_SIZE)),
           hasNextPage: false,
           hasPrevPage: currentPage > 1,
         });
@@ -87,35 +183,27 @@ const Activity = () => {
       }
     };
 
-    loadRideHistory();
+    loadActivities();
 
     return () => {
       active = false;
     };
-  }, [currentPage, reloadKey]);
-
-  const filtered = useMemo(() => {
-    return activities.filter((activity) => {
-      if (activeTab === 'All') return true;
-      if (activeTab === 'Rides') return activity.type === 'ride';
-      if (activeTab === 'Parcels') return activity.type === 'parcel';
-      return false;
-    });
-  }, [activeTab, activities]);
+  }, [activeTab, currentPage, reloadKey]);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [activeTab]);
 
   const handleItemClick = (item) => {
-    if (item.type === 'parcel') {
+    if (item.type === 'bus') {
+      navigate(`${routePrefix}/profile/bus-bookings/${item.id}`);
+    } else if (item.type === 'parcel') {
       navigate(`${routePrefix}/parcel/detail/${item.id}`);
     } else {
       navigate(`${routePrefix}/ride/detail/${item.id}`, { state: { ride: item.ride } });
     }
   };
-
-  const helperText = activeTab === 'Support' ? 'Tickets and help requests' : 'Your recent trips and deliveries';
+  const helperText = useMemo(() => getHelperText(activeTab), [activeTab]);
 
   return (
     <div className="mx-auto flex min-h-screen max-w-lg flex-col bg-slate-50 font-sans pb-28">
@@ -129,11 +217,11 @@ const Activity = () => {
           <ActivityLoadingState />
         ) : error ? (
           <ActivityErrorState error={error} onRetry={() => setReloadKey((current) => current + 1)} />
-        ) : filtered.length === 0 ? (
+        ) : activities.length === 0 ? (
           <ActivityEmptyState activeTab={activeTab} />
         ) : (
           <div className="space-y-3 pb-2">
-            {filtered.map((activity) => (
+            {activities.map((activity) => (
               <ActivityCard key={activity.id} {...activity} onClick={() => handleItemClick(activity)} />
             ))}
             <ActivityPager

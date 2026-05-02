@@ -834,7 +834,7 @@ export const getActiveRideForIdentity = async ({ role, entityId }) => {
   return null;
 };
 
-export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, page = 1 }) => {
+export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, page = 1, category = 'all' }) => {
   if (!['user', 'driver'].includes(role)) {
     throw new ApiError(403, 'Only riders and drivers can access ride history');
   }
@@ -842,6 +842,32 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
   const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 100);
   const safePage = Math.max(Number(page) || 1, 1);
   const query = role === 'driver' ? { driverId: entityId } : { userId: entityId };
+  const normalizedCategory = String(category || 'all').trim().toLowerCase();
+
+  if (normalizedCategory === 'rides') {
+    query.serviceType = 'ride';
+    query.scheduledAt = null;
+  } else if (normalizedCategory === 'parcels') {
+    query.serviceType = 'parcel';
+    query.scheduledAt = null;
+    query['parcel.isOutstation'] = { $ne: true };
+    query['parcel.deliveryScope'] = { $ne: 'outstation' };
+  } else if (normalizedCategory === 'outstation') {
+    query.scheduledAt = null;
+    query.$or = [
+      { serviceType: 'intercity' },
+      {
+        serviceType: 'parcel',
+        $or: [
+          { 'parcel.isOutstation': true },
+          { 'parcel.deliveryScope': 'outstation' },
+        ],
+      },
+    ];
+  } else if (normalizedCategory === 'scheduled') {
+    query.scheduledAt = { $ne: null };
+  }
+
   const counterpartPath = role === 'driver' ? 'userId' : 'driverId';
   const counterpartSelect =
     role === 'driver'

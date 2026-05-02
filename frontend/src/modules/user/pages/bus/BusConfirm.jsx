@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { CheckCircle2, Ticket, QrCode, Home, Share2 } from 'lucide-react';
+import { CheckCircle2, Ticket, QrCode, Home, Share2, Phone, Route, BusFront } from 'lucide-react';
 
 const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
 
@@ -18,6 +18,24 @@ const formatTravelDate = (dateStr) => {
     return dateStr;
   }
 };
+
+const formatDurationCompact = (value = '') => {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return 'Direct';
+  }
+
+  return raw
+    .replace(/days?/gi, 'd')
+    .replace(/hours?/gi, 'h')
+    .replace(/hrs?/gi, 'h')
+    .replace(/minutes?/gi, 'm')
+    .replace(/mins?/gi, 'm')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const formatBusRegistrationNumber = (value = '') => String(value || '').trim().toUpperCase();
 
 const BusConfirm = () => {
   const navigate = useNavigate();
@@ -87,14 +105,17 @@ const BusConfirm = () => {
                 <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">PNR Number</p>
                 <p className="text-lg font-bold tracking-widest">{booking.bookingCode}</p>
               </div>
-              <div className="text-right">
-                <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">Seat(s)</p>
-                <p className="text-lg font-bold">{(booking.seatLabels || booking.seatIds || []).join(', ')}</p>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">Seat(s)</p>
+                  <p className="text-lg font-bold">{(booking.seatLabels || booking.seatIds || []).join(', ')}</p>
+                </div>
               </div>
-            </div>
 
-            <h3 className="text-xl font-bold mb-1">{booking.bus?.operator}</h3>
-            <p className="text-xs font-medium text-slate-400">{booking.bus?.type}</p>
+              <h3 className="text-xl font-bold mb-1">{booking.bus?.operator}</h3>
+            <p className="text-xs font-medium text-slate-400">
+              {booking.bus?.type}
+              {booking.bus?.registrationNumber ? ` • ${formatBusRegistrationNumber(booking.bus.registrationNumber)}` : ''}
+            </p>
           </div>
 
           <div className="p-6 space-y-8">
@@ -104,13 +125,51 @@ const BusConfirm = () => {
                 <p className="text-[10px] font-bold text-slate-400 uppercase mt-1 truncate">{booking.bus?.fromCity || fromCity}</p>
               </div>
               <div className="flex flex-col items-center flex-1 px-2">
-                <span className="text-[9px] font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-full">{booking.bus?.duration || 'Direct'}</span>
+                <span className="text-[9px] font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-full">{formatDurationCompact(booking.bus?.duration)}</span>
                 <div className="w-full h-px border-t border-dashed border-slate-200 my-2" />
                 <span className="text-[9px] font-bold text-slate-400">{formatTravelDate(booking.travelDate || date)}</span>
               </div>
               <div className="flex-1 text-right">
                 <p className="text-xl font-bold text-slate-900">{booking.bus?.arrival}</p>
                 <p className="text-[10px] font-bold text-slate-400 uppercase mt-1 truncate">{booking.bus?.toCity || toCity}</p>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <div className="flex items-center gap-2 text-slate-500">
+                  <BusFront size={15} />
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em]">Bus number</p>
+                </div>
+                <p className="mt-2 text-sm font-black text-slate-900">
+                  {booking.bus?.registrationNumber
+                    ? formatBusRegistrationNumber(booking.bus.registrationNumber)
+                    : 'Will be shared soon'}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <div className="flex items-center gap-2 text-slate-500">
+                  <Phone size={15} />
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em]">Driver contact</p>
+                </div>
+                <p className="mt-2 text-sm font-black text-slate-900">{booking.bus?.driverPhone || booking.bus?.driverName || 'Assigned before departure'}</p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
+              <div className="flex items-center gap-2 text-slate-500">
+                <Route size={15} />
+                <p className="text-[10px] font-black uppercase tracking-[0.18em]">Pickup & drop</p>
+              </div>
+              <div className="mt-3 space-y-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-600">Pickup</p>
+                  <p className="mt-1 text-sm font-black text-slate-900">{booking.bus?.pickupLocation || booking.bus?.fromCity || fromCity}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-rose-600">Drop</p>
+                  <p className="mt-1 text-sm font-black text-slate-900">{booking.bus?.dropLocation || booking.bus?.toCity || toCity}</p>
+                </div>
               </div>
             </div>
 
@@ -134,10 +193,10 @@ const BusConfirm = () => {
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 pb-8 pt-4 bg-white border-t border-slate-100 z-30 flex gap-4">
         <motion.button
           whileTap={{ scale: 0.98 }}
-          onClick={() => navigate(`${routePrefix}/activity`)}
+          onClick={() => navigate(`${routePrefix}/profile/bus-bookings`)}
           className="flex-1 bg-slate-50 text-slate-700 py-4 rounded-2xl text-sm font-bold border border-slate-100 transition-colors hover:bg-slate-100"
         >
-          My Trips
+          My Bookings
         </motion.button>
         <motion.button
           whileTap={{ scale: 0.98 }}

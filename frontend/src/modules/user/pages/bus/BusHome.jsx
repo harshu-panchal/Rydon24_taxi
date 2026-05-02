@@ -27,7 +27,22 @@ const getDateOffset = (offset = 1) => {
   return date.toISOString().split('T')[0];
 };
 
+const getTodayDate = () => getDateOffset(0);
+
 const getTomorrowDate = () => getDateOffset(1);
+
+const getNextWeekendDate = () => {
+  const date = new Date();
+  const day = date.getDay();
+
+  if (day === 6 || day === 0) {
+    return formatDateKey(date);
+  }
+
+  const daysUntilSaturday = (6 - day + 7) % 7;
+  date.setDate(date.getDate() + daysUntilSaturday);
+  return formatDateKey(date);
+};
 
 const getMonthStart = (value) => new Date(value.getFullYear(), value.getMonth(), 1);
 
@@ -86,7 +101,7 @@ const BusHome = () => {
 
   const [fromCity, setFromCity] = useState('');
   const [toCity, setToCity] = useState('');
-  const [date, setDate] = useState(getTomorrowDate());
+  const [date, setDate] = useState(getTodayDate());
   const [error, setError] = useState('');
   const [routeSuggestions, setRouteSuggestions] = useState([]);
   const [routesLoading, setRoutesLoading] = useState(false);
@@ -159,9 +174,10 @@ const BusHome = () => {
 
   const quickDates = useMemo(
     () => [
+      { label: 'Today', value: getTodayDate() },
       { label: 'Tomorrow', value: getDateOffset(1) },
       { label: 'Day After', value: getDateOffset(2) },
-      { label: 'This Weekend', value: getDateOffset(4) },
+      { label: 'This Weekend', value: getNextWeekendDate() },
     ],
     [],
   );
@@ -195,7 +211,7 @@ const BusHome = () => {
   }, [fromCity, routeSuggestions, toCity]);
 
   const featuredRoutes = useMemo(() => routeSuggestions.slice(0, 6), [routeSuggestions]);
-  const minimumDate = useMemo(() => new Date(getTomorrowDate()), []);
+  const minimumDate = useMemo(() => new Date(`${getTodayDate()}T00:00:00`), []);
   const selectedDateValue = useMemo(() => (date ? new Date(`${date}T00:00:00`) : null), [date]);
   const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
   const monthLabel = useMemo(
@@ -231,8 +247,8 @@ const BusHome = () => {
       return;
     }
 
-    if (date < getTomorrowDate()) {
-      setError('Please select a future travel date.');
+    if (date < getTodayDate()) {
+      setError('Please select today or a future travel date.');
       return;
     }
 
@@ -281,7 +297,7 @@ const BusHome = () => {
 
   const selectCalendarDate = (value) => {
     const nextValue = formatDateKey(value);
-    if (nextValue < getTomorrowDate()) {
+    if (nextValue < getTodayDate()) {
       return;
     }
 
@@ -570,7 +586,7 @@ const BusHome = () => {
               {calendarDays.map((day) => {
                 const key = formatDateKey(day);
                 const isCurrentMonth = day.getMonth() === calendarMonth.getMonth();
-                const isDisabled = key < getTomorrowDate();
+                const isDisabled = key < getTodayDate();
                 const isSelected = key === date;
 
                 return (
@@ -599,7 +615,7 @@ const BusHome = () => {
               <button
                 type="button"
                 onClick={() => {
-                  setDate(getTomorrowDate());
+                  setDate(getTodayDate());
                   setCalendarOpen(false);
                 }}
                 className="flex-1 py-3 rounded-2xl bg-slate-50 text-slate-700 text-sm font-bold border border-slate-100"

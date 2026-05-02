@@ -164,6 +164,9 @@ const busBookingSchema = new mongoose.Schema(
       operatorName: { type: String, default: '' },
       coachType: { type: String, default: '' },
       busCategory: { type: String, default: '' },
+      registrationNumber: { type: String, default: '' },
+      driverName: { type: String, default: '' },
+      driverPhone: { type: String, default: '' },
     },
     payment: {
       provider: { type: String, default: 'razorpay' },

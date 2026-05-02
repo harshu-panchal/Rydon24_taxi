@@ -598,6 +598,30 @@ const serializeBusRouteSuggestion = (busService) => ({
   operator: busService.operatorName || '',
 });
 
+const getPrimaryBusStop = (busService, stopType = 'pickup') => {
+  const stops = Array.isArray(busService?.route?.stops) ? busService.route.stops : [];
+  const normalizedType = String(stopType || 'pickup').trim().toLowerCase();
+
+  return stops.find((stop) => {
+    const currentType = String(stop?.stopType || 'pickup').trim().toLowerCase();
+    if (normalizedType === 'pickup') {
+      return currentType === 'pickup' || currentType === 'both';
+    }
+    return currentType === 'drop' || currentType === 'both';
+  }) || null;
+};
+
+const formatBusStopLabel = (stop = null, fallback = '') => {
+  if (!stop) {
+    return fallback;
+  }
+
+  return [
+    toCleanString(stop.pointName),
+    toCleanString(stop.city),
+  ].filter(Boolean).join(', ') || fallback;
+};
+
 const serializeBusBooking = (booking, busService = null) => {
   const quote = busService ? computeBusCancellationQuote({ booking, busService }) : null;
   const schedule = busService ? findBusSchedule(busService, booking?.scheduleId) : null;
@@ -633,6 +657,8 @@ const serializeBusBooking = (booking, busService = null) => {
   const reviewEntry = Array.isArray(busService?.reviews)
     ? busService.reviews.find((item) => String(item?.bookingId || '') === String(booking?._id || ''))
     : null;
+  const primaryPickupStop = busService ? getPrimaryBusStop(busService, 'pickup') : null;
+  const primaryDropStop = busService ? getPrimaryBusStop(busService, 'drop') : null;
 
   return {
   id: String(booking._id),
@@ -716,6 +742,12 @@ const serializeBusBooking = (booking, busService = null) => {
     duration: booking.routeSnapshot?.durationHours || '',
     fromCity: booking.routeSnapshot?.originCity || '',
     toCity: booking.routeSnapshot?.destinationCity || '',
+    registrationNumber: booking.routeSnapshot?.registrationNumber || busService?.registrationNumber || '',
+    driverName: booking.routeSnapshot?.driverName || busService?.driverName || '',
+    driverPhone: booking.routeSnapshot?.driverPhone || busService?.driverPhone || '',
+    pickupLocation: formatBusStopLabel(primaryPickupStop, booking.routeSnapshot?.originCity || ''),
+    dropLocation: formatBusStopLabel(primaryDropStop, booking.routeSnapshot?.destinationCity || ''),
+    routeStops: Array.isArray(busService?.route?.stops) ? busService.route.stops : [],
   },
   createdAt: booking.createdAt || null,
   };
@@ -2004,6 +2036,9 @@ export const createBusBookingOrder = async (req, res) => {
       operatorName: busService.operatorName || '',
       coachType: busService.coachType || '',
       busCategory: busService.busCategory || '',
+      registrationNumber: busService.registrationNumber || '',
+      driverName: busService.driverName || '',
+      driverPhone: busService.driverPhone || '',
     },
     payment: {
       provider: 'razorpay',
@@ -2043,7 +2078,7 @@ export const createBusBookingOrder = async (req, res) => {
       amount: order.amount,
       currency: order.currency || busService.fareCurrency || 'INR',
       expiresAt,
-      booking: serializeBusBooking(booking),
+      booking: serializeBusBooking(booking, busService),
     },
   });
 };
@@ -2079,10 +2114,16 @@ export const verifyBusBookingPayment = async (req, res) => {
     throw new ApiError(404, 'Bus booking not found');
   }
 
+  const busService = booking.busServiceId
+    ? await BusService.findById(booking.busServiceId)
+        .select('registrationNumber driverName driverPhone cancellationPolicy cancellationRules schedules route rating ratingCount reviews')
+        .lean()
+    : null;
+
   if (String(booking.status) === 'confirmed') {
     return res.status(200).json({
       success: true,
-      data: serializeBusBooking(booking),
+      data: serializeBusBooking(booking, busService),
     });
   }
 
@@ -2131,7 +2172,7 @@ export const verifyBusBookingPayment = async (req, res) => {
 
   res.status(201).json({
     success: true,
-    data: serializeBusBooking(booking),
+    data: serializeBusBooking(booking, busService),
   });
 };
 
@@ -2155,7 +2196,7 @@ export const getMyBusBookingById = async (req, res) => {
 
   const busService = booking.busServiceId
     ? await BusService.findById(booking.busServiceId)
-        .select('cancellationPolicy cancellationRules schedules route.originCity route.destinationCity rating ratingCount reviews')
+        .select('registrationNumber driverName driverPhone cancellationPolicy cancellationRules schedules route rating ratingCount reviews')
         .lean()
     : null;
 
@@ -2721,39 +2762,61 @@ export const listMyBusBookings = async (req, res) => {
 
   const page = toPositiveInteger(req.query?.page, 1);
   const limit = Math.min(20, toPositiveInteger(req.query?.limit, 10));
-  const skip = (page - 1) * limit;
-  const query = { userId: req.auth?.sub };
+  const normalizedStatus = toCleanString(req.query?.status).toLowerCase();
+  const normalizedTripState = toCleanString(req.query?.tripState).toLowerCase();
+  const allowedStatuses = new Set(['pending', 'confirmed', 'failed', 'expired', 'cancelled']);
+  const query = {
+    userId: req.auth?.sub,
+    ...(allowedStatuses.has(normalizedStatus) ? { status: normalizedStatus } : {}),
+  };
 
-  const [total, items] = await Promise.all([
-    BusBooking.countDocuments(query),
-    BusBooking.find(query)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean(),
-  ]);
+  const items = await BusBooking.find(query)
+    .sort({ createdAt: -1 })
+    .lean();
 
   const busServiceIds = [...new Set(items.map((item) => String(item.busServiceId || '')).filter(Boolean))];
   const busServices = busServiceIds.length > 0
     ? await BusService.find({ _id: { $in: busServiceIds } })
-        .select('cancellationRules schedules route.originCity route.destinationCity')
+        .select('registrationNumber driverName driverPhone cancellationRules schedules route')
         .lean()
     : [];
   const busServiceMap = new Map(busServices.map((item) => [String(item._id), item]));
 
+  const serializedItems = items.map((item) =>
+    serializeBusBooking(item, busServiceMap.get(String(item.busServiceId || '')) || null));
+  const filteredItems = serializedItems.filter((item) => {
+    if (normalizedTripState === 'completed') {
+      return Boolean(item?.review?.tripCompleted);
+    }
+
+    if (normalizedTripState === 'upcoming') {
+      return !item?.review?.tripCompleted && !['cancelled', 'failed', 'expired'].includes(String(item?.status || '').toLowerCase());
+    }
+
+    if (normalizedTripState === 'cancelled') {
+      return String(item?.status || '').toLowerCase() === 'cancelled';
+    }
+
+    return true;
+  });
+
+  const total = filteredItems.length;
   const totalPages = Math.max(1, Math.ceil(total / limit));
+  const safePage = Math.min(page, totalPages);
+  const skip = (safePage - 1) * limit;
+  const pageItems = filteredItems.slice(skip, skip + limit);
 
   res.status(200).json({
     success: true,
     data: {
-      results: items.map((item) => serializeBusBooking(item, busServiceMap.get(String(item.busServiceId || '')) || null)),
+      results: pageItems,
       pagination: {
-        page,
+        page: safePage,
         limit,
         total,
         totalPages,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1,
+        hasNextPage: safePage < totalPages,
+        hasPrevPage: safePage > 1,
       },
     },
   });

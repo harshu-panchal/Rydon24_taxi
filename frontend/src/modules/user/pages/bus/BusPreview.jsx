@@ -31,6 +31,19 @@ const formatTravelDate = (dateStr) => {
   }
 };
 
+const formatDurationBrief = (value = '') => {
+  const raw = String(value || '').trim();
+  if (!raw) return 'Direct';
+  return raw
+    .replace(/days?/gi, 'd')
+    .replace(/hours?/gi, 'h')
+    .replace(/hrs?/gi, 'h')
+    .replace(/minutes?/gi, 'm')
+    .replace(/mins?/gi, 'm')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
 const stopBadgeTone = {
   pickup: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   drop: 'border-rose-200 bg-rose-50 text-rose-700',
@@ -153,7 +166,7 @@ const BusPreview = () => {
               <h3 className="mt-1 text-lg font-black text-slate-900">{fromCity} to {toCity}</h3>
             </div>
             <div className="rounded-full bg-orange-50 px-3 py-2 text-[11px] font-black text-orange-600">
-              {bus.duration || 'Direct'}
+              {formatDurationBrief(bus.duration)}
             </div>
           </div>
 

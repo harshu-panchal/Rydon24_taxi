@@ -4,9 +4,10 @@ import autoIcon from '../../../../assets/icons/auto.png';
 import LuxuryIcon from '../../../../assets/icons/Luxury.png';
 import PremiumIcon from '../../../../assets/icons/Premium.png';
 import SuvIcon from '../../../../assets/icons/SUV.png';
+import busIcon from '../../../../assets/3d images/AutoCab/bus.png';
 
 export const PAGE_SIZE = 4;
-export const TABS = ['All', 'Rides', 'Parcels', 'Support'];
+export const TABS = ['All', 'Rides', 'Parcels', 'Bus', 'Outstation', 'Scheduled', 'Support'];
 
 export const pickFirstString = (...values) => {
   for (const value of values) {
@@ -44,6 +45,13 @@ export const getVehicleTypeAsset = (iconType = '') => {
   return carIcon;
 };
 
+export const getStatusTone = (status = '') => {
+  const normalized = String(status || '').toLowerCase();
+  if (normalized === 'completed' || normalized === 'confirmed') return 'success';
+  if (normalized === 'cancelled' || normalized === 'failed' || normalized === 'expired') return 'danger';
+  return 'warning';
+};
+
 export const formatRideDate = (value) => {
   if (!value) {
     return '--';
@@ -70,6 +78,25 @@ export const formatRideTime = (value) => {
   return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 };
 
+export const toTimestamp = (value) => {
+  if (!value) {
+    return 0;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+};
+
+const getBusTravelTimestamp = (booking) => {
+  const travelDate = String(booking?.travelDate || '').trim();
+  const departure = String(booking?.bus?.departure || '').trim();
+  const rawValue = travelDate
+    ? `${travelDate}T${departure && /^\d{1,2}:\d{2}/.test(departure) ? departure.slice(0, 5) : '00:00'}:00`
+    : booking?.createdAt;
+
+  return toTimestamp(rawValue);
+};
+
 export const formatStatus = (status) => {
   const normalized = String(status || 'searching').toLowerCase();
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
@@ -94,6 +121,10 @@ export const getVehicleVisual = (ride, type) => {
     return '/5_Parcel.png';
   }
 
+  if (type === 'bus') {
+    return busIcon;
+  }
+
   return getVehicleTypeAsset(
     ride?.vehicleIconType ||
     ride?.driver?.vehicleIconType ||
@@ -104,28 +135,49 @@ export const getVehicleVisual = (ride, type) => {
 
 export const normalizeRide = (ride) => {
   const timeSource = getRideTimeSource(ride);
-  const driverName = ride.driver?.name || 'Captain';
+  const driverName = pickFirstString(
+    ride?.driver?.name,
+    ride?.driver?.fullName,
+    ride?.driverName,
+    ride?.driver?.phone ? `Driver ${ride.driver.phone}` : '',
+    'Driver assigned',
+  );
   const vehicle = ride.driver?.vehicleType || ride.vehicleIconType || 'Ride';
   const status = formatStatus(ride.status || ride.liveStatus);
   const serviceType = String(ride.serviceType || ride.type || 'ride').toLowerCase();
   const type = serviceType === 'parcel' ? 'parcel' : 'ride';
   const pickup = ride.pickupAddress || coordLabel(ride.pickupLocation, 'Pickup');
   const drop = ride.dropAddress || coordLabel(ride.dropLocation, 'Drop');
+  const isScheduled = Boolean(ride?.scheduledAt);
+  const isOutstation = serviceType === 'intercity' || Boolean(ride?.parcel?.isOutstation) || String(ride?.parcel?.deliveryScope || '').toLowerCase() === 'outstation';
+  const title = type === 'parcel'
+    ? (isScheduled ? 'Scheduled parcel' : isOutstation ? 'Outstation parcel' : status === 'Searching' ? 'Parcel request' : 'Parcel delivery')
+    : isScheduled
+      ? `Scheduled ride with ${driverName}`
+      : isOutstation
+        ? `Outstation trip with ${driverName}`
+        : (status === 'Searching' ? 'Ride request' : `Ride with ${driverName}`);
 
   return {
     id: ride.rideId || ride._id || ride.id,
     type,
-    title: type === 'parcel'
-      ? (status === 'Searching' ? 'Parcel request' : 'Parcel delivery')
-      : (status === 'Searching' ? 'Ride request' : `Ride with ${driverName}`),
+    title,
     address: `${pickup} to ${drop}`,
     date: formatRideDate(timeSource),
     time: formatRideTime(timeSource),
     status,
+    statusTone: getStatusTone(status),
     price: Number(ride.fare || 0).toFixed(0),
     ride,
     vehicle: type === 'parcel' ? 'Parcel' : vehicle,
     driverName,
+    eyebrow: isScheduled
+      ? 'Scheduled booking'
+      : isOutstation
+        ? 'Outstation trip'
+        : type === 'parcel'
+          ? 'Delivery booking'
+          : 'Driver trip',
     driverImage: pickFirstString(
       ride?.driver?.profileImage,
       ride?.driver?.profile_image,
@@ -134,5 +186,34 @@ export const normalizeRide = (ride) => {
       buildAvatarFallback(driverName),
     ),
     vehicleImage: getVehicleVisual(ride, type),
+    sortTimestamp: toTimestamp(timeSource),
+  };
+};
+
+export const normalizeBusBooking = (booking) => {
+  const fromCity = pickFirstString(booking?.bus?.fromCity, 'From');
+  const toCity = pickFirstString(booking?.bus?.toCity, 'To');
+  const operator = pickFirstString(booking?.bus?.operator, booking?.bus?.busName, 'Bus Service');
+  const driverName = pickFirstString(booking?.bus?.driverName, operator, 'Bus crew');
+  const status = formatStatus(booking?.status || 'confirmed');
+  const pickup = pickFirstString(booking?.bus?.pickupLocation, fromCity);
+  const drop = pickFirstString(booking?.bus?.dropLocation, toCity);
+
+  return {
+    id: booking.id,
+    type: 'bus',
+    title: `${fromCity} to ${toCity}`,
+    address: `${pickup} to ${drop}`,
+    date: formatRideDate(getBusTravelTimestamp(booking)),
+    time: pickFirstString(booking?.bus?.departure, formatRideTime(getBusTravelTimestamp(booking))),
+    status,
+    statusTone: getStatusTone(status),
+    price: Number(booking.amount || 0).toFixed(0),
+    driverName,
+    eyebrow: operator,
+    driverImage: buildAvatarFallback(driverName),
+    vehicleImage: getVehicleVisual(null, 'bus'),
+    booking,
+    sortTimestamp: toTimestamp(booking?.createdAt || getBusTravelTimestamp(booking)),
   };
 };
