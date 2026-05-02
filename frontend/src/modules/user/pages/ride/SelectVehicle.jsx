@@ -526,6 +526,30 @@ const formatDistanceLabel = (distanceMeters) => {
 
 const formatCurrency = (amount) => `₹${Math.round(Number(amount) || 0)}`;
 
+const getBidFareBounds = (vehicle, stepCount) => {
+  const baseFare = Math.max(0, Math.round(Number(vehicle?.price) || 0));
+  const maxSteps = Math.max(0, Number(vehicle?.maxBidSteps) || 0);
+  const safeStepCount = Math.min(
+    maxSteps,
+    Math.max(0, Number.isFinite(Number(stepCount)) ? Number(stepCount) : maxSteps),
+  );
+  const stepAmount = Math.max(0, Math.round(Number(vehicle?.bidStepAmount) || 0));
+
+  return {
+    min: baseFare,
+    max: baseFare + (safeStepCount * stepAmount),
+  };
+};
+
+const formatVehicleFare = (vehicle, stepCount) => {
+  if (!vehicle?.supportsBidding) {
+    return formatCurrency(vehicle?.price);
+  }
+
+  const { min, max } = getBidFareBounds(vehicle, stepCount);
+  return `${formatCurrency(min)}-${formatCurrency(max)}`;
+};
+
 const pad = (value) => String(value).padStart(2, '0');
 
 const formatDateTimeInputValue = (date) => {
@@ -922,6 +946,9 @@ const SelectVehicle = () => {
   const selectedBidSteps = Number(selectedVehicle?.maxBidSteps || 5);
   const selectedBidIncrement = (selectedVehicle?.supportsBidding ? bidStepCount : 0) * selectedBidStepAmount;
   const selectedBidCeiling = Number(selectedVehicle?.price || 0) + selectedBidIncrement;
+  const selectedFareDisplay = selectedVehicle?.supportsBidding
+    ? formatVehicleFare(selectedVehicle, bidStepCount)
+    : formatCurrency(selectedVehicle?.price);
   const allowedPaymentMethods = useMemo(
     () => normalizeAllowedPaymentMethods(selectedAvailability?.allowedPaymentMethods),
     [selectedAvailability?.allowedPaymentMethods],
@@ -1296,11 +1323,11 @@ const SelectVehicle = () => {
                 <div className="flex flex-col items-end gap-1 shrink-0 z-10">
                   <div className="text-right">
                     <span className={`text-[15px] font-black tracking-tight block ${isUnavailable ? 'text-slate-300' : 'text-slate-900'}`}>
-                      {isUnavailable ? 'N/A' : isFarePending ? '...' : formatCurrency(v.price)}
+                      {isUnavailable ? 'N/A' : isFarePending ? '...' : formatVehicleFare(v)}
                     </span>
                     {!isUnavailable && (
                       <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter opacity-70">
-                        {isFarePending ? 'calc.' : 'est.'}
+                        {isFarePending ? 'calc.' : v.supportsBidding ? 'bid range' : 'est.'}
                       </span>
                     )}
                   </div>
@@ -1325,66 +1352,19 @@ const SelectVehicle = () => {
         </div>
 
         <div className="shrink-0 border-t border-slate-100 bg-white/80 backdrop-blur-xl px-5 pb-6 pt-3.5 space-y-3.5 shadow-[0_-12px_40px_rgba(15,23,42,0.08)]">
-          <div className="rounded-[20px] border border-slate-100 bg-slate-50/60 px-4 py-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Ride time</p>
-                <p className="mt-1 text-[13px] font-bold text-slate-900">
-                  {rideMode === 'schedule' ? formatScheduledDisplay(scheduledAt) : 'Ride now'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const nextMode = rideMode === 'schedule' ? 'now' : 'schedule';
-                  setRideMode(nextMode);
-                  if (nextMode === 'schedule') {
-                    openPicker(scheduledAtInputRef);
-                  } else {
-                    setScheduleError('');
-                  }
-                }}
-                className={`flex h-11 items-center gap-2 rounded-[16px] border px-3.5 text-[11px] font-black uppercase tracking-[0.14em] transition-all ${
-                  rideMode === 'schedule'
-                    ? 'border-blue-100 bg-blue-50 text-blue-600'
-                    : 'border-slate-200 bg-white text-slate-600'
-                }`}
-              >
-                <Clock3 size={16} strokeWidth={2.4} />
-                {rideMode === 'schedule' ? 'Scheduled' : 'Schedule'}
-              </button>
-            </div>
-
-            {rideMode === 'schedule' ? (
-              <div className="mt-3">
-                <button
-                  type="button"
-                  onClick={() => openPicker(scheduledAtInputRef)}
-                  className="flex w-full items-center justify-between rounded-[16px] border border-blue-100 bg-white px-4 py-3 text-left text-[13px] font-bold text-slate-800 shadow-sm"
-                >
-                  <span>{formatScheduledDisplay(scheduledAt)}</span>
-                  <ChevronRight size={16} className="text-slate-300" />
-                </button>
-                <input
-                  ref={scheduledAtInputRef}
-                  type="datetime-local"
-                  value={scheduledAt}
-                  min={minScheduledAt}
-                  max={maxScheduledAt}
-                  onChange={(event) => {
-                    setScheduledAt(event.target.value);
-                    setScheduleError('');
-                  }}
-                  className="sr-only"
-                />
-                {scheduleError ? (
-                  <p className="mt-2 text-[11px] font-bold text-rose-500">{scheduleError}</p>
-                ) : (
-                  <p className="mt-2 text-[11px] font-medium text-slate-500">Drivers will be notified automatically at the scheduled time.</p>
-                )}
-              </div>
-            ) : null}
-          </div>
+          <input
+            ref={scheduledAtInputRef}
+            type="datetime-local"
+            value={scheduledAt}
+            min={minScheduledAt}
+            max={maxScheduledAt}
+            onChange={(event) => {
+              setScheduledAt(event.target.value);
+              setRideMode('schedule');
+              setScheduleError('');
+            }}
+            className="sr-only"
+          />
 
           <motion.button
             whileTap={{ scale: 0.98 }}
@@ -1406,47 +1386,75 @@ const SelectVehicle = () => {
             </div>
           </motion.button>
 
-          <motion.button
-            whileHover={canProceed ? { scale: 1.01, translateY: -2 } : {}}
-            whileTap={canProceed ? { scale: 0.98 } : undefined}
-            disabled={!canProceed}
-            onClick={handleBook}
-            className={`w-full py-4 rounded-[20px] text-[15px] font-extrabold shadow-xl transition-all duration-300 uppercase tracking-tight flex items-center justify-center gap-3 ${
-              canProceed
-                ? 'bg-[#f8e001] text-slate-900 shadow-[0_12px_28px_-4px_rgba(248,224,1,0.4)] active:shadow-none'
-                : 'bg-slate-200 text-slate-400 shadow-none cursor-not-allowed'
-            }`}
-          >
-            {selectedVehicle
-              ? isFarePending
-                ? 'Calculating fare...'
-                : selectedVehicle.supportsBidding
-                ? (
-                  <>
-                    <span>{`Request Bid for ${selectedVehicle.name}`}</span>
-                    <div className="w-1.5 h-1.5 rounded-full bg-slate-900/20" />
-                    <span>{formatCurrency(selectedBidCeiling)}</span>
-                  </>
-                )
-                : rideMode === 'schedule'
-                ? (
-                  <>
-                    <span>{`Schedule ${selectedVehicle.name}`}</span>
-                    <div className="w-1.5 h-1.5 rounded-full bg-slate-900/20" />
-                    <span>{formatCurrency(selectedVehicle.supportsBidding ? selectedBidCeiling : selectedVehicle.price)}</span>
-                  </>
-                )
-                : selectedAvailability.totalDrivers
-                ? (
-                  <>
-                    <span>{`Book ${selectedVehicle.name}`}</span>
-                    <div className="w-1.5 h-1.5 rounded-full bg-slate-900/20" />
-                    <span>{formatCurrency(selectedVehicle.price)}</span>
-                  </>
-                )
-                : `${selectedVehicle.name} Unavailable`
-              : 'Select Vehicle'}
-          </motion.button>
+          <div className="flex items-stretch gap-3">
+            <motion.button
+              whileHover={canProceed ? { scale: 1.01, translateY: -2 } : {}}
+              whileTap={canProceed ? { scale: 0.98 } : undefined}
+              disabled={!canProceed}
+              onClick={handleBook}
+              className={`flex-1 py-4 rounded-[20px] text-[15px] font-extrabold shadow-xl transition-all duration-300 uppercase tracking-tight flex items-center justify-center gap-3 ${
+                canProceed
+                  ? 'bg-[#f8e001] text-slate-900 shadow-[0_12px_28px_-4px_rgba(248,224,1,0.4)] active:shadow-none'
+                  : 'bg-slate-200 text-slate-400 shadow-none cursor-not-allowed'
+              }`}
+            >
+              {selectedVehicle
+                ? isFarePending
+                  ? 'Calculating fare...'
+                  : selectedVehicle.supportsBidding
+                  ? (
+                    <>
+                      <span>{`Request Bid for ${selectedVehicle.name}`}</span>
+                      <div className="w-1.5 h-1.5 rounded-full bg-slate-900/20" />
+                      <span>{selectedFareDisplay}</span>
+                    </>
+                  )
+                  : rideMode === 'schedule'
+                  ? (
+                    <>
+                      <span>{`Schedule ${selectedVehicle.name}`}</span>
+                      <div className="w-1.5 h-1.5 rounded-full bg-slate-900/20" />
+                      <span>{formatCurrency(selectedVehicle.supportsBidding ? selectedBidCeiling : selectedVehicle.price)}</span>
+                    </>
+                  )
+                  : selectedAvailability.totalDrivers
+                  ? (
+                    <>
+                      <span>{`Book ${selectedVehicle.name}`}</span>
+                      <div className="w-1.5 h-1.5 rounded-full bg-slate-900/20" />
+                      <span>{formatCurrency(selectedVehicle.price)}</span>
+                    </>
+                  )
+                  : `${selectedVehicle.name} Unavailable`
+                : 'Select Vehicle'}
+            </motion.button>
+
+            <button
+              type="button"
+              onClick={() => {
+                openPicker(scheduledAtInputRef);
+              }}
+              className={`flex h-auto min-h-[56px] w-[56px] shrink-0 items-center justify-center rounded-[20px] border transition-all ${
+                rideMode === 'schedule'
+                  ? 'border-blue-100 bg-blue-50 text-blue-600 shadow-[0_10px_24px_-12px_rgba(59,130,246,0.6)]'
+                  : 'border-slate-200 bg-white text-slate-600'
+              }`}
+              aria-label={rideMode === 'schedule' ? `Scheduled for ${formatScheduledDisplay(scheduledAt)}` : 'Schedule ride'}
+              title={rideMode === 'schedule' ? formatScheduledDisplay(scheduledAt) : 'Schedule ride'}
+            >
+              <Clock3 size={18} strokeWidth={2.4} />
+            </button>
+          </div>
+
+          {rideMode === 'schedule' ? (
+            scheduleError ? (
+              <p className="text-[11px] font-bold text-rose-500">{scheduleError}</p>
+            ) : (
+              <p className="text-[11px] font-medium text-slate-500">
+                Scheduled for {formatScheduledDisplay(scheduledAt)}. Drivers will be notified automatically.
+              </p>
+            )
+          ) : null}
         </div>
       </div>
 

@@ -11,11 +11,16 @@ import {
   Star,
   ShieldCheck,
   Zap,
-  Ticket
+  Ticket,
+  Navigation,
+  Calendar,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { userService } from '../../services/userService';
 import toast from 'react-hot-toast';
+
+// Asset Imports
+import taxiImg from '../../../../assets/3d images/AutoCab/taxi.png';
 
 const PoolingList = () => {
   const [searchParams] = useSearchParams();
@@ -44,81 +49,92 @@ const PoolingList = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-sans pb-24">
+    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-sans pb-24 selection:bg-indigo-100">
       {/* Immersive Header */}
-      <div className="sticky top-0 z-50 bg-white px-5 pt-10 pb-5 shadow-sm border-b border-slate-100">
-        <div className="flex items-center gap-4 mb-5">
+      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl px-5 pt-12 pb-6 shadow-sm border-b border-slate-100">
+        <div className="flex items-center gap-4 mb-6">
           <button 
             onClick={() => navigate('/taxi/user/pooling')}
-            className="w-10 h-10 rounded-2xl border border-slate-100 bg-white flex items-center justify-center text-slate-900 shadow-sm active:scale-95 transition-all"
+            className="w-11 h-11 rounded-2xl border border-slate-100 bg-white flex items-center justify-center text-slate-900 shadow-sm active:scale-95 transition-all hover:bg-slate-50"
           >
             <ArrowLeft size={20} />
           </button>
           <div className="flex-1 overflow-hidden">
             <div className="flex items-center gap-2">
-              <span className="truncate text-sm font-black text-slate-900">{from}</span>
+              <span className="truncate text-base font-black text-slate-900 leading-tight">{from}</span>
               <ChevronRight size={14} className="text-slate-300 shrink-0" />
-              <span className="truncate text-sm font-black text-slate-900">{to}</span>
+              <span className="truncate text-base font-black text-slate-900 leading-tight">{to}</span>
             </div>
-            <div className="flex items-center gap-2 mt-0.5">
-               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{date}</p>
+            <div className="flex items-center gap-2 mt-1">
+               <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  <Calendar size={10} />
+                  {date}
+               </div>
                <span className="bg-indigo-50 text-indigo-600 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">Step 1/3</span>
             </div>
           </div>
-          <button className="w-10 h-10 rounded-2xl border border-slate-100 bg-slate-50 flex items-center justify-center text-slate-600">
+          <button className="w-11 h-11 rounded-2xl border border-slate-100 bg-white flex items-center justify-center text-slate-400 hover:text-slate-900 transition-colors">
             <Filter size={18} />
           </button>
         </div>
 
         {/* Progress Bar */}
         <div className="flex items-center gap-2 px-1">
-          <div className="h-1.5 flex-1 rounded-full bg-indigo-600 animate-pulse" />
+          <div className="h-1.5 flex-1 rounded-full bg-indigo-600 shadow-[0_0_8px_rgba(79,70,229,0.4)]" />
           <div className="h-1.5 flex-1 rounded-full bg-slate-100" />
           <div className="h-1.5 flex-1 rounded-full bg-slate-100" />
         </div>
       </div>
 
-      <div className="px-5 pt-6">
+      <div className="px-5 pt-8">
         {loading ? (
           <div className="space-y-6">
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-48 w-full animate-pulse rounded-[32px] bg-white border border-slate-100" />
+              <div key={i} className="h-56 w-full animate-pulse rounded-[40px] bg-white border border-slate-100 shadow-sm" />
             ))}
           </div>
         ) : routes.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-indigo-50 text-indigo-200">
-              <Car size={48} />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center justify-center py-24 text-center"
+          >
+            <div className="mb-8 relative">
+               <div className="h-32 w-32 rounded-full bg-indigo-50/50 flex items-center justify-center text-indigo-100 animate-pulse" />
+               <Car size={56} className="absolute inset-0 m-auto text-indigo-200" />
             </div>
-            <h3 className="text-lg font-black text-slate-900">No matching rides</h3>
-            <p className="mt-2 max-w-[240px] text-xs font-bold text-slate-400 leading-relaxed">We couldn't find any active carpools for this route on the selected date.</p>
+            <h3 className="text-xl font-black text-slate-900 tracking-tight">No Rides Found</h3>
+            <p className="mt-3 max-w-[260px] text-sm font-medium text-slate-500 leading-relaxed">
+              We couldn't find any carpools matching your route for this date.
+            </p>
             <button 
               onClick={() => navigate('/taxi/user/pooling')}
-              className="mt-8 text-xs font-black uppercase tracking-widest text-indigo-600 px-6 py-3 bg-indigo-50 rounded-xl active:scale-95 transition-all"
+              className="mt-10 flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-white px-8 py-4 bg-slate-900 rounded-[20px] shadow-2xl shadow-slate-200 active:scale-95 transition-all"
             >
+              <ArrowLeft size={16} />
               Modify Search
             </button>
-          </div>
+          </motion.div>
         ) : (
           <div className="space-y-6">
-            <div className="flex items-center justify-between px-2">
-               <p className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400">{routes.length} Rides Found</p>
-               <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+            <div className="flex items-center justify-between px-3">
+               <p className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-400">{routes.length} Available Rides</p>
+               <div className="flex items-center gap-1.5 text-[10px] font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full uppercase tracking-widest">
                   <ShieldCheck size={12} />
-                  Safe Search
+                  Verified
                </div>
             </div>
 
             {routes.map((route, idx) => {
               const vehicle = route.assignedVehicleTypeIds?.[0] || {};
-              const vehicleImage = vehicle.images?.[0];
+              const vehicleImage = (vehicle.images && vehicle.images.length > 0) ? vehicle.images[0] : taxiImg;
 
               return (
                 <motion.div
                   key={route._id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.05 }}
+                  transition={{ delay: idx * 0.08 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() =>
                     navigate(`/taxi/user/pooling/seats/${route._id}`, {
@@ -127,92 +143,89 @@ const PoolingList = () => {
                       },
                     })
                   }
-                  className="group relative overflow-hidden rounded-[32px] border border-slate-100 bg-white p-6 transition-all hover:border-indigo-200 hover:shadow-[0_20px_40px_rgba(15,23,42,0.06)]"
+                  className="group relative overflow-hidden rounded-[40px] border border-white bg-white p-7 transition-all hover:border-indigo-100 hover:shadow-[0_40px_80px_-16px_rgba(15,23,42,0.1)] cursor-pointer"
                 >
-                  {/* Vehicle Image Background (Subtle) */}
-                  {vehicleImage && (
-                    <div className="absolute top-0 right-0 w-32 h-32 -mr-8 -mt-8 opacity-[0.03] grayscale transition-all group-hover:opacity-10 group-hover:scale-110 pointer-events-none">
-                      <img src={vehicleImage} alt="" className="w-full h-full object-contain" />
-                    </div>
-                  )}
-
-                  {/* Route Info */}
+                  {/* Decorative Elements */}
+                  <div className="absolute top-0 right-0 -mr-16 -mt-16 h-48 w-48 rounded-full bg-slate-50/50 blur-3xl group-hover:bg-indigo-50/50 transition-colors" />
+                  
                   <div className="flex items-start justify-between relative z-10">
-                    <div className="space-y-4 flex-1 pr-4">
+                    <div className="space-y-5 flex-1 pr-4">
                       <div className="flex items-start gap-4">
-                        <div className="relative flex flex-col items-center pt-1.5">
-                          <div className="h-3 w-3 rounded-full border-2 border-indigo-600 bg-white z-10" />
-                          <div className="h-10 w-0.5 bg-slate-50 border-l-2 border-dashed border-slate-200" />
-                          <div className="h-3 w-3 rounded-full bg-indigo-600 z-10" />
+                        <div className="relative flex flex-col items-center pt-2">
+                          <div className="h-3 w-3 rounded-full border-2 border-indigo-600 bg-white z-10 shadow-[0_0_8px_rgba(79,70,229,0.3)]" />
+                          <div className="h-12 w-0.5 border-l-2 border-dashed border-slate-100" />
+                          <div className="h-3 w-3 rounded-full bg-slate-900 z-10 ring-4 ring-slate-50" />
                         </div>
-                        <div className="space-y-6 flex-1">
+                        <div className="space-y-6 flex-1 min-w-0">
                           <div>
-                            <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400">Origin</p>
-                            <p className="text-sm font-black text-slate-900 truncate">{route.originLabel}</p>
+                            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Pickup</p>
+                            <p className="text-sm font-black text-slate-900 truncate leading-tight mt-0.5">{route.originLabel}</p>
                           </div>
                           <div>
-                            <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400">Destination</p>
-                            <p className="text-sm font-black text-slate-900 truncate">{route.destinationLabel}</p>
+                            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Destination</p>
+                            <p className="text-sm font-black text-slate-900 truncate leading-tight mt-0.5">{route.destinationLabel}</p>
                           </div>
                         </div>
                       </div>
                     </div>
                     
-                    <div className="text-right flex flex-col items-end">
-                      {vehicleImage ? (
-                        <div className="mb-4 w-20 h-14 rounded-2xl overflow-hidden bg-slate-50 border border-slate-100 shadow-sm">
-                           <img src={vehicleImage} alt={vehicle.name} className="w-full h-full object-cover" />
-                        </div>
-                      ) : (
-                        <div className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-[9px] font-black uppercase tracking-wide text-amber-600 mb-4">
-                          <Star size={10} className="fill-amber-600" />
-                          Top Rated
-                        </div>
-                      )}
+                    <div className="flex flex-col items-end">
+                      <div className="mb-6 relative h-20 w-32 overflow-hidden rounded-3xl bg-slate-50 border border-slate-100 shadow-inner group-hover:bg-white transition-colors">
+                         <img src={vehicleImage} alt={vehicle.name} className="w-full h-full object-contain p-2 transform group-hover:scale-110 transition-transform duration-500" />
+                         <div className="absolute bottom-1 right-2">
+                           <div className="bg-white/80 backdrop-blur-md px-2 py-0.5 rounded-lg border border-slate-100">
+                             <p className="text-[8px] font-black text-slate-900 uppercase tracking-widest">{vehicle.vehicleType || 'Sedan'}</p>
+                           </div>
+                         </div>
+                      </div>
                       
-                      <div className="flex flex-col items-end">
-                         <p className="text-2xl font-black text-slate-900">₹{route.farePerSeat}</p>
-                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Per Seat</p>
+                      <div className="text-right">
+                         <p className="text-3xl font-black tracking-tight text-slate-900 leading-none">₹{route.farePerSeat}</p>
+                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] mt-1.5">Per Seat</p>
                       </div>
                     </div>
                   </div>
 
-                  {/* Driver & Status */}
-                  <div className="mt-6 flex items-center justify-between border-t border-slate-50 pt-6">
+                  {/* Footer Info */}
+                  <div className="mt-8 flex items-center justify-between border-t border-slate-50 pt-7">
                     <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 overflow-hidden rounded-xl bg-slate-100 shadow-sm">
-                          <img src={`https://ui-avatars.com/api/?name=${route.driverName || 'Driver'}&background=random&bold=true`} alt="" />
+                      <div className="relative">
+                        <div className="h-10 w-10 overflow-hidden rounded-2xl bg-slate-100 border-2 border-white shadow-sm ring-1 ring-slate-50">
+                          <img src={`https://ui-avatars.com/api/?name=${route.driverName || 'Verified'}&background=4f46e5&color=fff&bold=true&font-size=0.45`} alt="" className="w-full h-full object-cover" />
                         </div>
-                        <div>
-                          <p className="text-xs font-black text-slate-900">{route.driverName || 'Verified'}</p>
-                          <div className="flex items-center gap-1 text-[9px] font-bold text-emerald-600 uppercase tracking-wider">
-                             <ShieldCheck size={10} />
-                             Secured
+                        <div className="absolute -right-1 -bottom-1 h-4 w-4 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center">
+                          <ShieldCheck size={8} className="text-white" />
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-slate-900">{route.driverName || 'Verified Captain'}</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <div className="flex items-center gap-0.5">
+                            {[...Array(5)].map((_, i) => (
+                              <Star key={i} size={8} className={i < 4 ? "text-amber-400 fill-amber-400" : "text-slate-200 fill-slate-200"} />
+                            ))}
                           </div>
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">4.8 • Top Pilot</span>
                         </div>
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-4">
                       <div className="flex flex-col items-end">
-                         <div className="flex items-center gap-1 text-[11px] font-black text-indigo-600">
-                           <Zap size={12} />
+                         <div className="flex items-center gap-1.5 text-[11px] font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase tracking-widest">
+                           <Zap size={10} fill="currentColor" />
                            Instant
                          </div>
-                         <div className="flex items-center gap-1 text-[11px] font-bold text-slate-400 mt-0.5">
-                           <Users size={12} />
-                           {route.maxSeatsPerBooking} Left
+                         <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 mt-2 tracking-tight">
+                           <Users size={12} className="text-slate-300" />
+                           {route.maxSeatsPerBooking} seats left
                          </div>
                       </div>
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-lg shadow-slate-200">
-                         <ChevronRight size={20} />
+                      <div className="flex h-11 w-11 items-center justify-center rounded-[18px] bg-slate-900 text-white shadow-xl shadow-slate-200 group-hover:bg-indigo-600 group-hover:shadow-indigo-100 transition-all">
+                         <ChevronRight size={22} className="group-hover:translate-x-0.5 transition-transform" />
                       </div>
                     </div>
                   </div>
-
-                  {/* Decoration */}
-                  <div className="absolute -right-12 -bottom-12 h-24 w-24 rounded-full bg-indigo-50/20" />
                 </motion.div>
               );
             })}

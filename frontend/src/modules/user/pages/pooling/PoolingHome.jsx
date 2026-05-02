@@ -17,6 +17,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { userService } from '../../services/userService';
 import toast from 'react-hot-toast';
 
+// Asset Imports
+import taxiImg from '../../../../assets/3d images/AutoCab/taxi.png';
+
 const toCleanString = (value = '') => String(value || '').trim();
 
 const formatDurationFromSchedule = (schedule = {}) => {
@@ -135,27 +138,47 @@ const PoolingHome = () => {
   );
 
   return (
-    <div className="min-h-screen bg-white pb-24 max-w-lg mx-auto font-sans">
+    <div className="min-h-screen bg-white pb-24 max-w-lg mx-auto font-sans selection:bg-indigo-100">
       {/* Header Section */}
-      <div className="relative bg-slate-900 px-6 pt-12 pb-24 text-white overflow-hidden">
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl" />
+      <div className="relative bg-slate-900 px-6 pt-12 pb-28 text-white overflow-hidden">
+        <div className="absolute top-0 right-0 -mr-16 -mt-16 h-80 w-80 rounded-full bg-indigo-500/20 blur-3xl" />
         <div className="absolute bottom-0 left-0 -ml-16 -mb-16 h-64 w-64 rounded-full bg-blue-500/10 blur-3xl" />
         
-        <button 
-          onClick={() => navigate('/taxi/user')}
-          className="relative mb-8 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 backdrop-blur-md transition hover:bg-white/20"
-        >
-          <ArrowLeft size={20} />
-        </button>
+        <div className="relative z-20 flex items-center justify-between mb-8">
+          <button 
+            onClick={() => navigate('/taxi/user')}
+            className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-md transition hover:bg-white/20 border border-white/10 shadow-xl shadow-black/20"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-md border border-white/10">
+            <Users size={18} className="text-indigo-200" />
+          </div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="relative"
-        >
-          <h1 className="text-4xl font-black tracking-tight uppercase">Carpool</h1>
-          <p className="mt-2 text-indigo-200 font-bold uppercase text-[10px] tracking-[0.2em]">Safe, affordable & eco-friendly</p>
-        </motion.div>
+        <div className="relative z-10 flex items-end justify-between">
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="max-w-[200px]"
+          >
+            <h1 className="text-5xl font-black tracking-tight leading-[0.9]">
+              POOL <br />
+              <span className="text-indigo-400">RIDE.</span>
+            </h1>
+            <p className="mt-4 text-indigo-100 font-bold uppercase text-[9px] tracking-[0.3em] bg-white/10 inline-block px-3 py-1 rounded-full backdrop-blur-sm">Verified Shared Trips</p>
+          </motion.div>
+          
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8, x: 20 }}
+            animate={{ opacity: 1, scale: 1, x: 0 }}
+            transition={{ type: 'spring', damping: 15 }}
+            className="relative -mr-10"
+          >
+            <div className="absolute inset-0 bg-indigo-500/20 blur-3xl rounded-full" />
+            <img src={taxiImg} alt="Pooling" className="relative z-10 h-40 w-auto object-contain drop-shadow-[0_20px_40px_rgba(0,0,0,0.5)]" />
+          </motion.div>
+        </div>
       </div>
 
       {/* Search Card */}
