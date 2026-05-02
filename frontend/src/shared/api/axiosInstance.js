@@ -9,6 +9,16 @@ const api = axios.create({
   },
 });
 
+const SLOW_REQUEST_THRESHOLD_MS = 8000;
+
+const dispatchNetworkStatus = (detail) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.dispatchEvent(new CustomEvent('app:network-status', { detail }));
+};
+
 const DEDUPED_GET_TTL_MS = 2500;
 const dedupedGetRequests = new Map();
 const recentDedupedGetResponses = new Map();
@@ -165,6 +175,24 @@ const clearStaleAuthState = (role = '', staleToken = '') => {
 // Request Interceptor: Attach Auth Token automatically
 api.interceptors.request.use(
   (config) => {
+    const startedAt = Date.now();
+    const slowRequestTimer = typeof window !== 'undefined' && window.setTimeout
+      ? window.setTimeout(() => {
+          dispatchNetworkStatus({
+            state: 'slow',
+            message: 'Slow network detected. We are still trying to connect.',
+            startedAt,
+            url: config.url || '',
+          });
+        }, SLOW_REQUEST_THRESHOLD_MS)
+      : null;
+
+    config.metadata = {
+      ...(config.metadata || {}),
+      startedAt,
+      slowRequestTimer,
+    };
+
     const requestPath = String(config.url || '').split('?')[0];
     const existingAuthorization = config.headers?.Authorization || config.headers?.authorization;
 
@@ -238,10 +266,26 @@ api.interceptors.request.use(
 // Response Interceptor: Simplify responses and handle global errors
 api.interceptors.response.use(
   (response) => {
+    const slowRequestTimer = response.config?.metadata?.slowRequestTimer;
+    if (slowRequestTimer) {
+      clearTimeout(slowRequestTimer);
+    }
+
+    dispatchNetworkStatus({
+      state: 'online',
+      message: '',
+      url: response.config?.url || '',
+    });
+
     // Pro-Level: Many APIs return data in data.data or data.result, you can flatten it here
     return response.data;
   },
   (error) => {
+    const slowRequestTimer = error.config?.metadata?.slowRequestTimer;
+    if (slowRequestTimer) {
+      clearTimeout(slowRequestTimer);
+    }
+
     if (error.response) {
       // Global error handling: e.g. deleted or inactive account logout
       if (error.response.status === 401 || error.response.status === 403) {
@@ -263,6 +307,23 @@ api.interceptors.response.use(
       }
       return Promise.reject({ ...error.response.data, status: error.response.status });
     }
+
+    const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    const isTimeout =
+      error.code === 'ECONNABORTED'
+      || String(error.message || '').toLowerCase().includes('timeout');
+
+    dispatchNetworkStatus({
+      state: isOffline ? 'offline' : 'slow',
+      message: isOffline
+        ? 'You appear to be offline. Please check your internet connection.'
+        : isTimeout
+          ? 'The request is taking too long. Your network may be slow.'
+          : 'We could not reach the server. Please try again in a moment.',
+      url: error.config?.url || '',
+      code: error.code || '',
+    });
+
     return Promise.reject({ message: 'Network error or server down.' });
   }
 );
