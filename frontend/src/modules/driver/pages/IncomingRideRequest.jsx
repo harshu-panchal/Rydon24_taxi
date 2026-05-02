@@ -130,6 +130,7 @@ const IncomingRideRequest = ({
 
   const isParcel = data.type === 'parcel';
   const isIntercity = data.type === 'intercity';
+  const scheduledAt = data.scheduledAt || data.raw?.scheduledAt || data.raw?.ride?.scheduledAt || null;
   const isScheduledRequest = Boolean(scheduledAt);
   const title = isPreviewMode
     ? (isParcel ? 'Scheduled delivery' : isIntercity ? 'Scheduled intercity trip' : 'Scheduled ride')
@@ -157,7 +158,6 @@ const IncomingRideRequest = ({
   const bidBaseFare = Number(data.raw?.bidding?.baseFare || data.raw?.baseFare || data.raw?.fare || 0);
   const bidMaxFare = Number(data.raw?.bidding?.userMaxBidFare || data.raw?.userMaxBidFare || bidBaseFare);
   const bidStepAmount = Number(data.raw?.bidding?.bidStepAmount || 10);
-  const scheduledAt = data.scheduledAt || data.raw?.scheduledAt || data.raw?.ride?.scheduledAt || null;
   const scheduledCountdown = getScheduledRideCountdown(scheduledAt, previewNow);
   const bidOptions = isBidding
     ? Array.from({ length: Math.max(1, Math.floor((bidMaxFare - bidBaseFare) / bidStepAmount) + 1) }, (_, index) => bidBaseFare + (index * bidStepAmount))

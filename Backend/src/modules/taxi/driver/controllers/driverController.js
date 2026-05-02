@@ -1744,27 +1744,37 @@ export const getDriverScheduledRides = async (req, res) => {
 
   const safePage = Math.max(1, Number(req.query?.page) || 1);
   const safeLimit = Math.min(100, Math.max(1, Number(req.query?.limit) || 20));
-  const query = {
-    scheduledAt: { $ne: null, $gte: new Date() },
+  const openScheduledRideQuery = {
+    driverId: null,
     status: RIDE_STATUS.SEARCHING,
     liveStatus: RIDE_LIVE_STATUS.SEARCHING,
     ...(driver.service_location_id ? { service_location_id: driver.service_location_id } : {}),
-    $or: [
-      { driverId: null },
-      { driverId: req.auth.sub },
-    ],
   };
 
   if (driver.vehicleTypeId) {
-    query.$and = [
-      {
-        $or: [
-          { vehicleTypeId: driver.vehicleTypeId },
-          { dispatchVehicleTypeIds: driver.vehicleTypeId },
-        ],
-      },
+    openScheduledRideQuery.$or = [
+      { vehicleTypeId: driver.vehicleTypeId },
+      { dispatchVehicleTypeIds: driver.vehicleTypeId },
     ];
   }
+
+  const query = {
+    scheduledAt: { $ne: null, $gte: new Date() },
+    $or: [
+      openScheduledRideQuery,
+      {
+        driverId: req.auth.sub,
+        status: { $in: [RIDE_STATUS.SEARCHING, RIDE_STATUS.ACCEPTED] },
+        liveStatus: {
+          $in: [
+            RIDE_LIVE_STATUS.SEARCHING,
+            RIDE_LIVE_STATUS.ACCEPTED,
+            RIDE_LIVE_STATUS.ARRIVING,
+          ],
+        },
+      },
+    ],
+  };
 
   const [rides, totalCount] = await Promise.all([
     Ride.find(query)

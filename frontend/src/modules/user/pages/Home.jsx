@@ -404,48 +404,64 @@ const Home = () => {
             animate={{ opacity: 1, y: 0 }}
             whileTap={{ scale: 0.99 }}
             onClick={() => navigate(trackingPath, { state: currentRide })}
-            className="mx-5 overflow-hidden rounded-[32px] border border-emerald-100/80 bg-[linear-gradient(135deg,#ffffff_0%,#f0fdf4_48%,#ecfeff_100%)] p-5 text-left shadow-[0_20px_44px_rgba(16,185,129,0.14)]"
+            className="mx-5 block w-[calc(100%-2.5rem)] overflow-hidden rounded-[32px] border border-emerald-100/50 bg-[linear-gradient(135deg,#ffffff_0%,#f0fdf4_100%)] p-6 text-left shadow-[0_24px_48px_rgba(16,185,129,0.12)]"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
-                  <ShieldCheck size={13} strokeWidth={2.6} />
-                  Scheduled ride confirmed
-                </div>
-                <h2 className="mt-3 text-[24px] font-black leading-none tracking-tight text-slate-950">
-                  {scheduledCountdown || 'Driver assigned'}
+            <div className="flex items-center justify-between">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100/50 px-3 py-1 text-[9px] font-black uppercase tracking-[0.15em] text-emerald-700">
+                <ShieldCheck size={12} strokeWidth={3} />
+                Confirmed
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Live Status</span>
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-end justify-between">
+              <div className="min-w-0">
+                <h2 className="text-[32px] font-black tracking-tight text-slate-950 leading-none">
+                  {scheduledCountdown}
                 </h2>
-                <p className="mt-2 text-[13px] font-bold text-slate-600">
+                <p className="mt-2 text-[14px] font-bold text-slate-500">
                   {scheduledDateLabel}
                 </p>
-                <p className="mt-3 text-[12px] font-bold leading-relaxed text-slate-500">
-                  {driverName} is locked in for this ride. Open the live trip card anytime to watch status updates and start tracking when location sharing begins.
-                </p>
               </div>
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] bg-slate-950 shadow-[0_14px_30px_rgba(15,23,42,0.18)]">
-                <img src={currentRideIcon} alt={vehicleLabel} className="h-10 w-10 object-contain" draggable={false} />
-              </div>
-            </div>
-            <div className="mt-4 grid grid-cols-3 gap-2.5">
-              <div className="rounded-[20px] bg-white/80 px-3 py-3 shadow-sm">
-                <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">Driver</p>
-                <p className="mt-1 truncate text-[13px] font-black text-slate-900">{driverName}</p>
-              </div>
-              <div className="rounded-[20px] bg-white/80 px-3 py-3 shadow-sm">
-                <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">Vehicle</p>
-                <p className="mt-1 truncate text-[13px] font-black text-slate-900">{vehicleLabel}</p>
-              </div>
-              <div className="rounded-[20px] bg-white/80 px-3 py-3 shadow-sm">
-                <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">Fare</p>
-                <p className="mt-1 truncate text-[13px] font-black text-slate-900">Rs {Number(currentRide?.fare || 0).toFixed(0)}</p>
+              <div className="relative mb-1">
+                <div className="absolute -inset-4 rounded-full bg-emerald-100/30 blur-xl animate-pulse" />
+                <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-950 shadow-2xl shadow-slate-950/40 border border-slate-800">
+                  <img src={currentRideIcon} alt="" className="h-10 w-10 object-contain" />
+                </div>
               </div>
             </div>
-            <div className="mt-4 flex items-center justify-between rounded-[22px] bg-slate-950 px-4 py-3 text-white shadow-[0_14px_28px_rgba(15,23,42,0.16)]">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45">Tap to open trip hub</p>
-                <p className="mt-1 text-[13px] font-black text-white">{currentRide?.pickup || 'Pickup location'} to {currentRide?.drop || 'Drop location'}</p>
+
+            <div className="mt-6 flex items-center justify-between rounded-2xl bg-white/60 p-3 shadow-sm border border-white">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-10 w-10 shrink-0 rounded-full bg-emerald-50 flex items-center justify-center border border-emerald-100">
+                  <User size={20} className="text-emerald-600" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 leading-none">Driver & Vehicle</p>
+                  <p className="mt-1 truncate text-[13px] font-black text-slate-900">{driverName} • {vehicleLabel}</p>
+                </div>
               </div>
-              <ChevronRight size={18} strokeWidth={3} className="shrink-0" />
+              <div className="text-right">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 leading-none">Fare</p>
+                <p className="mt-1 text-[13px] font-black text-slate-900">₹{Number(currentRide?.fare || 0).toFixed(0)}</p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center gap-3 rounded-2xl bg-slate-950 px-4 py-3.5 text-white shadow-xl shadow-slate-950/20">
+              <div className="min-w-0 flex-1">
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/40">Trip Route</p>
+                <div className="mt-1 flex items-center gap-2 text-[12px] font-bold">
+                  <span className="truncate max-w-[100px] text-white/90">{(currentRide?.pickup || 'Pickup').split(',')[0]}</span>
+                  <ChevronRight size={12} className="text-white/30" />
+                  <span className="truncate max-w-[100px] text-emerald-400">{(currentRide?.drop || 'Drop').split(',')[0]}</span>
+                </div>
+              </div>
+              <div className="h-8 w-8 shrink-0 rounded-full bg-white/10 flex items-center justify-center">
+                <ChevronRight size={18} strokeWidth={3} className="text-white" />
+              </div>
             </div>
           </motion.button>
         )}

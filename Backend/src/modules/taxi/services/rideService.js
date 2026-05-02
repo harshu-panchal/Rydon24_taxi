@@ -121,6 +121,8 @@ const normalizeScheduledAt = (value) => {
 };
 
 export const DRIVER_SCHEDULE_LOCK_WINDOW_MS = 30 * 60 * 1000;
+const DRIVER_SCHEDULE_MIN_DURATION_MINUTES = 30;
+const DRIVER_SCHEDULE_TURNOVER_BUFFER_MS = 15 * 60 * 1000;
 
 const getScheduledRideTimestamp = (ride = {}) => {
   const scheduledAt = ride?.scheduledAt ? new Date(ride.scheduledAt) : null;
@@ -131,6 +133,76 @@ const getScheduledRideTimestamp = (ride = {}) => {
 export const isRideScheduledForFuture = (ride = {}, referenceTime = new Date()) => {
   const scheduledTime = getScheduledRideTimestamp(ride);
   return Number.isFinite(scheduledTime) && scheduledTime > new Date(referenceTime).getTime();
+};
+
+const getScheduledRideCommitmentWindow = (ride = {}) => {
+  const scheduledTime = getScheduledRideTimestamp(ride);
+
+  if (!Number.isFinite(scheduledTime)) {
+    return null;
+  }
+
+  const durationMinutes = Math.max(
+    DRIVER_SCHEDULE_MIN_DURATION_MINUTES,
+    Number(ride?.estimatedDurationMinutes || 0),
+  );
+
+  return {
+    startTime: scheduledTime - DRIVER_SCHEDULE_LOCK_WINDOW_MS,
+    endTime:
+      scheduledTime +
+      (durationMinutes * 60 * 1000) +
+      DRIVER_SCHEDULE_TURNOVER_BUFFER_MS,
+  };
+};
+
+const doRideCommitmentWindowsOverlap = (firstWindow, secondWindow) => (
+  Boolean(firstWindow)
+  && Boolean(secondWindow)
+  && firstWindow.startTime < secondWindow.endTime
+  && secondWindow.startTime < firstWindow.endTime
+);
+
+export const findDriverConflictingScheduledRide = async ({
+  driverId,
+  ride,
+  excludeRideId = null,
+  session = null,
+} = {}) => {
+  const normalizedDriverId = String(driverId || '').trim();
+  const targetWindow = getScheduledRideCommitmentWindow(ride);
+
+  if (!normalizedDriverId || !targetWindow) {
+    return null;
+  }
+
+  const query = {
+    driverId: normalizedDriverId,
+    scheduledAt: { $ne: null },
+    status: { $in: [RIDE_STATUS.SEARCHING, RIDE_STATUS.ACCEPTED, RIDE_STATUS.ONGOING] },
+    liveStatus: { $nin: [RIDE_LIVE_STATUS.CANCELLED, RIDE_LIVE_STATUS.COMPLETED] },
+  };
+
+  if (excludeRideId) {
+    query._id = { $ne: excludeRideId };
+  }
+
+  const ridesQuery = Ride.find(query)
+    .select('_id scheduledAt estimatedDurationMinutes status liveStatus')
+    .sort({ scheduledAt: 1 })
+    .lean();
+
+  if (session) {
+    ridesQuery.session(session);
+  }
+
+  const rides = await ridesQuery;
+
+  return rides.find((candidateRide) =>
+    doRideCommitmentWindowsOverlap(
+      targetWindow,
+      getScheduledRideCommitmentWindow(candidateRide),
+    )) || null;
 };
 
 export const getDriverIdsBlockedByUpcomingScheduledRides = async (
@@ -925,6 +997,16 @@ export const acceptRideAssignment = async ({ rideId, driverId }) => {
         throw new ApiError(409, 'Driver is blocked from new rides within 30 minutes of a scheduled trip');
       }
 
+      const conflictingScheduledRide = await findDriverConflictingScheduledRide({
+        driverId,
+        ride,
+        excludeRideId: ride._id,
+        session,
+      });
+      if (conflictingScheduledRide) {
+        throw new ApiError(409, 'Driver already has another scheduled trip in a similar time range');
+      }
+
       await ensureDriverWalletCanAcceptRide(driver, { session });
 
       ride.driverId = driver._id;
@@ -1161,6 +1243,14 @@ export const submitRideBid = async ({ rideId, driverId, bidFare }) => {
     throw new ApiError(409, 'Driver is blocked from new rides within 30 minutes of a scheduled trip');
   }
 
+  const conflictingScheduledRide = await findDriverConflictingScheduledRide({
+    driverId,
+    ride,
+  });
+  if (conflictingScheduledRide) {
+    throw new ApiError(409, 'Driver already has another scheduled trip in a similar time range');
+  }
+
   const normalizedBid = normalizeRideBidAmount({ ride, bidFare });
 
   const bid = await RideBid.findOneAndUpdate(
@@ -1262,6 +1352,16 @@ export const acceptRideBidAssignment = async ({ rideId, bidId, userId }) => {
       const blockedDriverIds = await getDriverIdsBlockedByUpcomingScheduledRides([String(bid.driverId || '')], { session });
       if (blockedDriverIds.has(String(bid.driverId || ''))) {
         throw new ApiError(409, 'Driver is blocked from new rides within 30 minutes of a scheduled trip');
+      }
+
+      const conflictingScheduledRide = await findDriverConflictingScheduledRide({
+        driverId: String(bid.driverId || ''),
+        ride,
+        excludeRideId: ride._id,
+        session,
+      });
+      if (conflictingScheduledRide) {
+        throw new ApiError(409, 'Driver already has another scheduled trip in a similar time range');
       }
 
       await ensureDriverWalletCanAcceptRide(driver, { session });
