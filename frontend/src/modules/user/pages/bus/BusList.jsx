@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
+  Check,
   ChevronRight,
   Clock3,
   Loader2,
@@ -14,6 +15,13 @@ import {
   BadgePercent,
 } from 'lucide-react';
 import userBusService from '../../services/busService';
+
+const SORT_OPTIONS = [
+  { id: 'recommended', label: 'Filter & Sort' },
+  { id: 'price-asc', label: 'Price: Low to High' },
+  { id: 'departure-asc', label: 'Early Departure' },
+  { id: 'rating-desc', label: 'Top Rated' },
+];
 
 const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
 
@@ -44,6 +52,38 @@ const formatDurationBrief = (value = '') => {
     .trim();
 };
 
+const getNumericValue = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const getBusRating = (bus) => getNumericValue(bus?.rating, 0);
+const getBusRatingCount = (bus) => getNumericValue(bus?.ratingCount, 0);
+const hasBusRating = (bus) => getBusRatingCount(bus) > 0;
+const isHighlyRatedBus = (bus) => hasBusRating(bus) && getBusRating(bus) >= 4.5;
+
+const hasBusDeal = (bus) => {
+  const searchableText = [
+    bus?.cancellationPolicy,
+    bus?.offerText,
+    bus?.badge,
+    Array.isArray(bus?.tags) ? bus.tags.join(' ') : bus?.tags,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return searchableText.includes('free') || searchableText.includes('deal') || searchableText.includes('save');
+};
+
+const getDepartureSortValue = (bus) => {
+  const raw = String(bus?.departure || '').trim();
+  const match = raw.match(/(\d{1,2}):(\d{2})/);
+  if (!match) return Number.MAX_SAFE_INTEGER;
+
+  return (Number(match[1]) * 60) + Number(match[2]);
+};
+
 const BusList = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -53,6 +93,11 @@ const BusList = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [buses, setBuses] = useState([]);
+  const [sortBy, setSortBy] = useState('recommended');
+  const [showDealsOnly, setShowDealsOnly] = useState(false);
+  const [showHighlyRatedOnly, setShowHighlyRatedOnly] = useState(false);
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const sortMenuRef = useRef(null);
 
   useEffect(() => {
     if (!fromCity || !toCity || !date) {
@@ -83,6 +128,73 @@ const BusList = () => {
     };
   }, [date, fromCity, navigate, routePrefix, toCity]);
 
+  useEffect(() => {
+    if (!isSortMenuOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (sortMenuRef.current && !sortMenuRef.current.contains(event.target)) {
+        setIsSortMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setIsSortMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isSortMenuOpen]);
+
+  const sortOption = useMemo(
+    () => SORT_OPTIONS.find((option) => option.id === sortBy) || SORT_OPTIONS[0],
+    [sortBy],
+  );
+
+  const visibleBuses = useMemo(() => {
+    const nextBuses = Array.isArray(buses) ? [...buses] : [];
+    const filteredBuses = nextBuses.filter((bus) => {
+      if (showDealsOnly && !hasBusDeal(bus)) {
+        return false;
+      }
+
+      if (showHighlyRatedOnly && !isHighlyRatedBus(bus)) {
+        return false;
+      }
+
+      return true;
+    });
+
+    if (sortBy === 'price-asc') {
+      filteredBuses.sort(
+        (left, right) => getNumericValue(left?.price, Number.MAX_SAFE_INTEGER) - getNumericValue(right?.price, Number.MAX_SAFE_INTEGER),
+      );
+    } else if (sortBy === 'departure-asc') {
+      filteredBuses.sort((left, right) => getDepartureSortValue(left) - getDepartureSortValue(right));
+    } else if (sortBy === 'rating-desc') {
+      filteredBuses.sort((left, right) => {
+        const ratingDelta = getBusRating(right) - getBusRating(left);
+        if (ratingDelta !== 0) {
+          return ratingDelta;
+        }
+
+        return getBusRatingCount(right) - getBusRatingCount(left);
+      });
+    }
+
+    return filteredBuses;
+  }, [buses, showDealsOnly, showHighlyRatedOnly, sortBy]);
+
   const handleSelect = (bus) => {
     navigate(`${routePrefix}/bus/details`, {
       state: {
@@ -90,6 +202,11 @@ const BusList = () => {
         bus,
       },
     });
+  };
+
+  const handleSortSelect = (nextSortId) => {
+    setSortBy(nextSortId);
+    setIsSortMenuOpen(false);
   };
 
   return (
@@ -103,8 +220,10 @@ const BusList = () => {
             <ArrowLeft size={18} className="text-slate-900" />
           </button>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-base font-black text-slate-900">{fromCity} <span className="text-slate-300">→</span> {toCity}</h1>
-            <p className="mt-0.5 text-xs font-semibold text-slate-500">{buses.length || 0} buses</p>
+            <h1 className="truncate text-base font-black text-slate-900">
+              {fromCity} <span className="text-slate-300">→</span> {toCity}
+            </h1>
+            <p className="mt-0.5 text-xs font-semibold text-slate-500">{visibleBuses.length || 0} buses</p>
           </div>
           <div className="rounded-2xl border border-orange-100 bg-orange-50 px-3 py-2 text-right">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-400">{formatTravelDate(date)}</p>
@@ -126,10 +245,14 @@ const BusList = () => {
           </div>
         ) : null}
 
-        {!loading && !error && buses.length === 0 ? (
+        {!loading && !error && visibleBuses.length === 0 ? (
           <div className="rounded-3xl border border-slate-100 bg-white p-12 text-center shadow-sm">
             <h2 className="text-xl font-bold text-slate-900">No buses found</h2>
-            <p className="mt-2 text-sm font-medium text-slate-500">Try searching for a different date or route.</p>
+            <p className="mt-2 text-sm font-medium text-slate-500">
+              {showDealsOnly || showHighlyRatedOnly || sortBy !== 'recommended'
+                ? 'Try changing your filters to see more buses.'
+                : 'Try searching for a different date or route.'}
+            </p>
           </div>
         ) : null}
 
@@ -160,27 +283,84 @@ const BusList = () => {
               </div>
             </div>
 
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              <button
-                type="button"
-                className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm"
-              >
-                <SlidersHorizontal size={14} />
-                Filter & Sort
-              </button>
-              <span className="inline-flex shrink-0 items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm">
-                Deals
-              </span>
-              <span className="inline-flex shrink-0 items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm">
-                Highly Rated
-              </span>
+            <div className="relative pb-1">
+              <div className="flex gap-2 overflow-x-auto">
+                <div ref={sortMenuRef} className="shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsSortMenuOpen((current) => !current)}
+                    className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-xs font-bold shadow-sm transition ${
+                      isSortMenuOpen
+                        ? 'border-slate-300 bg-slate-50 text-slate-900'
+                        : 'border-slate-200 bg-white text-slate-700'
+                    }`}
+                  >
+                    <SlidersHorizontal size={14} />
+                    {sortOption.label}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDealsOnly((current) => !current)}
+                  className={`inline-flex shrink-0 items-center rounded-xl border px-4 py-2 text-xs font-bold shadow-sm transition ${
+                    showDealsOnly
+                      ? 'border-orange-200 bg-orange-50 text-orange-700'
+                      : 'border-slate-200 bg-white text-slate-700'
+                  }`}
+                >
+                  Deals
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowHighlyRatedOnly((current) => !current)}
+                  className={`inline-flex shrink-0 items-center rounded-xl border px-4 py-2 text-xs font-bold shadow-sm transition ${
+                    showHighlyRatedOnly
+                      ? 'border-amber-200 bg-amber-50 text-amber-700'
+                      : 'border-slate-200 bg-white text-slate-700'
+                  }`}
+                >
+                  Highly Rated
+                </button>
+              </div>
+
+              {isSortMenuOpen ? (
+                <div
+                  ref={sortMenuRef}
+                  className="absolute left-0 top-[calc(100%+0.5rem)] z-20 w-64 rounded-[20px] border border-slate-200 bg-white p-2 shadow-[0_18px_48px_rgba(15,23,42,0.14)]"
+                >
+                  <p className="px-3 pb-2 pt-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                    Sort buses by
+                  </p>
+                  <div className="space-y-1">
+                    {SORT_OPTIONS.map((option) => {
+                      const isActive = sortBy === option.id;
+
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => handleSortSelect(option.id)}
+                          className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-xs font-bold transition ${
+                            isActive
+                              ? 'bg-slate-900 text-white'
+                              : 'bg-white text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span>{option.label}</span>
+                          {isActive ? <Check size={14} /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </>
         ) : null}
 
         {!loading && !error
-          ? buses.map((bus, index) => {
-              const hasRating = Number(bus.ratingCount || 0) > 0;
+          ? visibleBuses.map((bus, index) => {
+              const rated = hasBusRating(bus);
               const topAmenities = Array.isArray(bus.amenities) ? bus.amenities.slice(0, 2) : [];
 
               return (
@@ -228,17 +408,17 @@ const BusList = () => {
                         {topAmenities.length > 0 ? topAmenities.join(' • ') : (bus.routeName || `${fromCity} to ${toCity}`)}
                       </p>
                     </div>
-                    {hasRating ? (
+                    {rated ? (
                       <div className="shrink-0 rounded-xl bg-amber-400 px-2.5 py-1.5 text-white shadow-sm">
                         <div className="flex items-center gap-1">
                           <Star size={12} className="fill-current" />
-                          <span className="text-sm font-black">{Number(bus.rating || 0).toFixed(1)}</span>
+                          <span className="text-sm font-black">{getBusRating(bus).toFixed(1)}</span>
                         </div>
-                        <p className="mt-0.5 text-center text-[10px] font-bold text-white/90">{Number(bus.ratingCount || 0)}</p>
+                        <p className="mt-0.5 text-center text-[10px] font-bold text-white/90">{getBusRatingCount(bus)}</p>
                       </div>
                     ) : (
                       <div className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">
-                        New Bus
+                        New
                       </div>
                     )}
                   </div>
@@ -258,7 +438,7 @@ const BusList = () => {
 
                   <div className="mt-3 flex items-center justify-between gap-3">
                     <div className="flex min-w-0 flex-wrap gap-2">
-                      {Number(bus.ratingCount || 0) > 20 ? (
+                      {isHighlyRatedBus(bus) ? (
                         <span className="rounded-full bg-pink-50 px-3 py-1 text-[10px] font-black text-pink-600">
                           Highly rated
                         </span>
@@ -266,6 +446,11 @@ const BusList = () => {
                       {String(bus.cancellationPolicy || '').toLowerCase().includes('free') ? (
                         <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-600">
                           Free cancellation
+                        </span>
+                      ) : null}
+                      {!rated ? (
+                        <span className="rounded-full bg-sky-50 px-3 py-1 text-[10px] font-black text-sky-700">
+                          New
                         </span>
                       ) : null}
                     </div>
