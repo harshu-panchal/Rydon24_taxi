@@ -55,7 +55,7 @@ const AddressCard = ({ icon: Icon, title, subtitle, accentClass, onEdit, onDelet
     </div>
 
     <div className="flex-1 min-w-0">
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-[15px] font-black text-slate-900 leading-none">{title}</div>
           <div className={`mt-1 text-[12px] font-bold ${isEmpty ? 'text-slate-400 italic' : 'text-slate-500'} truncate`}>
@@ -89,13 +89,13 @@ const AddressCard = ({ icon: Icon, title, subtitle, accentClass, onEdit, onDelet
 );
 
 const ModalShell = ({ title, subtitle, onClose, children }) => (
-  <div className="fixed inset-0 z-[110] flex items-end justify-center bg-black/55 backdrop-blur-sm p-4">
+  <div className="fixed inset-0 z-[110] flex items-end justify-center bg-black/55 backdrop-blur-sm p-3 sm:p-4">
     <motion.div
       initial={{ y: '100%' }}
       animate={{ y: 0 }}
       exit={{ y: '100%' }}
       transition={{ duration: 0.32, ease: 'easeOut' }}
-      className="w-full max-w-lg rounded-[28px] bg-white/90 backdrop-blur-md border border-white/80 shadow-2xl overflow-hidden"
+      className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-[28px] border border-white/80 bg-white/90 shadow-2xl backdrop-blur-md sm:max-h-[calc(100vh-2rem)]"
     >
       <div className="px-5 pt-5 pb-4 border-b border-white/70 bg-white/60">
         <div className="flex items-start justify-between gap-3">
@@ -113,7 +113,7 @@ const ModalShell = ({ title, subtitle, onClose, children }) => (
           </button>
         </div>
       </div>
-      <div className="px-5 py-5">{children}</div>
+      <div className="overflow-y-auto px-5 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">{children}</div>
     </motion.div>
   </div>
 );
@@ -278,7 +278,7 @@ const AddressSettings = () => {
           {hasLandmarks ? (
             <div className="bg-white/75 backdrop-blur-md rounded-[22px] border border-white/80 shadow-[0_14px_34px_rgba(15,23,42,0.06)] overflow-hidden">
               {data.landmarks.map((lm) => (
-                <div key={lm.id} className="px-4 py-3 border-b border-white/70 last:border-none flex items-start gap-3">
+                <div key={lm.id} className="flex flex-wrap items-start gap-3 border-b border-white/70 px-4 py-3 last:border-none">
                   <div className="w-10 h-10 rounded-2xl bg-white/70 border border-white/80 shadow-sm flex items-center justify-center shrink-0 text-slate-500">
                     <MapPin size={18} strokeWidth={2.6} />
                   </div>
@@ -420,7 +420,7 @@ const AddressSettings = () => {
                 </button>
               </div>
 
-              <div className="mt-5 flex gap-2">
+              <div className="mt-5 flex flex-col gap-2 sm:flex-row">
                 <button
                   type="button"
                   onClick={() => setConfirmDelete(null)}
