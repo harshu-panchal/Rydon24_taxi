@@ -27,7 +27,7 @@ import {
   hashPassword,
   signAccessToken,
 } from "../services/authService.js";
-import { emitToDriver } from "../../services/dispatchService.js";
+import { cancelScheduledRideByDriver, emitToDriver } from "../../services/dispatchService.js";
 import { notifyLateAvailableDriver } from "../../services/dispatchService.js";
 import { findZoneByPickup } from "../services/locationService.js";
 import { listDriverServiceLocations } from "../services/serviceLocationService.js";
@@ -1366,7 +1366,7 @@ const serializeDriverNotification = (item = {}) => ({
   createdAt: item.createdAt || null,
 });
 
-const serializeDriverScheduledRide = (ride = {}) => ({
+const serializeDriverScheduledRide = (ride = {}, currentDriverId = "") => ({
   rideId: String(ride._id || ""),
   type: ride.serviceType || "ride",
   serviceType: ride.serviceType || "ride",
@@ -1385,6 +1385,9 @@ const serializeDriverScheduledRide = (ride = {}) => ({
   scheduledAt: ride.scheduledAt || null,
   parcel: ride.parcel || null,
   intercity: ride.intercity || null,
+  driverId: ride.driverId ? String(ride.driverId) : null,
+  isAssignedToCurrentDriver:
+    Boolean(ride.driverId) && String(ride.driverId) === String(currentDriverId || ""),
   vehicleTypeId: ride.vehicleTypeId ? String(ride.vehicleTypeId) : null,
   vehicleTypeIds: Array.isArray(ride.dispatchVehicleTypeIds)
     ? ride.dispatchVehicleTypeIds.map((item) => String(item))
@@ -1783,6 +1786,7 @@ export const getDriverScheduledRides = async (req, res) => {
         "dropLocation",
         "dropAddress",
         "scheduledAt",
+        "driverId",
         "parcel",
         "intercity",
         "vehicleTypeId",
@@ -1801,7 +1805,7 @@ export const getDriverScheduledRides = async (req, res) => {
   res.json({
     success: true,
     data: {
-      results: rides.map(serializeDriverScheduledRide),
+      results: rides.map((ride) => serializeDriverScheduledRide(ride, req.auth.sub)),
       totalCount,
       pagination: {
         page: safePage,
@@ -1811,6 +1815,33 @@ export const getDriverScheduledRides = async (req, res) => {
         hasNextPage: safePage * safeLimit < totalCount,
         hasPrevPage: safePage > 1,
       },
+    },
+  });
+};
+
+export const cancelDriverScheduledRide = async (req, res) => {
+  const rideId = toCleanString(req.params?.rideId);
+
+  if (!rideId) {
+    throw new ApiError(400, "Ride id is required");
+  }
+
+  const ride = await cancelScheduledRideByDriver({
+    rideId,
+    driverId: req.auth.sub,
+  });
+
+  if (!ride) {
+    throw new ApiError(404, "Scheduled ride not found for this driver");
+  }
+
+  res.json({
+    success: true,
+    message: "Scheduled ride cancelled successfully",
+    data: {
+      rideId: String(ride._id || ""),
+      status: ride.status || RIDE_STATUS.CANCELLED,
+      liveStatus: ride.liveStatus || RIDE_LIVE_STATUS.CANCELLED,
     },
   });
 };

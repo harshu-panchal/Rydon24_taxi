@@ -120,6 +120,46 @@ const normalizeScheduledAt = (value) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+export const DRIVER_SCHEDULE_LOCK_WINDOW_MS = 30 * 60 * 1000;
+
+export const getDriverIdsBlockedByUpcomingScheduledRides = async (
+  driverIds = [],
+  { referenceTime = new Date(), lockWindowMs = DRIVER_SCHEDULE_LOCK_WINDOW_MS, session = null } = {},
+) => {
+  const normalizedDriverIds = [...new Set((Array.isArray(driverIds) ? driverIds : [driverIds])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean))];
+
+  if (normalizedDriverIds.length === 0) {
+    return new Set();
+  }
+
+  const windowStart = new Date(referenceTime);
+  const windowEnd = new Date(windowStart.getTime() + Math.max(0, Number(lockWindowMs) || 0));
+  const query = {
+    driverId: { $in: normalizedDriverIds },
+    scheduledAt: {
+      $ne: null,
+      $gte: windowStart,
+      $lte: windowEnd,
+    },
+    status: { $in: [RIDE_STATUS.ACCEPTED, RIDE_STATUS.ONGOING] },
+    liveStatus: { $nin: [RIDE_LIVE_STATUS.CANCELLED, RIDE_LIVE_STATUS.COMPLETED] },
+  };
+
+  const ridesQuery = Ride.find(query).select('driverId').lean();
+  if (session) {
+    ridesQuery.session(session);
+  }
+
+  const rides = await ridesQuery;
+  return new Set(
+    rides
+      .map((ride) => String(ride?.driverId || '').trim())
+      .filter(Boolean),
+  );
+};
+
 const normalizeVehicleTypeIds = (vehicleTypeIds = [], vehicleTypeId = null) => {
   const values = Array.isArray(vehicleTypeIds) ? vehicleTypeIds : [vehicleTypeIds];
 
@@ -641,6 +681,7 @@ export const serializeRideRealtime = (ride) => ({
   pickupAddress: ride.pickupAddress || '',
   dropLocation: ride.dropLocation,
   dropAddress: ride.dropAddress || '',
+  scheduledAt: ride.scheduledAt || null,
   acceptedAt: ride.acceptedAt,
   arrivedAt: ride.arrivedAt,
   startedAt: ride.startedAt,
@@ -864,6 +905,11 @@ export const acceptRideAssignment = async ({ rideId, driverId }) => {
 
       if (!driver) {
         throw new ApiError(409, 'Driver is unavailable to accept this ride');
+      }
+
+      const blockedDriverIds = await getDriverIdsBlockedByUpcomingScheduledRides([driverId], { session });
+      if (blockedDriverIds.has(String(driverId))) {
+        throw new ApiError(409, 'Driver is blocked from new rides within 30 minutes of a scheduled trip');
       }
 
       await ensureDriverWalletCanAcceptRide(driver, { session });
@@ -1097,6 +1143,11 @@ export const submitRideBid = async ({ rideId, driverId, bidFare }) => {
     throw new ApiError(409, 'Driver is unavailable to bid on this ride');
   }
 
+  const blockedDriverIds = await getDriverIdsBlockedByUpcomingScheduledRides([driverId]);
+  if (blockedDriverIds.has(String(driverId))) {
+    throw new ApiError(409, 'Driver is blocked from new rides within 30 minutes of a scheduled trip');
+  }
+
   const normalizedBid = normalizeRideBidAmount({ ride, bidFare });
 
   const bid = await RideBid.findOneAndUpdate(
@@ -1193,6 +1244,11 @@ export const acceptRideBidAssignment = async ({ rideId, bidId, userId }) => {
 
       if (!driver) {
         throw new ApiError(409, 'Driver is unavailable to accept this bid');
+      }
+
+      const blockedDriverIds = await getDriverIdsBlockedByUpcomingScheduledRides([String(bid.driverId || '')], { session });
+      if (blockedDriverIds.has(String(bid.driverId || ''))) {
+        throw new ApiError(409, 'Driver is blocked from new rides within 30 minutes of a scheduled trip');
       }
 
       await ensureDriverWalletCanAcceptRide(driver, { session });

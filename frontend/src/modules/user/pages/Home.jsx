@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronRight, Clock3, MapPin } from 'lucide-react';
+import { CalendarClock, ChevronRight, Clock3, MapPin, ShieldCheck, User } from 'lucide-react';
 import HeaderGreeting from '../components/HeaderGreeting';
 import ServiceGrid from '../components/ServiceGrid';
 import LocationMapSection from '../components/LocationMapSection';
@@ -57,6 +57,55 @@ const getCurrentRideIcon = (ride) => {
   return carIcon;
 };
 
+const unwrapApiPayload = (response) => response?.data?.data || response?.data || response;
+
+const formatScheduledDateTime = (value) => {
+  if (!value) {
+    return 'Scheduled time pending';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Scheduled time pending';
+  }
+
+  return parsed.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const getScheduledCountdownLabel = (value, now = Date.now()) => {
+  const parsed = value ? new Date(value) : null;
+  const time = parsed?.getTime?.() || NaN;
+
+  if (!Number.isFinite(time)) {
+    return '';
+  }
+
+  const diffMs = time - now;
+  if (diffMs <= 0) {
+    return 'Pickup window is opening now';
+  }
+
+  const totalMinutes = Math.ceil(diffMs / 60000);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) {
+    return `Starts in ${days}d ${hours}h`;
+  }
+
+  if (hours > 0) {
+    return `Starts in ${hours}h ${minutes}m`;
+  }
+
+  return `Starts in ${minutes}m`;
+};
+
 const Home = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -69,6 +118,7 @@ const Home = () => {
   });
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [endingRide, setEndingRide] = useState(false);
+  const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
 
   const handleEndRide = async () => {
     if (!currentRide?.rideId) return;
@@ -126,8 +176,7 @@ const Home = () => {
       let rideData = null;
 
       try {
-        const res = await api.get('/rides/active/me');
-        rideData = res?.ride || res || null;
+        rideData = unwrapApiPayload(await api.get('/rides/active/me'));
       } catch (error) {
         const status = Number(error?.response?.status || 0);
         if (status !== 404) {
@@ -140,10 +189,21 @@ const Home = () => {
           rideId: rideData._id || rideData.rideId,
           pickup: rideData.pickupAddress || rideData.pickup,
           drop: rideData.dropAddress || rideData.drop,
+          pickupCoords: rideData.pickupLocation?.coordinates || rideData.pickupCoords || null,
+          dropCoords: rideData.dropLocation?.coordinates || rideData.dropCoords || null,
           fare: rideData.fare,
+          baseFare: rideData.baseFare || rideData.fare || 0,
           status: rideData.status,
           liveStatus: rideData.liveStatus,
           serviceType: rideData.serviceType,
+          scheduledAt: rideData.scheduledAt || null,
+          acceptedAt: rideData.acceptedAt || null,
+          arrivedAt: rideData.arrivedAt || null,
+          estimatedDistanceMeters: rideData.estimatedDistanceMeters || 0,
+          estimatedDurationMinutes: rideData.estimatedDurationMinutes || 0,
+          paymentMethod: rideData.paymentMethod || 'Cash',
+          pricingSnapshot: rideData.pricingSnapshot || null,
+          otp: rideData.otp || '',
           driver: rideData.driverId || rideData.driver,
           vehicleIconUrl: rideData.vehicleIconUrl,
           vehicleIconType: rideData.vehicleIconType,
@@ -235,7 +295,6 @@ const Home = () => {
     };
   }, []);
 
-  const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
   const driverName = currentRide?.driver?.name || 'Captain';
   const serviceType = String(currentRide?.serviceType || currentRide?.type || 'ride').toLowerCase();
   const vehicleLabel = currentRide?.driver?.vehicle || currentRide?.driver?.vehicleType || (serviceType === 'parcel' ? 'Parcel' : serviceType === 'rental' ? 'Rental' : 'Taxi');
@@ -247,6 +306,11 @@ const Home = () => {
         ? `${routePrefix}/rental/confirmed`
         : `${routePrefix}/ride/tracking`;
   const rideStage = String(currentRide?.liveStatus || currentRide?.status || 'accepted').toLowerCase();
+  const hasAssignedDriver = Boolean(currentRide?.driver?._id || currentRide?.driver?.id || currentRide?.driver?.name);
+  const scheduledTimestamp = currentRide?.scheduledAt ? new Date(currentRide.scheduledAt).getTime() : NaN;
+  const isScheduledRide = Number.isFinite(scheduledTimestamp);
+  const isScheduledUpcoming = isScheduledRide && scheduledTimestamp > clockNow;
+  const isScheduledAcceptedRide = ['ride', 'intercity'].includes(serviceType) && isScheduledUpcoming && hasAssignedDriver && ['accepted', 'arriving'].includes(rideStage);
   const rideStageLabel =
     serviceType === 'rental'
       ? rideStage === 'end_requested'
@@ -261,6 +325,11 @@ const Home = () => {
         : serviceType === 'parcel'
           ? 'Parcel booked'
           : 'Ride booked';
+  const rideStageContextLabel = isScheduledAcceptedRide
+    ? 'Driver assigned for your scheduled trip'
+    : rideStageLabel;
+  const scheduledDateLabel = formatScheduledDateTime(currentRide?.scheduledAt);
+  const scheduledCountdown = getScheduledCountdownLabel(currentRide?.scheduledAt, clockNow);
   const rentalElapsedSeconds = serviceType === 'rental' && currentRide?.assignedAt
     ? String(currentRide?.status || '').toLowerCase() === 'end_requested' && Number(currentRide?.finalElapsedMinutes || 0) > 0
       ? Number(currentRide.finalElapsedMinutes || 0) * 60
@@ -327,6 +396,59 @@ const Home = () => {
 
       <div className="relative z-10 space-y-4 pb-6">
         <HeaderGreeting />
+
+        {isScheduledAcceptedRide && (
+          <motion.button
+            type="button"
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            whileTap={{ scale: 0.99 }}
+            onClick={() => navigate(trackingPath, { state: currentRide })}
+            className="mx-5 overflow-hidden rounded-[32px] border border-emerald-100/80 bg-[linear-gradient(135deg,#ffffff_0%,#f0fdf4_48%,#ecfeff_100%)] p-5 text-left shadow-[0_20px_44px_rgba(16,185,129,0.14)]"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
+                  <ShieldCheck size={13} strokeWidth={2.6} />
+                  Scheduled ride confirmed
+                </div>
+                <h2 className="mt-3 text-[24px] font-black leading-none tracking-tight text-slate-950">
+                  {scheduledCountdown || 'Driver assigned'}
+                </h2>
+                <p className="mt-2 text-[13px] font-bold text-slate-600">
+                  {scheduledDateLabel}
+                </p>
+                <p className="mt-3 text-[12px] font-bold leading-relaxed text-slate-500">
+                  {driverName} is locked in for this ride. Open the live trip card anytime to watch status updates and start tracking when location sharing begins.
+                </p>
+              </div>
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] bg-slate-950 shadow-[0_14px_30px_rgba(15,23,42,0.18)]">
+                <img src={currentRideIcon} alt={vehicleLabel} className="h-10 w-10 object-contain" draggable={false} />
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2.5">
+              <div className="rounded-[20px] bg-white/80 px-3 py-3 shadow-sm">
+                <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">Driver</p>
+                <p className="mt-1 truncate text-[13px] font-black text-slate-900">{driverName}</p>
+              </div>
+              <div className="rounded-[20px] bg-white/80 px-3 py-3 shadow-sm">
+                <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">Vehicle</p>
+                <p className="mt-1 truncate text-[13px] font-black text-slate-900">{vehicleLabel}</p>
+              </div>
+              <div className="rounded-[20px] bg-white/80 px-3 py-3 shadow-sm">
+                <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">Fare</p>
+                <p className="mt-1 truncate text-[13px] font-black text-slate-900">Rs {Number(currentRide?.fare || 0).toFixed(0)}</p>
+              </div>
+            </div>
+            <div className="mt-4 flex items-center justify-between rounded-[22px] bg-slate-950 px-4 py-3 text-white shadow-[0_14px_28px_rgba(15,23,42,0.16)]">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45">Tap to open trip hub</p>
+                <p className="mt-1 text-[13px] font-black text-white">{currentRide?.pickup || 'Pickup location'} to {currentRide?.drop || 'Drop location'}</p>
+              </div>
+              <ChevronRight size={18} strokeWidth={3} className="shrink-0" />
+            </div>
+          </motion.button>
+        )}
         
         {/* Active Rental Dashboard - Only visible during active rentals */}
         {serviceType === 'rental' && (
@@ -461,12 +583,31 @@ const Home = () => {
               <div className="flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
                 <p className="text-[9px] font-black uppercase tracking-[0.22em] text-orange-600">
-                  {serviceType === 'parcel' ? 'Parcel in progress' : serviceType === 'rental' ? (rideStage === 'end_requested' ? 'Rental end review' : 'Rental in progress') : 'Current Ride'}
+                  {isScheduledAcceptedRide
+                    ? 'Scheduled ride ready'
+                    : serviceType === 'parcel'
+                      ? 'Parcel in progress'
+                      : serviceType === 'rental'
+                        ? (rideStage === 'end_requested' ? 'Rental end review' : 'Rental in progress')
+                        : 'Current Ride'}
                 </p>
               </div>
               <p className="mt-0.5 truncate text-[14px] font-black leading-tight text-slate-900">
-                {rideStageLabel}
+                {rideStageContextLabel}
               </p>
+              {isScheduledAcceptedRide ? (
+                <div className="mt-1 flex items-center gap-2 text-[10px] font-black text-slate-600">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">
+                    <CalendarClock size={11} />
+                    {scheduledDateLabel}
+                  </span>
+                  {scheduledCountdown ? (
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">
+                      {scheduledCountdown}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] font-bold text-slate-500">
                 <MapPin size={12} className="shrink-0 text-emerald-500" strokeWidth={2.5} />
                 <span className="truncate">{currentRide.pickup || 'Pickup location'}</span>
@@ -483,6 +624,16 @@ const Home = () => {
                   </span>
                   <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">
                     Live charge Rs {rentalCurrentCharge.toFixed(0)}
+                  </span>
+                </div>
+              ) : isScheduledAcceptedRide ? (
+                <div className="mt-1 flex items-center gap-2 text-[10px] font-black text-slate-600">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-1 text-sky-700">
+                    <User size={11} />
+                    {driverName}
+                  </span>
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">
+                    Live tracking unlocks soon
                   </span>
                 </div>
               ) : null}

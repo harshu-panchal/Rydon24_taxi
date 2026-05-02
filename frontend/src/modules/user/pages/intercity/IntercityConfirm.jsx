@@ -19,6 +19,7 @@ const IntercityConfirm = () => {
   const [error, setError] = useState('');
   const requestStartedRef = useRef(false);
   const isScheduled = state.rideMode === 'schedule' && Boolean(state.scheduledAt);
+  const isBiddingRide = String(state.bookingMode || '').trim().toLowerCase() === 'bidding';
 
   useEffect(() => {
     if (!state.pickup || !state.drop || !state.vehicle) {
@@ -26,7 +27,7 @@ const IntercityConfirm = () => {
       return;
     }
 
-    if (!isScheduled) {
+    if (!isScheduled || isBiddingRide) {
       const bookingId = state.bookingId || generateIntercityBookingId();
 
       navigate(`${routePrefix}/ride/searching`, {
@@ -41,6 +42,9 @@ const IntercityConfirm = () => {
           paymentMethod: state.paymentMethod || 'Cash',
           serviceType: 'intercity',
           transport_type: 'intercity',
+          bookingMode: isBiddingRide ? 'bidding' : (state.bookingMode || 'normal'),
+          bidStepAmount: Number(state.bidStepAmount || 10),
+          userMaxBidFare: Number(state.userMaxBidFare || state.fare || 0),
           intercity: {
             bookingId,
             fromCity: state.fromCity || '',
@@ -80,6 +84,9 @@ const IntercityConfirm = () => {
           paymentMethod: state.paymentMethod || 'Cash',
           serviceType: 'intercity',
           transport_type: 'intercity',
+          bookingMode: state.bookingMode || 'normal',
+          userMaxBidFare: Number(state.userMaxBidFare || state.fare || 0),
+          bidStepAmount: Number(state.bidStepAmount || 10),
           scheduledAt: state.scheduledAt,
           intercity: {
             bookingId,

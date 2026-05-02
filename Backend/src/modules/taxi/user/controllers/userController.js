@@ -536,7 +536,7 @@ export const getIntercityPackageCatalog = async (_req, res) => {
   })
     .populate('service_location_id', 'name service_location_name')
     .populate('package_type_id', 'name')
-    .populate('package_vehicle_prices.vehicle_type', 'name capacity icon map_icon image icon_types')
+    .populate('package_vehicle_prices.vehicle_type', 'name capacity icon map_icon image icon_types dispatch_type')
     .sort({ package_destination: 1, createdAt: -1 })
     .lean();
 
@@ -562,6 +562,7 @@ export const getIntercityPackageCatalog = async (_req, res) => {
               capacity: Number(row.vehicle_type?.capacity || 0),
               icon: row.vehicle_type?.map_icon || row.vehicle_type?.icon || row.vehicle_type?.image || '',
               iconType: row.vehicle_type?.icon_types || row.vehicle_type?.name || '',
+              dispatchType: String(row.vehicle_type?.dispatch_type || 'normal').trim().toLowerCase(),
               basePrice: Number(row.base_price ?? 0),
               freeDistance: Number(row.free_distance ?? 0),
               distancePrice: Number(row.distance_price ?? 0),

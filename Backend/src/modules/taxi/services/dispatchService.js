@@ -410,6 +410,103 @@ export const cancelRideByUser = async ({ rideId, userId }) => {
   return ride;
 };
 
+export const cancelScheduledRideByDriver = async ({ rideId, driverId }) => {
+  const dispatchState = getDispatchState(rideId);
+  stopDispatchFlow(rideId);
+
+  const ride = await Ride.findOne({ _id: rideId, driverId });
+
+  if (!ride) {
+    return null;
+  }
+
+  const scheduledAt = ride?.scheduledAt ? new Date(ride.scheduledAt) : null;
+  const isScheduledRide = scheduledAt && Number.isFinite(scheduledAt.getTime()) && scheduledAt.getTime() > Date.now();
+
+  if (!isScheduledRide) {
+    throw new Error('Only upcoming scheduled rides can be cancelled by the driver');
+  }
+
+  if (ride.status === RIDE_STATUS.COMPLETED || ride.liveStatus === RIDE_LIVE_STATUS.COMPLETED) {
+    throw new Error('Completed rides cannot be cancelled');
+  }
+
+  if (ride.status === RIDE_STATUS.CANCELLED || ride.liveStatus === RIDE_LIVE_STATUS.CANCELLED) {
+    return ride;
+  }
+
+  ride.status = RIDE_STATUS.CANCELLED;
+  ride.liveStatus = RIDE_LIVE_STATUS.CANCELLED;
+  if (ride.bookingMode === 'bidding') {
+    ride.biddingStatus = 'cancelled';
+  }
+  await ride.save();
+
+  if (ride.deliveryId) {
+    await Delivery.findByIdAndUpdate(ride.deliveryId, {
+      driverId: ride.driverId || null,
+      status: ride.status,
+      liveStatus: ride.liveStatus,
+    });
+  }
+
+  await Promise.all([
+    User.findByIdAndUpdate(ride.userId, { currentRideId: null }),
+    ride.driverId ? Driver.findByIdAndUpdate(ride.driverId, { isOnRide: false }) : Promise.resolve(),
+  ]);
+
+  const cancelReason = 'Your scheduled ride was cancelled by the driver.';
+
+  emitToRoom(getUserRoom(ride.userId), 'rideCancelled', {
+    rideId: String(ride._id),
+    room: getRideRoom(ride._id),
+    reason: cancelReason,
+  });
+
+  emitToRoom(getRideRoom(ride._id), 'rideRequestClosed', {
+    rideId: String(ride._id),
+    reason: 'driver-cancelled',
+    message: cancelReason,
+  });
+
+  if (ride.driverId) {
+    emitToRoom(getDriverRoom(ride.driverId), 'rideRequestClosed', {
+      rideId: String(ride._id),
+      reason: 'driver-cancelled',
+      message: 'Scheduled ride cancelled.',
+    });
+  }
+
+  for (const notifiedDriverId of dispatchState.notifiedDriverIds) {
+    emitToDriver(notifiedDriverId, 'rideRequestClosed', {
+      rideId: String(ride._id),
+      reason: 'driver-cancelled',
+      message: cancelReason,
+    });
+  }
+
+  emitToRoom(getRideRoom(ride._id), SOCKET_EVENTS.RIDE_STATUS_UPDATED, {
+    rideId: String(ride._id),
+    status: ride.status,
+    liveStatus: ride.liveStatus,
+  });
+
+  sendPushNotificationToEntities({
+    userIds: [String(ride.userId)],
+    title: 'Scheduled ride cancelled',
+    body: cancelReason,
+    data: {
+      type: 'ride_cancelled_by_driver',
+      rideId: String(ride._id),
+      serviceType: ride.serviceType || 'ride',
+    },
+  }).catch((error) => {
+    console.error('Failed to send user scheduled-ride cancellation push notification', error);
+  });
+
+  return ride;
+};
+
 const scheduleNextAttempt = (rideId, nextAttemptIndex, retryDelayMs) => {
   const timer = setTimeout(() => {
     dispatchAttempt(rideId, nextAttemptIndex).catch((error) => {

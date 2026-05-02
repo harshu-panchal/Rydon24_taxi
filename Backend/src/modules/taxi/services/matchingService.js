@@ -4,6 +4,7 @@ import { DISPATCH_TOP_DRIVERS } from '../constants/index.js';
 import { Vehicle } from '../admin/models/Vehicle.js';
 import { Driver } from '../driver/models/Driver.js';
 import { Zone } from '../driver/models/Zone.js';
+import { getDriverIdsBlockedByUpcomingScheduledRides } from './rideService.js';
 
 const EARTH_RADIUS_METERS = 6371000;
 
@@ -258,6 +259,11 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
     vehicleTypeKeys,
   });
 
+  const blockedDriverIds = await getDriverIdsBlockedByUpcomingScheduledRides(
+    drivers.map((driver) => String(driver?._id || '')),
+  );
+  drivers = drivers.filter((driver) => !blockedDriverIds.has(String(driver?._id || '')));
+
   if (drivers.length === 0 && zone?._id) {
     drivers = await findDriversForZone({
       zoneId: null,
@@ -267,6 +273,11 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
       normalizedVehicleTypeIds,
       vehicleTypeKeys,
     });
+
+    const fallbackBlockedDriverIds = await getDriverIdsBlockedByUpcomingScheduledRides(
+      drivers.map((driver) => String(driver?._id || '')),
+    );
+    drivers = drivers.filter((driver) => !fallbackBlockedDriverIds.has(String(driver?._id || '')));
   }
 
   return {

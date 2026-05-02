@@ -26,6 +26,9 @@ const getTomorrowLocalDateTime = () => {
   return formatDateTimeInputValue(next);
 };
 
+const DEFAULT_BID_STEP_AMOUNT = 10;
+const DEFAULT_BID_HEADROOM_PERCENT = 20;
+
 const getTodayLocalDate = () => formatDateInputValue(new Date());
 
 const getMaxAdvanceDate = () => {
@@ -62,6 +65,8 @@ const normalizeVehicleEntry = (pkg, vehicle, index) => ({
   icon: getVehicleIcon(vehicle),
   vehicleIconUrl: getVehicleIcon(vehicle),
   iconType: vehicle.iconType || vehicle.vehicleName || 'car',
+  dispatchType: String(vehicle.dispatchType || 'normal').trim().toLowerCase(),
+  supportsBidding: ['bidding', 'both'].includes(String(vehicle.dispatchType || 'normal').trim().toLowerCase()),
   baseFare: Number(vehicle.basePrice || 0),
   freeDistance: Number(vehicle.freeDistance || 0),
   pricePerKm: Number(vehicle.distancePrice || 0),
@@ -74,6 +79,12 @@ const normalizeVehicleEntry = (pkg, vehicle, index) => ({
 const calculateFare = (vehicle, tripType) => {
   const baseFare = Number(vehicle.baseFare || 0);
   return tripType === 'Round Trip' ? Math.round(baseFare * 1.8) : Math.round(baseFare);
+};
+
+const calculateDefaultBidCeiling = (fare) => {
+  const safeFare = Math.max(0, Number(fare || 0));
+  const raisedFare = Math.ceil(safeFare * (1 + (DEFAULT_BID_HEADROOM_PERCENT / 100)));
+  return Math.max(safeFare, raisedFare);
 };
 
 const getDisplayDate = (rideMode, travelDate) => (rideMode === 'schedule' ? travelDate : 'Ride Now');
@@ -243,6 +254,10 @@ const IntercityVehicle = () => {
         vehicle: selectedVehicle,
         passengers,
         fare: finalFare,
+        baseFare: finalFare,
+        bookingMode: selectedVehicle.supportsBidding ? 'bidding' : 'normal',
+        bidStepAmount: DEFAULT_BID_STEP_AMOUNT,
+        userMaxBidFare: selectedVehicle.supportsBidding ? calculateDefaultBidCeiling(finalFare) : finalFare,
       },
     });
   };

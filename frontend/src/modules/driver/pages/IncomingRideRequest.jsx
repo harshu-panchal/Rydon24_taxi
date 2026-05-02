@@ -72,6 +72,11 @@ const IncomingRideRequest = ({
   onClose,
   requestData,
   isAccepting = false,
+  onPreviewCancel,
+  isPreviewCancelling = false,
+  canPreviewCancel = true,
+  previewCancelDisabledLabel = 'Cancel unavailable',
+  previewCancelHelpText = '',
   mode = 'live',
 }) => {
   const isPreviewMode = mode === 'preview';
@@ -319,13 +324,38 @@ const IncomingRideRequest = ({
             </div>
 
             {isPreviewMode ? (
-              <button
-                type="button"
-                onClick={onClose || onDecline}
-                className="flex h-[58px] w-full items-center justify-center rounded-[18px] bg-slate-900 px-5 text-[13px] font-black uppercase tracking-[0.16em] text-white shadow-[0_14px_30px_rgba(15,23,42,0.2)] transition-all active:scale-95"
-              >
-                Close details
-              </button>
+              onPreviewCancel ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={onClose || onDecline}
+                    disabled={isPreviewCancelling}
+                    className="flex h-[58px] items-center justify-center rounded-[18px] border border-slate-200 bg-white px-5 text-[12px] font-black uppercase tracking-[0.14em] text-slate-500 shadow-sm transition-all active:scale-95 disabled:opacity-60"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (canPreviewCancel) {
+                        onPreviewCancel(data);
+                      }
+                    }}
+                    disabled={isPreviewCancelling || !canPreviewCancel}
+                    className="flex h-[58px] items-center justify-center rounded-[18px] bg-rose-500 px-5 text-[12px] font-black uppercase tracking-[0.14em] text-white shadow-[0_14px_30px_rgba(244,63,94,0.28)] transition-all active:scale-95 disabled:opacity-60"
+                  >
+                    {isPreviewCancelling ? 'Cancelling...' : canPreviewCancel ? 'Cancel ride' : previewCancelDisabledLabel}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onClose || onDecline}
+                  className="flex h-[58px] w-full items-center justify-center rounded-[18px] bg-slate-900 px-5 text-[13px] font-black uppercase tracking-[0.16em] text-white shadow-[0_14px_30px_rgba(15,23,42,0.2)] transition-all active:scale-95"
+                >
+                  Close details
+                </button>
+              )
             ) : (
               <>
                 <div className="grid grid-cols-[86px_1fr] gap-3">
@@ -379,6 +409,12 @@ const IncomingRideRequest = ({
                 </p>
               </>
             )}
+
+            {isPreviewMode && onPreviewCancel && previewCancelHelpText ? (
+              <p className="mt-3 text-center text-[10px] font-bold text-slate-400">
+                {previewCancelHelpText}
+              </p>
+            ) : null}
           </div>
         </Motion.div>
       </Motion.div>

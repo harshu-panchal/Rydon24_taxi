@@ -193,6 +193,11 @@ const IntercityDetails = () => {
       paymentMethod: 'Cash',
       serviceType: 'intercity',
       transport_type: 'intercity',
+      bookingMode: vehicle.supportsBidding ? 'bidding' : (state.bookingMode || 'normal'),
+      bidStepAmount: Number(state.bidStepAmount || 10),
+      userMaxBidFare: vehicle.supportsBidding
+        ? Number(state.userMaxBidFare || state.fare || 0)
+        : Number(state.fare || 0),
       intercity: {
         bookingId,
         fromCity,

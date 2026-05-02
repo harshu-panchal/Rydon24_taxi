@@ -161,6 +161,54 @@ const formatTimerClock = (totalSeconds) => {
 
 const formatWholeMinutes = (value) => `${Math.max(0, Math.floor(Number(value) || 0))} min`;
 
+const formatScheduledDateTime = (value) => {
+  if (!value) {
+    return 'Pickup time pending';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Pickup time pending';
+  }
+
+  return parsed.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const getScheduledCountdownLabel = (value, now = Date.now()) => {
+  const parsed = value ? new Date(value) : null;
+  const time = parsed?.getTime?.() || NaN;
+
+  if (!Number.isFinite(time)) {
+    return '';
+  }
+
+  const diffMs = time - now;
+  if (diffMs <= 0) {
+    return 'Pickup window is open';
+  }
+
+  const totalMinutes = Math.ceil(diffMs / 60000);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) {
+    return `Starts in ${days}d ${hours}h`;
+  }
+
+  if (hours > 0) {
+    return `Starts in ${hours}h ${minutes}m`;
+  }
+
+  return `Starts in ${minutes}m`;
+};
+
 const mergeDriverSnapshot = (baseDriver = {}, incomingDriver = {}) => {
   const safeBaseDriver = isPlainObject(baseDriver) ? baseDriver : {};
   const safeIncomingDriver = isPlainObject(incomingDriver) ? incomingDriver : {};
@@ -292,6 +340,12 @@ const RideTracking = () => {
   const routeSos = location.pathname.startsWith('/taxi/user') ? '/taxi/user/safety/sos' : '/safety/sos';
 
   const rideId = state.rideId || '';
+  const scheduledAt = rideRealtime?.scheduledAt || state.scheduledAt || null;
+  const scheduledTimestamp = scheduledAt ? new Date(scheduledAt).getTime() : NaN;
+  const isScheduledRide = Number.isFinite(scheduledTimestamp);
+  const isScheduledUpcoming = isScheduledRide && scheduledTimestamp > waitingNow;
+  const scheduledCountdown = getScheduledCountdownLabel(scheduledAt, waitingNow);
+  const scheduledDateLabel = formatScheduledDateTime(scheduledAt);
   const fare = rideRealtime?.fare || state.fare || 22;
   const paymentMethod = rideRealtime?.paymentMethod || state.paymentMethod || 'Cash';
   const fallbackDriver = useMemo(
@@ -312,6 +366,7 @@ const RideTracking = () => {
     () => toLatLng(rideRealtime?.driverLocation?.coordinates, pickupPosition),
     [pickupPosition, rideRealtime?.driverLocation?.coordinates],
   );
+  const hasLiveDriverLocation = Boolean(rideRealtime?.driverLocation?.coordinates?.length);
   const tripStatus = String(rideRealtime?.status || state.liveStatus || state.status || 'accepted').toLowerCase();
   const otp = tripStatus === 'started' || tripStatus === 'ongoing'
     ? ''
@@ -372,6 +427,8 @@ const RideTracking = () => {
   const hasVehiclePhoto = isLikelyVehiclePhoto(vehicleImage) && !vehicleImageBroken;
   const driverSubtitle = isWaitingForOtp
     ? (serviceType === 'parcel' ? 'Agent has arrived' : 'Captain has arrived')
+    : isScheduledUpcoming && !hasLiveDriverLocation
+    ? 'Driver assigned. Live tracking starts closer to pickup time'
     : tripStatus === 'started'
     ? (serviceType === 'parcel' ? 'Parcel picked up' : 'Trip started')
     : serviceType === 'parcel'
@@ -543,6 +600,7 @@ const RideTracking = () => {
               paymentMethod: payload?.paymentMethod || latestStateRef.current.paymentMethod || 'Cash',
               vehicleIconType: payload?.vehicleIconType || latestStateRef.current.vehicleIconType || '',
               vehicleIconUrl: payload?.vehicleIconUrl || latestStateRef.current.vehicleIconUrl || '',
+              scheduledAt: payload?.scheduledAt || latestStateRef.current.scheduledAt || null,
               otp: payload?.otp || latestStateRef.current.otp || latestStateRef.current.ride_otp || '',
               arrivedAt: payload?.arrivedAt || latestStateRef.current.arrivedAt || '',
               pricingSnapshot: payload?.pricingSnapshot || latestStateRef.current.pricingSnapshot || null,
@@ -580,6 +638,7 @@ const RideTracking = () => {
           paymentMethod: payload?.paymentMethod || latestStateRef.current.paymentMethod || 'Cash',
           vehicleIconType: payload?.vehicleIconType || latestStateRef.current.vehicleIconType || '',
           vehicleIconUrl: payload?.vehicleIconUrl || latestStateRef.current.vehicleIconUrl || '',
+          scheduledAt: payload?.scheduledAt || latestStateRef.current.scheduledAt || null,
           otp: payload?.otp || latestStateRef.current.otp || latestStateRef.current.ride_otp || '',
           arrivedAt: payload?.arrivedAt || latestStateRef.current.arrivedAt || '',
           pricingSnapshot: payload?.pricingSnapshot || latestStateRef.current.pricingSnapshot || null,
@@ -595,6 +654,7 @@ const RideTracking = () => {
           driver: mergedDriver,
           status: payload?.status || latestStateRef.current.status || 'accepted',
           liveStatus: payload?.liveStatus || payload?.status || latestStateRef.current.liveStatus || latestStateRef.current.status || 'accepted',
+          scheduledAt: payload?.scheduledAt || latestStateRef.current.scheduledAt || null,
           arrivedAt: payload?.arrivedAt || latestStateRef.current.arrivedAt || '',
           pricingSnapshot: payload?.pricingSnapshot || latestStateRef.current.pricingSnapshot || null,
           driverPaymentCollection: payload?.driverPaymentCollection || latestStateRef.current.driverPaymentCollection || null,
@@ -707,6 +767,7 @@ const RideTracking = () => {
         paymentMethod: payload.paymentMethod || prev?.paymentMethod || latestState.paymentMethod || 'Cash',
         vehicleIconType: payload.vehicleIconType || prev?.vehicleIconType || latestState.vehicleIconType || '',
         vehicleIconUrl: payload.vehicleIconUrl || prev?.vehicleIconUrl || latestState.vehicleIconUrl || '',
+        scheduledAt: payload.scheduledAt || prev?.scheduledAt || latestState.scheduledAt || null,
         otp: payload.otp || prev?.otp || latestState.otp || latestState.ride_otp || '',
         arrivedAt: payload.arrivedAt || prev?.arrivedAt || latestState.arrivedAt || '',
         pricingSnapshot: payload.pricingSnapshot || prev?.pricingSnapshot || latestState.pricingSnapshot || null,
@@ -768,6 +829,7 @@ const RideTracking = () => {
           rideId,
           driver: latestDriverRef.current,
           status: nextStatus,
+          scheduledAt: payload.scheduledAt || latestState.scheduledAt || null,
           arrivedAt: payload.arrivedAt || latestState.arrivedAt || '',
           pricingSnapshot: payload.pricingSnapshot || latestState.pricingSnapshot || null,
           driverPaymentCollection: payload.driverPaymentCollection || latestState.driverPaymentCollection || null,
@@ -777,6 +839,7 @@ const RideTracking = () => {
       setRideRealtime((prev) => ({
         ...(prev || {}),
         status: nextStatus,
+        scheduledAt: payload.scheduledAt || prev?.scheduledAt || latestStateRef.current.scheduledAt || null,
         arrivedAt: payload.arrivedAt || prev?.arrivedAt || '',
         pricingSnapshot: payload.pricingSnapshot || prev?.pricingSnapshot || null,
         driverPaymentCollection: payload.driverPaymentCollection || prev?.driverPaymentCollection || null,
@@ -797,6 +860,12 @@ const RideTracking = () => {
   }, [rideId]);
 
   useEffect(() => {
+    if (isScheduledUpcoming && !hasLiveDriverLocation) {
+      setRoutePath([]);
+      setRouteError('');
+      return;
+    }
+
     if (!isLoaded || !window.google?.maps?.DirectionsService) {
       setRoutePath([driverPosition, activeDestination]);
       setRouteError('');
@@ -843,7 +912,7 @@ const RideTracking = () => {
     return () => {
       active = false;
     };
-  }, [activeDestination, driverPosition, isLoaded]);
+  }, [activeDestination, driverPosition, hasLiveDriverLocation, isLoaded, isScheduledUpcoming]);
 
   useEffect(() => {
     if (!map || !window.google?.maps) {
@@ -1079,7 +1148,7 @@ const RideTracking = () => {
               gestureHandling: 'greedy',
             }}
           >
-            {routePath.length > 1 && (
+            {routePath.length > 1 && hasLiveDriverLocation && (
               <PolylineF
                 path={routePath}
                 options={{
@@ -1089,12 +1158,14 @@ const RideTracking = () => {
                 }}
               />
             )}
-            <RotatingVehicleMarker
-              position={driverPosition}
-              title="Driver"
-              iconUrl={vehicleIcon}
-              heading={displayDriverHeading}
-            />
+            {hasLiveDriverLocation ? (
+              <RotatingVehicleMarker
+                position={driverPosition}
+                title="Driver"
+                iconUrl={vehicleIcon}
+                heading={displayDriverHeading}
+              />
+            ) : null}
             <MarkerF
               position={activeDestination}
               title={tripStatus === 'started' ? 'Drop' : 'Pickup'}
@@ -1144,6 +1215,26 @@ const RideTracking = () => {
           <p className="text-[11px] font-bold text-slate-700">Using fallback path while directions load.</p>
         </div>
       )}
+
+      {isScheduledUpcoming ? (
+        <div className="absolute top-[132px] left-4 right-4 z-10 rounded-[18px] border border-emerald-100 bg-white/92 px-4 py-3 shadow-[0_10px_28px_rgba(16,185,129,0.12)] backdrop-blur-md">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Scheduled ride</p>
+              <p className="mt-1 text-[15px] font-black tracking-tight text-slate-950">{scheduledDateLabel}</p>
+              <p className="mt-1 text-[11px] font-bold text-slate-500">
+                {hasLiveDriverLocation
+                  ? 'Your driver has started sharing location for this pickup.'
+                  : 'Driver assigned. We will light up live movement here as pickup time gets closer.'}
+              </p>
+            </div>
+            <div className="rounded-[16px] bg-emerald-50 px-3 py-2 text-right">
+              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-emerald-700">Countdown</p>
+              <p className="mt-1 text-[13px] font-black text-slate-950">{scheduledCountdown || 'Ready'}</p>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <motion.div
         animate={{ y: drawerOpen ? 0 : 420 }}
@@ -1202,6 +1293,26 @@ const RideTracking = () => {
               </div>
             )}
           </div>
+
+          {isScheduledRide ? (
+            <div className="rounded-[22px] border border-emerald-100 bg-emerald-50/70 px-4 py-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[9px] font-black uppercase tracking-[0.22em] text-emerald-700">Trip plan</p>
+                  <p className="mt-1 text-[15px] font-black text-slate-950">{scheduledDateLabel}</p>
+                  <p className="mt-1 text-[11px] font-bold text-slate-500">
+                    {isScheduledUpcoming
+                      ? 'We will switch from booking mode to live pickup tracking automatically as your slot approaches.'
+                      : 'Your scheduled ride is now in its live service window.'}
+                  </p>
+                </div>
+                <div className="rounded-[16px] bg-white px-3 py-2 text-right shadow-sm">
+                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Status</p>
+                  <p className="mt-1 text-[13px] font-black text-slate-950">{isScheduledUpcoming ? scheduledCountdown || 'Ready' : 'Live now'}</p>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {isWaitingForOtp && (
             <div className="rounded-[24px] border border-amber-100 bg-amber-50/70 px-4 py-4 shadow-sm">

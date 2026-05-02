@@ -166,6 +166,8 @@ export const getDriverNotifications = (params = {}) =>
   api.get("/drivers/notifications", withDriverAuth({ params }));
 export const getDriverScheduledRides = (params = {}) =>
   api.get("/drivers/scheduled-rides", withDriverAuth({ params }));
+export const cancelDriverScheduledRide = (rideId) =>
+  api.post(`/drivers/scheduled-rides/${rideId}/cancel`, {}, withDriverAuth());
 export const deleteDriverNotification = (id) =>
   api.delete(`/drivers/notifications/${id}`, withDriverAuth());
 export const clearAllDriverNotifications = () =>

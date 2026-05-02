@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { GoogleMap, Marker } from '@react-google-maps/api';
+import toast from 'react-hot-toast';
 import LowBalanceModal from './LowBalanceModal';
 
 
@@ -49,7 +50,7 @@ import SuvIcon from '@/assets/icons/SUV.png';
 
 import { socketService } from '../../../shared/api/socket';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../admin/utils/googleMaps';
-import { getCurrentDriver, getDriverDocumentTemplates, getDriverNotifications, getDriverScheduledRides, getLocalDriverToken } from '../services/registrationService';
+import { cancelDriverScheduledRide, getCurrentDriver, getDriverDocumentTemplates, getDriverNotifications, getDriverScheduledRides, getLocalDriverToken } from '../services/registrationService';
 import { addLocalDriverNotification, getUnreadDriverNotificationCount, getVisibleDriverNotifications } from '../utils/notificationState';
 import { getScheduledRideCountdown } from '../utils/scheduledRideTime';
 import {
@@ -287,6 +288,8 @@ const createScheduledRidePreview = (ride) => ({
         name: ride.user?.name || 'Customer',
         phone: ride.user?.phone || '',
     },
+    driverId: ride.driverId || '',
+    isAssignedToCurrentDriver: Boolean(ride.isAssignedToCurrentDriver),
     raw: {
         fare: ride.fare,
         baseFare: ride.baseFare,
@@ -485,6 +488,7 @@ const DriverHome = () => {
     const [isScheduleLoading, setIsScheduleLoading] = useState(false);
     const [selectedScheduledRide, setSelectedScheduledRide] = useState(null);
     const [scheduleNow, setScheduleNow] = useState(() => Date.now());
+    const [cancellingScheduledRideId, setCancellingScheduledRideId] = useState('');
     const [acceptingRideId, setAcceptingRideId] = useState('');
     const [isHydratingDriver, setIsHydratingDriver] = useState(true);
     const [isTogglingDuty, setIsTogglingDuty] = useState(false);
@@ -579,6 +583,35 @@ const DriverHome = () => {
             setIsScheduleLoading(false);
         }
     }, []);
+
+    const handleCancelScheduledRide = useCallback(async (ride) => {
+        const rideId = String(ride?.rideId || '');
+
+        if (!rideId || cancellingScheduledRideId) {
+            return;
+        }
+
+        const confirmed = window.confirm('Cancel this scheduled ride? The user will be notified immediately.');
+        if (!confirmed) {
+            return;
+        }
+
+        setCancellingScheduledRideId(rideId);
+
+        try {
+            await cancelDriverScheduledRide(rideId);
+            toast.success('Scheduled ride cancelled. User notified.', {
+                duration: 3200,
+                className: 'font-bold text-[13px] rounded-2xl shadow-xl border border-rose-50 bg-white',
+            });
+            setSelectedScheduledRide(null);
+            await loadScheduledRides();
+        } catch (error) {
+            toast.error(error?.response?.data?.message || error?.message || 'Failed to cancel scheduled ride');
+        } finally {
+            setCancellingScheduledRideId('');
+        }
+    }, [cancellingScheduledRideId, loadScheduledRides]);
 
 
     useEffect(() => {
@@ -1646,6 +1679,15 @@ const DriverHome = () => {
                 visible={Boolean(selectedScheduledRide)}
                 requestData={selectedScheduledRide}
                 mode="preview"
+                onPreviewCancel={handleCancelScheduledRide}
+                isPreviewCancelling={cancellingScheduledRideId === selectedScheduledRide?.rideId}
+                canPreviewCancel={Boolean(selectedScheduledRide?.isAssignedToCurrentDriver)}
+                previewCancelDisabledLabel="Not assigned yet"
+                previewCancelHelpText={
+                    selectedScheduledRide?.isAssignedToCurrentDriver
+                        ? 'Cancelling here will also notify the user immediately.'
+                        : 'This scheduled request is visible to you, but only a ride already assigned to you can be cancelled from here.'
+                }
                 onClose={() => setSelectedScheduledRide(null)}
                 onDecline={() => setSelectedScheduledRide(null)}
             />
@@ -1892,7 +1934,7 @@ const DriverHome = () => {
             </AnimatePresence>
 
             {/* --- TOP FLOATING UI --- */}
-            <div className="fixed top-0 left-0 right-0 p-5 pt-12 flex items-start justify-end z-40 pointer-events-none max-w-md mx-auto">
+            <div className="fixed top-0 left-0 right-0 z-40 mx-auto flex max-w-md items-start justify-between p-5 pt-12 pointer-events-none">
                 {/* Earnings Pill */}
                 <div 
                     onClick={() => navigate('/taxi/driver/wallet')}
@@ -1904,33 +1946,35 @@ const DriverHome = () => {
                     </span>
                 </div>
 
-                <button
-                    onClick={() => {
-                        loadScheduledRides();
-                        setIsScheduleSheetOpen(true);
-                    }}
-                    className="absolute left-2 relative w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-900 active:scale-90 transition-all pointer-events-auto border border-slate-100"
-                >
-                    <CalendarClock size={22} />
-                    {scheduledRideCount > 0 ? (
-                        <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-blue-600 border-2 border-white text-white text-[10px] font-black flex items-center justify-center shadow-sm">
-                            {scheduledRideCount > 99 ? '99+' : scheduledRideCount}
-                        </span>
-                    ) : null}
-                </button>
+                <div className="pointer-events-auto flex items-center gap-3">
+                    <button
+                        onClick={() => {
+                            loadScheduledRides();
+                            setIsScheduleSheetOpen(true);
+                        }}
+                        className="relative flex h-12 w-12 items-center justify-center rounded-full border border-slate-100 bg-white text-slate-900 shadow-lg transition-all active:scale-90"
+                    >
+                        <CalendarClock size={22} />
+                        {scheduledRideCount > 0 ? (
+                            <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-white bg-blue-600 px-1 text-[10px] font-black text-white shadow-sm">
+                                {scheduledRideCount > 99 ? '99+' : scheduledRideCount}
+                            </span>
+                        ) : null}
+                    </button>
 
-                {/* Notification Button */}
-                <button 
-                    onClick={() => navigate('/taxi/driver/notifications')}
-                    className="relative w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-900 active:scale-90 transition-all pointer-events-auto border border-slate-100"
-                >
-                    <Bell size={22} />
-                    {notificationCount > 0 ? (
-                        <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-rose-500 border-2 border-white text-white text-[10px] font-black flex items-center justify-center shadow-sm">
-                            {notificationCount > 99 ? '99+' : notificationCount}
-                        </span>
-                    ) : null}
-                </button>
+                    {/* Notification Button */}
+                    <button 
+                        onClick={() => navigate('/taxi/driver/notifications')}
+                        className="relative flex h-12 w-12 items-center justify-center rounded-full border border-slate-100 bg-white text-slate-900 shadow-lg transition-all active:scale-90"
+                    >
+                        <Bell size={22} />
+                        {notificationCount > 0 ? (
+                            <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-white bg-rose-500 px-1 text-[10px] font-black text-white shadow-sm">
+                                {notificationCount > 99 ? '99+' : notificationCount}
+                            </span>
+                        ) : null}
+                    </button>
+                </div>
             </div>
 
             {/* --- MAP BACKGROUND --- */}
