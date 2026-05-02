@@ -8,6 +8,7 @@ import api from '../../../../shared/api/axiosInstance';
 import { getLocalUserToken, userAuthService } from '../../services/authService';
 import { getCurrentRide, isActiveCurrentRide, saveCurrentRide } from '../../services/currentRideService';
 import { useAppGoogleMapsLoader, HAS_VALID_GOOGLE_MAPS_KEY } from '../../../admin/utils/googleMaps';
+import { scheduleScheduledRideReminders } from '../../utils/upcomingRideReminderService';
 
 const MAP_OPTIONS = {
   disableDefaultUI: true,
@@ -591,6 +592,15 @@ const SearchingDriver = () => {
           loadRideBids(rideId).catch(() => {});
         }
         if (isScheduledRide && !isScheduledBiddingRide) {
+          scheduleScheduledRideReminders({
+            ...ride,
+            rideId: normalizedRideId,
+            scheduledAt: ride?.scheduledAt || routeState.scheduledAt || null,
+            pickupAddress: ride?.pickupAddress || routeState.pickup || '',
+            dropAddress: ride?.dropAddress || routeState.drop || '',
+            status: ride?.status || 'scheduled',
+            liveStatus: ride?.liveStatus || 'scheduled',
+          });
           setScheduledStatus('scheduled');
           setSearchStatus('Your ride has been scheduled successfully.');
           return;

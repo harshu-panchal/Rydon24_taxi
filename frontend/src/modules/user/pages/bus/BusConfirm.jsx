@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { CheckCircle2, Ticket, QrCode, Home, Share2, Phone, Route, BusFront } from 'lucide-react';
+import { scheduleBusBookingReminders } from '../../utils/upcomingRideReminderService';
 
 const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
 
@@ -43,6 +44,12 @@ const BusConfirm = () => {
   const routePrefix = getRoutePrefix(location.pathname);
   const state = location.state || {};
   const { booking, fromCity, toCity, date } = state;
+
+  useEffect(() => {
+    if (booking?.bookingCode) {
+      scheduleBusBookingReminders(booking);
+    }
+  }, [booking]);
 
   if (!booking?.bookingCode) {
     navigate(`${routePrefix}/bus`, { replace: true });

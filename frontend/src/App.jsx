@@ -3,12 +3,16 @@ import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useLocation, 
 import { MapPin, FileText } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
+import api from './shared/api/axiosInstance';
 import { socketService } from './shared/api/socket';
 import { SettingsProvider } from './shared/context/SettingsContext';
 import AppAutoUpdater from './modules/shared/components/AppAutoUpdater';
 import { addRealtimeNotification } from './modules/user/utils/realtimeNotificationStore';
 import { clearLocalUserSession, getLocalUserToken } from './modules/user/services/authService';
 import { clearCurrentRide } from './modules/user/services/currentRideService';
+import userBusService from './modules/user/services/busService';
+import { userService } from './modules/user/services/userService';
+import { syncUpcomingRideReminders } from './modules/user/utils/upcomingRideReminderService';
 import { getAuthenticatedDriverRole, getLocalDriverToken } from './modules/driver/services/registrationService';
 import './App.css';
 
@@ -491,6 +495,116 @@ const UserAccountInvalidationListener = () => {
   return null;
 };
 
+const getResponsePayload = (response) => response?.data?.data || response?.data || response || {};
+
+const UserUpcomingRideReminderBootstrap = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    const isUserRoute =
+      location.pathname.startsWith('/taxi/user') ||
+      location.pathname === '/user' ||
+      location.pathname.startsWith('/ride') ||
+      location.pathname.startsWith('/pooling') ||
+      location.pathname.startsWith('/bus');
+
+    if (!isUserRoute || !getLocalUserToken()) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const syncReminders = async () => {
+      try {
+        const [busResult, poolingResult, scheduledRideResult] = await Promise.all([
+          userBusService.getMyBookings({ page: 1, limit: 20, tripState: 'upcoming' }),
+          userService.getMyPoolingBookings(),
+          api.get('/rides', {
+            params: {
+              page: 1,
+              limit: 20,
+              category: 'scheduled',
+            },
+          }),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        const busPayload = getResponsePayload(busResult);
+        const poolingPayload = getResponsePayload(poolingResult);
+        const scheduledRidePayload = getResponsePayload(scheduledRideResult);
+
+        const rawPoolingBookings = Array.isArray(poolingPayload)
+          ? poolingPayload
+          : Array.isArray(poolingPayload?.results)
+            ? poolingPayload.results
+            : [];
+        const routeIds = [...new Set(rawPoolingBookings.map((booking) => String(booking?.route?._id || '')).filter(Boolean))];
+        const routeDetailsEntries = await Promise.all(
+          routeIds.map(async (routeId) => {
+            try {
+              const routeResponse = await userService.getPoolingRouteDetails(routeId);
+              return [routeId, getResponsePayload(routeResponse)];
+            } catch {
+              return [routeId, null];
+            }
+          }),
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        const routeDetailsMap = new Map(routeDetailsEntries);
+        const poolingBookings = rawPoolingBookings.map((booking) => {
+          const routeId = String(booking?.route?._id || '');
+          const routeDetails = routeDetailsMap.get(routeId);
+
+          return routeDetails
+            ? {
+                ...booking,
+                route: {
+                  ...(booking.route || {}),
+                  ...routeDetails,
+                },
+              }
+            : booking;
+        });
+
+        syncUpcomingRideReminders({
+          busBookings: Array.isArray(busPayload?.results) ? busPayload.results : [],
+          poolingBookings,
+          scheduledRides: Array.isArray(scheduledRidePayload?.results) ? scheduledRidePayload.results : [],
+        });
+      } catch {
+        // Reminder sync is non-blocking.
+      }
+    };
+
+    const handleVisibilitySync = () => {
+      if (document.visibilityState === 'visible') {
+        syncReminders();
+      }
+    };
+
+    syncReminders();
+    const intervalId = window.setInterval(syncReminders, 10 * 60 * 1000);
+    window.addEventListener('focus', syncReminders);
+    document.addEventListener('visibilitychange', handleVisibilitySync);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', syncReminders);
+      document.removeEventListener('visibilitychange', handleVisibilitySync);
+    };
+  }, [location.pathname]);
+
+  return null;
+};
+
 const DriverEntryRedirect = () => {
   const token = getLocalDriverToken();
   const role = String(getAuthenticatedDriverRole() || 'driver').toLowerCase();
@@ -524,6 +638,7 @@ function App() {
         <AppAutoUpdater />
         <ScrollToTop />
         <UserAccountInvalidationListener />
+        <UserUpcomingRideReminderBootstrap />
         <MainLayout>
           <Suspense
             fallback={

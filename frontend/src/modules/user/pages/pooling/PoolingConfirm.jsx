@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -22,6 +22,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { userService } from '../../services/userService';
 import toast from 'react-hot-toast';
+import { schedulePoolingBookingReminders } from '../../utils/upcomingRideReminderService';
 
 // Asset Imports
 import taxiImg from '../../../../assets/3d images/AutoCab/taxi.png';
@@ -78,6 +79,21 @@ const PoolingConfirm = () => {
   const [isBooking, setIsBooking] = useState(false);
   const [isBooked, setIsBooked] = useState(false);
   const [confirmedBooking, setConfirmedBooking] = useState(null);
+
+  useEffect(() => {
+    if (!confirmedBooking) {
+      return;
+    }
+
+    schedulePoolingBookingReminders({
+      ...confirmedBooking,
+      route: {
+        ...(confirmedBooking.route || {}),
+        schedules: Array.isArray(route?.schedules) ? route.schedules : [],
+      },
+      departureTime: schedule?.departureTime || '',
+    });
+  }, [confirmedBooking, route?.schedules, schedule?.departureTime]);
 
   if (!route || !vehicle || !schedule?.id || !pickupStop?.id || !dropStop?.id) {
     return (
