@@ -1,6 +1,6 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { MapPin, FileText, WifiOff, CloudOff, RefreshCw } from 'lucide-react';
+import { MapPin, FileText } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 import { socketService } from './shared/api/socket';
@@ -517,137 +517,10 @@ const DriverEntryRedirect = () => {
   );
 };
 
-const NETWORK_OVERLAY_DISMISS_MS = 1500;
-
-const GlobalNetworkOverlay = () => {
-  const [networkState, setNetworkState] = useState(() => ({
-    status: typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'online',
-    message: '',
-  }));
-
-  useEffect(() => {
-    let clearTimer = null;
-
-    const scheduleHide = () => {
-      if (clearTimer) {
-        window.clearTimeout(clearTimer);
-      }
-
-      clearTimer = window.setTimeout(() => {
-        setNetworkState({ status: 'online', message: '' });
-      }, NETWORK_OVERLAY_DISMISS_MS);
-    };
-
-    const handleOffline = () => {
-      if (clearTimer) {
-        window.clearTimeout(clearTimer);
-      }
-
-      setNetworkState({
-        status: 'offline',
-        message: 'You are offline. Check your internet connection and try again.',
-      });
-    };
-
-    const handleOnline = () => {
-      setNetworkState((current) => ({
-        status: current.status === 'offline' ? 'slow' : 'online',
-        message: current.status === 'offline' ? 'Back online. Reconnecting...' : '',
-      }));
-
-      scheduleHide();
-    };
-
-    const handleNetworkStatus = (event) => {
-      const nextState = String(event.detail?.state || '').toLowerCase();
-      const nextMessage = String(event.detail?.message || '').trim();
-
-      if (nextState === 'online') {
-        scheduleHide();
-        return;
-      }
-
-      if (clearTimer) {
-        window.clearTimeout(clearTimer);
-      }
-
-      if (nextState === 'offline' || nextState === 'slow') {
-        setNetworkState({
-          status: nextState,
-          message: nextMessage,
-        });
-      }
-    };
-
-    window.addEventListener('offline', handleOffline);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('app:network-status', handleNetworkStatus);
-
-    return () => {
-      if (clearTimer) {
-        window.clearTimeout(clearTimer);
-      }
-
-      window.removeEventListener('offline', handleOffline);
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('app:network-status', handleNetworkStatus);
-    };
-  }, []);
-
-  if (networkState.status === 'online') {
-    return null;
-  }
-
-  const isOffline = networkState.status === 'offline';
-  const Icon = isOffline ? WifiOff : CloudOff;
-  const title = isOffline ? 'No Internet Connection' : 'Slow Network';
-  const description = networkState.message || (
-    isOffline
-      ? 'Please reconnect to continue using the app.'
-      : 'Things are taking longer than usual. We are still trying to load your data.'
-  );
-
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/92 px-6">
-      <div className="w-full max-w-sm rounded-[32px] border border-white/10 bg-white px-6 py-8 text-center shadow-[0_28px_80px_rgba(15,23,42,0.45)]">
-        <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] ${
-          isOffline ? 'bg-rose-50 text-rose-500' : 'bg-amber-50 text-amber-500'
-        }`}>
-          <Icon size={28} strokeWidth={2.2} />
-        </div>
-        <h2 className="mt-5 text-[22px] font-black tracking-tight text-slate-900">{title}</h2>
-        <p className="mt-2 text-[14px] font-medium leading-6 text-slate-500">{description}</p>
-
-        <div className="mt-6 flex flex-col gap-3">
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="flex w-full items-center justify-center gap-2 rounded-[18px] bg-slate-900 px-4 py-3 text-[13px] font-black uppercase tracking-[0.14em] text-white"
-          >
-            <RefreshCw size={16} strokeWidth={2.4} />
-            Retry
-          </button>
-
-          {!isOffline && (
-            <button
-              type="button"
-              onClick={() => setNetworkState({ status: 'online', message: '' })}
-              className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-[13px] font-black uppercase tracking-[0.14em] text-slate-600"
-            >
-              Keep Waiting
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 function App() {
   return (
     <Router>
       <SettingsProvider>
-        <GlobalNetworkOverlay />
         <AppAutoUpdater />
         <ScrollToTop />
         <UserAccountInvalidationListener />

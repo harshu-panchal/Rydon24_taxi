@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CalendarClock, ChevronRight, Clock3, MapPin, ShieldCheck, User } from 'lucide-react';
@@ -25,6 +25,9 @@ import {
 } from '../services/currentRideService';
 
 const Motion = motion;
+const ACTIVE_RIDE_SYNC_INTERVAL_MS = 12000;
+const IDLE_RIDE_SYNC_INTERVAL_MS = 30000;
+const DEFERRED_SECTION_DELAY_MS = 250;
 
 const getCurrentRideIcon = (ride) => {
   const customIcon = String(
@@ -118,7 +121,13 @@ const Home = () => {
   });
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [endingRide, setEndingRide] = useState(false);
+  const [showDeferredSections, setShowDeferredSections] = useState(false);
   const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
+  const currentRideRef = useRef(currentRide);
+
+  useEffect(() => {
+    currentRideRef.current = currentRide;
+  }, [currentRide]);
 
   const handleEndRide = async () => {
     if (!currentRide?.rideId) return;
@@ -152,12 +161,45 @@ const Home = () => {
     }
   }, [navigate]);
 
+  const shouldTickClock =
+    String(currentRide?.serviceType || '').toLowerCase() === 'rental'
+    || Number.isFinite(currentRide?.scheduledAt ? new Date(currentRide.scheduledAt).getTime() : NaN);
+
   useEffect(() => {
+    if (!shouldTickClock) {
+      return undefined;
+    }
+
     const timer = window.setInterval(() => {
       setClockNow(Date.now());
-    }, 1000); // Updated to 1s for real-time ticking feel
+    }, 1000);
 
     return () => window.clearInterval(timer);
+  }, [shouldTickClock]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const scheduleDeferredSections = window.requestIdleCallback
+      ? window.requestIdleCallback(() => {
+          if (!cancelled) {
+            setShowDeferredSections(true);
+          }
+        }, { timeout: DEFERRED_SECTION_DELAY_MS })
+      : window.setTimeout(() => {
+          if (!cancelled) {
+            setShowDeferredSections(true);
+          }
+        }, DEFERRED_SECTION_DELAY_MS);
+
+    return () => {
+      cancelled = true;
+      if (typeof scheduleDeferredSections === 'number') {
+        window.clearTimeout(scheduleDeferredSections);
+        return;
+      }
+
+      window.cancelIdleCallback?.(scheduleDeferredSections);
+    };
   }, []);
 
   useEffect(() => {
@@ -171,47 +213,68 @@ const Home = () => {
     window.addEventListener(CURRENT_RIDE_UPDATED_EVENT, refreshCurrentRide);
 
     let cancelled = false;
+    let syncTimer = null;
+    let syncInFlight = false;
 
-    const syncCurrentRide = async () => {
-      let rideData = null;
-
-      try {
-        rideData = unwrapApiPayload(await api.get('/rides/active/me'));
-      } catch (error) {
-        const status = Number(error?.response?.status || 0);
-        if (status !== 404) {
-          throw error;
-        }
-      }
-
-      if (rideData?._id || rideData?.rideId) {
-        const normalizedRide = {
-          rideId: rideData._id || rideData.rideId,
-          pickup: rideData.pickupAddress || rideData.pickup,
-          drop: rideData.dropAddress || rideData.drop,
-          pickupCoords: rideData.pickupLocation?.coordinates || rideData.pickupCoords || null,
-          dropCoords: rideData.dropLocation?.coordinates || rideData.dropCoords || null,
-          fare: rideData.fare,
-          baseFare: rideData.baseFare || rideData.fare || 0,
-          status: rideData.status,
-          liveStatus: rideData.liveStatus,
-          serviceType: rideData.serviceType,
-          scheduledAt: rideData.scheduledAt || null,
-          acceptedAt: rideData.acceptedAt || null,
-          arrivedAt: rideData.arrivedAt || null,
-          estimatedDistanceMeters: rideData.estimatedDistanceMeters || 0,
-          estimatedDurationMinutes: rideData.estimatedDurationMinutes || 0,
-          paymentMethod: rideData.paymentMethod || 'Cash',
-          pricingSnapshot: rideData.pricingSnapshot || null,
-          otp: rideData.otp || '',
-          driver: rideData.driverId || rideData.driver,
-          vehicleIconUrl: rideData.vehicleIconUrl,
-          vehicleIconType: rideData.vehicleIconType,
-        };
-        if (cancelled) return;
-        saveCurrentRide(normalizedRide);
+    const scheduleNextSync = () => {
+      if (cancelled) {
         return;
       }
+
+      const nextInterval = currentRideRef.current ? ACTIVE_RIDE_SYNC_INTERVAL_MS : IDLE_RIDE_SYNC_INTERVAL_MS;
+      syncTimer = window.setTimeout(() => {
+        syncCurrentRide();
+      }, nextInterval);
+    };
+
+    const syncCurrentRide = async () => {
+      if (cancelled || syncInFlight || document.visibilityState === 'hidden') {
+        scheduleNextSync();
+        return;
+      }
+
+      syncInFlight = true;
+      try {
+        let rideData = null;
+
+        try {
+          rideData = unwrapApiPayload(await api.get('/rides/active/me'));
+        } catch (error) {
+          const status = Number(error?.response?.status || 0);
+          if (status !== 404) {
+            throw error;
+          }
+        }
+
+        if (rideData?._id || rideData?.rideId) {
+          const normalizedRide = {
+            rideId: rideData._id || rideData.rideId,
+            pickup: rideData.pickupAddress || rideData.pickup,
+            drop: rideData.dropAddress || rideData.drop,
+            pickupCoords: rideData.pickupLocation?.coordinates || rideData.pickupCoords || null,
+            dropCoords: rideData.dropLocation?.coordinates || rideData.dropCoords || null,
+            fare: rideData.fare,
+            baseFare: rideData.baseFare || rideData.fare || 0,
+            status: rideData.status,
+            liveStatus: rideData.liveStatus,
+            serviceType: rideData.serviceType,
+            scheduledAt: rideData.scheduledAt || null,
+            acceptedAt: rideData.acceptedAt || null,
+            arrivedAt: rideData.arrivedAt || null,
+            estimatedDistanceMeters: rideData.estimatedDistanceMeters || 0,
+            estimatedDurationMinutes: rideData.estimatedDurationMinutes || 0,
+            paymentMethod: rideData.paymentMethod || 'Cash',
+            pricingSnapshot: rideData.pricingSnapshot || null,
+            otp: rideData.otp || '',
+            driver: rideData.driverId || rideData.driver,
+            vehicleIconUrl: rideData.vehicleIconUrl,
+            vehicleIconType: rideData.vehicleIconType,
+          };
+          if (cancelled) return;
+          saveCurrentRide(normalizedRide);
+          currentRideRef.current = normalizedRide;
+          return;
+        }
 
       try {
         const rentalResponse = await userService.getActiveRentalBooking();
@@ -224,11 +287,12 @@ const Home = () => {
           if (isTerminal) {
             if (cancelled) return;
             clearCurrentRide();
+            currentRideRef.current = null;
             return;
           }
 
           if (cancelled) return;
-          saveCurrentRide({
+          const nextRentalRide = {
             rideId: rentalRide.id,
             bookingReference: rentalRide.bookingReference,
             pickup: rentalRide.serviceLocation?.name || rentalRide.serviceLocation?.address || 'Rental pickup',
@@ -261,7 +325,9 @@ const Home = () => {
             assignedVehicle: rentalRide.assignedVehicle,
             finalCharge: rentalRide.finalCharge || 0,
             finalElapsedMinutes: rentalRide.finalElapsedMinutes || 0,
-          });
+          };
+          saveCurrentRide(nextRentalRide);
+          currentRideRef.current = nextRentalRide;
           return;
         }
       } catch (error) {
@@ -272,22 +338,30 @@ const Home = () => {
         }
       }
 
-      if (cancelled) return;
-      clearCurrentRide();
+        if (cancelled) return;
+        clearCurrentRide();
+        currentRideRef.current = null;
+      } finally {
+        syncInFlight = false;
+        scheduleNextSync();
+      }
     };
 
     const handleWindowFocus = () => {
-      syncCurrentRide();
+      if (document.visibilityState !== 'hidden') {
+        syncCurrentRide();
+      }
     };
 
     syncCurrentRide();
-    const syncTimer = window.setInterval(syncCurrentRide, 4000);
     window.addEventListener('focus', handleWindowFocus);
     document.addEventListener('visibilitychange', handleWindowFocus);
 
     return () => {
       cancelled = true;
-      window.clearInterval(syncTimer);
+      if (syncTimer) {
+        window.clearTimeout(syncTimer);
+      }
       window.removeEventListener('focus', handleWindowFocus);
       document.removeEventListener('visibilitychange', handleWindowFocus);
       window.removeEventListener('storage', refreshCurrentRide);
@@ -519,10 +593,20 @@ const Home = () => {
         )}
 
         <ServiceGrid />
-        <LocationMapSection />
-        <ActionsSection />
-        <PromoBanners />
-        <ExplorerSection />
+        {showDeferredSections ? (
+          <>
+            <LocationMapSection />
+            <ActionsSection />
+            <PromoBanners />
+            <ExplorerSection />
+          </>
+        ) : (
+          <div className="space-y-4 px-5">
+            <div className="h-[170px] animate-pulse rounded-[20px] border border-white/80 bg-white/70 shadow-[0_10px_22px_rgba(15,23,42,0.05)]" />
+            <div className="h-[112px] animate-pulse rounded-[24px] border border-white/80 bg-white/70 shadow-[0_10px_22px_rgba(15,23,42,0.05)]" />
+            <div className="h-[160px] animate-pulse rounded-[24px] border border-white/80 bg-white/70 shadow-[0_10px_22px_rgba(15,23,42,0.05)]" />
+          </div>
+        )}
         <div
           className="relative w-full"
           style={{
