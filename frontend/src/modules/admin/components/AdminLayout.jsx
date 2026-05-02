@@ -472,7 +472,10 @@ const AdminLayout = () => {
           {
             icon: Bus,
             label: 'Bus Service',
-            path: '/admin/bus-service',
+            subItems: [
+              { label: 'Fleet Manager', path: '/admin/bus-service' },
+              { label: 'Bus Bookings', path: '/admin/bus-service/bookings' },
+            ],
           },
           {
             icon: Share2,

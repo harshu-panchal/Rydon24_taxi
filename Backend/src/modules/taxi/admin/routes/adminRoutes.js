@@ -4,6 +4,7 @@ import {
   approveOwner,
   approveOwnerSignupFromDriver,
   createAirport,
+  createAdminBusBooking,
   createBusService,
   createAppModule,
   createGoodsType,
@@ -57,6 +58,8 @@ import {
   downloadUserReport,
   forgotPassword,
   getAdminStatus,
+  getAdminBusBookingCalendar,
+  getAdminBusBookings,
   getAdminEarnings,
   getAirports,
   getBusServices,
@@ -186,6 +189,7 @@ import {
   updateZone,
   createVehicleType,
   createFleetVehicle,
+  cancelAdminBusBookingSeats,
   deleteAirport,
   deleteVehicleType,
   getTransportTypes,
@@ -292,6 +296,10 @@ adminRouter.get('/admin/bus-services', getBusServices);
 adminRouter.post('/admin/bus-services', createBusService);
 adminRouter.patch('/admin/bus-services/:id', updateBusService);
 adminRouter.delete('/admin/bus-services/:id', deleteBusService);
+adminRouter.get('/admin/bus-bookings', getAdminBusBookings);
+adminRouter.get('/admin/bus-bookings/calendar', getAdminBusBookingCalendar);
+adminRouter.post('/admin/bus-bookings/manual', createAdminBusBooking);
+adminRouter.post('/admin/bus-bookings/:id/cancel', cancelAdminBusBookingSeats);
 adminRouter.get('/admin/types/rental-vehicles', getRentalVehicleTypes);
 adminRouter.post('/admin/types/rental-vehicles', createRentalVehicleType);
 adminRouter.patch('/admin/types/rental-vehicles/:id', updateRentalVehicleType);

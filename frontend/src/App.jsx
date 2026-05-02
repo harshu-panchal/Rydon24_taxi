@@ -221,6 +221,7 @@ const AdminPoolingVehicleForm = lazy(() => import('./modules/admin/pages/pooling
 const AdminPoolingBookings = lazy(() => import('./modules/admin/pages/pooling/PoolingBookings'));
 const AdminBusServiceManager = lazy(() => import('./modules/admin/pages/bus-service/BusServiceManager'));
 const AdminBusServiceDetails = lazy(() => import('./modules/admin/pages/bus-service/BusServiceDetails'));
+const AdminBusBookingManager = lazy(() => import('./modules/admin/pages/bus-service/BusBookingManager'));
 const AdminPricingPlaceholder = ({ title }) => (
   <div className="flex flex-col items-center justify-center min-h-[500px] text-gray-400 bg-white rounded-[32px] border border-gray-100 shadow-sm p-10">
     <MapPin size={60} strokeWidth={1} className="mb-6 opacity-20" />
@@ -903,6 +904,7 @@ function App() {
                 <Route path="bus-service" element={<AdminBusServiceManager />} />
                 <Route path="bus-service/create" element={<AdminBusServiceManager mode="create" />} />
                 <Route path="bus-service/edit/:id" element={<AdminBusServiceManager mode="edit" />} />
+                <Route path="bus-service/bookings" element={<AdminBusBookingManager />} />
                 <Route path="bus-service/:id" element={<AdminBusServiceDetails />} />
                 <Route path="pooling" element={<Navigate to="/admin/pooling/routes" replace />} />
                 <Route path="pooling/routes" element={<AdminPoolingManager />} />

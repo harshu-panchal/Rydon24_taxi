@@ -5,6 +5,7 @@ import { normalizePoint, toPoint } from '../../../../utils/geo.js';
 import { uploadDataUrlToCloudinary } from '../../../../utils/cloudinaryUpload.js';
 import { Driver } from '../models/Driver.js';
 import { DriverRegistrationSession } from '../models/DriverRegistrationSession.js';
+import { Owner } from '../../admin/models/Owner.js';
 import { ServiceLocation } from '../../admin/models/ServiceLocation.js';
 import { Vehicle } from '../../admin/models/Vehicle.js';
 import { listDriverDocumentUploadFields } from '../../admin/services/adminService.js';
@@ -122,6 +123,20 @@ const getServiceLocationCoordinates = (serviceLocation = {}) => {
   }
 
   return null;
+};
+
+const getValidatedServiceLocationCoordinates = (serviceLocation = {}) => {
+  const coordinates = getServiceLocationCoordinates(serviceLocation);
+
+  if (!coordinates) {
+    return null;
+  }
+
+  try {
+    return normalizePoint(coordinates, 'location');
+  } catch {
+    return null;
+  }
 };
 
 const normalizeStoredDocument = (value) => {
@@ -250,9 +265,23 @@ export const startDriverOnboarding = async ({ phone, role = 'driver' }) => {
 
   const normalizedRole = normalizeRole(role);
   const existingDriver = await Driver.findOne({ phone: normalizedPhone });
+  const existingOwner =
+    normalizedRole === 'owner'
+      ? await Owner.findOne({
+          $or: [
+            { mobile: normalizedPhone },
+            { phone: normalizedPhone },
+          ],
+        })
+      : null;
 
-  if (existingDriver) {
-    throw new ApiError(409, 'Phone number is already registered');
+  if (existingDriver || existingOwner) {
+    throw new ApiError(
+      409,
+      normalizedRole === 'owner'
+        ? 'Phone number is already registered as an owner'
+        : 'Phone number is already registered',
+    );
   }
 
   const { otp, isStatic } = resolveDriverOnboardingOtpForPhone(normalizedPhone);
@@ -566,13 +595,14 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
     resolvedServiceLocation = await ServiceLocation.findById(session.vehicle.locationId).lean();
   }
 
-  const serviceLocationCoordinates = getServiceLocationCoordinates(resolvedServiceLocation || {});
+  const serviceLocationCoordinates = getValidatedServiceLocationCoordinates(resolvedServiceLocation || {});
+  const isOwnerRegistration = String(session.role || '').toLowerCase() === 'owner';
 
-  if (!serviceLocationCoordinates) {
+  if (!serviceLocationCoordinates && !isOwnerRegistration) {
     throw new ApiError(400, `Unsupported service location: ${session.vehicle.locationName}`);
   }
 
-  const zone = await findZoneByPickup(serviceLocationCoordinates);
+  const zone = serviceLocationCoordinates ? await findZoneByPickup(serviceLocationCoordinates) : null;
   const selectedVehicle =
     session.vehicle.vehicleTypeId && /^[a-f\d]{24}$/i.test(String(session.vehicle.vehicleTypeId))
       ? await Vehicle.findById(session.vehicle.vehicleTypeId).lean()
@@ -580,6 +610,79 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
   const vehicleType = selectedVehicle
     ? getGenericVehicleTypeFromCatalog(selectedVehicle)
     : getVehicleType(session.vehicle.vehicleTypeId, session.vehicle.registerFor);
+  const submittedAt = new Date();
+
+  if (isOwnerRegistration) {
+    const normalizedEmail = String(session.personal.email || '').trim().toLowerCase();
+    const normalizedMobile = String(session.phone || '').trim();
+    const serviceLocationId =
+      session.vehicle.locationId && /^[a-f\d]{24}$/i.test(String(session.vehicle.locationId))
+        ? session.vehicle.locationId
+        : null;
+
+    const duplicateOwner = await Owner.findOne({
+      $or: [
+        { email: normalizedEmail },
+        { mobile: normalizedMobile },
+      ],
+    }).lean();
+
+    if (duplicateOwner) {
+      throw new ApiError(409, 'Owner already exists with this phone or email');
+    }
+
+    const owner = await Owner.create({
+      company_name: String(session.vehicle.companyName || session.personal.fullName || '').trim(),
+      owner_name: String(session.personal.fullName || '').trim() || null,
+      name: String(session.personal.fullName || '').trim(),
+      mobile: normalizedMobile,
+      email: normalizedEmail,
+      password: session.personal.passwordHash,
+      service_location_id: serviceLocationId || null,
+      legacy_service_location_id: serviceLocationId ? '' : String(session.vehicle.locationId || '').trim(),
+      transport_type: String(session.vehicle.registerFor || 'taxi').trim().toLowerCase(),
+      phone: normalizedMobile,
+      address: String(session.vehicle.companyAddress || '').trim() || null,
+      postal_code: String(session.vehicle.postalCode || '').trim() || null,
+      city: String(session.vehicle.city || session.vehicle.locationName || '').trim() || null,
+      tax_number: String(session.vehicle.taxNumber || '').trim() || null,
+      active: true,
+      approve: false,
+      status: 'pending',
+      user_snapshot: {
+        source: 'owner_onboarding',
+        registrationId: session.registrationId,
+        verifiedAt: session.otpVerifiedAt,
+        submittedAt,
+        location: serviceLocationCoordinates ? toPoint(serviceLocationCoordinates, 'location') : null,
+        zoneId: zone?._id || null,
+        documents: normalizedDocuments,
+      },
+      area_snapshot: resolvedServiceLocation || null,
+    });
+
+    session.status = 'completed';
+    session.completedAt = submittedAt;
+    await session.save();
+    await DriverRegistrationSession.deleteOne({ _id: session._id });
+
+    return {
+      message: 'Owner registration completed successfully',
+      owner: {
+        id: owner._id,
+        name: owner.owner_name || owner.name || owner.company_name || '',
+        company_name: owner.company_name || '',
+        phone: owner.mobile || owner.phone || '',
+        email: owner.email || '',
+        approve: owner.approve,
+        status: owner.status,
+      },
+      documents: normalizedDocuments,
+      token: signAccessToken({ sub: String(owner._id), role: 'owner' }),
+      session: publicSessionPayload(session),
+    };
+  }
+
   const driver = await Driver.create({
     name: session.personal.fullName,
     phone: session.phone,
@@ -603,27 +706,13 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
       registrationId: session.registrationId,
       role: session.role,
       verifiedAt: session.otpVerifiedAt,
-      submittedAt: new Date(),
-      ...(session.role === 'owner'
-        ? {
-            company: {
-              name: session.vehicle.companyName || '',
-              address: session.vehicle.companyAddress || '',
-              city: session.vehicle.city || session.vehicle.locationName || '',
-              postalCode: session.vehicle.postalCode || '',
-              taxNumber: session.vehicle.taxNumber || '',
-              serviceLocationId: session.vehicle.locationId || '',
-              serviceLocationName: session.vehicle.locationName || '',
-              registerFor: session.vehicle.registerFor || '',
-            },
-          }
-        : {}),
+      submittedAt,
     },
   });
 
   session.finalDriverId = driver._id;
   session.status = 'completed';
-  session.completedAt = new Date();
+  session.completedAt = submittedAt;
   await session.save();
   await DriverRegistrationSession.deleteOne({ _id: session._id });
 

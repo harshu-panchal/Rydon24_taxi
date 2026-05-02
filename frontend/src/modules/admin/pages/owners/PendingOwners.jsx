@@ -53,6 +53,21 @@ const resolveRegisterFor = (driver) =>
   driver?.registerFor ||
   'N/A';
 
+const isOwnerApproved = (owner) => {
+  if (!owner) return false;
+
+  const approveRaw = owner.approve ?? '';
+  const approveNormalized = String(approveRaw).toLowerCase();
+  const status = String(owner.status || '').toLowerCase();
+
+  return (
+    approveRaw === true ||
+    approveRaw === 1 ||
+    ['true', '1', 'yes', 'approved'].includes(approveNormalized) ||
+    ['approved', 'active', 'verified'].includes(status)
+  );
+};
+
 const PendingOwners = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
@@ -98,8 +113,14 @@ const PendingOwners = () => {
   };
 
   const handleAction = async (action, id) => {
+    const record = pendingOwners.find((item) => item.id === id);
+
     if (action === 'view') {
-      navigate(`/admin/drivers/${id}`);
+      navigate(
+        record?.source === 'driver-signup'
+          ? `/admin/drivers/${id}`
+          : `/admin/owners/${id}`,
+      );
       return;
     }
 
@@ -109,7 +130,11 @@ const PendingOwners = () => {
 
     try {
       if (action === 'approve') {
-        await adminService.approveOwnerSignupFromDriver(id);
+        if (record?.source === 'driver-signup') {
+          await adminService.approveOwnerSignupFromDriver(id);
+        } else {
+          await adminService.approveOwner(id, { approve: true });
+        }
         await fetchPendingOwners();
       }
     } catch (err) {
@@ -124,9 +149,28 @@ const PendingOwners = () => {
     setError('');
 
     try {
-      const responseData = await adminService.getDrivers(1, 200);
-      const driversList = responseData.data?.results || [];
-      const pending = driversList
+      const [ownersResponse, driversResponse] = await Promise.all([
+        adminService.getOwners(),
+        adminService.getDrivers(1, 200),
+      ]);
+
+      const ownersList = ownersResponse?.data?.results || [];
+      const pendingOwnersFromOwners = ownersList
+        .filter((owner) => !isOwnerApproved(owner))
+        .map((owner) => ({
+          id: owner._id || owner.id,
+          ownerName: owner.name || owner.owner_name || 'Unknown',
+          companyName: owner.company_name || '-',
+          serviceLocation: owner.area_name || owner.city || 'India',
+          phone: owner.mobile || owner.phone || 'N/A',
+          transport: owner.transport_type || 'N/A',
+          status: String(owner.status || 'pending').toUpperCase(),
+          registeredAt: owner.createdAt || owner.created_at || null,
+          source: 'owner',
+        }));
+
+      const driversList = driversResponse?.data?.results || [];
+      const pendingOwnersFromDriverSignups = driversList
         .filter((d) => isOwnerSignup(d) && !isDriverApproved(d))
         .map((d) => ({
           id: d._id,
@@ -137,9 +181,19 @@ const PendingOwners = () => {
           transport: resolveRegisterFor(d),
           status: String(d.status || 'pending').toUpperCase(),
           registeredAt: d.createdAt || null,
+          source: 'driver-signup',
         }));
 
-      setPendingOwners(pending);
+      const merged = [...pendingOwnersFromOwners, ...pendingOwnersFromDriverSignups];
+      const seen = new Set();
+      const deduped = merged.filter((item) => {
+        const key = String(item.id || '');
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      setPendingOwners(deduped);
     } catch (err) {
       setError(err?.message || 'Failed to fetch pending owners');
       setPendingOwners([]);
