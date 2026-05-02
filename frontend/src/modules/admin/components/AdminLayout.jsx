@@ -157,16 +157,39 @@ const resolvePageTitle = (pathname, sections, appName) => {
   return `${appName || 'App'} Admin`;
 };
 
-const SidebarItem = ({ icon, label, path, isCollapsed }) => (
+const normalizeHexColor = (value, fallback = '') => {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return fallback;
+
+  const withHash = trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+  const shortHexMatch = withHash.match(/^#([0-9a-fA-F]{3})$/);
+  if (shortHexMatch) {
+    const [r, g, b] = shortHexMatch[1].split('');
+    return `#${r}${r}${g}${g}${b}${b}`.toUpperCase();
+  }
+
+  if (/^#([0-9a-fA-F]{6})$/.test(withHash)) {
+    return withHash.toUpperCase();
+  }
+
+  return fallback;
+};
+
+const SidebarItem = ({ icon, label, path, isCollapsed, sidebarTextColor }) => (
   <NavLink
     to={path}
     end
     className={({ isActive }) =>
       `group flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${
         isActive
-          ? 'bg-indigo-600 text-white'
-          : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          ? 'text-white'
+          : 'hover:text-white hover:bg-slate-800'
       }`
+    }
+    style={({ isActive }) =>
+      isActive
+        ? { backgroundColor: 'rgba(255, 255, 255, 0.16)', color: '#FFFFFF' }
+        : { color: sidebarTextColor }
     }
   >
     {React.createElement(icon, { size: 18, className: 'shrink-0' })}
@@ -184,6 +207,7 @@ const SidebarGroup = ({
   groupKey,
   expandedGroups,
   setExpandedGroups,
+  sidebarTextColor,
 }) => {
   const isActive = hasActiveChild(pathname, subItems);
   const isOpen = expandedGroups.includes(groupKey);
@@ -202,13 +226,15 @@ const SidebarGroup = ({
         type="button"
         onClick={toggleGroup}
         className={`group w-full flex items-center justify-between px-4 py-2.5 rounded-lg transition-all duration-200 ${
-          isActive || isExpanded ? 'text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          isActive || isExpanded ? 'text-white' : 'hover:text-white hover:bg-slate-800'
         }`}
+        style={isActive || isExpanded ? { backgroundColor: 'rgba(255, 255, 255, 0.16)' } : { color: sidebarTextColor }}
       >
         <div className="flex items-center gap-3">
           {React.createElement(icon, {
             size: 18,
-            className: `shrink-0 ${isActive || isExpanded ? 'text-indigo-400' : ''}`,
+            className: 'shrink-0',
+            style: isActive || isExpanded ? { color: '#FFFFFF' } : { color: sidebarTextColor },
           })}
           {!isCollapsed && <span className="text-[14px] font-bold tracking-tight">{label}</span>}
         </div>
@@ -230,16 +256,16 @@ const SidebarGroup = ({
                 groupKey={`${groupKey}:${item.label}`}
                 expandedGroups={expandedGroups}
                 setExpandedGroups={setExpandedGroups}
+                sidebarTextColor={sidebarTextColor}
               />
             ) : (
               <NavLink
                 key={item.path}
                 to={item.path}
                 end
-                className={({ isActive: childActive }) =>
-                  `flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all ${
-                    childActive ? 'text-indigo-400' : 'text-slate-500 hover:text-slate-200'
-                  }`
+                className="flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all hover:text-slate-200"
+                style={({ isActive: childActive }) =>
+                  childActive ? { color: '#FFFFFF' } : { color: sidebarTextColor }
                 }
               >
                 <div className="h-1 w-1 shrink-0 rounded-full bg-slate-600" />
@@ -261,6 +287,7 @@ const NestedGroup = ({
   groupKey,
   expandedGroups,
   setExpandedGroups,
+  sidebarTextColor,
 }) => {
   const isActive = hasActiveChild(pathname, subItems);
   const isOpen = expandedGroups.includes(groupKey);
@@ -279,8 +306,9 @@ const NestedGroup = ({
         type="button"
         onClick={toggleGroup}
         className={`group w-full flex items-center justify-between px-3 py-1.5 rounded-lg transition-all ${
-          isActive || isExpanded ? 'text-white' : 'text-slate-500 hover:text-slate-200'
+          isActive || isExpanded ? 'text-white' : 'hover:text-slate-200'
         }`}
+        style={isActive || isExpanded ? { backgroundColor: 'rgba(255, 255, 255, 0.12)' } : { color: sidebarTextColor }}
       >
         <span className="flex items-center gap-3 text-[12px] font-medium">
           <div className="h-1 w-1 shrink-0 rounded-full bg-slate-600" />
@@ -296,10 +324,9 @@ const NestedGroup = ({
               key={item.path}
               to={item.path}
               end
-              className={({ isActive: childActive }) =>
-                `flex items-center gap-3 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all ${
-                  childActive ? 'text-indigo-400' : 'text-slate-600 hover:text-slate-300'
-                }`
+              className="flex items-center gap-3 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all hover:text-slate-300"
+              style={({ isActive: childActive }) =>
+                childActive ? { color: '#FFFFFF' } : { color: sidebarTextColor }
               }
             >
               <div className="h-0.5 w-0.5 shrink-0 rounded-full bg-slate-700" />
@@ -382,6 +409,8 @@ const AdminLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { settings } = useSettings();
+  const adminThemeColor = normalizeHexColor(settings.customization?.admin_theme_color, '#405189');
+  const sidebarTextColor = normalizeHexColor(settings.customization?.sidebar_text_color, '#CBD5E1');
   const [isSidebarOpen] = useState(true);
   const [isCollapsed, setCollapsed] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -450,7 +479,6 @@ const AdminLayout = () => {
             label: 'Price Management',
             subItems: [
               { label: 'Service Location', path: '/admin/pricing/service-location' },
-              { label: 'Service Stores', path: '/admin/pricing/service-stores' },
               { label: 'Zone', path: '/admin/pricing/zone' },
               { label: 'Airport', path: '/admin/pricing/airport' },
               { label: 'App Modules', path: '/admin/pricing/app-modules' },
@@ -458,6 +486,7 @@ const AdminLayout = () => {
               {
                 label: 'Rental',
                 subItems: [
+                  { label: 'Service Stores', path: '/admin/pricing/service-stores' },
                   { label: 'Rental Vehicles', path: '/admin/pricing/rental-vehicles' },
                   { label: 'Rental Requests', path: '/admin/pricing/rental-requests' },
                   { label: 'Rental Quote Requests', path: '/admin/pricing/rental-quotes' },
@@ -907,9 +936,10 @@ const AdminLayout = () => {
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8F9FA] font-sans text-gray-900">
       <aside
-        className={`relative z-50 flex h-screen flex-col overflow-hidden bg-[#0F172A] transition-all duration-500 ${
+        className={`relative z-50 flex h-screen flex-col overflow-hidden transition-all duration-500 ${
           isCollapsed ? 'w-20' : 'w-72'
         } ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+        style={{ backgroundColor: adminThemeColor }}
       >
         <div className="flex h-full flex-col">
           <div className="group/sidebar-head relative mb-4 flex h-24 items-center border-b border-white/5 px-6">
@@ -939,6 +969,7 @@ const AdminLayout = () => {
               type="button"
               onClick={() => setCollapsed((current) => !current)}
               className="absolute -right-3 top-9 z-[60] hidden h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-800 shadow-lg ring-4 ring-[#0F172A] transition-all hover:bg-indigo-600 hover:text-white hover:border-indigo-500 hover:scale-110 active:scale-90 lg:flex group/collapse"
+              style={{ '--tw-ring-color': '#0F172A' }}
             >
               {isCollapsed ? (
                 <ChevronRight size={12} strokeWidth={3.5} className="transition-transform group-hover/collapse:translate-x-0.5" />
@@ -970,9 +1001,15 @@ const AdminLayout = () => {
                       groupKey={`${section.title}:${item.label}`}
                       expandedGroups={expandedSidebarGroups}
                       setExpandedGroups={setExpandedSidebarGroups}
+                      sidebarTextColor={sidebarTextColor}
                     />
                   ) : (
-                    <SidebarItem key={item.path} {...item} isCollapsed={isCollapsed} />
+                    <SidebarItem
+                      key={item.path}
+                      {...item}
+                      isCollapsed={isCollapsed}
+                      sidebarTextColor={sidebarTextColor}
+                    />
                   )
                 )}
               </div>

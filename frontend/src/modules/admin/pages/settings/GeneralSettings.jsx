@@ -12,6 +12,29 @@ import api from '../../../../shared/api/axiosInstance';
 import toast from 'react-hot-toast';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 let liveFaviconObjectUrl = '';
+const DEFAULT_ADMIN_THEME_COLOR = '#405189';
+const DEFAULT_LANDING_THEME_COLOR = '#0AB39C';
+const DEFAULT_SIDEBAR_TEXT_COLOR = '#CBD5E1';
+const DEFAULT_DISPATCHER_SIDEBAR_COLOR = '#000000';
+const DEFAULT_DISPATCHER_TEXT_COLOR = '#000000';
+
+const normalizeHexColor = (value, fallback = '') => {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return fallback;
+
+  const withHash = trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+  const shortHexMatch = withHash.match(/^#([0-9a-fA-F]{3})$/);
+  if (shortHexMatch) {
+    const [r, g, b] = shortHexMatch[1].split('');
+    return `#${r}${r}${g}${g}${b}${b}`.toUpperCase();
+  }
+
+  if (/^#([0-9a-fA-F]{6})$/.test(withHash)) {
+    return withHash.toUpperCase();
+  }
+
+  return fallback;
+};
 
 const SectionCard = ({ title, children, id }) => (
   <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-8" id={id}>
@@ -47,6 +70,45 @@ const InputField = ({ label, name, value, onChange, placeholder, info }) => {
            <span className="text-[11px] bg-[#00BFA5] text-white px-2 py-0.5 rounded font-bold">{value || info.default}</span>
         </div>
       )}
+    </div>
+  );
+};
+
+const ColorField = ({ label, name, value, onChange, placeholder, defaultValue }) => {
+  const inputClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors shadow-sm";
+  const normalizedValue = normalizeHexColor(value, normalizeHexColor(defaultValue, '#000000'));
+
+  return (
+    <div className="space-y-2">
+      <label className="block text-xs font-semibold text-gray-500">{label}</label>
+      <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+        <div
+          className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-gray-50"
+          style={{ backgroundColor: normalizedValue }}
+        >
+          <input
+            type="color"
+            value={normalizedValue}
+            onChange={(event) => onChange(name, normalizeHexColor(event.target.value, normalizedValue))}
+            className="h-16 w-16 cursor-pointer border-0 bg-transparent p-0"
+            aria-label={label}
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <input
+            type="text"
+            name={name}
+            value={value || ''}
+            onChange={(event) => onChange(name, event.target.value)}
+            placeholder={placeholder}
+            className={inputClass}
+          />
+          <div className="mt-2 flex items-center gap-2 text-[11px] font-semibold text-gray-500">
+            <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-1 uppercase">{normalizedValue}</span>
+            <span>Pick visually or type a hex color.</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
@@ -192,12 +254,55 @@ const GeneralSettings = () => {
     fetchSettings();
   }, []);
 
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      '--admin-theme-color',
+      normalizeHexColor(settings.customization?.admin_theme_color, DEFAULT_ADMIN_THEME_COLOR)
+    );
+    document.documentElement.style.setProperty(
+      '--landing-theme-color',
+      normalizeHexColor(settings.customization?.landing_theme_color, DEFAULT_LANDING_THEME_COLOR)
+    );
+    document.documentElement.style.setProperty(
+      '--admin-sidebar-text-color',
+      normalizeHexColor(settings.customization?.sidebar_text_color, DEFAULT_SIDEBAR_TEXT_COLOR)
+    );
+  }, [
+    settings.customization?.admin_theme_color,
+    settings.customization?.landing_theme_color,
+    settings.customization?.sidebar_text_color,
+  ]);
+
   const handleUpdate = async () => {
     try {
       setSaving(true);
+      const customizationPayload = {
+        ...settings.customization,
+        admin_theme_color: normalizeHexColor(
+          settings.customization?.admin_theme_color,
+          DEFAULT_ADMIN_THEME_COLOR
+        ),
+        landing_theme_color: normalizeHexColor(
+          settings.customization?.landing_theme_color,
+          DEFAULT_LANDING_THEME_COLOR
+        ),
+        sidebar_text_color: normalizeHexColor(
+          settings.customization?.sidebar_text_color,
+          DEFAULT_SIDEBAR_TEXT_COLOR
+        ),
+        disp_sidebar_bg: normalizeHexColor(
+          settings.customization?.disp_sidebar_bg,
+          DEFAULT_DISPATCHER_SIDEBAR_COLOR
+        ),
+        disp_side_text: normalizeHexColor(
+          settings.customization?.disp_side_text,
+          DEFAULT_DISPATCHER_TEXT_COLOR
+        ),
+      };
+
       await Promise.all([
         api.patch('/admin/general-settings/general', { settings: settings.general }),
-        api.patch('/admin/general-settings/customize', { settings: settings.customization })
+        api.patch('/admin/general-settings/customize', { settings: customizationPayload })
       ]);
       await refreshSettings();
       toast.success('Configuration saved successfully!');
@@ -264,9 +369,9 @@ const GeneralSettings = () => {
         {/* Basic Identification */}
         <SectionCard>
            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
-              <InputField label="Admin Theme Color" name="admin_theme_color" value={settings.customization.admin_theme_color} onChange={(n, v) => handleChange('customization', n, v)} placeholder="#405189" />
-              <InputField label="Landing Website Theme Color" name="landing_theme_color" value={settings.customization.landing_theme_color} onChange={(n, v) => handleChange('customization', n, v)} placeholder="#0ab39c" />
-              <InputField label="Side Text Bar Color (eg:#1c3faa)" name="sidebar_text_color" value={settings.customization.sidebar_text_color} onChange={(n, v) => handleChange('customization', n, v)} placeholder="#ffffff" />
+              <ColorField label="Admin Theme Color" name="admin_theme_color" value={settings.customization.admin_theme_color} onChange={(n, v) => handleChange('customization', n, v)} placeholder={DEFAULT_ADMIN_THEME_COLOR} defaultValue={DEFAULT_ADMIN_THEME_COLOR} />
+              <ColorField label="Landing Website Theme Color" name="landing_theme_color" value={settings.customization.landing_theme_color} onChange={(n, v) => handleChange('customization', n, v)} placeholder={DEFAULT_LANDING_THEME_COLOR} defaultValue={DEFAULT_LANDING_THEME_COLOR} />
+              <ColorField label="Side Text Bar Color" name="sidebar_text_color" value={settings.customization.sidebar_text_color} onChange={(n, v) => handleChange('customization', n, v)} placeholder={DEFAULT_SIDEBAR_TEXT_COLOR} defaultValue={DEFAULT_SIDEBAR_TEXT_COLOR} />
               <InputField label="App Name" name="app_name" value={settings.general.app_name} onChange={(n, v) => handleChange('general', n, v)} placeholder={configuredAppName} />
               <InputField label="Currency Code" name="default_currency_code_for_mobile_app" value={settings.customization.default_currency_code_for_mobile_app} onChange={(n, v) => handleChange('customization', n, v)} placeholder="INR" />
               <InputField label="Currency Symbol" name="currency_symbol" value={settings.customization.currency_symbol} onChange={(n, v) => handleChange('customization', n, v)} placeholder="₹" />
@@ -303,8 +408,8 @@ const GeneralSettings = () => {
         {/* Operational Styling */}
         <SectionCard title="Dispatcher Panel Section">
            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
-              <InputField label="Side Bar Background Color" name="disp_sidebar_bg" value={settings.customization.disp_sidebar_bg} onChange={(n, v) => handleChange('customization', n, v)} placeholder="#000000" />
-              <InputField label="Side Menu Text Color" name="disp_side_text" value={settings.customization.disp_side_text} onChange={(n, v) => handleChange('customization', n, v)} placeholder="#000000" />
+              <ColorField label="Side Bar Background Color" name="disp_sidebar_bg" value={settings.customization.disp_sidebar_bg} onChange={(n, v) => handleChange('customization', n, v)} placeholder={DEFAULT_DISPATCHER_SIDEBAR_COLOR} defaultValue={DEFAULT_DISPATCHER_SIDEBAR_COLOR} />
+              <ColorField label="Side Menu Text Color" name="disp_side_text" value={settings.customization.disp_side_text} onChange={(n, v) => handleChange('customization', n, v)} placeholder={DEFAULT_DISPATCHER_TEXT_COLOR} defaultValue={DEFAULT_DISPATCHER_TEXT_COLOR} />
            </div>
         </SectionCard>
 

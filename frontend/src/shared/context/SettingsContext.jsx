@@ -3,6 +3,46 @@ import api from '../api/axiosInstance';
 
 const SettingsContext = createContext(null);
 let activeFaviconObjectUrl = '';
+const DEFAULT_ADMIN_THEME_COLOR = '#405189';
+const DEFAULT_LANDING_THEME_COLOR = '#0ab39c';
+const DEFAULT_SIDEBAR_TEXT_COLOR = '#cbd5e1';
+
+const normalizeHexColor = (value, fallback = '') => {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return fallback;
+
+  const withHash = trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+  const shortHexMatch = withHash.match(/^#([0-9a-fA-F]{3})$/);
+  if (shortHexMatch) {
+    const [r, g, b] = shortHexMatch[1].split('');
+    return `#${r}${r}${g}${g}${b}${b}`.toUpperCase();
+  }
+
+  if (/^#([0-9a-fA-F]{6})$/.test(withHash)) {
+    return withHash.toUpperCase();
+  }
+
+  return fallback;
+};
+
+const hexToRgb = (hex) => {
+  const normalized = normalizeHexColor(hex);
+  if (!normalized) return null;
+
+  return {
+    r: Number.parseInt(normalized.slice(1, 3), 16),
+    g: Number.parseInt(normalized.slice(3, 5), 16),
+    b: Number.parseInt(normalized.slice(5, 7), 16),
+  };
+};
+
+const getReadableTextColor = (hex, dark = '#0F172A', light = '#FFFFFF') => {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return light;
+
+  const brightness = (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000;
+  return brightness > 160 ? dark : light;
+};
 
 const ensureHeadLink = (selector, relValue) => {
   let link = document.head.querySelector(selector);
@@ -143,6 +183,33 @@ export const SettingsProvider = ({ children }) => {
       }
     };
   }, [settings.general?.app_name, settings.general?.favicon, settings.customization?.favicon]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const adminThemeColor = normalizeHexColor(
+      settings.customization?.admin_theme_color,
+      DEFAULT_ADMIN_THEME_COLOR
+    );
+    const landingThemeColor = normalizeHexColor(
+      settings.customization?.landing_theme_color,
+      DEFAULT_LANDING_THEME_COLOR
+    );
+    const sidebarTextColor = normalizeHexColor(
+      settings.customization?.sidebar_text_color,
+      DEFAULT_SIDEBAR_TEXT_COLOR
+    );
+    const rgb = hexToRgb(adminThemeColor) || { r: 64, g: 81, b: 137 };
+
+    root.style.setProperty('--admin-theme-color', adminThemeColor);
+    root.style.setProperty('--admin-theme-color-rgb', `${rgb.r}, ${rgb.g}, ${rgb.b}`);
+    root.style.setProperty('--admin-theme-contrast', getReadableTextColor(adminThemeColor));
+    root.style.setProperty('--landing-theme-color', landingThemeColor);
+    root.style.setProperty('--admin-sidebar-text-color', sidebarTextColor);
+  }, [
+    settings.customization?.admin_theme_color,
+    settings.customization?.landing_theme_color,
+    settings.customization?.sidebar_text_color,
+  ]);
 
   const refreshSettings = () => fetchSettings();
 
