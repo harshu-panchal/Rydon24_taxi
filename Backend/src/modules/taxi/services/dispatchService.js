@@ -529,8 +529,10 @@ export const startDispatchFlow = async (ride) => {
 
   const scheduledAt = ride?.scheduledAt ? new Date(ride.scheduledAt) : null;
   const delayMs = scheduledAt ? scheduledAt.getTime() - Date.now() : 0;
+  const bookingMode = String(ride?.bookingMode || 'normal').trim().toLowerCase();
+  const shouldDispatchImmediately = bookingMode === 'bidding';
 
-  if (scheduledAt && Number.isFinite(delayMs) && delayMs > 0) {
+  if (!shouldDispatchImmediately && scheduledAt && Number.isFinite(delayMs) && delayMs > 0) {
     const rideId = String(ride._id);
     const timer = setTimeout(() => {
       scheduledDispatchTimers.delete(rideId);

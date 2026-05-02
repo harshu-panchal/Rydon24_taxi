@@ -212,6 +212,7 @@ const SearchingDriver = () => {
   const searchNonce = String(routeState.searchNonce || '');
   const isBiddingRide = biddingSummary.bookingMode === 'bidding';
   const isScheduledRide = Boolean(routeState.scheduledAt);
+  const isScheduledBiddingRide = isScheduledRide && isBiddingRide;
 
   const { isLoaded } = useAppGoogleMapsLoader();
 
@@ -589,7 +590,7 @@ const SearchingDriver = () => {
           });
           loadRideBids(rideId).catch(() => {});
         }
-        if (isScheduledRide) {
+        if (isScheduledRide && !isScheduledBiddingRide) {
           setScheduledStatus('scheduled');
           setSearchStatus('Your ride has been scheduled successfully.');
           return;
@@ -635,14 +636,14 @@ const SearchingDriver = () => {
         if (!disposed) {
           setSearchStatus(
             (ride?.bookingMode || routeState.bookingMode) === 'bidding'
-              ? 'Booking created. Waiting for driver bids...'
+              ? (isScheduledRide ? 'Scheduled ride created. Waiting for driver bids...' : 'Booking created. Waiting for driver bids...')
               : 'Booking created. Notifying nearby drivers...',
           );
         }
       } catch (error) {
         console.error('[searching-driver] Ride creation error:', error);
         if (!disposed) {
-          if (isScheduledRide) {
+          if (isScheduledRide && !isScheduledBiddingRide) {
             setScheduledStatus('error');
             setScheduledError(error?.message || 'Could not schedule this ride.');
             setSearchStatus(error?.message || 'Could not schedule this ride.');
@@ -661,7 +662,7 @@ const SearchingDriver = () => {
         cleanupSearchRef.current?.();
       }, 0);
     };
-  }, [isScheduledRide, navigate, routePrefix, routeState, searchNonce, selectedVehicleTypeId, userHomeRoute]);
+  }, [isScheduledBiddingRide, isScheduledRide, navigate, routePrefix, routeState, searchNonce, selectedVehicleTypeId, userHomeRoute]);
 
   const handleCancel = async () => {
     clearTimeout(timerRef.current);
@@ -724,7 +725,7 @@ const SearchingDriver = () => {
   const isSearching = stage === STAGES.SEARCHING;
   const isAccepted  = stage === STAGES.ACCEPTED || stage === STAGES.COMPLETING;
 
-  if (isScheduledRide) {
+  if (isScheduledRide && !isScheduledBiddingRide) {
     return (
       <div className="min-h-screen max-w-lg mx-auto flex items-center justify-center bg-slate-950 px-6">
         <motion.div
