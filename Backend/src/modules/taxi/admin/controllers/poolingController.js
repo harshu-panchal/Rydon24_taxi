@@ -1,6 +1,7 @@
 import { PoolingVehicle } from '../models/PoolingVehicle.js';
 import { PoolingBooking } from '../models/PoolingBooking.js';
 import { PoolingRoute } from '../models/PoolingRoute.js';
+import { PoolingSeatReservation } from '../models/PoolingSeatReservation.js';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { uploadDataUrlToCloudinary } from '../../../../utils/cloudinaryUpload.js';
@@ -51,6 +52,11 @@ export const updatePoolingBookingStatus = asyncHandler(async (req, res) => {
     { new: true }
   );
   if (!booking) throw new ApiError(404, 'Booking not found');
+
+  if (['cancelled', 'no_show'].includes(String(status || '').toLowerCase())) {
+    await PoolingSeatReservation.deleteMany({ booking: booking._id });
+  }
+
   return ok(res, booking, 'Booking status updated successfully');
 });
 

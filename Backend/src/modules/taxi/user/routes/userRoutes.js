@@ -42,6 +42,8 @@ import {
 import {
   searchPoolingRoutes,
   getPoolingRouteDetails,
+  createPoolingBookingOrder,
+  verifyPoolingBookingPayment,
   createPoolingBooking,
   getMyPoolingBookings
 } from '../controllers/poolingController.js';
@@ -92,5 +94,7 @@ userRouter.post('/bus-bookings/:id/cancel', authenticateOrResolveUser(['user']),
 
 userRouter.get('/pooling/search', authenticateOrResolveUser(['user']), asyncHandler(searchPoolingRoutes));
 userRouter.get('/pooling/routes/:id', authenticateOrResolveUser(['user']), asyncHandler(getPoolingRouteDetails));
+userRouter.post('/pooling/bookings/order', authenticateOrResolveUser(['user']), asyncHandler(createPoolingBookingOrder));
+userRouter.post('/pooling/bookings/verify', authenticateOrResolveUser(['user']), asyncHandler(verifyPoolingBookingPayment));
 userRouter.post('/pooling/bookings', authenticateOrResolveUser(['user']), asyncHandler(createPoolingBooking));
 userRouter.get('/pooling/bookings', authenticateOrResolveUser(['user']), asyncHandler(getMyPoolingBookings));

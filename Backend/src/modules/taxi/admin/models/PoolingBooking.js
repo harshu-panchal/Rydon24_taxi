@@ -42,6 +42,25 @@ const poolingBookingSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    currency: {
+      type: String,
+      default: 'INR',
+      trim: true,
+    },
+    selectedSeats: {
+      type: [String],
+      default: [],
+    },
+    pickupLabel: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    dropLabel: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     paymentStatus: {
       type: String,
       enum: ['pending', 'paid', 'failed', 'refunded'],
@@ -59,6 +78,37 @@ const poolingBookingSchema = new mongoose.Schema(
     otp: {
       type: String,
     },
+    payment: {
+      provider: {
+        type: String,
+        default: 'razorpay',
+        trim: true,
+      },
+      orderId: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      paymentId: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      signature: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      status: {
+        type: String,
+        default: 'pending',
+        trim: true,
+      },
+      paidAt: {
+        type: Date,
+        default: null,
+      },
+    },
   },
   { timestamps: true },
 );
@@ -66,6 +116,8 @@ const poolingBookingSchema = new mongoose.Schema(
 poolingBookingSchema.index({ user: 1 });
 poolingBookingSchema.index({ route: 1 });
 poolingBookingSchema.index({ travelDate: 1 });
+poolingBookingSchema.index({ 'payment.orderId': 1 });
+poolingBookingSchema.index({ 'payment.paymentId': 1 });
 
 export const PoolingBooking =
   mongoose.models.TaxiPoolingBooking ||

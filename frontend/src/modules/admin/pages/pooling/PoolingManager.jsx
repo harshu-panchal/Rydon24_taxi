@@ -25,6 +25,8 @@ const inputClass =
   'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100/60';
 const labelClass = 'mb-2 block text-[12px] font-bold text-slate-700';
 const DAY_OPTIONS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const errorInputClass = 'border-rose-300 bg-rose-50/60 focus:border-rose-300 focus:ring-rose-100';
+const getInputClasses = (hasError = false) => `${inputClass} ${hasError ? errorInputClass : ''}`;
 
 const createStop = (type = 'stop', sequence = 1) => ({
   id: `stop-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -116,84 +118,118 @@ const BlueprintMini = ({ blueprint }) => {
   );
 };
 
-const StopEditor = ({ title, helper, items, stopType, onChange, onAdd, onRemove }) => (
-  <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-    <div className="mb-4 flex items-start justify-between gap-4">
+const StopEditor = ({ title, helper, items, stopType, onChange, onAdd, onRemove, errors = {} }) => (
+  <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm flex flex-col h-full">
+    <div className="mb-6 flex items-start justify-between gap-4">
       <div>
-        <h3 className="text-base font-black text-slate-900">{title}</h3>
-        <p className="mt-1 text-xs font-medium text-slate-500">{helper}</p>
+        <h3 className="text-lg font-black text-slate-900">{title}</h3>
+        <p className="mt-1 text-xs font-medium text-slate-500 leading-relaxed">{helper}</p>
       </div>
       <button
         type="button"
         onClick={onAdd}
-        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+        className="shrink-0 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 active:scale-95"
       >
-        <Plus size={14} />
+        <Plus size={16} />
         Add
       </button>
     </div>
 
-    <div className="space-y-4">
+    <div className="space-y-5 flex-1">
+      {errors.group ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-600">
+          {errors.group}
+        </div>
+      ) : null}
       {items.map((item, index) => (
-        <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="text-sm font-black text-slate-900">
-              {title.slice(0, -1)} {index + 1}
-            </p>
+        <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-5 transition-all hover:bg-slate-50 hover:shadow-md">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-[10px] font-black text-white">
+                {index + 1}
+              </span>
+              <p className="text-[13px] font-black uppercase tracking-wider text-slate-900">
+                {title.slice(0, -1)} Detail
+              </p>
+            </div>
             {items.length > 1 ? (
               <button
                 type="button"
                 onClick={() => onRemove(item.id)}
-                className="rounded-xl border border-rose-200 bg-white p-2 text-rose-500 transition hover:bg-rose-50"
+                className="rounded-xl border border-rose-100 bg-white p-2 text-rose-500 shadow-sm transition hover:bg-rose-50 hover:border-rose-200 active:scale-90"
               >
-                <Trash2 size={14} />
+                <Trash2 size={16} />
               </button>
             ) : null}
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <input
-              value={item.name}
-              onChange={(event) => onChange(item.id, 'name', event.target.value)}
-              className={inputClass}
-              placeholder="Point name"
-            />
-            <input
-              value={item.address}
-              onChange={(event) => onChange(item.id, 'address', event.target.value)}
-              className={inputClass}
-              placeholder="Address"
-            />
-            <input
-              value={item.landmark}
-              onChange={(event) => onChange(item.id, 'landmark', event.target.value)}
-              className={inputClass}
-              placeholder="Landmark"
-            />
-            <input
-              type="number"
-              value={item.etaMinutes}
-              onChange={(event) => onChange(item.id, 'etaMinutes', Number(event.target.value || 0))}
-              className={inputClass}
-              placeholder="ETA"
-            />
-          </div>
-
-          {stopType === 'stop' ? (
-            <div className="mt-4">
-              <label className={labelClass}>Stop Type</label>
-              <select
-                value={item.stopType}
-                onChange={(event) => onChange(item.id, 'stopType', event.target.value)}
-                className={inputClass}
-              >
-                <option value="stop">Middle Stop</option>
-                <option value="pickup">Pickup</option>
-                <option value="drop">Drop</option>
-                <option value="both">Pickup And Drop</option>
-              </select>
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">Point Name</label>
+                <input
+                  value={item.name}
+                  onChange={(event) => onChange(item.id, 'name', event.target.value)}
+                  className={getInputClasses(Boolean(errors[`${item.id}.name`]))}
+                  placeholder="e.g. Main Gate, Tower A"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">Address / Location</label>
+                <input
+                  value={item.address}
+                  onChange={(event) => onChange(item.id, 'address', event.target.value)}
+                  className={getInputClasses(Boolean(errors[`${item.id}.address`]))}
+                  placeholder="Street name, Area"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">Landmark</label>
+                <input
+                  value={item.landmark}
+                  onChange={(event) => onChange(item.id, 'landmark', event.target.value)}
+                  className={getInputClasses(Boolean(errors[`${item.id}.landmark`]))}
+                  placeholder="Near Park, Mall"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">ETA (Min)</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={item.etaMinutes}
+                    onChange={(event) => onChange(item.id, 'etaMinutes', Number(event.target.value || 0))}
+                    className={`${getInputClasses(Boolean(errors[`${item.id}.etaMinutes`]))} pr-12`}
+                    placeholder="0"
+                  />
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Min</span>
+                  </div>
+                </div>
+              </div>
             </div>
-          ) : null}
+            {errors[`${item.id}.name`] || errors[`${item.id}.address`] || errors[`${item.id}.etaMinutes`] ? (
+              <p className="text-xs font-semibold text-rose-600">
+                {errors[`${item.id}.name`] || errors[`${item.id}.address`] || errors[`${item.id}.etaMinutes`]}
+              </p>
+            ) : null}
+
+            {stopType === 'stop' ? (
+              <div className="pt-2 border-t border-slate-200/60">
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">Action At Stop</label>
+                <select
+                  value={item.stopType}
+                  onChange={(event) => onChange(item.id, 'stopType', event.target.value)}
+                  className={getInputClasses(Boolean(errors[`${item.id}.stopType`]))}
+                >
+                  <option value="stop">Middle Stop Only</option>
+                  <option value="pickup">Allow Pickup</option>
+                  <option value="drop">Allow Drop</option>
+                  <option value="both">Allow Pickup & Drop</option>
+                </select>
+              </div>
+            ) : null}
+          </div>
         </div>
       ))}
     </div>
@@ -209,6 +245,7 @@ const PoolingManager = ({ mode: propMode }) => {
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [validationErrors, setValidationErrors] = useState({});
   const [formData, setFormData] = useState(buildDefaultForm);
 
   useEffect(() => {
@@ -311,10 +348,23 @@ const PoolingManager = ({ mode: propMode }) => {
   );
 
   const updateForm = (field, value) => {
+    setValidationErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
     setFormData((current) => ({ ...current, [field]: value }));
   };
 
   const updateNestedRule = (field, value) => {
+    setValidationErrors((current) => {
+      const key = `poolingRules.${field}`;
+      if (!current[key]) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
     setFormData((current) => ({
       ...current,
       poolingRules: {
@@ -325,6 +375,12 @@ const PoolingManager = ({ mode: propMode }) => {
   };
 
   const updateStopGroup = (field, stopId, key, value) => {
+    setValidationErrors((current) => {
+      const next = { ...current };
+      delete next[`${field}.group`];
+      delete next[`${stopId}.${key}`];
+      return next;
+    });
     setFormData((current) => ({
       ...current,
       [field]: current[field].map((item) =>
@@ -348,6 +404,12 @@ const PoolingManager = ({ mode: propMode }) => {
   };
 
   const updateSchedule = (scheduleId, key, value) => {
+    setValidationErrors((current) => {
+      const next = { ...current };
+      delete next.schedules;
+      delete next[`${scheduleId}.${key}`];
+      return next;
+    });
     setFormData((current) => ({
       ...current,
       schedules: current.schedules.map((item) =>
@@ -357,6 +419,12 @@ const PoolingManager = ({ mode: propMode }) => {
   };
 
   const toggleScheduleDay = (scheduleId, day) => {
+    setValidationErrors((current) => {
+      const next = { ...current };
+      delete next.schedules;
+      delete next[`${scheduleId}.activeDays`];
+      return next;
+    });
     setFormData((current) => ({
       ...current,
       schedules: current.schedules.map((item) => {
@@ -385,6 +453,12 @@ const PoolingManager = ({ mode: propMode }) => {
 
   const toggleVehicle = (vehicleId) => {
     const normalizedId = String(vehicleId);
+    setValidationErrors((current) => {
+      if (!current.assignedVehicleTypeIds) return current;
+      const next = { ...current };
+      delete next.assignedVehicleTypeIds;
+      return next;
+    });
     setFormData((current) => ({
       ...current,
       assignedVehicleTypeIds: current.assignedVehicleTypeIds.includes(normalizedId)
@@ -393,11 +467,72 @@ const PoolingManager = ({ mode: propMode }) => {
     }));
   };
 
+  const validateStops = (items = [], field) => {
+    const errors = {};
+    const filledItems = items.filter((item) =>
+      item.name.trim() || item.address.trim() || item.landmark.trim() || Number(item.etaMinutes || 0) > 0,
+    );
+
+    if (filledItems.length === 0) {
+      errors[`${field}.group`] = `Add at least one ${field === 'pickupPoints' ? 'pickup point' : field === 'dropPoints' ? 'drop point' : 'middle stop'}.`;
+      return errors;
+    }
+
+    filledItems.forEach((item) => {
+      if (!item.name.trim()) {
+        errors[`${item.id}.name`] = 'Point name is required.';
+      } else if (!item.address.trim()) {
+        errors[`${item.id}.address`] = 'Address is required.';
+      } else if (Number(item.etaMinutes || 0) < 0) {
+        errors[`${item.id}.etaMinutes`] = 'ETA cannot be negative.';
+      }
+    });
+
+    return errors;
+  };
+
+  const validateForm = () => {
+    const errors = {};
+    const filledSchedules = formData.schedules.filter((item) => item.label.trim() || item.departureTime || item.arrivalTime);
+
+    if (!formData.routeName.trim()) errors.routeName = 'Route name is required.';
+    if (!formData.originLabel.trim()) errors.originLabel = 'Origin location is required.';
+    if (!formData.destinationLabel.trim()) errors.destinationLabel = 'Destination is required.';
+    if (formData.assignedVehicleTypeIds.length === 0) errors.assignedVehicleTypeIds = 'Select at least one pooling-enabled vehicle.';
+    if (Number(formData.farePerSeat || 0) <= 0) errors.farePerSeat = 'Fare per seat must be greater than zero.';
+    if (Number(formData.maxSeatsPerBooking || 0) <= 0) errors.maxSeatsPerBooking = 'Max seats per booking must be at least 1.';
+    if (Number(formData.maxAdvanceBookingHours || 0) < 0) errors.maxAdvanceBookingHours = 'Advance booking window cannot be negative.';
+    if (Number(formData.boardingBufferMinutes || 0) < 0) errors.boardingBufferMinutes = 'Boarding buffer cannot be negative.';
+    if (Number(formData.poolingRules?.maxDetourKm || 0) < 0) errors['poolingRules.maxDetourKm'] = 'Maximum detour cannot be negative.';
+
+    Object.assign(errors, validateStops(formData.pickupPoints, 'pickupPoints'));
+    Object.assign(errors, validateStops(formData.dropPoints, 'dropPoints'));
+
+    if (filledSchedules.length === 0) {
+      errors.schedules = 'Add at least one schedule.';
+    } else {
+      filledSchedules.forEach((schedule) => {
+        if (!schedule.label.trim()) errors[`${schedule.id}.label`] = 'Schedule label is required.';
+        if (!schedule.departureTime) errors[`${schedule.id}.departureTime`] = 'Departure time is required.';
+        if (!schedule.arrivalTime) errors[`${schedule.id}.arrivalTime`] = 'Arrival time is required.';
+        if (!Array.isArray(schedule.activeDays) || schedule.activeDays.length === 0) errors[`${schedule.id}.activeDays`] = 'Select at least one active day.';
+      });
+    }
+
+    return errors;
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     setErrorMessage('');
+    const nextValidationErrors = validateForm();
+    setValidationErrors(nextValidationErrors);
 
     try {
+      if (Object.keys(nextValidationErrors).length > 0) {
+        throw new Error('Please fix the highlighted pooling route fields.');
+      }
+
       const payload = {
         ...formData,
         pickupPoints: formData.pickupPoints
@@ -684,9 +819,10 @@ const PoolingManager = ({ mode: propMode }) => {
                 type="text"
                 value={formData.routeName}
                 onChange={(event) => updateForm('routeName', event.target.value)}
-                className={inputClass}
+                className={getInputClasses(Boolean(validationErrors.routeName))}
                 placeholder="Airport Morning Pool"
               />
+              {validationErrors.routeName ? <p className="mt-2 text-xs font-semibold text-rose-600">{validationErrors.routeName}</p> : null}
               <p className="mt-2 text-xs text-slate-500">Main name used by the admin team to identify this pooled route.</p>
             </div>
 
@@ -708,9 +844,10 @@ const PoolingManager = ({ mode: propMode }) => {
                 type="text"
                 value={formData.originLabel}
                 onChange={(event) => updateForm('originLabel', event.target.value)}
-                className={inputClass}
+                className={getInputClasses(Boolean(validationErrors.originLabel))}
                 placeholder="Vijay Nagar"
               />
+              {validationErrors.originLabel ? <p className="mt-2 text-xs font-semibold text-rose-600">{validationErrors.originLabel}</p> : null}
             </div>
 
             <div>
@@ -719,9 +856,10 @@ const PoolingManager = ({ mode: propMode }) => {
                 type="text"
                 value={formData.destinationLabel}
                 onChange={(event) => updateForm('destinationLabel', event.target.value)}
-                className={inputClass}
+                className={getInputClasses(Boolean(validationErrors.destinationLabel))}
                 placeholder="Indore Airport"
               />
+              {validationErrors.destinationLabel ? <p className="mt-2 text-xs font-semibold text-rose-600">{validationErrors.destinationLabel}</p> : null}
             </div>
 
             <div className="lg:col-span-2">
@@ -743,12 +881,17 @@ const PoolingManager = ({ mode: propMode }) => {
               </p>
             </div>
 
-            <div className="lg:col-span-2 grid gap-6 xl:grid-cols-3">
+            <div className="lg:col-span-2 grid gap-8 xl:grid-cols-2 2xl:grid-cols-3">
               <StopEditor
                 title="Pickup Points"
                 helper="Add the pickup locations riders can select while booking this route."
                 items={formData.pickupPoints}
                 stopType="pickup"
+                errors={Object.fromEntries(
+                  Object.entries(validationErrors).filter(([key]) =>
+                    key === 'pickupPoints.group' || formData.pickupPoints.some((item) => key.startsWith(`${item.id}.`)),
+                  ),
+                )}
                 onAdd={() => addStopGroupItem('pickupPoints', 'pickup')}
                 onChange={(stopId, key, value) => updateStopGroup('pickupPoints', stopId, key, value)}
                 onRemove={(stopId) => removeStopGroupItem('pickupPoints', stopId)}
@@ -758,6 +901,11 @@ const PoolingManager = ({ mode: propMode }) => {
                 helper="Use this for route checkpoints, boarding stops, or service pauses between origin and destination."
                 items={formData.stops}
                 stopType="stop"
+                errors={Object.fromEntries(
+                  Object.entries(validationErrors).filter(([key]) =>
+                    key === 'stops.group' || formData.stops.some((item) => key.startsWith(`${item.id}.`)),
+                  ),
+                )}
                 onAdd={() => addStopGroupItem('stops', 'stop')}
                 onChange={(stopId, key, value) => updateStopGroup('stops', stopId, key, value)}
                 onRemove={(stopId) => removeStopGroupItem('stops', stopId)}
@@ -767,6 +915,11 @@ const PoolingManager = ({ mode: propMode }) => {
                 helper="Add the drop locations riders can choose for the final leg of this pooled ride."
                 items={formData.dropPoints}
                 stopType="drop"
+                errors={Object.fromEntries(
+                  Object.entries(validationErrors).filter(([key]) =>
+                    key === 'dropPoints.group' || formData.dropPoints.some((item) => key.startsWith(`${item.id}.`)),
+                  ),
+                )}
                 onAdd={() => addStopGroupItem('dropPoints', 'drop')}
                 onChange={(stopId, key, value) => updateStopGroup('dropPoints', stopId, key, value)}
                 onRemove={(stopId) => removeStopGroupItem('dropPoints', stopId)}
@@ -889,7 +1042,7 @@ const PoolingManager = ({ mode: propMode }) => {
                       ) : null}
                     </div>
 
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
                       <input
                         value={schedule.label}
                         onChange={(event) => updateSchedule(schedule.id, 'label', event.target.value)}

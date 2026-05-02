@@ -1,20 +1,68 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   MapPin, 
   ArrowLeftRight, 
   Calendar, 
-  Search, 
   ChevronRight, 
   Clock, 
   Star,
   ShieldCheck,
   Users,
-  ArrowLeft
+  ArrowLeft,
+  Search,
+  History
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { userService } from '../../services/userService';
 import toast from 'react-hot-toast';
+
+const toCleanString = (value = '') => String(value || '').trim();
+
+const formatDurationFromSchedule = (schedule = {}) => {
+  const departure = toCleanString(schedule?.departureTime);
+  const arrival = toCleanString(schedule?.arrivalTime);
+  if (!departure || !arrival) return '';
+
+  const [departureHour, departureMinute] = departure.split(':').map(Number);
+  const [arrivalHour, arrivalMinute] = arrival.split(':').map(Number);
+
+  if (![departureHour, departureMinute, arrivalHour, arrivalMinute].every(Number.isFinite)) {
+    return '';
+  }
+
+  let totalMinutes = ((arrivalHour * 60) + arrivalMinute) - ((departureHour * 60) + departureMinute);
+  if (totalMinutes < 0) {
+    totalMinutes += 24 * 60;
+  }
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h`;
+  return `${minutes}m`;
+};
+
+const getPrimarySchedule = (route = {}) => {
+  const schedules = Array.isArray(route?.schedules) ? route.schedules : [];
+  return schedules.find((item) => String(item?.status || '').toLowerCase() === 'active') || schedules[0] || null;
+};
+
+const normalizePopularRoute = (route = {}) => {
+  const schedule = getPrimarySchedule(route);
+  const middleStopCount = Array.isArray(route?.stops) ? route.stops.length : 0;
+
+  return {
+    id: route._id || route.id,
+    from: toCleanString(route.originLabel) || 'Origin',
+    to: toCleanString(route.destinationLabel) || 'Destination',
+    price: Number(route.farePerSeat || 0),
+    time: formatDurationFromSchedule(schedule) || (schedule?.departureTime && schedule?.arrivalTime ? `${schedule.departureTime} - ${schedule.arrivalTime}` : 'Schedule available'),
+    scheduleLabel: toCleanString(schedule?.label) || 'Shared route',
+    seats: Number(route.maxSeatsPerBooking || 0),
+    stopCount: middleStopCount,
+  };
+};
 
 const PoolingHome = () => {
   const navigate = useNavigate();
@@ -24,15 +72,46 @@ const PoolingHome = () => {
     date: new Date().toISOString().split('T')[0]
   });
   const [popularRoutes, setPopularRoutes] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [allSuggestions, setAllSuggestions] = useState({ origins: [], destinations: [] });
+  const [showFromSuggestions, setShowFromSuggestions] = useState(false);
+  const [showToSuggestions, setShowToSuggestions] = useState(false);
+  
+  const fromRef = useRef(null);
+  const toRef = useRef(null);
 
   useEffect(() => {
-    // In a real app, we'd fetch actual popular routes
-    setPopularRoutes([
-      { id: 1, from: 'Indore', to: 'Bhopal', price: 450, time: '3h 30m', rating: 4.8 },
-      { id: 2, from: 'Dewas', to: 'Indore', price: 120, time: '45m', rating: 4.9 },
-      { id: 3, from: 'Ujjain', to: 'Indore', price: 180, time: '1h 15m', rating: 4.7 }
-    ]);
+    const loadData = async () => {
+      try {
+        const response = await userService.searchPoolingRoutes({});
+        const routes = Array.isArray(response?.data?.data) ? response.data.data : Array.isArray(response?.data) ? response.data : [];
+        
+        // Extract unique locations for suggestions
+        const origins = [...new Set(routes.map(r => r.originLabel).filter(Boolean))];
+        const destinations = [...new Set(routes.map(r => r.destinationLabel).filter(Boolean))];
+        setAllSuggestions({ origins, destinations });
+
+        const activeRoutes = routes
+          .filter((route) => String(route?.status || '').toLowerCase() === 'active' && route?.active !== false)
+          .slice(0, 6)
+          .map(normalizePopularRoute)
+          .filter((route) => route.id);
+        setPopularRoutes(activeRoutes);
+      } catch (error) {
+        setPopularRoutes([]);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  // Close suggestions on click outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (fromRef.current && !fromRef.current.contains(event.target)) setShowFromSuggestions(false);
+      if (toRef.current && !toRef.current.contains(event.target)) setShowToSuggestions(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const handleSearch = () => {
@@ -47,8 +126,16 @@ const PoolingHome = () => {
     setSearch(prev => ({ ...prev, from: prev.to, to: prev.from }));
   };
 
+  const filteredFrom = allSuggestions.origins.filter(loc => 
+    loc.toLowerCase().includes(search.from.toLowerCase()) && loc !== search.from
+  );
+
+  const filteredTo = allSuggestions.destinations.filter(loc => 
+    loc.toLowerCase().includes(search.to.toLowerCase()) && loc !== search.to
+  );
+
   return (
-    <div className="min-h-screen bg-white pb-24">
+    <div className="min-h-screen bg-white pb-24 max-w-lg mx-auto font-sans">
       {/* Header Section */}
       <div className="relative bg-slate-900 px-6 pt-12 pb-24 text-white overflow-hidden">
         <div className="absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl" />
@@ -66,108 +153,164 @@ const PoolingHome = () => {
           animate={{ opacity: 1, y: 0 }}
           className="relative"
         >
-          <h1 className="text-4xl font-black tracking-tight">Carpool</h1>
-          <p className="mt-2 text-indigo-200 font-medium">Safe, affordable & eco-friendly rides</p>
+          <h1 className="text-4xl font-black tracking-tight uppercase">Carpool</h1>
+          <p className="mt-2 text-indigo-200 font-bold uppercase text-[10px] tracking-[0.2em]">Safe, affordable & eco-friendly</p>
         </motion.div>
       </div>
 
       {/* Search Card */}
-      <div className="mx-6 -mt-16">
+      <div className="mx-6 -mt-16 relative z-50">
         <motion.div 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="rounded-[32px] bg-white p-6 shadow-2xl shadow-indigo-100 border border-slate-50"
+          className="rounded-[40px] bg-white p-6 shadow-2xl shadow-indigo-200/50 border border-slate-50"
         >
           <div className="space-y-4">
             {/* Origin */}
-            <div className="relative">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500">
+            <div className="relative" ref={fromRef}>
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500 z-10">
                 <MapPin size={20} />
               </div>
               <input
                 type="text"
                 placeholder="From where?"
                 value={search.from}
-                onChange={(e) => setSearch({ ...search, from: e.target.value })}
-                className="w-full rounded-2xl bg-slate-50 py-4 pl-12 pr-4 text-sm font-bold text-slate-900 outline-none transition focus:ring-4 focus:ring-indigo-50 border border-transparent focus:border-indigo-100"
+                onFocus={() => setShowFromSuggestions(true)}
+                onChange={(e) => {
+                  setSearch({ ...search, from: e.target.value });
+                  setShowFromSuggestions(true);
+                }}
+                className="w-full rounded-[24px] bg-slate-50 py-5 pl-12 pr-4 text-sm font-black text-slate-900 outline-none transition focus:ring-4 focus:ring-indigo-50 border border-transparent focus:border-indigo-100"
               />
+              
+              <AnimatePresence>
+                {showFromSuggestions && filteredFrom.length > 0 && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute left-0 right-0 top-full mt-2 bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-[100]"
+                  >
+                    <p className="px-5 pt-4 pb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Suggestions</p>
+                    {filteredFrom.map((loc, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          setSearch({ ...search, from: loc });
+                          setShowFromSuggestions(false);
+                        }}
+                        className="w-full px-5 py-4 text-left flex items-center gap-4 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0"
+                      >
+                        <History size={16} className="text-slate-300" />
+                        <span className="text-sm font-black text-slate-900">{loc}</span>
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* Swap Button */}
-            <div className="relative flex justify-center -my-2 z-10">
+            <div className="relative flex justify-center -my-3 z-10">
               <button 
                 onClick={swapLocations}
-                className="h-10 w-10 rounded-full bg-indigo-600 text-white shadow-lg flex items-center justify-center border-4 border-white active:scale-90 transition-transform"
+                className="h-12 w-12 rounded-2xl bg-indigo-600 text-white shadow-xl flex items-center justify-center border-4 border-white active:scale-90 transition-transform"
               >
-                <ArrowLeftRight size={18} className="rotate-90" />
+                <ArrowLeftRight size={20} className="rotate-90" />
               </button>
             </div>
 
             {/* Destination */}
-            <div className="relative">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-rose-500">
+            <div className="relative" ref={toRef}>
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-rose-500 z-10">
                 <MapPin size={20} />
               </div>
               <input
                 type="text"
                 placeholder="To where?"
                 value={search.to}
-                onChange={(e) => setSearch({ ...search, to: e.target.value })}
-                className="w-full rounded-2xl bg-slate-50 py-4 pl-12 pr-4 text-sm font-bold text-slate-900 outline-none transition focus:ring-4 focus:ring-indigo-50 border border-transparent focus:border-indigo-100"
+                onFocus={() => setShowToSuggestions(true)}
+                onChange={(e) => {
+                  setSearch({ ...search, to: e.target.value });
+                  setShowToSuggestions(true);
+                }}
+                className="w-full rounded-[24px] bg-slate-50 py-5 pl-12 pr-4 text-sm font-black text-slate-900 outline-none transition focus:ring-4 focus:ring-indigo-50 border border-transparent focus:border-indigo-100"
               />
+
+              <AnimatePresence>
+                {showToSuggestions && filteredTo.length > 0 && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute left-0 right-0 top-full mt-2 bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-[100]"
+                  >
+                    <p className="px-5 pt-4 pb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Suggestions</p>
+                    {filteredTo.map((loc, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          setSearch({ ...search, to: loc });
+                          setShowToSuggestions(false);
+                        }}
+                        className="w-full px-5 py-4 text-left flex items-center gap-4 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0"
+                      >
+                        <History size={16} className="text-slate-300" />
+                        <span className="text-sm font-black text-slate-900">{loc}</span>
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* Date Selection */}
             <div className="relative">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500">
                 <Calendar size={20} />
               </div>
               <input
                 type="date"
                 value={search.date}
                 onChange={(e) => setSearch({ ...search, date: e.target.value })}
-                className="w-full rounded-2xl bg-slate-50 py-4 pl-12 pr-4 text-sm font-bold text-slate-900 outline-none transition focus:ring-4 focus:ring-indigo-50 border border-transparent focus:border-indigo-100"
+                className="w-full rounded-[24px] bg-slate-50 py-5 pl-12 pr-4 text-sm font-black text-slate-900 outline-none transition focus:ring-4 focus:ring-indigo-50 border border-transparent focus:border-indigo-100 appearance-none"
               />
             </div>
 
             <button
               onClick={handleSearch}
-              className="mt-2 w-full rounded-2xl bg-indigo-600 py-4 text-sm font-black text-white shadow-xl shadow-indigo-100 transition hover:bg-indigo-700 active:scale-[0.98]"
+              className="mt-2 w-full rounded-[24px] bg-slate-900 py-5 text-sm font-black text-white shadow-2xl shadow-slate-200 transition hover:bg-black active:scale-[0.98] flex items-center justify-center gap-3"
             >
+              <Search size={20} />
               Search Rides
             </button>
           </div>
         </motion.div>
       </div>
 
-      {/* Features Section */}
-      <div className="mt-12 px-6">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="rounded-3xl bg-indigo-50/50 p-5 border border-indigo-100/50">
-            <div className="mb-3 h-10 w-10 rounded-2xl bg-indigo-100 flex items-center justify-center text-indigo-600">
-              <ShieldCheck size={20} />
-            </div>
-            <h3 className="text-sm font-black text-slate-900">Verified ID</h3>
-            <p className="mt-1 text-[11px] font-bold text-slate-500">All members are verified</p>
-          </div>
-          <div className="rounded-3xl bg-blue-50/50 p-5 border border-blue-100/50">
-            <div className="mb-3 h-10 w-10 rounded-2xl bg-blue-100 flex items-center justify-center text-blue-600">
-              <Star size={20} />
-            </div>
-            <h3 className="text-sm font-black text-slate-900">Top Rated</h3>
-            <p className="mt-1 text-[11px] font-bold text-slate-500">Highly rated co-travelers</p>
-          </div>
-        </div>
-      </div>
-
       {/* Popular Routes */}
-      <div className="mt-12 px-6">
-        <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-xl font-black text-slate-900">Popular Routes</h2>
-          <button className="text-xs font-black uppercase tracking-widest text-indigo-600">View All</button>
+      <div className="mt-16 px-6">
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Popular Routes</h2>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Frequent shared trips</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-900"
+          >
+            <ChevronRight size={20} className="-rotate-90" />
+          </button>
         </div>
         
-        <div className="space-y-4">
+        <div className="space-y-5">
+          {!popularRoutes.length ? (
+            <div className="rounded-[32px] border-2 border-dashed border-slate-100 bg-slate-50/50 p-10 text-center">
+              <History size={32} className="mx-auto text-slate-200 mb-4" />
+              <p className="text-xs font-bold text-slate-400 leading-relaxed max-w-[180px] mx-auto">Active pooling routes will appear here once they are created by admin.</p>
+            </div>
+          ) : null}
           {popularRoutes.map((route) => (
             <motion.div
               key={route.id}
@@ -176,36 +319,67 @@ const PoolingHome = () => {
                 setSearch({ ...search, from: route.from, to: route.to });
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              className="group flex items-center justify-between rounded-3xl border border-slate-100 bg-white p-5 transition-all hover:border-indigo-100 hover:shadow-xl hover:shadow-indigo-50"
+              className="group relative overflow-hidden rounded-[40px] border border-slate-100 bg-white p-6 transition-all hover:border-indigo-200 hover:shadow-2xl hover:shadow-indigo-100/50"
             >
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
-                  <ArrowLeftRight size={20} />
+              <div className="flex items-center justify-between relative z-10">
+                <div className="flex items-center gap-5">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-slate-50 text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-500 shadow-sm">
+                    <ArrowLeftRight size={22} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-base font-black text-slate-900">{route.from}</span>
+                      <ChevronRight size={14} className="text-slate-300" />
+                      <span className="text-base font-black text-slate-900">{route.to}</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-4">
+                      <div className="flex items-center gap-1.5 text-[10px] font-black text-indigo-600 uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded-full">
+                        <Clock size={12} />
+                        {route.time}
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[10px] font-black text-amber-600 uppercase tracking-wider bg-amber-50 px-2 py-0.5 rounded-full">
+                        <Users size={12} />
+                        {route.seats || 0} SEATS
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-black text-slate-900">{route.from}</span>
-                    <ChevronRight size={14} className="text-slate-300" />
-                    <span className="text-sm font-black text-slate-900">{route.to}</span>
-                  </div>
-                  <div className="mt-1 flex items-center gap-3">
-                    <div className="flex items-center gap-1 text-[11px] font-bold text-slate-400">
-                      <Clock size={12} />
-                      {route.time}
-                    </div>
-                    <div className="flex items-center gap-1 text-[11px] font-bold text-amber-500">
-                      <Star size={12} fill="currentColor" />
-                      {route.rating}
-                    </div>
-                  </div>
+                <div className="text-right">
+                  <p className="text-xl font-black text-slate-900">₹{route.price}</p>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">FARES</p>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-lg font-black text-indigo-600">₹{route.price}</p>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Per Seat</p>
-              </div>
+              
+              {/* Background Decoration */}
+              <div className="absolute -right-12 -bottom-12 w-32 h-32 bg-indigo-50/20 rounded-full blur-2xl group-hover:bg-indigo-100/40 transition-colors" />
             </motion.div>
           ))}
+        </div>
+      </div>
+
+      {/* Safety Section */}
+      <div className="mt-16 px-6">
+        <div className="rounded-[40px] bg-slate-900 p-8 text-white relative overflow-hidden">
+          <div className="relative z-10">
+             <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-500 flex items-center justify-center">
+                   <ShieldCheck size={24} />
+                </div>
+                <h3 className="text-lg font-black tracking-tight">Travel with Peace</h3>
+             </div>
+             <p className="text-sm font-medium text-slate-400 leading-relaxed mb-6">All drivers and passengers are ID-verified for a secure community experience.</p>
+             <div className="flex items-center gap-4">
+                <div className="flex -space-x-3">
+                   {[1,2,3,4].map(i => (
+                     <div key={i} className="w-8 h-8 rounded-full border-2 border-slate-900 bg-slate-800 overflow-hidden">
+                        <img src={`https://ui-avatars.com/api/?name=U${i}&background=random`} alt="" />
+                     </div>
+                   ))}
+                </div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">10k+ Verified Users</p>
+             </div>
+          </div>
+          <div className="absolute top-0 right-0 -mr-10 -mt-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl" />
         </div>
       </div>
     </div>

@@ -1,39 +1,75 @@
 import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { 
-  ArrowLeft, 
-  MapPin, 
-  Calendar, 
-  Clock, 
-  ShieldCheck, 
-  CreditCard,
+import {
+  ArrowLeft,
+  ShieldCheck,
   ChevronRight,
   CheckCircle2,
   Armchair,
-  Car
+  Car,
+  CreditCard,
+  Zap,
+  Ticket,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { userService } from '../../services/userService';
 import toast from 'react-hot-toast';
 
+const loadRazorpayScript = () =>
+  new Promise((resolve) => {
+    if (window.Razorpay) {
+      resolve(true);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+
+const formatTravelDate = (value) => {
+  if (!value) return 'Today';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+};
+
+const unwrapPayload = (response) => response?.data?.data || response?.data || response || {};
+
 const PoolingConfirm = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { route, vehicle, selectedSeats, totalFare } = location.state || {};
+  const { route, vehicle, selectedSeats, totalFare, travelDate, schedule, pickupStop, dropStop } = location.state || {};
 
   const [isBooking, setIsBooking] = useState(false);
   const [isBooked, setIsBooked] = useState(false);
 
-  if (!route || !vehicle) {
+  if (!route || !vehicle || !schedule?.id || !pickupStop?.id || !dropStop?.id) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center p-6 text-center">
-        <h2 className="text-xl font-black text-slate-900">Session Expired</h2>
-        <p className="mt-2 text-sm text-slate-500">Please start your booking again.</p>
-        <button 
+      <div className="flex h-screen flex-col items-center justify-center bg-white p-6 text-center">
+        <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-rose-50 text-rose-500">
+          <Ticket size={40} />
+        </div>
+        <h2 className="text-xl font-black tracking-tight text-slate-900">Session Expired</h2>
+        <p className="mt-2 text-sm font-medium text-slate-500">
+          Your booking session has timed out. Please select your seats again.
+        </p>
+        <button
+          type="button"
           onClick={() => navigate('/taxi/user/pooling')}
-          className="mt-6 rounded-2xl bg-indigo-600 px-8 py-3 text-sm font-black text-white"
+          className="mt-8 rounded-2xl bg-slate-900 px-8 py-4 text-xs font-black uppercase tracking-widest text-white shadow-xl transition-all active:scale-95"
         >
-          Go Back
+          Restart Booking
         </button>
       </div>
     );
@@ -41,180 +77,329 @@ const PoolingConfirm = () => {
 
   const handleConfirm = async () => {
     setIsBooking(true);
+
     try {
-      await userService.createPoolingBooking({
+      const scriptLoaded = await loadRazorpayScript();
+      if (!scriptLoaded) {
+        throw new Error('Razorpay SDK failed to load');
+      }
+
+      const orderResponse = await userService.createPoolingBookingOrder({
         routeId: route._id,
         vehicleId: vehicle._id,
+        scheduleId: schedule.id,
+        travelDate,
         selectedSeats,
-        fare: totalFare,
-        pickupPoint: route.originLabel,
-        dropPoint: route.destinationLabel
+        pickupStopId: pickupStop.id,
+        dropStopId: dropStop.id,
       });
-      
-      setIsBooked(true);
-      toast.success('Booking Successful!');
-      
-      // Auto-navigate after 2 seconds
-      setTimeout(() => {
-        navigate('/taxi/user');
-      }, 2500);
+      const order = unwrapPayload(orderResponse);
+
+      if (!order.keyId || !order.orderId) {
+        throw new Error('Unable to start pooling payment');
+      }
+
+      const rzp = new window.Razorpay({
+        key: order.keyId,
+        amount: order.amount,
+        currency: order.currency || 'INR',
+        name: 'Pooling Booking',
+        description: `${route.originLabel} to ${route.destinationLabel}`,
+        order_id: order.orderId,
+        modal: {
+          ondismiss: () => {
+            setIsBooking(false);
+          },
+        },
+        theme: {
+          color: '#0f172a',
+        },
+        handler: async (response) => {
+          try {
+            await userService.verifyPoolingBookingPayment({
+              ...response,
+              routeId: route._id,
+              vehicleId: vehicle._id,
+              scheduleId: schedule.id,
+              travelDate,
+              selectedSeats,
+              pickupStopId: pickupStop.id,
+              dropStopId: dropStop.id,
+            });
+
+            setIsBooked(true);
+            toast.success('Pooling booking confirmed');
+
+            setTimeout(() => {
+              navigate('/taxi/user');
+            }, 2500);
+          } catch (verifyError) {
+            const message =
+              verifyError?.response?.data?.message ||
+              verifyError?.message ||
+              'Payment verification failed. Please contact support if payment was deducted.';
+            toast.error(message);
+            setIsBooking(false);
+          }
+        },
+      });
+
+      rzp.on('payment.failed', (event) => {
+        const message = event?.error?.description || event?.error?.reason || 'Payment failed';
+        toast.error(message);
+        setIsBooking(false);
+      });
+
+      rzp.open();
     } catch (error) {
-      toast.error('Booking failed. Please try again.');
-    } finally {
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Unable to continue with Razorpay payment';
+      toast.error(message);
       setIsBooking(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-32">
+    <div className="mx-auto min-h-screen max-w-lg bg-slate-50 pb-32 font-sans">
       <AnimatePresence>
         {isBooked ? (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-white p-6 text-center"
+            className="fixed inset-0 z-[100] mx-auto flex max-w-lg flex-col items-center justify-center bg-white p-6 text-center"
           >
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: 'spring', damping: 12, stiffness: 200 }}
-              className="mb-8 flex h-32 w-32 items-center justify-center rounded-full bg-emerald-50 text-emerald-500"
+              className="relative mb-10"
             >
-              <CheckCircle2 size={64} />
+              <div className="absolute inset-0 animate-ping rounded-full bg-emerald-100/50" />
+              <div className="relative flex h-32 w-32 items-center justify-center rounded-full bg-emerald-50 text-emerald-500">
+                <CheckCircle2 size={64} />
+              </div>
             </motion.div>
-            <h1 className="text-3xl font-black text-slate-900">Ride Confirmed!</h1>
-            <p className="mt-4 max-w-xs text-base font-bold text-slate-500">Your carpool booking is successful. Driver will pick you up at the scheduled time.</p>
-            <motion.div 
+            <h1 className="text-3xl font-black tracking-tight text-slate-900">Ride Confirmed!</h1>
+            <p className="mt-4 max-w-xs text-sm font-bold leading-relaxed text-slate-500">
+              Your online payment is complete and your pooling ride to{' '}
+              <span className="text-slate-900">{route.destinationLabel}</span> is secured.
+            </p>
+
+            <div className="mt-12 w-full rounded-3xl border border-slate-100 bg-slate-50 p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Booking Status</p>
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black uppercase text-emerald-600">
+                  Paid
+                </span>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white shadow-sm">
+                  <Car size={20} className="text-slate-900" />
+                </div>
+                <div className="text-left">
+                  <p className="text-xs font-black text-slate-900">{vehicle.name}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-tighter text-slate-400">
+                    {vehicle.vehicleNumber}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5 }}
-              className="mt-12 flex items-center gap-2 text-sm font-black text-indigo-600"
+              className="mt-12 flex items-center gap-3 text-xs font-black text-indigo-600"
             >
-              Redirecting to home...
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
+              Moving to your dashboard...
             </motion.div>
           </motion.div>
         ) : (
-          <div className="pt-12 px-6">
-            {/* Header */}
-            <div className="flex items-center gap-4 mb-8">
-              <button 
-                onClick={() => navigate(-1)}
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-600 shadow-sm"
-              >
-                <ArrowLeft size={20} />
-              </button>
-              <h1 className="text-xl font-black text-slate-900">Booking Summary</h1>
+          <>
+            <div className="sticky top-0 z-30 border-b border-slate-100 bg-white px-5 pb-6 pt-12 shadow-sm">
+              <div className="mb-6 flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() => navigate(-1)}
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-100 bg-white text-slate-900 shadow-sm transition-all active:scale-95"
+                >
+                  <ArrowLeft size={20} />
+                </button>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-lg font-black text-slate-900">Review Booking</h1>
+                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-600">
+                      Step 3/3
+                    </span>
+                  </div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Online payment only</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 px-2">
+                <div className="h-1.5 flex-1 rounded-full bg-indigo-600" />
+                <div className="h-1.5 flex-1 rounded-full bg-indigo-600" />
+                <div className="h-1.5 flex-1 rounded-full animate-pulse bg-indigo-600" />
+              </div>
             </div>
 
-            {/* Ride Card */}
-            <div className="mb-8 overflow-hidden rounded-[40px] bg-white shadow-xl shadow-slate-200/50">
-              <div className="bg-indigo-600 p-8 text-white">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest backdrop-blur-sm">
-                    <ShieldCheck size={12} />
-                    Secured Ride
+            <div className="space-y-6 px-5 pt-8">
+              <div className="relative overflow-hidden rounded-[40px] border border-slate-100 bg-white shadow-2xl shadow-slate-200/50">
+                <div className="bg-slate-900 p-8 text-white">
+                  <div className="mb-8 flex items-center justify-between">
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] backdrop-blur-md">
+                      <ShieldCheck size={12} className="text-indigo-400" />
+                      Confirmed Slot
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Seats</p>
+                      <p className="text-sm font-black">{selectedSeats.length} Selected</p>
+                      <p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                        {formatTravelDate(travelDate)}
+                        {schedule?.departureTime ? ` • ${schedule.departureTime}` : ''}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-sm font-black">₹{totalFare}</p>
+
+                  <div className="flex items-start gap-5">
+                    <div className="relative flex flex-col items-center pt-1">
+                      <div className="z-10 h-4 w-4 rounded-full border-2 border-indigo-500 bg-slate-900" />
+                      <div className="h-16 w-0.5 border-l-2 border-dashed border-slate-700 bg-dashed" />
+                      <div className="z-10 h-4 w-4 rounded-full bg-indigo-500" />
+                    </div>
+                    <div className="flex-1 space-y-8">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Pickup Location</p>
+                        <p className="truncate text-base font-black">{route.originLabel}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Drop Location</p>
+                        <p className="truncate text-base font-black">{route.destinationLabel}</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-start gap-4">
-                  <div className="relative flex flex-col items-center">
-                    <div className="h-3 w-3 rounded-full bg-white" />
-                    <div className="h-10 w-0.5 bg-white/30" />
-                    <div className="h-3 w-3 rounded-full bg-white" />
+
+                <div className="relative h-4 bg-slate-900">
+                  <div className="absolute left-0 right-0 top-0 flex h-4 items-center justify-around">
+                    {[...Array(12)].map((_, index) => (
+                      <div key={index} className="h-2 w-2 rounded-full bg-slate-50" />
+                    ))}
                   </div>
-                  <div className="space-y-4 flex-1">
+                </div>
+
+                <div className="space-y-6 bg-white p-8">
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-50 text-slate-400">
+                        <Car size={20} />
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-black uppercase text-slate-400">Vehicle</p>
+                        <p className="truncate text-xs font-black text-slate-900">{vehicle.name}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-50 text-slate-400">
+                        <Armchair size={20} />
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-black uppercase text-slate-400">Seat ID</p>
+                        <p className="truncate text-xs font-black text-slate-900">{selectedSeats.join(', ')}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-6 border-t border-slate-100 pt-6">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-200">Pickup</p>
-                      <p className="text-sm font-black truncate">{route.originLabel}</p>
+                      <p className="text-[9px] font-black uppercase text-slate-400">Pickup Point</p>
+                      <p className="mt-1 text-xs font-black leading-relaxed text-slate-900">
+                        {pickupStop?.name || route.originLabel}
+                      </p>
                     </div>
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-200">Drop</p>
-                      <p className="text-sm font-black truncate">{route.destinationLabel}</p>
+                      <p className="text-[9px] font-black uppercase text-slate-400">Drop Point</p>
+                      <p className="mt-1 text-xs font-black leading-relaxed text-slate-900">
+                        {dropStop?.name || route.destinationLabel}
+                      </p>
                     </div>
                   </div>
                 </div>
               </div>
-              <div className="p-8 space-y-6">
+
+              <div className="rounded-[32px] border border-slate-100 bg-white p-8 shadow-sm">
+                <div className="mb-6 flex items-center gap-2">
+                  <Ticket size={18} className="text-indigo-600" />
+                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-900">Price Breakdown</h3>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex justify-between text-xs font-bold text-slate-500">
+                    <span>Base Fare ({selectedSeats.length} x Rs {route.farePerSeat})</span>
+                    <span className="text-slate-900">Rs {totalFare}</span>
+                  </div>
+                  <div className="flex justify-between text-xs font-bold text-slate-500">
+                    <span>Platform Service Fee</span>
+                    <span className="font-black uppercase text-emerald-500">Rs 0</span>
+                  </div>
+                  <div className="mt-6 flex items-center justify-between border-t border-slate-50 pt-6">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Amount</p>
+                      <p className="text-2xl font-black text-slate-900">Rs {totalFare}</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-[9px] font-black uppercase tracking-wide text-emerald-600">
+                        <Zap size={10} />
+                        Best Price
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[32px] border border-dashed border-slate-200 bg-white p-6 shadow-sm">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-400">
-                      <Car size={20} />
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-slate-900">
+                      <CreditCard size={24} />
                     </div>
                     <div>
-                      <p className="text-xs font-black text-slate-900">{vehicle.name}</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{vehicle.vehicleNumber}</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Payment Mode</p>
+                      <p className="text-sm font-black text-slate-900">Online Only</p>
+                      <p className="mt-1 text-[11px] font-bold text-slate-500">
+                        Razorpay checkout will open for this pooling booking.
+                      </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-400">
-                      <Armchair size={20} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-black text-slate-900">{selectedSeats.length} Seats</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{selectedSeats.join(', ')}</p>
-                    </div>
+                  <div className="rounded-xl bg-emerald-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-600">
+                    Razorpay
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Price Breakdown */}
-            <div className="mb-8 rounded-[32px] bg-white p-8 border border-slate-100">
-              <h3 className="mb-6 text-sm font-black uppercase tracking-widest text-slate-900">Price Breakdown</h3>
-              <div className="space-y-4">
-                <div className="flex justify-between text-sm font-bold text-slate-500">
-                  <span>Ride Fare ({selectedSeats.length} Seats)</span>
-                  <span>₹{totalFare}</span>
-                </div>
-                <div className="flex justify-between text-sm font-bold text-slate-500">
-                  <span>Service Fee</span>
-                  <span className="text-emerald-500 text-[10px] font-black uppercase">Free</span>
-                </div>
-                <div className="mt-4 border-t border-slate-50 pt-4 flex justify-between items-center">
-                  <span className="text-base font-black text-slate-900">Total Payable</span>
-                  <span className="text-xl font-black text-indigo-600">₹{totalFare}</span>
-                </div>
-              </div>
+            <div className="fixed bottom-0 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 border-t border-slate-100 bg-white/80 px-5 pb-8 pt-4 backdrop-blur-md">
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={isBooking}
+                className="flex w-full items-center justify-center gap-3 rounded-[24px] bg-slate-900 py-5 text-sm font-black text-white shadow-2xl shadow-slate-300 transition-all active:scale-[0.98] disabled:opacity-50"
+              >
+                {isBooking ? (
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <>
+                    Pay Online & Secure Ride
+                    <ChevronRight size={20} />
+                  </>
+                )}
+              </button>
             </div>
-
-            {/* Payment Method */}
-            <div className="rounded-[32px] bg-slate-900 p-8 text-white">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
-                    <CreditCard size={20} />
-                  </div>
-                  <div>
-                    <p className="text-xs font-black">Pay on Arrival</p>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">Cash or UPI</p>
-                  </div>
-                </div>
-                <button className="text-[10px] font-black uppercase tracking-widest text-indigo-400">Change</button>
-              </div>
-            </div>
-          </div>
+          </>
         )}
       </AnimatePresence>
-
-      {/* Sticky Action Button */}
-      {!isBooked && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md px-6 pt-6 pb-8">
-          <button 
-            onClick={handleConfirm}
-            disabled={isBooking}
-            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-indigo-600 py-4 text-sm font-black text-white shadow-2xl shadow-indigo-200 active:scale-95 transition-transform disabled:opacity-50"
-          >
-            {isBooking ? (
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            ) : (
-              <>
-                Confirm Booking
-                <ChevronRight size={20} />
-              </>
-            )}
-          </button>
-        </div>
-      )}
     </div>
   );
 };

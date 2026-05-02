@@ -113,7 +113,7 @@ const poolingRouteSchema = new mongoose.Schema(
     },
     assignedVehicleTypeIds: {
       type: [mongoose.Schema.Types.ObjectId],
-      ref: 'TaxiRentalVehicleType',
+      ref: 'TaxiPoolingVehicle',
       default: [],
     },
     pickupPoints: {
