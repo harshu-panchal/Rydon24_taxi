@@ -239,6 +239,10 @@ const BusBookingManager = () => {
   const seatLayout = bookingData.seatLayout || [];
   const summary = bookingData.summary || {};
   const selectedSeats = seatLayout.filter((seat) => selectedSeatIds.includes(seat.seatId));
+  const selectedSeatFare = selectedSeats.reduce(
+    (sum, seat) => sum + Number(seat.price || selectedBus?.seatPrice || 0),
+    0,
+  );
 
   const refreshAll = async () => {
     if (!filters.busServiceId) return;
@@ -615,7 +619,7 @@ const BusBookingManager = () => {
                   </p>
                   <p className="mt-1 text-[11px] font-semibold text-slate-500">
                     {selectedSeats.length > 0
-                      ? `Estimated fare ${formatCurrency((selectedBus?.seatPrice || 0) * selectedSeats.length, selectedBus?.fareCurrency || 'INR')}`
+                      ? `Estimated fare ${formatCurrency(selectedSeatFare, selectedBus?.fareCurrency || 'INR')}`
                       : 'Click available seats to start a manual booking.'}
                   </p>
                 </div>

@@ -50,6 +50,7 @@ import {
   deleteRentalVehicleType,
   ensureThirdPartySettings,
   listDriverNeededDocuments,
+  listOwnerNeededDocuments,
   listRentalVehicleTypes,
   updateRentalVehicleType,
 } from "../../admin/services/adminService.js";
@@ -3601,14 +3602,52 @@ export const getServiceLocations = async (_req, res) => {
 };
 
 export const getDriverDocumentTemplates = async (_req, res) => {
-  const results = await listDriverNeededDocuments({
-    activeOnly: true,
-    includeFields: true,
-  });
+  const requestedRole = String(_req.query?.role || "driver").trim().toLowerCase();
+  const isOwnerRequest = requestedRole === "owner";
+  const results = isOwnerRequest
+    ? await listOwnerNeededDocuments()
+    : await listDriverNeededDocuments({
+        activeOnly: true,
+        includeFields: true,
+      });
 
   res.json({
     success: true,
-    data: { results },
+    data: {
+      results: isOwnerRequest ? results.filter((item) => item.active !== false).map((item) => ({
+        ...item,
+        fields:
+          item.image_type === "front_back"
+            ? [
+                {
+                  key: `${String(item.name || "owner_document").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "owner_document"}_${String(item._id || "").replace(/[^a-zA-Z0-9]/g, "")}_front`,
+                  label: `${item.name} Front`,
+                  side: "front",
+                  required: item.is_required !== false,
+                },
+                {
+                  key: `${String(item.name || "owner_document").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "owner_document"}_${String(item._id || "").replace(/[^a-zA-Z0-9]/g, "")}_back`,
+                  label: `${item.name} Back`,
+                  side: "back",
+                  required: item.is_required !== false,
+                },
+              ]
+            : [
+                {
+                  key: `${String(item.name || "owner_document").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "owner_document"}_${String(item._id || "").replace(/[^a-zA-Z0-9]/g, "")}`,
+                  label:
+                    item.image_type === "front"
+                      ? `${item.name} Front`
+                      : item.image_type === "back"
+                        ? `${item.name} Back`
+                        : item.name,
+                  side: item.image_type === "front" ? "front" : item.image_type === "back" ? "back" : "single",
+                  required: item.is_required !== false,
+                },
+              ],
+      }))
+      : results,
+    },
   });
 };
 

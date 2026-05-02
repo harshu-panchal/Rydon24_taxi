@@ -233,6 +233,24 @@ const busServiceSchema = new mongoose.Schema(
       trim: true,
       uppercase: true,
     },
+    variantPricing: {
+      seat: {
+        type: Number,
+        default: 0,
+      },
+      window: {
+        type: Number,
+        default: 0,
+      },
+      aisle: {
+        type: Number,
+        default: 0,
+      },
+      sleeper: {
+        type: Number,
+        default: 0,
+      },
+    },
     boardingPolicy: {
       type: String,
       default: '',

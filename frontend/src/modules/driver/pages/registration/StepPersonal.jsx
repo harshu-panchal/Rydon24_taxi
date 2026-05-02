@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, User, Mail, Phone, Lock, ChevronRight } from 'lucide-react';
+import { User, Mail, Phone, Lock, ChevronRight } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
     getStoredDriverRegistrationSession,
@@ -105,13 +105,7 @@ const StepPersonal = () => {
         >
             <main className="mx-auto max-w-sm space-y-6">
                 <header className="space-y-5">
-                    <div className="flex items-center justify-between">
-                        <button
-                            onClick={() => navigate(-1)}
-                            className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/70 bg-white/80 text-slate-900 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-sm transition-transform active:scale-95"
-                        >
-                            <ArrowLeft size={18} strokeWidth={2.5} />
-                        </button>
+                    <div className="flex justify-end">
                         <div className="rounded-full border border-[#dcc9ab] bg-[#f7efe2] px-3 py-1 text-[11px] font-semibold tracking-[0.18em] text-[#8a6a3d] uppercase">
                             Step 1 of 4
                         </div>

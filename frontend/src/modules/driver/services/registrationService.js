@@ -246,8 +246,12 @@ export const getDriverRegistrationSession = ({ registrationId, phone }) =>
 
 export const getDriverServiceLocations = () =>
   api.get("/drivers/service-locations");
-export const getDriverDocumentTemplates = () =>
-  api.get("/drivers/document-templates");
+export const getDriverDocumentTemplates = (role = "driver") =>
+  api.get("/drivers/document-templates", {
+    params: {
+      role,
+    },
+  });
 
 export const updateDriverDocument = (documentKey, document) =>
   api.patch(

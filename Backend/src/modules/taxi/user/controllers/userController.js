@@ -227,6 +227,15 @@ const flattenBusBlueprintSeats = (blueprint = {}) =>
     .flatMap((row) => (Array.isArray(row) ? row : []))
     .filter((cell) => cell?.kind === 'seat' && cell?.id);
 
+const resolveBusSeatPrice = (busService = {}, seat = {}) => {
+  const variantPricing = busService?.variantPricing || {};
+  const defaultPrice = Number(busService?.seatPrice || 0);
+  const variantKey = String(seat?.variant || 'seat').trim().toLowerCase();
+  const resolvedPrice = variantPricing?.[variantKey] ?? variantPricing?.seat ?? defaultPrice;
+
+  return Number.isFinite(Number(resolvedPrice)) ? Number(resolvedPrice) : defaultPrice;
+};
+
 const findBusSchedule = (busService, scheduleId) =>
   (Array.isArray(busService?.schedules) ? busService.schedules : []).find(
     (item) => String(item?.id || '') === String(scheduleId || ''),
@@ -494,6 +503,7 @@ const serializeBusSearchResult = ({ busService, schedule, availableSeats, travel
   seats: Math.max(0, Number(availableSeats || 0)),
   availableSeats: Math.max(0, Number(availableSeats || 0)),
   price: Number(busService.seatPrice || 0),
+  variantPricing: busService.variantPricing || null,
   fareCurrency: busService.fareCurrency || 'INR',
   rating: Number(busService.rating || 0),
   ratingCount: Number(busService.ratingCount || 0),
@@ -583,6 +593,7 @@ const serializeBusRouteSuggestion = (busService) => ({
   routeName: busService.route?.routeName || '',
   duration: busService.route?.durationHours || '',
   startingPrice: Number(busService.seatPrice || 0),
+  variantPricing: busService.variantPricing || null,
   operator: busService.operatorName || '',
 });
 
@@ -1937,7 +1948,9 @@ export const createBusBookingOrder = async (req, res) => {
     throw new ApiError(400, `Seat ${invalidSeat} is not available for booking`);
   }
 
-  const amount = Math.round(Number(busService.seatPrice || 0) * seatIds.length * 100) / 100;
+  const amount = Math.round(
+    seatIds.reduce((sum, seatId) => sum + resolveBusSeatPrice(busService, seatCellMap.get(seatId)), 0) * 100,
+  ) / 100;
   if (amount <= 0) {
     throw new ApiError(400, 'Bus fare is not configured');
   }

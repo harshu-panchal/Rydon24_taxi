@@ -186,12 +186,18 @@ const PendingOwners = () => {
 
       const merged = [...pendingOwnersFromOwners, ...pendingOwnersFromDriverSignups];
       const seen = new Set();
-      const deduped = merged.filter((item) => {
-        const key = String(item.id || '');
-        if (!key || seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
+      const deduped = merged
+        .sort((left, right) => {
+          const leftTime = left?.registeredAt ? new Date(left.registeredAt).getTime() : 0;
+          const rightTime = right?.registeredAt ? new Date(right.registeredAt).getTime() : 0;
+          return rightTime - leftTime;
+        })
+        .filter((item) => {
+          const key = String(item.id || '');
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
 
       setPendingOwners(deduped);
     } catch (err) {

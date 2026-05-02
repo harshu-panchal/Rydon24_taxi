@@ -20,7 +20,7 @@ const DriverBottomNav = () => {
   const navItems = isOwner
     ? [
         {
-          icon: <Briefcase size={22} />,
+          icon: <Home size={22} />,
           label: "Dashboard",
           path: "/taxi/driver/dashboard",
         },
@@ -66,7 +66,10 @@ const DriverBottomNav = () => {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-100 bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),8px)] pt-2 backdrop-blur-md shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
-      <div className="mx-auto grid h-[68px] w-full max-w-lg grid-cols-5 items-stretch gap-0.5">
+      <div
+        className="mx-auto grid h-[68px] w-full max-w-lg items-stretch gap-0.5"
+        style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}
+      >
       {navItems.map((item) => {
         const isActive =
           location.pathname === item.path ||

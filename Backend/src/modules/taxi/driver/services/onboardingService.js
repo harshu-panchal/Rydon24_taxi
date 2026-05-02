@@ -8,7 +8,7 @@ import { DriverRegistrationSession } from '../models/DriverRegistrationSession.j
 import { Owner } from '../../admin/models/Owner.js';
 import { ServiceLocation } from '../../admin/models/ServiceLocation.js';
 import { Vehicle } from '../../admin/models/Vehicle.js';
-import { listDriverDocumentUploadFields } from '../../admin/services/adminService.js';
+import { listDriverDocumentUploadFields, listOwnerDocumentUploadFields } from '../../admin/services/adminService.js';
 import { hashPassword, signAccessToken } from './authService.js';
 import { findZoneByPickup } from './locationService.js';
 import { sendOtpSms } from '../../services/smsService.js';
@@ -579,7 +579,10 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
     normalizedDocuments[documentKey] = normalizeStoredDocument(value);
   }
 
-  const configuredUploadFields = await listDriverDocumentUploadFields({ activeOnly: true });
+  const configuredUploadFields =
+    String(session.role || '').toLowerCase() === 'owner'
+      ? await listOwnerDocumentUploadFields({ activeOnly: true })
+      : await listDriverDocumentUploadFields({ activeOnly: true });
   const requiredDocuments = configuredUploadFields
     .filter((field) => Boolean(field.required) && matchesDocumentRole(field.account_type, session.role))
     .map((field) => field.key);

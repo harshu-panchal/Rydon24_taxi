@@ -59,7 +59,7 @@ const StepReferral = () => {
                 <header className="space-y-5">
                     <div className="flex items-center justify-between">
                         <button
-                            onClick={() => navigate(-1)}
+                            onClick={() => navigate('/taxi/driver/step-personal', { state: session })}
                             className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/70 bg-white/80 text-slate-900 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-sm transition-transform active:scale-95"
                         >
                             <ArrowLeft size={18} strokeWidth={2.5} />

@@ -198,6 +198,18 @@ const sanitizeBusSeatPrice = (value, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const normalizeBusVariantPricing = (value = {}, fallback = 0) => {
+  const source = value && typeof value === 'object' ? value : {};
+  const seatFallback = sanitizeBusSeatPrice(source.seat, fallback);
+
+  return {
+    seat: seatFallback,
+    window: sanitizeBusSeatPrice(source.window, seatFallback),
+    aisle: sanitizeBusSeatPrice(source.aisle, seatFallback),
+    sleeper: sanitizeBusSeatPrice(source.sleeper, seatFallback),
+  };
+};
+
 const sanitizeBusPhone = (value = '') =>
   String(value || '')
     .replace(/\D/g, '')
@@ -336,6 +348,10 @@ const normalizeBusServicePayload = (payload = {}, existing = {}) => {
     registrationNumber: sanitizeBusText(payload.registrationNumber, existing.registrationNumber || ''),
     busColor: sanitizeBusText(payload.busColor, existing.busColor || '#1f2937'),
     seatPrice: sanitizeBusSeatPrice(payload.seatPrice, existing.seatPrice || 0),
+    variantPricing: normalizeBusVariantPricing(
+      payload.variantPricing ?? existing.variantPricing ?? {},
+      sanitizeBusSeatPrice(payload.seatPrice, existing.seatPrice || 0),
+    ),
     fareCurrency:
       sanitizeBusText(payload.fareCurrency, existing.fareCurrency || 'INR').toUpperCase() || 'INR',
     boardingPolicy: sanitizeBusText(payload.boardingPolicy, existing.boardingPolicy || ''),
@@ -381,6 +397,7 @@ const serializeBusService = (item = {}) => ({
   registrationNumber: item.registrationNumber || '',
   busColor: item.busColor || '#1f2937',
   seatPrice: item.seatPrice !== undefined && item.seatPrice !== null ? String(item.seatPrice) : '0',
+  variantPricing: normalizeBusVariantPricing(item.variantPricing || {}, item.seatPrice ?? 0),
   fareCurrency: item.fareCurrency || 'INR',
   boardingPolicy: item.boardingPolicy || '',
   cancellationPolicy: item.cancellationPolicy || '',
@@ -1355,6 +1372,53 @@ const serializeOwnerNeededDocument = (item) => ({
   status: item.active === false ? 'inactive' : 'active',
   createdAt: item.createdAt,
   updatedAt: item.updatedAt,
+});
+
+const slugifyOwnerDocumentName = (value) =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'owner_document';
+
+const buildOwnerDocumentFields = (item) => {
+  const baseKey = `${slugifyOwnerDocumentName(item.name)}_${String(item._id || '').replace(/[^a-zA-Z0-9]/g, '')}`;
+
+  if (item.image_type === 'front_back') {
+    return [
+      {
+        key: `${baseKey}_front`,
+        label: `${item.name} Front`,
+        side: 'front',
+        required: item.is_required !== false,
+      },
+      {
+        key: `${baseKey}_back`,
+        label: `${item.name} Back`,
+        side: 'back',
+        required: item.is_required !== false,
+      },
+    ];
+  }
+
+  return [
+    {
+      key: baseKey,
+      label:
+        item.image_type === 'front'
+          ? `${item.name} Front`
+          : item.image_type === 'back'
+            ? `${item.name} Back`
+            : item.name,
+      side: item.image_type === 'front' ? 'front' : item.image_type === 'back' ? 'back' : 'single',
+      required: item.is_required !== false,
+    },
+  ];
+};
+
+const serializeOwnerNeededDocumentTemplate = (item) => ({
+  ...serializeOwnerNeededDocument(item),
+  fields: buildOwnerDocumentFields(item),
 });
 
 const buildDriverDocumentFields = (item) => {
@@ -7159,7 +7223,23 @@ export const listDriverDocumentUploadFields = async ({ activeOnly = true } = {})
       has_identify_number: item.has_identify_number,
     })),
   );
-  };
+};
+
+export const listOwnerDocumentUploadFields = async ({ activeOnly = true } = {}) => {
+  const items = await listOwnerNeededDocuments();
+  const filteredItems = activeOnly ? items.filter((item) => item.active !== false) : items;
+
+  return filteredItems.flatMap((item) =>
+    buildOwnerDocumentFields(item).map((field) => ({
+      ...field,
+      template_id: item.id,
+      template_name: item.name,
+      image_type: item.image_type,
+      has_expiry_date: item.has_expiry_date,
+      has_identify_number: item.has_identify_number,
+    })),
+  );
+};
 
   export const createDriverNeededDocument = async (payload) => {
     if (!payload.name?.trim()) {

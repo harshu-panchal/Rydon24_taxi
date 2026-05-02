@@ -1909,7 +1909,7 @@ const DriverHome = () => {
                         loadScheduledRides();
                         setIsScheduleSheetOpen(true);
                     }}
-                    className="absolute left-0 relative w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-900 active:scale-90 transition-all pointer-events-auto border border-slate-100"
+                    className="absolute left-2 relative w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-900 active:scale-90 transition-all pointer-events-auto border border-slate-100"
                 >
                     <CalendarClock size={22} />
                     {scheduledRideCount > 0 ? (

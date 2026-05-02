@@ -45,6 +45,15 @@ const flattenBusBlueprintSeats = (blueprint = {}) =>
     .flatMap((row) => (Array.isArray(row) ? row : []))
     .filter((cell) => cell?.kind === 'seat' && cell?.id);
 
+const resolveBusSeatPrice = (busService = {}, seat = {}) => {
+  const variantPricing = busService?.variantPricing || {};
+  const defaultPrice = Number(busService?.seatPrice || 0);
+  const variantKey = String(seat?.variant || 'seat').trim().toLowerCase();
+  const resolvedPrice = variantPricing?.[variantKey] ?? variantPricing?.seat ?? defaultPrice;
+
+  return Number.isFinite(Number(resolvedPrice)) ? Number(resolvedPrice) : defaultPrice;
+};
+
 const normalizePhone = (value) => {
   const digits = toCleanString(value).replace(/\D/g, '');
   return digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
@@ -912,7 +921,7 @@ export const getAdminBusBookings = asyncHandler(async (req, res) => {
   const [buses, rawBookings] = await Promise.all([
     BusService.find()
       .sort({ operatorName: 1, busName: 1 })
-      .select('_id busName operatorName serviceNumber coachType busCategory status route schedules blueprint seatPrice fareCurrency')
+      .select('_id busName operatorName serviceNumber coachType busCategory status route schedules blueprint seatPrice variantPricing fareCurrency')
       .lean(),
     BusBooking.find(query)
       .populate('userId', 'name phone email')
@@ -979,6 +988,7 @@ export const getAdminBusBookings = asyncHandler(async (req, res) => {
           seatId: seat.id || '',
           seatLabel: seat.label || seat.id || '',
           variant: seat.variant || 'seat',
+          price: resolveBusSeatPrice(selectedBus, seat),
           baseStatus: seat.status || 'available',
           liveStatus: booked ? 'booked' : seat.status === 'blocked' ? 'blocked' : 'available',
           booking: booked || null,
@@ -1029,6 +1039,7 @@ export const getAdminBusBookings = asyncHandler(async (req, res) => {
       status: bus.status || 'draft',
       route: bus.route || {},
       seatPrice: Number(bus.seatPrice || 0),
+      variantPricing: bus.variantPricing || null,
       fareCurrency: bus.fareCurrency || 'INR',
       schedules: Array.isArray(bus.schedules) ? bus.schedules : [],
     })),
@@ -1172,7 +1183,9 @@ export const createAdminBusBooking = asyncHandler(async (req, res) => {
     throw new ApiError(409, `Seat ${invalidSeat} is not available`);
   }
 
-  const amount = Math.round(Number(busService.seatPrice || 0) * seatIds.length * 100) / 100;
+  const amount = Math.round(
+    seatIds.reduce((sum, seatId) => sum + resolveBusSeatPrice(busService, availableSeatMap.get(seatId)), 0) * 100,
+  ) / 100;
   const booking = await BusBooking.create({
     userId: user._id,
     busServiceId: busService._id,

@@ -52,6 +52,14 @@ const statusTone = {
   paused: 'bg-slate-100 text-slate-600 border-slate-200',
 };
 
+const DEFAULT_COACH_TYPES = ['AC Sleeper', 'Non AC Sleeper', 'AC Seater', 'Volvo Multi Axle', 'Semi Sleeper'];
+const VARIANT_PRICING_FIELDS = [
+  { key: 'seat', label: 'Standard Seat' },
+  { key: 'window', label: 'Window Seat' },
+  { key: 'aisle', label: 'Aisle Seat' },
+  { key: 'sleeper', label: 'Sleeper Berth' },
+];
+
 const blankStop = () => ({
   id: `stop-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
   city: '',
@@ -123,19 +131,35 @@ const SeatCell = ({ cell, onToggle }) => {
   }
 
   const isBlocked = cell.status === 'blocked';
+  const isSleeper = cell.variant === 'sleeper';
   return (
     <button
       type="button"
       onClick={onToggle}
-      className={`relative flex h-10 items-center justify-center rounded-xl border text-[10px] font-black tracking-wider transition ${
+      className={`relative flex items-center justify-center border text-[10px] font-black tracking-wider transition ${
         isBlocked
           ? 'border-rose-200 bg-rose-50 text-rose-500'
-          : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:text-indigo-600'
+          : isSleeper
+            ? 'border-sky-200 bg-sky-50 text-sky-700 hover:border-sky-300 hover:text-sky-800'
+            : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:text-indigo-600'
       }`}
       title={isBlocked ? 'Seat blocked for sale' : 'Seat available for sale'}
+      style={{
+        minHeight: isSleeper ? '56px' : '40px',
+        borderRadius: isSleeper ? '18px' : '12px',
+      }}
     >
-      <span className="absolute inset-x-2 top-1 h-1 rounded-full bg-slate-200" />
-      <span>{cell.label}</span>
+      {isSleeper ? (
+        <>
+          <span className="absolute bottom-1 left-1 top-1 w-2 rounded-full bg-sky-200" />
+          <span className="pl-3">{cell.label}</span>
+        </>
+      ) : (
+        <>
+          <span className="absolute inset-x-2 top-1 h-1 rounded-full bg-slate-200" />
+          <span>{cell.label}</span>
+        </>
+      )}
     </button>
   );
 };
@@ -185,6 +209,15 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
   const [draft, setDraft] = useState(() => createBusDraft());
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const coachTypeOptions = useMemo(() => {
+    const discovered = Array.from(
+      new Set(
+        [draft.coachType, ...catalog.map((item) => item.coachType)].filter(Boolean),
+      ),
+    );
+
+    return Array.from(new Set([...DEFAULT_COACH_TYPES, ...discovered]));
+  }, [catalog, draft.coachType]);
 
   useEffect(() => {
     let active = true;
@@ -1215,17 +1248,28 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
               </div>
               <div>
                 <label className={labelClassName}>Registration Number</label>
-                <input className={fieldClassName} value={draft.registrationNumber} onChange={(event) => updateDraft('registrationNumber', event.target.value)} placeholder="MP09-AB-2401" />
+                <input className={fieldClassName} value={draft.registrationNumber} onChange={(event) => updateDraft('registrationNumber', event.target.value.toUpperCase())} placeholder="MP09-AB-2401" />
               </div>
               <div>
                 <label className={labelClassName}>Coach Type</label>
-                <select className={fieldClassName} value={draft.coachType} onChange={(event) => updateDraft('coachType', event.target.value)}>
-                  {['AC Sleeper', 'Non AC Sleeper', 'AC Seater', 'Volvo Multi Axle', 'Semi Sleeper'].map((option) => (
+                <div className="space-y-3">
+                <select className={fieldClassName} value={coachTypeOptions.includes(draft.coachType) ? draft.coachType : '__custom__'} onChange={(event) => updateDraft('coachType', event.target.value === '__custom__' ? '' : event.target.value)}>
+                  {coachTypeOptions.map((option) => (
                     <option key={option} value={option}>
                       {option}
                     </option>
                   ))}
+                  <option value="__custom__">Custom Coach Type</option>
                 </select>
+                {!coachTypeOptions.includes(draft.coachType) || !draft.coachType ? (
+                  <input
+                    className={fieldClassName}
+                    value={draft.coachType}
+                    onChange={(event) => updateDraft('coachType', event.target.value)}
+                    placeholder="Enter custom coach type"
+                  />
+                ) : null}
+                </div>
               </div>
               <div>
                 <label className={labelClassName}>Category</label>
@@ -1243,7 +1287,33 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
               </div>
               <div>
                 <label className={labelClassName}>Currency</label>
-                <input className={fieldClassName} value={draft.fareCurrency} onChange={(event) => updateDraft('fareCurrency', event.target.value)} placeholder="INR" />
+                <input className={fieldClassName} value={draft.fareCurrency} onChange={(event) => updateDraft('fareCurrency', event.target.value.toUpperCase())} placeholder="INR" />
+              </div>
+              <div className="md:col-span-2">
+                <label className={labelClassName}>Different Seat Pricing</label>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  {VARIANT_PRICING_FIELDS.map((field) => (
+                    <div key={field.key}>
+                      <p className="mb-2 text-xs font-bold text-slate-500">{field.label}</p>
+                      <input
+                        className={fieldClassName}
+                        type="number"
+                        min="0"
+                        value={draft.variantPricing?.[field.key] ?? ''}
+                        onChange={(event) =>
+                          setDraft((current) => ({
+                            ...current,
+                            variantPricing: {
+                              ...(current.variantPricing || {}),
+                              [field.key]: event.target.value,
+                            },
+                          }))
+                        }
+                        placeholder="0"
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className="md:col-span-2">
                 <label className={labelClassName}>Bus Main Image</label>

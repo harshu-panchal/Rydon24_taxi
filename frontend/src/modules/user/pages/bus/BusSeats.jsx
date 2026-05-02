@@ -13,6 +13,15 @@ const seatLegend = [
   { key: 'sleeper', label: 'Sleeper' },
 ];
 
+const resolveSeatPrice = (bus, seat) => {
+  const variantPricing = bus?.variantPricing || {};
+  const defaultPrice = Number(bus?.price || 0);
+  const variantKey = String(seat?.variant || 'seat').trim().toLowerCase();
+  const resolvedPrice = variantPricing?.[variantKey] ?? variantPricing?.seat ?? defaultPrice;
+
+  return Number.isFinite(Number(resolvedPrice)) ? Number(resolvedPrice) : defaultPrice;
+};
+
 const SeatDeck = ({ title, rows, selectedSeatIds, onToggle }) => {
   if (!rows?.length) return null;
 
@@ -152,11 +161,11 @@ const BusSeats = () => {
     setSelectedSeats((current) =>
       current.some((item) => item.id === seat.id)
         ? current.filter((item) => item.id !== seat.id)
-        : [...current, { id: seat.id, label: seat.label || seat.id }],
+        : [...current, { id: seat.id, label: seat.label || seat.id, variant: seat.variant || 'seat', price: resolveSeatPrice(seatLayout?.bus || bus, seat) }],
     );
   };
 
-  const totalFare = selectedSeats.length * Number(bus?.price || 0);
+  const totalFare = selectedSeats.reduce((sum, seat) => sum + Number(seat.price || 0), 0);
 
   return (
     <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-sans pb-32">

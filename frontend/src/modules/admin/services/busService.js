@@ -153,6 +153,12 @@ export const createBusDraft = () => ({
   registrationNumber: '',
   busColor: '#1f2937',
   seatPrice: '899',
+  variantPricing: {
+    seat: '899',
+    window: '899',
+    aisle: '899',
+    sleeper: '1199',
+  },
   fareCurrency: 'INR',
   boardingPolicy: 'Reach 15 minutes before departure.',
   cancellationPolicy: 'Cancellation allowed up to 6 hours before departure.',
@@ -217,6 +223,12 @@ const normalizeCatalog = (catalog = []) =>
       blueprint,
       seatPrice:
         bus.seatPrice !== undefined && bus.seatPrice !== null ? String(bus.seatPrice) : fallbackDraft.seatPrice,
+      variantPricing: {
+        seat: String(bus.variantPricing?.seat ?? bus.seatPrice ?? fallbackDraft.variantPricing.seat),
+        window: String(bus.variantPricing?.window ?? bus.seatPrice ?? fallbackDraft.variantPricing.window),
+        aisle: String(bus.variantPricing?.aisle ?? bus.seatPrice ?? fallbackDraft.variantPricing.aisle),
+        sleeper: String(bus.variantPricing?.sleeper ?? bus.seatPrice ?? fallbackDraft.variantPricing.sleeper),
+      },
       route: {
         ...fallbackDraft.route,
         ...bus.route,
@@ -274,6 +286,8 @@ export const getAdminBuses = async () => {
 export const upsertAdminBus = async (payload) => {
   const requestPayload = {
     ...payload,
+    registrationNumber: String(payload.registrationNumber || '').toUpperCase(),
+    fareCurrency: String(payload.fareCurrency || 'INR').toUpperCase(),
     capacity: countTotalSeats(payload.blueprint || {}),
   };
 

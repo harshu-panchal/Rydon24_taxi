@@ -255,6 +255,16 @@ const BusHome = () => {
     setFromCity(route.fromCity || '');
     setToCity(route.toCity || '');
     setError('');
+
+    if (date) {
+      navigate(`${routePrefix}/bus/list`, {
+        state: {
+          fromCity: route.fromCity || '',
+          toCity: route.toCity || '',
+          date,
+        },
+      });
+    }
   };
 
   const swapCities = () => {

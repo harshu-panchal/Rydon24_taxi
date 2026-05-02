@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Phone, ChevronRight, ShieldCheck, Briefcase, UserRound, Sparkles, Building2, CheckCircle2 } from 'lucide-react';
+import { Phone, ChevronRight, ShieldCheck, Briefcase, UserRound, Sparkles, Building2, CheckCircle2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    clearDriverRegistrationSession,
+    getStoredDriverRegistrationSession,
     saveDriverRegistrationSession,
     sendDriverLoginOtp,
     sendDriverOtp,
@@ -16,8 +16,16 @@ const PhoneRegistration = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { settings } = useSettings();
-    const [phone, setPhone] = useState('');
-    const [role, setRole] = useState('driver');
+    const storedSession = getStoredDriverRegistrationSession();
+    const [phone, setPhone] = useState(() => String(location.state?.phone || storedSession.phone || '').replace(/\D/g, '').slice(-10));
+    const [role, setRole] = useState(() => {
+        const stateRole = String(location.state?.role || '').toLowerCase();
+        if (stateRole === 'owner') return 'owner';
+        if (stateRole === 'driver') return 'driver';
+
+        const savedRole = String(storedSession.role || '').toLowerCase();
+        return savedRole === 'owner' ? 'owner' : 'driver';
+    });
     const [agreed, setAgreed] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -58,8 +66,14 @@ const PhoneRegistration = () => {
     }, [appName, isLoginPage, role]);
 
     useEffect(() => {
-        clearDriverRegistrationSession();
-    }, []);
+        if (!isLoginPage) {
+            saveDriverRegistrationSession({
+                ...storedSession,
+                role,
+                phone,
+            });
+        }
+    }, [isLoginPage, role, phone]);
 
     const handleSendOTP = async () => {
         if (phone.length !== 10) {
@@ -138,16 +152,6 @@ const PhoneRegistration = () => {
                     className="space-y-6"
                 >
                     <div className="flex items-center justify-between">
-                        {!isLoginPage && (
-                            <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={() => navigate(-1)}
-                                className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-premium border border-slate-100 text-slate-900"
-                            >
-                                <ArrowLeft size={20} strokeWidth={2.5} />
-                            </motion.button>
-                        )}
                         <motion.div 
                             variants={itemVariants}
                             className="ml-auto rounded-full bg-indigo-50 px-4 py-1.5 text-[11px] font-bold tracking-[0.1em] text-indigo-600 uppercase"
@@ -257,9 +261,33 @@ const PhoneRegistration = () => {
                                 </div>
                                 <label htmlFor="terms" className="text-[12px] font-semibold text-slate-500 leading-relaxed cursor-pointer">
                                     By continuing, you agree to our{' '}
-                                    <button type="button" onClick={() => navigate('/terms')} className="text-indigo-600 font-bold hover:underline">Terms</button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            saveDriverRegistrationSession({
+                                                ...storedSession,
+                                                role,
+                                            });
+                                            navigate('/terms', { state: { role, returnTo: location.pathname } });
+                                        }}
+                                        className="text-indigo-600 font-bold hover:underline"
+                                    >
+                                        Terms
+                                    </button>
                                     {' '}and{' '}
-                                    <button type="button" onClick={() => navigate('/privacy')} className="text-indigo-600 font-bold hover:underline">Privacy Policy</button>.
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            saveDriverRegistrationSession({
+                                                ...storedSession,
+                                                role,
+                                            });
+                                            navigate('/privacy', { state: { role, returnTo: location.pathname } });
+                                        }}
+                                        className="text-indigo-600 font-bold hover:underline"
+                                    >
+                                        Privacy Policy
+                                    </button>.
                                 </label>
                             </div>
 

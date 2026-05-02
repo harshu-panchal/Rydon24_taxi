@@ -203,6 +203,7 @@ const StepVehicle = () => {
 
     const registerTypes = [
         { id: 'taxi', label: 'Taxi Only', icon: <Car size={18} />, color: 'emerald' },
+        { id: 'outstation', label: 'Outstation', icon: <MapPin size={18} />, color: 'sky' },
         { id: 'delivery', label: 'Delivery Only', icon: <Package size={18} />, color: 'amber' },
         { id: 'both', label: 'Both Services', icon: <Zap size={18} />, color: 'indigo' }
     ];
@@ -216,7 +217,7 @@ const StepVehicle = () => {
                 <header className="space-y-5">
                     <div className="flex items-center justify-between">
                         <button
-                            onClick={() => navigate(-1)}
+                            onClick={() => navigate('/taxi/driver/step-referral', { state: session })}
                             className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/70 bg-white/80 text-slate-900 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-sm transition-transform active:scale-95"
                         >
                             <ArrowLeft size={18} strokeWidth={2.5} />
@@ -289,7 +290,30 @@ const StepVehicle = () => {
                                     <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600">Operating City</label>
                                     <select 
                                         value={formData.locationId}
-                                        onChange={(e) => setFormData(p => ({ ...p, locationId: e.target.value, vehicleTypeId: '' }))}
+                                        onChange={(e) => {
+                                            const nextLocationId = e.target.value;
+                                            const selectedServiceLocation = locations.find(
+                                                (item) => String(item._id || item.id) === String(nextLocationId),
+                                            );
+
+                                            setFormData((p) => ({
+                                                ...p,
+                                                locationId: nextLocationId,
+                                                vehicleTypeId: '',
+                                                ...(isOwner
+                                                    ? {
+                                                        companyAddress: p.companyAddress || String(selectedServiceLocation?.address || '').trim(),
+                                                        city:
+                                                            p.city ||
+                                                            String(
+                                                                selectedServiceLocation?.service_location_name ||
+                                                                selectedServiceLocation?.name ||
+                                                                '',
+                                                            ).trim(),
+                                                    }
+                                                    : {}),
+                                            }));
+                                        }}
                                         disabled={locationsLoading || locations.length === 0}
                                         className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 appearance-none cursor-pointer disabled:opacity-50"
                                     >
@@ -321,7 +345,7 @@ const StepVehicle = () => {
                                     <input 
                                         value={formData.companyAddress}
                                         onChange={(e) => setFormData(p => ({ ...p, companyAddress: e.target.value }))}
-                                        placeholder="Enter street address"
+                                        placeholder="Select city to prefill address"
                                         className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-300"
                                     />
                                 </div>
