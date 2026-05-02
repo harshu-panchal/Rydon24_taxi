@@ -1,6 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { clearDriverAuthState, getCurrentDriver, getLocalDriverToken, getStoredDriverRole } from '../services/registrationService';
+import {
+    clearDriverAuthState,
+    getAuthenticatedDriverRole,
+    getCurrentDriver,
+    getLocalDriverToken,
+    getStoredDriverRole,
+} from '../services/registrationService';
 import DriverRideRequestListener from './DriverRideRequestListener';
 
 const unwrapDriver = (response) => response?.data?.data || response?.data || response;
@@ -52,20 +58,23 @@ const redirectToDriverLogin = (navigate) => {
 };
 
 const getStoredRole = () => String(getStoredDriverRole() || 'driver').toLowerCase();
+const getAuthenticatedRole = () => String(getAuthenticatedDriverRole() || 'driver').toLowerCase();
 
 const getAuthenticatedDriverHome = () => (
-    getStoredRole() === 'owner'
+    getAuthenticatedRole() === 'owner'
         ? '/taxi/driver/profile'
-        : getStoredRole() === 'service_center'
+        : getAuthenticatedRole() === 'service_center'
             ? '/taxi/driver/service-center'
-        : getStoredRole() === 'service_center_staff'
+        : getAuthenticatedRole() === 'service_center_staff'
             ? '/taxi/driver/service-center'
-        : getStoredRole() === 'bus_driver'
+        : getAuthenticatedRole() === 'bus_driver'
             ? '/taxi/driver/bus-home'
             : '/taxi/driver/home'
 );
 
 const getPendingDriverRoute = () => '/taxi/driver/registration-status';
+const isBusConsoleRoute = (pathname = '') => pathname.startsWith('/taxi/driver/bus-home');
+const isServiceCenterRoute = (pathname = '') => pathname.startsWith('/taxi/driver/service-center');
 
 const DriverLayout = () => {
     const location = useLocation();
@@ -79,6 +88,7 @@ const DriverLayout = () => {
         const onboardingState = location.state || {};
         const token = getLocalDriverToken();
         const authenticatedHome = getAuthenticatedDriverHome();
+        const authenticatedRole = getAuthenticatedRole();
         const shouldVerifyOnboardingRoute =
             Boolean(token)
             && (
@@ -103,6 +113,21 @@ const DriverLayout = () => {
             return;
         }
 
+        if (isBusConsoleRoute(currentPath) && authenticatedRole !== 'bus_driver') {
+            setIsAllowed(false);
+            navigate(authenticatedHome, { replace: true });
+            return;
+        }
+
+        if (
+            isServiceCenterRoute(currentPath)
+            && !['service_center', 'service_center_staff'].includes(authenticatedRole)
+        ) {
+            setIsAllowed(false);
+            navigate(authenticatedHome, { replace: true });
+            return;
+        }
+
         if (verifiedTokenRef.current === token && isAllowed) {
             setIsChecking(false);
             return;
@@ -117,6 +142,7 @@ const DriverLayout = () => {
                 const response = await getCurrentDriver();
                 const driver = unwrapDriver(response);
                 const isApproved = isDriverApproved(driver);
+                const effectiveRole = String(driver?.role || driver?.onboarding?.role || authenticatedRole || '').toLowerCase();
 
                 if (!active) {
                     return;
@@ -130,6 +156,19 @@ const DriverLayout = () => {
 
                 setIsAllowed(true);
                 verifiedTokenRef.current = token;
+
+                if (isBusConsoleRoute(currentPath) && effectiveRole !== 'bus_driver') {
+                    navigate(getAuthenticatedDriverHome(), { replace: true });
+                    return;
+                }
+
+                if (
+                    isServiceCenterRoute(currentPath)
+                    && !['service_center', 'service_center_staff'].includes(effectiveRole)
+                ) {
+                    navigate(getAuthenticatedDriverHome(), { replace: true });
+                    return;
+                }
 
                 if (softEntryRoutes.has(currentPath)) {
                     navigate(authenticatedHome, { replace: true });

@@ -1,7 +1,7 @@
 import api from "../../../shared/api/axiosInstance";
 
 const STORAGE_KEY = "driverRegistrationSession";
-const DRIVER_AUTH_KEYS = ["token", "driverToken", "driverInfo", "role", "chatRole"];
+const DRIVER_AUTH_KEYS = ["token", "driverToken", "driverInfo", "role", "driverRole", "chatRole"];
 const readSessionValue = (key) => {
   try {
     return sessionStorage.getItem(key) || "";
@@ -62,13 +62,36 @@ export const persistDriverAuthSession = ({ token = "", role = "driver" } = {}) =
   }
 
   writeSessionValue("role", normalizedRole);
+  writeSessionValue("driverRole", normalizedRole);
   localStorage.setItem("role", normalizedRole);
+  localStorage.setItem("driverRole", normalizedRole);
   localStorage.removeItem("token");
   localStorage.removeItem("driverToken");
 };
 
 export const getStoredDriverRole = () =>
-  readSessionValue("role") || String(localStorage.getItem("role") || "driver").toLowerCase();
+  readSessionValue("driverRole")
+  || readSessionValue("role")
+  || String(localStorage.getItem("driverRole") || localStorage.getItem("role") || "driver").toLowerCase();
+
+export const normalizeDriverPortalRole = (role) => {
+  const normalized = String(role || "").toLowerCase();
+
+  if (!normalized) return "";
+
+  if (normalized === "owner") return "owner";
+  if (normalized === "service_center" || normalized === "service-center" || normalized === "servicecenter") {
+    return "service_center";
+  }
+  if (normalized === "service_center_staff" || normalized === "service-center-staff" || normalized === "servicecenterstaff") {
+    return "service_center_staff";
+  }
+  if (normalized === "bus_driver" || normalized === "bus-driver" || normalized === "busdriver") {
+    return "bus_driver";
+  }
+
+  return "driver";
+};
 
 export const sendDriverOtp = (payload) =>
   api.post("/drivers/onboarding/send-otp", payload);
@@ -134,6 +157,13 @@ const readLocalDriverToken = () => {
 };
 
 export const getLocalDriverToken = readLocalDriverToken;
+
+export const getAuthenticatedDriverRole = () => {
+  const tokenPayloadRole = normalizeDriverPortalRole(getTokenPayload(readLocalDriverToken())?.role);
+  const storedRole = normalizeDriverPortalRole(getStoredDriverRole());
+
+  return tokenPayloadRole || storedRole || "driver";
+};
 
 const withDriverAuth = (config = {}) => {
   const token = readLocalDriverToken();

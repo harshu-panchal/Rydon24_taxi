@@ -20,12 +20,20 @@ const PhoneRegistration = () => {
     const storedSession = getStoredDriverRegistrationSession();
     const [phone, setPhone] = useState(() => String(location.state?.phone || storedSession.phone || '').replace(/\D/g, '').slice(-10));
     const [role, setRole] = useState(() => {
+        const normalizePortalRole = (value) => {
+            const normalized = String(value || '').toLowerCase();
+            if (normalized === 'owner') return 'owner';
+            if (normalized === 'bus_driver' || normalized === 'bus-driver' || normalized === 'busdriver') return 'bus_driver';
+            if (normalized === 'service_center' || normalized === 'service-center' || normalized === 'servicecenter') return 'service_center';
+            if (normalized === 'service_center_staff' || normalized === 'service-center-staff' || normalized === 'servicecenterstaff') return 'service_center_staff';
+            return 'driver';
+        };
+
         const stateRole = String(location.state?.role || '').toLowerCase();
-        if (stateRole === 'owner') return 'owner';
-        if (stateRole === 'driver') return 'driver';
+        if (stateRole) return normalizePortalRole(stateRole);
 
         const savedRole = String(storedSession.role || '').toLowerCase();
-        return savedRole === 'owner' ? 'owner' : 'driver';
+        return normalizePortalRole(savedRole);
     });
     const [agreed, setAgreed] = useState(true);
     const [loading, setLoading] = useState(false);

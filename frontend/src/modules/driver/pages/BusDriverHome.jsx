@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   Bus,
@@ -264,6 +264,17 @@ const BusDriverHome = () => {
     notes: '',
   });
 
+  const confirmLogout = useCallback(() => {
+    const shouldLogout = window.confirm('Do you want to log out and leave the bus driver console?');
+    if (!shouldLogout) {
+      return false;
+    }
+
+    clearDriverAuthState();
+    navigate('/taxi/driver/login', { replace: true });
+    return true;
+  }, [navigate]);
+
   const busService = profile?.busService || null;
   const schedules = Array.isArray(busService?.schedules) ? busService.schedules : [];
   const routeStops = Array.isArray(busService?.route?.stops) ? busService.route.stops : [];
@@ -336,6 +347,22 @@ const BusDriverHome = () => {
         : [createScheduleDraft()],
     );
   }, [schedules]);
+
+  useEffect(() => {
+    window.history.pushState({ busDriverHome: true }, '', window.location.href);
+
+    const handlePopState = () => {
+      const loggedOut = confirmLogout();
+      if (!loggedOut) {
+        window.history.pushState({ busDriverHome: true }, '', window.location.href);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [confirmLogout]);
 
   useEffect(() => {
     if (!schedules.length) {
@@ -1646,17 +1673,14 @@ const BusDriverHome = () => {
             <div className="flex items-start justify-between gap-3">
               <button
                 type="button"
-                onClick={() => navigate(-1)}
+                onClick={confirmLogout}
                 className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-white transition active:scale-95"
               >
                 <ArrowLeft size={18} />
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  clearDriverAuthState();
-                  navigate('/taxi/driver/login', { replace: true });
-                }}
+                onClick={confirmLogout}
                 className="rounded-full border border-white/15 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-white/80"
               >
                 Logout
@@ -1718,15 +1742,12 @@ const BusDriverHome = () => {
                 </button>
                 <h2 className="text-lg font-black text-slate-900 capitalize">{activeTab}</h2>
              </div>
-             <button
-                type="button"
-                onClick={() => {
-                  clearDriverAuthState();
-                  navigate('/taxi/driver/login', { replace: true });
-                }}
-                className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-rose-500"
-              >
-                Logout
+              <button
+                 type="button"
+                 onClick={confirmLogout}
+                 className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-rose-500"
+               >
+                 Logout
               </button>
           </div>
         )}
@@ -1748,10 +1769,7 @@ const BusDriverHome = () => {
       <BusDriverBottomNav
         activeTab={activeTab}
         onChangeTab={setActiveTab}
-        onLogout={() => {
-          clearDriverAuthState();
-          navigate('/taxi/driver/login', { replace: true });
-        }}
+        onLogout={confirmLogout}
       />
     </div>
   );
