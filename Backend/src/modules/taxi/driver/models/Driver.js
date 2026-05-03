@@ -144,6 +144,10 @@ const driverSchema = new mongoose.Schema(
       default: 'taxi',
       trim: true,
     },
+    serviceCategories: {
+      type: [String],
+      default: [],
+    },
     vehicleNumber: {
       type: String,
       default: '',

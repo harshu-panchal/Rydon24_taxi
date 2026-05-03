@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { adminService } from '../../services/adminService';
-import { getAdminBuses } from '../../services/busService';
+import { getAdminBuses, upsertAdminBus } from '../../services/busService';
 
 const statusTone = {
   confirmed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -68,6 +68,12 @@ const formatMonthLabel = (value) => {
 
 const getTodayValue = () => new Date().toISOString().slice(0, 10);
 const getMonthValue = (value = getTodayValue()) => String(value || '').slice(0, 7);
+
+const formatScheduleTime = (schedule = {}) => {
+  const departure = schedule?.departureTime || '--:--';
+  const arrival = schedule?.arrivalTime || '--:--';
+  return `${departure} to ${arrival}`;
+};
 
 const buildCalendarCells = (month, dayLookup) => {
   if (!/^\d{4}-\d{2}$/.test(String(month || ''))) {
@@ -243,6 +249,18 @@ const BusBookingManager = () => {
     (sum, seat) => sum + Number(seat.price || selectedBus?.seatPrice || 0),
     0,
   );
+  const selectedSchedule = schedules.find((schedule) => schedule.id === filters.scheduleId) || null;
+
+  const getScheduleMeta = (scheduleId, fallback = {}) => {
+    const matchedSchedule =
+      schedules.find((schedule) => schedule.id === scheduleId) ||
+      (selectedBus?.schedules || []).find((schedule) => schedule.id === scheduleId);
+
+    return {
+      label: matchedSchedule?.label || scheduleId || 'Standard',
+      time: matchedSchedule ? formatScheduleTime(matchedSchedule) : `${fallback.departureTime || '--:--'} to ${fallback.arrivalTime || '--:--'}`,
+    };
+  };
 
   const refreshAll = async () => {
     if (!filters.busServiceId) return;
@@ -259,7 +277,11 @@ const BusBookingManager = () => {
   };
 
   const handleSeatClick = (seat) => {
-    if (seat.liveStatus === 'blocked') return;
+    if (seat.liveStatus === 'blocked') {
+      setActiveSeat(seat);
+      setSelectedSeatIds([]);
+      return;
+    }
 
     if (seat.liveStatus === 'booked') {
       setActiveSeat(seat);
@@ -273,6 +295,53 @@ const BusBookingManager = () => {
         ? current.filter((item) => item !== seat.seatId)
         : [...current, seat.seatId],
     );
+  };
+
+  const handleUnblockSeat = async (seat) => {
+    if (!selectedBus?.id || !seat?.seatId) {
+      toast.error('Select a valid blocked seat first');
+      return;
+    }
+
+    const nextBlueprint = JSON.parse(JSON.stringify(selectedBus.blueprint || { lowerDeck: [], upperDeck: [] }));
+    let updated = false;
+
+    ['lowerDeck', 'upperDeck'].forEach((deckKey) => {
+      nextBlueprint[deckKey] = (Array.isArray(nextBlueprint[deckKey]) ? nextBlueprint[deckKey] : []).map((row) =>
+        (Array.isArray(row) ? row : []).map((cell) => {
+          if (cell?.kind === 'seat' && cell.id === seat.seatId) {
+            updated = true;
+            return {
+              ...cell,
+              status: 'available',
+            };
+          }
+          return cell;
+        }),
+      );
+    });
+
+    if (!updated) {
+      toast.error('Seat could not be matched in this bus layout');
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      const updatedBus = await upsertAdminBus({
+        ...selectedBus,
+        blueprint: nextBlueprint,
+      });
+
+      setBuses((current) => current.map((bus) => (bus.id === updatedBus.id ? updatedBus : bus)));
+      await refreshAll();
+      setActiveSeat(null);
+      toast.success(`Seat ${seat.seatLabel || seat.seatId} is available again`);
+    } catch (error) {
+      toast.error(error?.message || 'Failed to unblock seat');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleCreateBooking = async () => {
@@ -387,17 +456,17 @@ const BusBookingManager = () => {
           />
         </div>
 
-        <div className="rounded-[28px] border border-slate-100 bg-white p-5 shadow-sm">
+            <div className="rounded-[28px] border border-slate-100 bg-white p-5 shadow-sm">
           <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Schedule</label>
           <select
             value={filters.scheduleId}
             onChange={(event) => setFilters((current) => ({ ...current, scheduleId: event.target.value }))}
             className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none"
           >
-            <option value="">All schedules</option>
+            <option value="">Select schedule</option>
             {schedules.map((schedule) => (
               <option key={schedule.id} value={schedule.id}>
-                {schedule.label || schedule.id} | {schedule.departureTime} to {schedule.arrivalTime}
+                {schedule.label || schedule.id} | {formatDateLabel(filters.travelDate)} | {formatScheduleTime(schedule)}
               </option>
             ))}
           </select>
@@ -532,6 +601,11 @@ const BusBookingManager = () => {
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Seat Snapshot</p>
                 <h2 className="mt-2 text-xl font-black text-slate-900">Setwise Occupancy</h2>
+                <p className="mt-1 text-xs font-semibold text-slate-500">
+                  {selectedSchedule
+                    ? `${formatDateLabel(filters.travelDate)} | ${selectedSchedule.label || selectedSchedule.id} | ${formatScheduleTime(selectedSchedule)}`
+                    : `${formatDateLabel(filters.travelDate)} | Pick a schedule to inspect seats`}
+                </p>
               </div>
               <div className="rounded-full bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
                 {seatLayout.length} seats
@@ -562,13 +636,23 @@ const BusBookingManager = () => {
                         key={seat.seatId}
                         type="button"
                         onClick={() => handleSeatClick(seat)}
-                        disabled={seat.liveStatus === 'blocked' || actionLoading}
+                        disabled={actionLoading}
                         className={`rounded-2xl border p-3 text-left transition-all ${seatTone[toneKey] || seatTone.available}`}
                       >
                         <p className="text-sm font-black">{seat.seatLabel}</p>
-                        <p className="mt-2 text-[10px] font-black uppercase tracking-wide">
-                          {isSelected ? 'selected' : seat.liveStatus}
-                        </p>
+                        <div className="mt-2">
+                          <span className={`inline-flex rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-wide ${
+                            isSelected
+                              ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
+                              : seat.liveStatus === 'booked'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : seat.liveStatus === 'blocked'
+                                  ? 'border-slate-300 bg-slate-200 text-slate-600'
+                                  : 'border-slate-200 bg-slate-50 text-slate-600'
+                          }`}>
+                            {isSelected ? 'selected' : seat.liveStatus}
+                          </span>
+                        </div>
                         <p className="mt-1 truncate text-[10px] font-semibold">
                           {seat.booking?.passengerName || seat.booking?.bookingCode || '--'}
                         </p>
@@ -589,7 +673,7 @@ const BusBookingManager = () => {
 
           <div className="rounded-[32px] border border-slate-100 bg-white p-6 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
-              {activeSeat?.liveStatus === 'booked' ? 'Unbook Seat' : 'Book Seats'}
+              {activeSeat?.liveStatus === 'booked' ? 'Unbook Seat' : activeSeat?.liveStatus === 'blocked' ? 'Unblock Seat' : 'Book Seats'}
             </p>
             {activeSeat?.liveStatus === 'booked' ? (
               <div className="mt-4 space-y-4">
@@ -609,6 +693,26 @@ const BusBookingManager = () => {
                   className="w-full rounded-2xl bg-rose-600 px-4 py-3 text-sm font-black text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {actionLoading ? 'Unbooking...' : `Unbook ${activeSeat.seatLabel}`}
+                </button>
+              </div>
+            ) : activeSeat?.liveStatus === 'blocked' ? (
+              <div className="mt-4 space-y-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                  <p className="text-lg font-black text-slate-900">{activeSeat.seatLabel}</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-600">
+                    This seat is blocked in the bus inventory and is currently not sellable.
+                  </p>
+                  <p className="mt-2 text-[11px] font-semibold text-slate-500">
+                    Unblocking it will reopen the seat for this bus service.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={() => handleUnblockSeat(activeSeat)}
+                  className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {actionLoading ? 'Updating Seat...' : `Unblock ${activeSeat.seatLabel}`}
                 </button>
               </div>
             ) : (
@@ -768,7 +872,10 @@ const BusBookingManager = () => {
 
                       <div className="rounded-2xl bg-white px-4 py-3">
                         <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Schedule & Seats</p>
-                        <p className="mt-1 text-sm font-black text-slate-900">{booking.scheduleId || 'Standard'}</p>
+                        <p className="mt-1 text-sm font-black text-slate-900">{getScheduleMeta(booking.scheduleId, booking.routeSnapshot).label}</p>
+                        <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                          {formatDateLabel(booking.travelDate)} | {getScheduleMeta(booking.scheduleId, booking.routeSnapshot).time}
+                        </p>
                         <p className="mt-1 text-[11px] font-semibold text-slate-500">
                           {(booking.activeSeats || []).map((seat) => seat.seatLabel).join(', ') || 'No active seats'}
                         </p>

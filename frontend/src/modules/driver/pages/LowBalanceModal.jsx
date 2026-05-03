@@ -5,7 +5,16 @@ import { useNavigate } from 'react-router-dom';
 
 const Motion = motion;
 
-const LowBalanceModal = ({ isOpen, onClose, balance, cashLimit, isBlocked }) => {
+const LowBalanceModal = ({
+    isOpen,
+    onClose,
+    balance,
+    cashLimit,
+    minimumBalance,
+    isBlocked,
+    belowMinimumBalance,
+    cashLimitExceeded,
+}) => {
     const navigate = useNavigate();
     
     if (!isOpen) return null;
@@ -32,12 +41,16 @@ const LowBalanceModal = ({ isOpen, onClose, balance, cashLimit, isBlocked }) => 
                             {isBlocked ? <AlertTriangle size={40} /> : <Wallet size={40} />}
                         </div>
                         <h3 className="text-2xl font-black text-slate-900 leading-tight">
-                            {isBlocked ? 'Account Blocked' : 'Low Cash Limit'}
+                            {isBlocked ? 'Go Online Unavailable' : 'Wallet Alert'}
                         </h3>
                         <p className={`mt-2 text-sm font-semibold px-4 ${isBlocked ? 'text-rose-600' : 'text-amber-600'}`}>
-                            {isBlocked 
-                                ? 'Your cash limit has been exceeded. Please deposit cash to continue taking rides.'
-                                : 'You are approaching your cash limit. Top up soon to avoid being blocked.'}
+                            {isBlocked
+                                ? belowMinimumBalance
+                                    ? 'Your minimum wallet balance is not maintained. Please top up to continue taking rides.'
+                                    : cashLimitExceeded
+                                        ? 'Your cash limit has been exceeded. Please deposit cash to continue taking rides.'
+                                        : 'Your wallet needs attention before you can continue taking rides.'
+                                : 'Your available wallet balance is getting low. Top up soon to avoid going offline.'}
                         </p>
                     </div>
 
@@ -47,13 +60,17 @@ const LowBalanceModal = ({ isOpen, onClose, balance, cashLimit, isBlocked }) => 
                             <div className="flex justify-between items-end mb-4">
                                 <div className="flex flex-col">
                                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Current Balance</span>
-                                    <span className={`text-2xl font-black ${balance < 0 ? 'text-rose-600' : 'text-slate-900'}`}>
-                                        Rs {Math.abs(balance).toFixed(2)}
+                                    <span className={`text-2xl font-black ${Number(balance || 0) < 0 ? 'text-rose-600' : 'text-slate-900'}`}>
+                                        Rs {Math.abs(Number(balance || 0)).toFixed(2)}
                                     </span>
                                 </div>
                                 <div className="text-right">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Limit</span>
-                                    <span className="block text-sm font-bold text-slate-600">Rs {cashLimit}</span>
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                        {belowMinimumBalance ? 'Minimum Balance' : 'Cash Limit'}
+                                    </span>
+                                    <span className="block text-sm font-bold text-slate-600">
+                                        Rs {belowMinimumBalance ? Number(minimumBalance || 0) : Number(cashLimit || 0)}
+                                    </span>
                                 </div>
                             </div>
 
@@ -66,8 +83,12 @@ const LowBalanceModal = ({ isOpen, onClose, balance, cashLimit, isBlocked }) => 
                                 />
                             </div>
                             <div className="flex justify-between text-[10px] font-bold text-slate-400">
-                                <span>Used</span>
-                                <span>{Math.round(progress)}% of limit</span>
+                                <span>{belowMinimumBalance ? 'Current balance' : 'Used'}</span>
+                                <span>
+                                    {belowMinimumBalance
+                                        ? `Required Rs ${Number(minimumBalance || 0)}`
+                                        : `${Math.round(progress)}% of limit`}
+                                </span>
                             </div>
                         </div>
 

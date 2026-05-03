@@ -22,6 +22,43 @@ const VEHICLE_NUMBER_REGEX = /^[A-Z]{2}\d{2}[A-Z]{1,2}\d{4}$/;
 const getCurrentVehicleYear = () => new Date().getFullYear();
 const normalizeVehicleNumber = (value = '') => String(value).replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 10);
 const normalizePostalCode = (value = '') => String(value).replace(/\D/g, '').slice(0, 6);
+const normalizeServiceCategories = (value, registerFor = 'taxi') => {
+    const rawValues = Array.isArray(value)
+        ? value
+        : typeof value === 'string'
+            ? value.split(',')
+            : [];
+
+    const normalized = [...new Set(
+        rawValues
+            .map((item) => String(item || '').trim().toLowerCase())
+            .flatMap((item) => item === 'both' ? ['taxi', 'outstation'] : item ? [item] : [])
+            .filter((item) => ['taxi', 'outstation', 'delivery', 'pooling'].includes(item)),
+    )];
+
+    if (normalized.length > 0) {
+        return normalized;
+    }
+
+    const fallback = String(registerFor || 'taxi').trim().toLowerCase();
+    if (fallback === 'both') {
+        return ['taxi', 'outstation'];
+    }
+
+    return ['taxi', 'outstation', 'delivery', 'pooling'].includes(fallback) ? [fallback] : ['taxi'];
+};
+
+const getPrimaryRegisterFor = (serviceCategories = [], fallback = 'taxi') => {
+    const normalized = normalizeServiceCategories(serviceCategories, fallback);
+
+    if (normalized.includes('taxi') && normalized.includes('outstation')) return 'both';
+    if (normalized.includes('taxi')) return 'taxi';
+    if (normalized.includes('outstation')) return 'outstation';
+    if (normalized.includes('delivery')) return 'delivery';
+    if (normalized.includes('pooling')) return 'pooling';
+
+    return String(fallback || 'taxi').trim().toLowerCase() || 'taxi';
+};
 
 
 const StepVehicle = () => {
@@ -42,7 +79,8 @@ const StepVehicle = () => {
     const [vehicleTypesLoading, setVehicleTypesLoading] = useState(false);
 
     const [formData, setFormData] = useState({
-        registerFor: session.registerFor || 'taxi',
+        registerFor: getPrimaryRegisterFor(session.serviceCategories || session.vehicleSession?.vehicle?.serviceCategories || [], session.registerFor || 'taxi'),
+        serviceCategories: normalizeServiceCategories(session.serviceCategories || session.vehicleSession?.vehicle?.serviceCategories || [], session.registerFor || 'taxi'),
         locationId: session.locationId || '',
         vehicleTypeId: session.vehicleTypeId || '',
         make: session.make || '',
@@ -125,6 +163,10 @@ const StepVehicle = () => {
             required = ['locationId', 'companyName', 'companyAddress', 'city', 'postalCode', 'taxNumber'];
         } else {
             required = ['locationId', 'vehicleTypeId', 'make', 'model', 'year', 'number', 'color'];
+            if (formData.serviceCategories.length === 0) {
+                setError('Please select at least one service category');
+                return;
+            }
         }
 
         if (required.every(key => formData[key])) {
@@ -167,6 +209,7 @@ const StepVehicle = () => {
                     registrationId: session.registrationId,
                     phone: session.phone,
                     registerFor: formData.registerFor,
+                    serviceCategories: formData.serviceCategories,
                     locationId: formData.locationId,
                     locationName: selectedServiceLocation?.name || selectedServiceLocation?.service_location_name || '',
                     serviceLocation: selectedServiceLocation || null,
@@ -202,10 +245,10 @@ const StepVehicle = () => {
     };
 
     const registerTypes = [
-        { id: 'taxi', label: 'Taxi Only', icon: <Car size={18} />, color: 'emerald' },
+        { id: 'taxi', label: 'Taxi', icon: <Car size={18} />, color: 'emerald' },
         { id: 'outstation', label: 'Outstation', icon: <MapPin size={18} />, color: 'sky' },
-        { id: 'delivery', label: 'Delivery Only', icon: <Package size={18} />, color: 'amber' },
-        { id: 'both', label: 'Both Services', icon: <Zap size={18} />, color: 'indigo' }
+        { id: 'delivery', label: 'Delivery', icon: <Package size={18} />, color: 'amber' },
+        { id: 'pooling', label: 'Pooling', icon: <Zap size={18} />, color: 'indigo' }
     ];
 
     return (
@@ -250,26 +293,38 @@ const StepVehicle = () => {
                         <section className="space-y-4 rounded-[30px] border border-slate-200/70 bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
                             <div className="space-y-1 px-1">
                                 <h2 className="text-base font-semibold tracking-[-0.03em] text-slate-950">Service category</h2>
-                                <p className="text-sm text-slate-500">What would you like to provide?</p>
+                                <p className="text-sm text-slate-500">Choose one or more services you want to provide.</p>
                             </div>
                             <div className="grid grid-cols-1 gap-2.5">
                                 {registerTypes.map((item) => (
                                     <button
                                         key={item.id}
-                                        onClick={() => setFormData(p => ({ ...p, registerFor: item.id }))}
+                                        type="button"
+                                        onClick={() => setFormData((previous) => {
+                                            const exists = previous.serviceCategories.includes(item.id);
+                                            const nextServiceCategories = exists
+                                                ? previous.serviceCategories.filter((value) => value !== item.id)
+                                                : [...previous.serviceCategories, item.id];
+
+                                            return {
+                                                ...previous,
+                                                serviceCategories: nextServiceCategories,
+                                                registerFor: getPrimaryRegisterFor(nextServiceCategories, previous.registerFor),
+                                            };
+                                        })}
                                         className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${
-                                            formData.registerFor === item.id 
+                                            formData.serviceCategories.includes(item.id)
                                             ? 'bg-slate-950 border-slate-950 text-white shadow-lg' 
                                             : 'bg-[#fcfcfb] border-slate-100 text-slate-600 hover:border-slate-300'
                                         }`}
                                     >
-                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${formData.registerFor === item.id ? 'bg-white/20' : 'bg-white shadow-sm text-slate-400'}`}>
+                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${formData.serviceCategories.includes(item.id) ? 'bg-white/20' : 'bg-white shadow-sm text-slate-400'}`}>
                                             {item.icon}
                                         </div>
                                         <div className="flex-1 text-left">
                                             <span className="block text-[14px] font-semibold leading-none">{item.label}</span>
                                         </div>
-                                        {formData.registerFor === item.id && (
+                                        {formData.serviceCategories.includes(item.id) && (
                                             <div className="w-5 h-5 rounded-full bg-white flex items-center justify-center">
                                                 <div className="w-2.5 h-2.5 rounded-full bg-slate-950" />
                                             </div>
@@ -277,6 +332,11 @@ const StepVehicle = () => {
                                     </button>
                                 ))}
                             </div>
+                            {formData.serviceCategories.length === 0 ? (
+                                <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-700">
+                                    Select at least one service category to continue.
+                                </div>
+                            ) : null}
                         </section>
                     )}
 

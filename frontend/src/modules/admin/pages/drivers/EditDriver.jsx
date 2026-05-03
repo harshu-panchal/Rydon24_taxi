@@ -14,18 +14,41 @@ import {
   Globe,
   Loader2
 } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTaxiTransportTypes } from '../../../../shared/hooks/useTaxiTransportTypes';
+
+const normalizeTransportTypeForSelect = (value, options = []) => {
+  const normalizedValue = String(value || '').trim().toLowerCase();
+  if (!normalizedValue) return '';
+
+  const availableNames = options.map((item) => String(item.name || '').trim().toLowerCase());
+  if (availableNames.includes(normalizedValue)) {
+    return normalizedValue;
+  }
+
+  if (normalizedValue === 'both' && availableNames.includes('all')) {
+    return 'all';
+  }
+
+  if (normalizedValue === 'all' && availableNames.includes('both')) {
+    return 'both';
+  }
+
+  return normalizedValue;
+};
 
 const EditDriver = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams();
+  const backRoute = location.state?.from || '/admin/drivers';
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
   const [locations, setLocations] = useState([]);
   const [countries, setCountries] = useState([]);
   const { transportTypes } = useTaxiTransportTypes();
   const [vehicleTypes, setVehicleTypes] = useState([]);
+  const [vehicleTypeFallbackOption, setVehicleTypeFallbackOption] = useState(null);
   const [success, setSuccess] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
 
@@ -82,21 +105,41 @@ const EditDriver = () => {
         
         if (response.ok && data.success) {
           const d = data.data;
+          const onboarding = d.onboarding || {};
+          const onboardingPersonal = onboarding.personal || {};
+          const onboardingVehicle = onboarding.vehicle || {};
+          const savedVehicleTypeId = d.vehicle_type_id || d.vehicleTypeId || onboardingVehicle.vehicleTypeId || '';
+          const savedVehicleTypeLabel = d.car_type || d.vehicle_type || d.vehicleType || onboardingVehicle.vehicleType || '';
+
+          setVehicleTypeFallbackOption(
+            savedVehicleTypeId || savedVehicleTypeLabel
+              ? {
+                  value: String(savedVehicleTypeId || savedVehicleTypeLabel),
+                  label: String(savedVehicleTypeLabel || savedVehicleTypeId),
+                }
+              : null,
+          );
+
           setFormData({
-            area: d.service_location_id?._id || d.service_location_id || d.service_location?._id || d.service_location || '',
+            area: d.service_location_id?._id || d.service_location_id || d.service_location?._id || d.service_location || onboardingVehicle.locationId || '',
             country: d.country?._id || d.country || d.service_location?.country?._id || d.service_location?.country || '',
-            name: d.name || d.user_id?.name || '',
-            mobile: d.mobile || d.user_id?.mobile || '',
+            name: d.name || d.user_id?.name || onboardingPersonal.fullName || '',
+            mobile: d.phone || d.mobile || d.user_id?.mobile || '',
             gender: d.gender ? d.gender.charAt(0).toUpperCase() + d.gender.slice(1) : 'Male',
-            email: d.email || d.user_id?.email || '',
+            email: d.email || d.user_id?.email || onboardingPersonal.email || '',
             password: '',
             confirmPassword: '',
-            transportType: d.transport_type || 'taxi',
-            vehicleType: d.car_type || d.vehicle_type || '',
-            vehicleMake: d.car_make || d.vehicle_make || '',
-            vehicleModel: d.car_model || d.vehicle_model || '',
-            vehicleColor: d.car_color || d.vehicle_color || '',
-            vehicleNumber: d.car_number || d.vehicle_number || ''
+            transportType: d.transport_type || d.register_for || d.registerFor || onboardingVehicle.registerFor || 'taxi',
+            vehicleType: savedVehicleTypeId || savedVehicleTypeLabel || '',
+            vehicleMake: d.car_make || d.vehicle_make || d.vehicleMake || onboardingVehicle.make || '',
+            vehicleModel: d.car_model || d.vehicle_model || d.vehicleModel || onboardingVehicle.model || '',
+            vehicleColor: d.car_color || d.vehicle_color || d.vehicleColor || onboardingVehicle.color || '',
+            vehicleNumber: d.car_number || d.vehicle_number || d.vehicleNumber || onboardingVehicle.number || '',
+            companyName: onboardingVehicle.companyName || '',
+            companyAddress: onboardingVehicle.companyAddress || '',
+            city: onboardingVehicle.city || '',
+            postalCode: onboardingVehicle.postalCode || '',
+            taxNumber: onboardingVehicle.taxNumber || '',
           });
         }
       } catch (err) {
@@ -107,6 +150,15 @@ const EditDriver = () => {
     };
     fetchInitialData();
   }, [id]);
+
+  useEffect(() => {
+    if (!transportTypes.length) return;
+
+    setFormData((prev) => {
+      const normalized = normalizeTransportTypeForSelect(prev.transportType, transportTypes);
+      return normalized === prev.transportType ? prev : { ...prev, transportType: normalized };
+    });
+  }, [transportTypes]);
 
   useEffect(() => {
     const fetchVehiclesForArea = async () => {
@@ -124,6 +176,31 @@ const EditDriver = () => {
     };
     fetchVehiclesForArea();
   }, [formData.area, formData.transportType]);
+
+  useEffect(() => {
+    if (!vehicleTypes.length || !formData.vehicleType) return;
+
+    const rawValue = String(formData.vehicleType);
+    const alreadyMatchesId = vehicleTypes.some((item) => String(item._id) === rawValue);
+    if (alreadyMatchesId) return;
+
+    const matchedVehicleType = vehicleTypes.find((item) => {
+      const labels = [
+        item.vehicle_type,
+        item.name,
+        item.slug,
+        item.type,
+      ]
+        .filter(Boolean)
+        .map((value) => String(value).trim().toLowerCase());
+
+      return labels.includes(rawValue.trim().toLowerCase());
+    });
+
+    if (matchedVehicleType?._id) {
+      setFormData((prev) => ({ ...prev, vehicleType: String(matchedVehicleType._id) }));
+    }
+  }, [vehicleTypes, formData.vehicleType]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -187,7 +264,7 @@ const EditDriver = () => {
       const data = await response.json();
       if (response.ok && data.success) {
         setSuccess(true);
-        setTimeout(() => navigate('/admin/drivers'), 2000);
+        setTimeout(() => navigate(backRoute), 2000);
       } else {
         setError(data.message || 'Failed to update driver.');
       }
@@ -220,14 +297,14 @@ const EditDriver = () => {
         <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
           <span>Drivers</span>
           <ChevronRight size={12} />
-          <span>Approved</span>
+          <span>{backRoute.includes('/pending') ? 'Pending' : 'Approved'}</span>
           <ChevronRight size={12} />
           <span className="text-gray-700">Edit Driver</span>
         </div>
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-semibold text-gray-900">Edit Driver</h1>
           <button 
-            onClick={() => navigate('/admin/drivers')}
+            onClick={() => navigate(backRoute)}
             className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <ArrowLeft size={16} />
@@ -416,6 +493,10 @@ const EditDriver = () => {
                   className={inputClass}
                 >
                   <option value="">Select Vehicle Type</option>
+                  {vehicleTypeFallbackOption &&
+                  !vehicleTypes.some((vt) => String(vt._id) === String(vehicleTypeFallbackOption.value)) ? (
+                    <option value={vehicleTypeFallbackOption.value}>{vehicleTypeFallbackOption.label}</option>
+                  ) : null}
                   {vehicleTypes.map(vt => (
                     <option key={vt._id} value={vt._id}>{vt.vehicle_type || vt.name}</option>
                   ))}

@@ -9,6 +9,7 @@ import {
   createDriverWithdrawalRequest,
   createServiceCenterVehicle,
   createOwnerFleetDriver,
+  updateOwnerFleetDriver,
   deleteCurrentDriverAccount,
   deleteServiceCenterVehicle,
   updateServiceCenterVehicle,
@@ -217,6 +218,11 @@ driverRouter.post(
   "/fleet/drivers",
   authenticate(["driver", "owner"]),
   asyncHandler(createOwnerFleetDriver),
+);
+driverRouter.patch(
+  "/fleet/drivers/:driverId",
+  authenticate(["driver", "owner"]),
+  asyncHandler(updateOwnerFleetDriver),
 );
 driverRouter.get(
   "/fleet/vehicles",

@@ -275,6 +275,34 @@ const formatFareLabel = (value) => {
     return `Rs ${amount}`;
 };
 
+const getWalletAlertState = (wallet = {}) => {
+    const balance = Number(wallet.balance || 0);
+    const cashLimit = Math.max(0, Number(wallet.cashLimit || 0));
+    const minimumBalanceForOrders = Number(wallet.minimumBalanceForOrders || 0);
+    const cashLimitUsed = Math.max(0, balance < 0 ? Math.abs(balance) : 0);
+    const remainingCashLimit = Math.max(0, cashLimit - cashLimitUsed);
+    const warningThreshold = cashLimit > 0
+        ? Math.min(cashLimit, Math.max(50, cashLimit * 0.15))
+        : 0;
+    const belowMinimumBalance = balance <= minimumBalanceForOrders;
+    const cashLimitExceeded = cashLimit > 0 && remainingCashLimit <= 0;
+    const isBlocked = Boolean(wallet.isBlocked) || belowMinimumBalance || cashLimitExceeded;
+    const isWarning = !isBlocked && cashLimitUsed > 0 && remainingCashLimit <= warningThreshold;
+
+    return {
+        balance,
+        cashLimit,
+        minimumBalanceForOrders,
+        cashLimitUsed,
+        remainingCashLimit,
+        warningThreshold,
+        belowMinimumBalance,
+        cashLimitExceeded,
+        isBlocked,
+        isWarning,
+    };
+};
+
 const isScheduledRideForFuture = (value) => {
     if (!value) {
         return false;
@@ -539,26 +567,7 @@ const DriverHome = () => {
         [vehicleIconType, vehicleIconUrl],
     );
 
-    const walletAlertState = useMemo(() => {
-        const balance = Number(walletSummary.balance || 0);
-        const cashLimit = Math.max(0, Number(walletSummary.cashLimit || 0));
-        const cashLimitUsed = Math.max(0, balance < 0 ? Math.abs(balance) : 0);
-        const remainingCashLimit = Math.max(0, cashLimit - cashLimitUsed);
-        const warningThreshold = cashLimit > 0
-            ? Math.min(cashLimit, Math.max(50, cashLimit * 0.15))
-            : 0;
-        const isBlocked = Boolean(walletSummary.isBlocked) || (cashLimit > 0 && remainingCashLimit <= 0);
-        const isWarning = !isBlocked && cashLimitUsed > 0 && remainingCashLimit <= warningThreshold;
-
-        return {
-            cashLimit,
-            cashLimitUsed,
-            remainingCashLimit,
-            warningThreshold,
-            isBlocked,
-            isWarning,
-        };
-    }, [walletSummary]);
+    const walletAlertState = useMemo(() => getWalletAlertState(walletSummary), [walletSummary]);
 
     const { isLoaded } = useAppGoogleMapsLoader();
 
@@ -959,7 +968,11 @@ const DriverHome = () => {
 
         if (walletAlertState.isBlocked) {
             setShowLowBalanceModal(true);
-            setStatusMessage('Please top up your wallet to go online.');
+            setStatusMessage(
+                walletAlertState.belowMinimumBalance
+                    ? 'Minimum wallet balance is not maintained. Please top up to go online.'
+                    : 'Cash limit exceeded. Please top up your wallet to go online.',
+            );
             return;
         }
 
@@ -1044,7 +1057,7 @@ const DriverHome = () => {
         } finally {
             setIsTogglingDuty(false);
         }
-    }, [expiredDocumentNames, routeBookingPreferences.coordinates, routeBookingPreferences.enabled, updateDriverLocation, vehicleReapprovalPending, walletAlertState.isBlocked]);
+    }, [expiredDocumentNames, routeBookingPreferences.coordinates, routeBookingPreferences.enabled, updateDriverLocation, vehicleReapprovalPending, walletAlertState]);
 
     const goOffline = useCallback(async () => {
         setIsTogglingDuty(true);
@@ -1474,23 +1487,19 @@ const DriverHome = () => {
                 if (payload?.wallet) {
                     setWalletSummary(payload.wallet);
 
-                    const balance = Number(payload.wallet.balance || 0);
-                    const cashLimit = Math.max(0, Number(payload.wallet.cashLimit || 0));
-                    const cashLimitUsed = Math.max(0, balance < 0 ? Math.abs(balance) : 0);
-                    const remainingCashLimit = Math.max(0, cashLimit - cashLimitUsed);
-                    const warningThreshold = cashLimit > 0
-                        ? Math.min(cashLimit, Math.max(50, cashLimit * 0.15))
-                        : 0;
-                    const isWalletBlocked = Boolean(payload.wallet.isBlocked) || (cashLimit > 0 && remainingCashLimit <= 0);
-                    const isWalletWarning = !isWalletBlocked && cashLimitUsed > 0 && remainingCashLimit <= warningThreshold;
+                    const nextWalletAlertState = getWalletAlertState(payload.wallet);
 
-                    if (isWalletBlocked) {
+                    if (nextWalletAlertState.isBlocked) {
                         setShowRequest(false);
                         setCurrentRequest(null);
                         stopRideRequestAlertSound();
                         setShowLowBalanceModal(true);
-                        setStatusMessage('Cash limit reached. Top up to receive new ride requests.');
-                    } else if (isWalletWarning) {
+                        setStatusMessage(
+                            nextWalletAlertState.belowMinimumBalance
+                                ? 'Minimum wallet balance is not maintained. Top up to receive new ride requests.'
+                                : 'Cash limit exceeded. Top up to receive new ride requests.',
+                        );
+                    } else if (nextWalletAlertState.isWarning) {
                         setShowLowBalanceModal(true);
                         setStatusMessage('Available cash limit is getting low. Top up soon.');
                     }
@@ -1711,9 +1720,12 @@ const DriverHome = () => {
             <LowBalanceModal 
                 isOpen={showLowBalanceModal}
                 onClose={() => setShowLowBalanceModal(false)}
-                balance={Number(walletSummary.balance || 0)}
-                cashLimit={Number(walletSummary.cashLimit || 500)}
+                balance={walletAlertState.balance}
+                cashLimit={walletAlertState.cashLimit}
+                minimumBalance={walletAlertState.minimumBalanceForOrders}
                 isBlocked={walletAlertState.isBlocked}
+                belowMinimumBalance={walletAlertState.belowMinimumBalance}
+                cashLimitExceeded={walletAlertState.cashLimitExceeded}
             />
 
             <AnimatePresence>

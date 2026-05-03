@@ -166,6 +166,19 @@ const normalizeVehicleTransportType = (value = '') => {
   return 'taxi';
 };
 
+const normalizeDriverRegisterFor = (value = '', fallback = 'taxi') => {
+  const normalized = String(value || fallback || 'taxi').trim().toLowerCase();
+  if (normalized === 'all') return 'both';
+  if (normalized === 'both') return 'both';
+  if (normalized === 'delivery') return 'delivery';
+  if (normalized === 'outstation') return 'outstation';
+  if (normalized === 'pooling') return 'pooling';
+  if (normalized === 'bike') return 'bike';
+  if (normalized === 'auto') return 'auto';
+  if (normalized === 'car') return 'car';
+  return 'taxi';
+};
+
 const normalizeDeliveryCategory = (value = '') => {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'trucks') return 'trucks';
@@ -1762,9 +1775,13 @@ const serializeDriver = (driver) => ({
   service_location_name: driver.city || '',
   transport_type: driver.registerFor || driver.vehicleType || '',
   register_for: driver.registerFor || '',
+  service_categories: Array.isArray(driver.serviceCategories) ? driver.serviceCategories : [],
   vehicle_type: driver.vehicleType || '',
+  vehicle_type_id: driver.vehicleTypeId || null,
   vehicleIconType: driver.vehicleIconType || driver.vehicleType || '',
   vehicleImage: driver.vehicleImage || '',
+  vehicle_make: driver.vehicleMake || '',
+  vehicle_model: driver.vehicleModel || '',
   vehicle_number: driver.vehicleNumber || '',
   vehicle_color: driver.vehicleColor || '',
   rating:
@@ -3924,9 +3941,70 @@ export const createDriver = async (payload = {}) => {
 };
 
 export const updateDriver = async (id, payload) => {
-  const update = {
-    ...payload,
-  };
+  const update = {};
+
+  if (payload.name !== undefined) {
+    update.name = String(payload.name || '').trim();
+  }
+
+  const phoneValue = payload.phone ?? payload.mobile;
+  if (phoneValue !== undefined) {
+    update.phone = String(phoneValue || '').trim();
+  }
+
+  if (payload.email !== undefined) {
+    update.email = String(payload.email || '').trim();
+  }
+
+  if (payload.gender !== undefined) {
+    update.gender = String(payload.gender || '').trim();
+  }
+
+  const transportTypeValue =
+    payload.transport_type ?? payload.transportType ?? payload.register_for ?? payload.registerFor;
+  if (transportTypeValue !== undefined) {
+    update.registerFor = normalizeDriverRegisterFor(transportTypeValue);
+  }
+
+  const vehicleTypeValue = payload.vehicle_type ?? payload.vehicleType ?? payload.car_type;
+  if (vehicleTypeValue !== undefined) {
+    update.vehicleType = String(vehicleTypeValue || '').trim().toLowerCase() || 'car';
+  }
+
+  const vehicleTypeId =
+    payload.vehicle_type_id ?? payload.vehicleTypeId ?? payload.vehicleType?._id ?? payload.vehicleType?.id;
+  if (vehicleTypeId !== undefined) {
+    update.vehicleTypeId =
+      vehicleTypeId && mongoose.isValidObjectId(vehicleTypeId) ? toObjectId(vehicleTypeId) : null;
+  }
+
+  if (payload.vehicle_make !== undefined || payload.vehicleMake !== undefined || payload.car_make !== undefined) {
+    update.vehicleMake = String(payload.vehicle_make ?? payload.vehicleMake ?? payload.car_make ?? '').trim();
+  }
+
+  if (payload.vehicle_model !== undefined || payload.vehicleModel !== undefined || payload.car_model !== undefined) {
+    update.vehicleModel = String(payload.vehicle_model ?? payload.vehicleModel ?? payload.car_model ?? '').trim();
+  }
+
+  if (payload.vehicle_color !== undefined || payload.vehicleColor !== undefined || payload.car_color !== undefined) {
+    update.vehicleColor = String(payload.vehicle_color ?? payload.vehicleColor ?? payload.car_color ?? '').trim();
+  }
+
+  if (payload.vehicle_number !== undefined || payload.vehicleNumber !== undefined || payload.car_number !== undefined) {
+    update.vehicleNumber = String(payload.vehicle_number ?? payload.vehicleNumber ?? payload.car_number ?? '').trim();
+  }
+
+  const serviceLocationValue = payload.service_location_id ?? payload.area ?? payload.service_location;
+  if (serviceLocationValue !== undefined) {
+    update.service_location_id =
+      serviceLocationValue && mongoose.isValidObjectId(serviceLocationValue)
+        ? toObjectId(serviceLocationValue)
+        : null;
+  }
+
+  if (payload.country !== undefined) {
+    update.country = payload.country || null;
+  }
 
   if ('approve' in payload) {
     update.approve = Boolean(payload.approve);
@@ -3936,10 +4014,6 @@ export const updateDriver = async (id, payload) => {
     update.status = String(payload.status);
   } else if ('approve' in payload) {
     update.status = update.approve ? 'approved' : 'pending';
-  }
-
-  if ('phone' in update) {
-    update.phone = String(update.phone);
   }
 
   const driver = await Driver.findByIdAndUpdate(id, update, { returnDocument: 'after' });
@@ -5498,6 +5572,17 @@ export const getOwnerById = async (id) => {
     if (payload.approve !== undefined) {
       owner.approve = normalizeBoolean(payload.approve);
       owner.status = owner.approve ? 'approved' : 'pending';
+    }
+    if (payload.status !== undefined) {
+      const normalizedStatus = String(payload.status || 'pending').trim().toLowerCase();
+      if (!['pending', 'approved', 'rejected'].includes(normalizedStatus)) {
+        throw new ApiError(400, 'Invalid owner status');
+      }
+      owner.status = normalizedStatus;
+      owner.approve = normalizedStatus === 'approved';
+      if (payload.active === undefined) {
+        owner.active = normalizedStatus !== 'rejected';
+      }
     }
     if (payload.password) {
       if (String(payload.password).length < 6) {

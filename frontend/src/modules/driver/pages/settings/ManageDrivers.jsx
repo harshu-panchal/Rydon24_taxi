@@ -168,7 +168,16 @@ const ManageDrivers = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button className="p-2 bg-slate-50 rounded-lg text-slate-400 hover:text-slate-900 transition-colors">
+                      <button
+                        onClick={() =>
+                          navigate(`/taxi/driver/edit-driver/${d.id}`, {
+                            state: {
+                              driver: d,
+                              returnTo: "/taxi/driver/manage-drivers",
+                            },
+                          })
+                        }
+                        className="p-2 bg-slate-50 rounded-lg text-slate-400 hover:text-slate-900 transition-colors">
                         <Edit3 size={14} />
                       </button>
                       <button

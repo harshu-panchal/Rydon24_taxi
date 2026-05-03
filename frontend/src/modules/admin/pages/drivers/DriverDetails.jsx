@@ -154,12 +154,14 @@ const DriverDetails = () => {
   const wallet = profile?.wallet || {};
   const requests = profile?.requests || [];
   const withdrawals = profile?.withdrawals || [];
+  const backRoute = location.state?.from || '/admin/drivers';
   const documents = useMemo(() => {
     const raw = profile?.documents;
     if (Array.isArray(raw)) {
       return raw.map((doc) => {
         const images = getDocumentImages(doc);
         return {
+          sourceKey: doc?.key || doc?.documentKey || doc?.type || doc?.name || '',
           name: doc?.name || '',
           identify_number: doc?.identify_number ?? doc?.identifyNumber ?? doc?.number ?? doc?.id_number ?? '',
           expiry_date: doc?.expiry_date ?? doc?.expiryDate ?? doc?.expiry ?? '',
@@ -177,6 +179,7 @@ const DriverDetails = () => {
       const normalizeOne = (doc) => {
         const images = getDocumentImages(doc);
         return {
+          sourceKey: key,
           name: doc?.name || key,
           identify_number: doc?.identify_number ?? doc?.identifyNumber ?? doc?.number ?? doc?.id_number ?? '',
           expiry_date: doc?.expiry_date ?? doc?.expiryDate ?? doc?.expiry ?? '',
@@ -237,7 +240,7 @@ const DriverDetails = () => {
         <div className="flex items-center justify-between gap-4">
           <h1 className="text-xl font-semibold text-gray-900">Driver Profile</h1>
           <button
-            onClick={() => navigate('/admin/drivers')}
+            onClick={() => navigate(backRoute)}
             className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <ArrowLeft size={16} /> Back
@@ -313,9 +316,11 @@ const DriverDetails = () => {
                 alt={`${profile.name} online selfie`}
                 className="h-14 w-14 rounded-xl object-cover border border-indigo-100 bg-white"
               />
-              <div>
+              <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Daily online selfie</p>
-                <p className="text-xs font-semibold text-slate-700">{profile?.online_selfie?.forDate || 'Latest check-in'}</p>
+                <p className="break-words text-xs font-semibold leading-relaxed text-slate-700">
+                  {profile?.online_selfie?.forDate || 'Latest check-in'}
+                </p>
               </div>
             </div>
           ) : null}
@@ -624,7 +629,48 @@ const DriverDetails = () => {
                             )}
                           </td>
                           <td className="px-4 py-3">
-                            <button className="px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 rounded-md hover:bg-rose-100 transition-colors">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!doc.sourceKey) return;
+                                const note = window.prompt(`Reason for rejecting "${doc.name}"`, doc.comment || '');
+                                if (note === null) return;
+
+                                try {
+                                  const token = localStorage.getItem('adminToken');
+                                  const nextDocuments = {
+                                    ...(profile?.documents || {}),
+                                    [doc.sourceKey]: {
+                                      ...(profile?.documents?.[doc.sourceKey] || {}),
+                                      status: 'rejected',
+                                      comment: String(note || '').trim(),
+                                    },
+                                  };
+
+                                  const response = await fetch(
+                                    `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/drivers/${id}`,
+                                    {
+                                      method: 'PATCH',
+                                      headers: {
+                                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                                        'Content-Type': 'application/json',
+                                      },
+                                      body: JSON.stringify({ documents: nextDocuments }),
+                                    },
+                                  );
+                                  const data = await response.json();
+
+                                  if (!response.ok || !data?.success) {
+                                    throw new Error(data?.message || 'Unable to reject document');
+                                  }
+
+                                  await fetchProfile();
+                                } catch (err) {
+                                  window.alert(err?.message || 'Unable to reject document');
+                                }
+                              }}
+                              className="px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 rounded-md hover:bg-rose-100 transition-colors"
+                            >
                               Decline
                             </button>
                           </td>

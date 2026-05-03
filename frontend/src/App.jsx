@@ -995,6 +995,7 @@ function App() {
                 <Route path="add-vehicle" element={<AddVehicle />} />
                 <Route path="manage-drivers" element={<ManageDrivers />} />
                 <Route path="add-driver" element={<AddDriver />} />
+                <Route path="edit-driver/:driverId" element={<AddDriver />} />
               </Route>
 
               {/* Admin Module Routes */}
@@ -1188,6 +1189,7 @@ function App() {
                 />
                 <Route path="owners/pending" element={<AdminPendingOwners />} />
                 <Route path="owners" element={<AdminManageOwners />} />
+                <Route path="owners/create" element={<AdminOwnerCreate />} />
                 <Route
                   path="owners/:id/password"
                   element={<AdminOwnerPasswordUpdate />}

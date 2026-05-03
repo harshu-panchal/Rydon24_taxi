@@ -51,6 +51,7 @@ const driverRegistrationSessionSchema = new mongoose.Schema(
     },
     vehicle: {
       registerFor: { type: String, default: 'taxi' },
+      serviceCategories: { type: [String], default: [] },
       locationId: { type: String, default: '' },
       locationName: { type: String, default: '' },
       vehicleTypeId: { type: String, default: '' },

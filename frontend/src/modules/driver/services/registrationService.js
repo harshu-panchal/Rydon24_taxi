@@ -238,6 +238,9 @@ export const getOwnerFleetDrivers = () =>
 export const createOwnerFleetDriver = (payload) =>
   api.post("/drivers/fleet/drivers", payload, withDriverAuth());
 
+export const updateOwnerFleetDriver = (driverId, payload) =>
+  api.patch(`/drivers/fleet/drivers/${driverId}`, payload, withDriverAuth());
+
 export const getOwnerFleetVehicles = () =>
   api.get("/drivers/fleet/vehicles", withDriverAuth());
 

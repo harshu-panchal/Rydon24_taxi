@@ -174,11 +174,11 @@ const OTPVerification = () => {
                     phone,
                     role,
                     loginMode: true,
-                    debugOtp: response?.data?.session?.debugOtp || '',
+                    debugOtp: response?.data?.session?.debugOtp || response?.session?.debugOtp || '',
                 });
             } else {
                 const response = await sendDriverOtp({ phone, role });
-                const sessionData = response?.data?.session || {};
+                const sessionData = response?.data?.session || response?.session || {};
                 saveDriverRegistrationSession({
                     ...session,
                     phone,

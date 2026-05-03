@@ -42,6 +42,7 @@ const defaultTransportTypes = [
 ];
 
 const MotionDiv = motion.div;
+const ownerStatusOptions = ['pending', 'approved', 'rejected'];
 
 const ManageOwners = () => {
   const navigate = useNavigate();
@@ -136,6 +137,25 @@ const ManageOwners = () => {
   const isOwnerApproved = (owner) =>
     owner?.approve === true || owner?.approve === 1 || String(owner?.status || '').toLowerCase() === 'approved';
 
+  const getOwnerStatus = (owner) => {
+    const normalizedStatus = String(owner?.status || '').trim().toLowerCase();
+    if (ownerStatusOptions.includes(normalizedStatus)) {
+      return normalizedStatus;
+    }
+    return isOwnerApproved(owner) ? 'approved' : 'pending';
+  };
+
+  const getStatusClasses = (status) => {
+    switch (status) {
+      case 'approved':
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'rejected':
+        return 'bg-rose-50 text-rose-700 border-rose-200';
+      default:
+        return 'bg-amber-50 text-amber-700 border-amber-200';
+    }
+  };
+
   const handleToggleApproval = async (owner) => {
     const ownerId = owner?._id || owner?.id;
     if (!ownerId) return;
@@ -154,6 +174,26 @@ const ManageOwners = () => {
       }
     } catch (error) {
       alert(error.message || 'Failed to update approval status');
+    }
+  };
+
+  const handleStatusChange = async (ownerId, status) => {
+    try {
+      const response = await adminService.updateOwner(ownerId, {
+        status,
+        approve: status === 'approved',
+      });
+
+      if (response.success) {
+        const updatedOwner = response.data;
+        setOwners((currentOwners) =>
+          currentOwners.map((item) => (item._id === ownerId || item.id === ownerId ? updatedOwner : item))
+        );
+      } else {
+        alert(response.message || 'Failed to update owner status');
+      }
+    } catch (error) {
+      alert(error.message || 'Failed to update owner status');
     }
   };
 
@@ -296,13 +336,19 @@ const ManageOwners = () => {
                             </button>
                           </td>
                           <td className="px-4 py-4">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium ${
-                              isOwnerApproved(owner)
-                                ? 'bg-emerald-50 text-emerald-700'
-                                : 'bg-amber-50 text-amber-700'
-                            }`}>
-                              {isOwnerApproved(owner) ? 'Approved' : 'Pending'}
-                            </span>
+                            <select
+                              value={getOwnerStatus(owner)}
+                              onChange={(e) => handleStatusChange(owner._id, e.target.value)}
+                              className={`min-w-[120px] rounded-md border px-2.5 py-1.5 text-xs font-medium capitalize outline-none transition-colors ${getStatusClasses(
+                                getOwnerStatus(owner),
+                              )}`}
+                            >
+                              {ownerStatusOptions.map((status) => (
+                                <option key={status} value={status}>
+                                  {status}
+                                </option>
+                              ))}
+                            </select>
                           </td>
                           <td className="px-4 py-4 text-center">
                             <div className="inline-flex items-center gap-1">

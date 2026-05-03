@@ -1,13 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, UserPlus, CheckCircle2, ChevronRight, Upload, X, ShieldCheck, Mail, Phone, MapPin } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { createOwnerFleetDriver } from '../../services/registrationService';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { createOwnerFleetDriver, getOwnerFleetDrivers, updateOwnerFleetDriver } from '../../services/registrationService';
 
 const AddDriver = () => {
     const navigate = useNavigate();
     const location = useLocation();
+    const { driverId } = useParams();
+    const isEditMode = Boolean(driverId);
     const [submitting, setSubmitting] = useState(false);
+    const [loadingDriver, setLoadingDriver] = useState(false);
     const [error, setError] = useState('');
     const [step, setStep] = useState(1); // 1: Details, 2: Documents, 3: Success
     const [formData, setFormData] = useState({
@@ -18,6 +21,56 @@ const AddDriver = () => {
         adhaarFile: null,
         licenseFile: null
     });
+
+    useEffect(() => {
+        if (!isEditMode) return;
+
+        const stateDriver = location.state?.driver;
+        if (stateDriver && String(stateDriver.id) === String(driverId)) {
+            setFormData((prev) => ({
+                ...prev,
+                name: stateDriver.name || '',
+                mobile: stateDriver.phone || '',
+                email: stateDriver.email || '',
+                address: stateDriver.address || '',
+            }));
+            return;
+        }
+
+        let active = true;
+        setLoadingDriver(true);
+        setError('');
+
+        getOwnerFleetDrivers()
+            .then((response) => {
+                if (!active) return;
+                const payload = response?.data?.data || response?.data || response;
+                const match = (payload?.results || []).find((item) => String(item.id || item._id) === String(driverId));
+                if (!match) {
+                    setError('Driver not found.');
+                    return;
+                }
+
+                setFormData((prev) => ({
+                    ...prev,
+                    name: match.name || '',
+                    mobile: match.phone || '',
+                    email: match.email || '',
+                    address: match.city || '',
+                }));
+            })
+            .catch((err) => {
+                if (!active) return;
+                setError(err?.message || 'Unable to load driver details');
+            })
+            .finally(() => {
+                if (active) setLoadingDriver(false);
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [driverId, isEditMode, location.state]);
 
     const handleFileUpload = (field, e) => {
         const file = e.target.files[0];
@@ -41,11 +94,19 @@ const AddDriver = () => {
         setError('');
 
         try {
-            await createOwnerFleetDriver({
+            const payload = {
                 name: formData.name,
                 phone: formData.mobile,
                 email: formData.email,
-            });
+                address: formData.address,
+                city: formData.address,
+            };
+
+            if (isEditMode) {
+                await updateOwnerFleetDriver(driverId, payload);
+            } else {
+                await createOwnerFleetDriver(payload);
+            }
 
             setStep(3);
 
@@ -83,11 +144,14 @@ const AddDriver = () => {
                             className="space-y-6"
                         >
                             <div className="space-y-1.5">
-                                <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-none uppercase">Driver Details</h1>
-                                <p className="text-[11px] font-bold text-slate-400 opacity-80 uppercase tracking-widest leading-relaxed">Register a new driver for your fleet</p>
+                                <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-none uppercase">{isEditMode ? 'Edit Driver' : 'Driver Details'}</h1>
+                                <p className="text-[11px] font-bold text-slate-400 opacity-80 uppercase tracking-widest leading-relaxed">{isEditMode ? 'Update fleet driver information' : 'Register a new driver for your fleet'}</p>
                             </div>
 
                             <div className="space-y-4">
+                                {loadingDriver ? (
+                                    <p className="text-[11px] font-bold text-slate-400">Loading driver details...</p>
+                                ) : null}
                                 {error ? (
                                     <p className="text-[11px] font-bold text-rose-500">{error}</p>
                                 ) : null}
@@ -136,15 +200,21 @@ const AddDriver = () => {
 
                             <div className="fixed bottom-0 left-0 right-0 p-5 bg-white border-t border-slate-50">
                                 <button 
-                                    onClick={() => setStep(2)}
-                                    disabled={submitting || !formData.name || !formData.mobile}
+                                    onClick={() => {
+                                        if (isEditMode) {
+                                            handleSubmit();
+                                            return;
+                                        }
+                                        setStep(2);
+                                    }}
+                                    disabled={submitting || loadingDriver || !formData.name || !formData.mobile}
                                     className={`w-full h-14 rounded-2xl flex items-center justify-center gap-2 text-[13px] font-black uppercase tracking-widest shadow-lg transition-all ${
-                                        (formData.name && formData.mobile) 
+                                        (formData.name && formData.mobile && !loadingDriver) 
                                         ? 'bg-slate-900 text-white shadow-slate-900/10' 
                                         : 'bg-slate-100 text-slate-300 pointer-events-none'
                                     }`}
                                 >
-                                    Next: Documents <ChevronRight size={16} strokeWidth={3} />
+                                    {isEditMode ? 'Save Driver' : 'Next: Documents'} {!isEditMode ? <ChevronRight size={16} strokeWidth={3} /> : <UserPlus size={16} strokeWidth={3} />}
                                 </button>
                             </div>
                         </motion.div>
@@ -224,7 +294,7 @@ const AddDriver = () => {
                             <div className="text-center space-y-3">
                                 <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">Pending!</h1>
                                 <p className="text-[12px] font-bold text-slate-400 uppercase tracking-[0.2em] leading-relaxed px-10">
-                                    Driver details sent to admin. Status will update in <span className="text-slate-900">5 seconds</span>.
+                                    {isEditMode ? 'Driver details updated successfully.' : <>Driver details sent to admin. Status will update in <span className="text-slate-900">5 seconds</span>.</>}
                                 </p>
                             </div>
 

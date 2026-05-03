@@ -3983,6 +3983,79 @@ export const createOwnerFleetDriver = async (req, res) => {
   });
 };
 
+export const updateOwnerFleetDriver = async (req, res) => {
+  const owner = await resolveAuthenticatedOwner(req);
+
+  if (!owner?._id) {
+    throw new ApiError(
+      403,
+      "Fleet driver access is only available for owner accounts",
+    );
+  }
+
+  const driverId = String(req.params?.driverId || "").trim();
+  if (!driverId || !mongoose.isValidObjectId(driverId)) {
+    throw new ApiError(400, "A valid driver id is required");
+  }
+
+  const driver = await Driver.findOne({
+    _id: driverId,
+    owner_id: owner._id,
+    deletedAt: null,
+  });
+
+  if (!driver) {
+    throw new ApiError(404, "Fleet driver not found");
+  }
+
+  const name = String(req.body?.name || "").trim();
+  const phone = normalizePhone(req.body?.phone || req.body?.mobile);
+  const email = String(req.body?.email || "")
+    .trim()
+    .toLowerCase();
+  const city = String(req.body?.city || req.body?.address || "").trim();
+
+  if (!name) {
+    throw new ApiError(400, "name is required");
+  }
+
+  if (!/^\d{10}$/.test(phone)) {
+    throw new ApiError(400, "A valid 10-digit mobile number is required");
+  }
+
+  const existing = await Driver.findOne({
+    phone,
+    _id: { $ne: driver._id },
+  }).lean();
+  if (existing) {
+    throw new ApiError(409, "Phone number is already registered");
+  }
+
+  driver.name = name;
+  driver.phone = phone;
+  driver.email = email;
+  driver.city = city || driver.city || "";
+
+  await driver.save();
+
+  res.json({
+    success: true,
+    message: "Fleet driver updated successfully",
+    data: {
+      id: String(driver._id),
+      name: driver.name || "",
+      phone: driver.phone || "",
+      email: driver.email || "",
+      city: driver.city || "",
+      approve: driver.approve,
+      status: driver.status,
+      isOnline: Boolean(driver.isOnline),
+      isOnRide: Boolean(driver.isOnRide),
+      createdAt: driver.createdAt,
+    },
+  });
+};
+
 export const startDriverLoginOtpRequest = async (req, res) => {
   const result = await startDriverLoginOtp(req.body);
   res.status(201).json({ success: true, data: result });

@@ -18,6 +18,7 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DRIVER_NAME_REGEX = /^[A-Za-z]+(?:[ .'-][A-Za-z]+)*$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const VEHICLE_NUMBER_REGEX = /^[A-Z]{2}\d{2}[A-Z]{1,2}\d{4}$/;
+const ALLOWED_SERVICE_CATEGORIES = ['taxi', 'outstation', 'delivery', 'pooling'];
 
 const VEHICLE_TYPE_MAP = {
   v1: 'bike',
@@ -36,6 +37,49 @@ const normalizePhone = (phone) => {
 };
 
 const normalizeRole = (role) => (String(role || 'driver').toLowerCase() === 'owner' ? 'owner' : 'driver');
+const normalizeServiceCategories = (value, fallback = 'taxi') => {
+  const rawValues = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(',')
+      : [];
+
+  const normalized = [...new Set(
+    rawValues
+      .map((item) => String(item || '').trim().toLowerCase())
+      .flatMap((item) => {
+        if (item === 'both') return ['taxi', 'outstation'];
+        return item ? [item] : [];
+      })
+      .filter((item) => ALLOWED_SERVICE_CATEGORIES.includes(item)),
+  )];
+
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  const fallbackValue = String(fallback || 'taxi').trim().toLowerCase();
+  if (fallbackValue === 'both') {
+    return ['taxi', 'outstation'];
+  }
+
+  return ALLOWED_SERVICE_CATEGORIES.includes(fallbackValue) ? [fallbackValue] : ['taxi'];
+};
+
+const getPrimaryRegisterFor = (serviceCategories = [], fallback = 'taxi') => {
+  const normalized = normalizeServiceCategories(serviceCategories, fallback);
+
+  if (normalized.includes('taxi') && normalized.includes('outstation')) {
+    return 'both';
+  }
+
+  if (normalized.includes('taxi')) return 'taxi';
+  if (normalized.includes('outstation')) return 'outstation';
+  if (normalized.includes('delivery')) return 'delivery';
+  if (normalized.includes('pooling')) return 'pooling';
+
+  return String(fallback || 'taxi').trim().toLowerCase() || 'taxi';
+};
 const matchesDocumentRole = (accountType, role) => {
   const normalizedAccountType = String(accountType || 'individual').trim().toLowerCase();
   const normalizedRole = normalizeRole(role);
@@ -182,6 +226,7 @@ const publicDriverPayload = (driver) => {
     gender: driver.gender,
     vehicleType: driver.vehicleType,
     registerFor: driver.registerFor,
+    serviceCategories: Array.isArray(driver.serviceCategories) ? driver.serviceCategories : [],
     vehicleNumber: driver.vehicleNumber,
     vehicleColor: driver.vehicleColor,
     city: driver.city,
@@ -414,6 +459,7 @@ export const saveDriverVehicle = async ({
   registrationId,
   phone,
   registerFor,
+  serviceCategories,
   locationId,
   locationName,
   serviceLocation,
@@ -437,6 +483,8 @@ export const saveDriverVehicle = async ({
 
   const selectedServiceLocation = serviceLocation || (locationId ? await ServiceLocation.findById(locationId).lean() : null);
   const selectedLocation = getServiceLocationName(selectedServiceLocation) || String(locationName || city || '').trim();
+  const normalizedServiceCategories = normalizeServiceCategories(serviceCategories, registerFor || session.role || 'taxi');
+  const normalizedRegisterFor = getPrimaryRegisterFor(normalizedServiceCategories, registerFor || session.role || 'taxi');
 
   if (!selectedLocation) {
     throw new ApiError(400, 'A valid service location is required');
@@ -473,7 +521,8 @@ export const saveDriverVehicle = async ({
   }
 
   session.vehicle = {
-    registerFor: String(registerFor || session.role || 'taxi').trim().toLowerCase(),
+    registerFor: normalizedRegisterFor,
+    serviceCategories: normalizedServiceCategories,
     locationId: String(locationId || '').trim(),
     locationName: selectedLocation,
     serviceLocation: selectedServiceLocation
@@ -692,10 +741,17 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
     email: session.personal.email,
     gender: session.personal.gender,
     password: session.personal.passwordHash,
+    service_location_id:
+      session.vehicle.locationId && /^[a-f\d]{24}$/i.test(String(session.vehicle.locationId))
+        ? session.vehicle.locationId
+        : null,
     vehicleType,
     vehicleTypeId: selectedVehicle?._id || null,
     vehicleIconType: selectedVehicle?.icon_types || vehicleType,
     registerFor: session.vehicle.registerFor,
+    serviceCategories: Array.isArray(session.vehicle.serviceCategories) ? session.vehicle.serviceCategories : [],
+    vehicleMake: session.vehicle.make,
+    vehicleModel: session.vehicle.model,
     vehicleNumber: session.vehicle.number,
     vehicleColor: session.vehicle.color,
     city: session.vehicle.city || session.vehicle.locationName,
@@ -710,6 +766,24 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
       role: session.role,
       verifiedAt: session.otpVerifiedAt,
       submittedAt,
+      personal: {
+        fullName: session.personal.fullName,
+        email: session.personal.email,
+        gender: session.personal.gender,
+      },
+      vehicle: {
+        registerFor: session.vehicle.registerFor,
+        serviceCategories: Array.isArray(session.vehicle.serviceCategories) ? session.vehicle.serviceCategories : [],
+        locationId: session.vehicle.locationId,
+        locationName: session.vehicle.locationName,
+        vehicleTypeId: session.vehicle.vehicleTypeId,
+        make: session.vehicle.make,
+        model: session.vehicle.model,
+        year: session.vehicle.year,
+        number: session.vehicle.number,
+        color: session.vehicle.color,
+        city: session.vehicle.city,
+      },
     },
   });
 

@@ -559,6 +559,10 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
       id: `bus-copy-${Date.now()}`,
       busName: `${draft.busName || 'New Bus'} Copy`,
       serviceNumber: '',
+      registrationNumber: '',
+      driverName: '',
+      driverPhone: '',
+      busDriverId: '',
       status: 'draft',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -579,6 +583,7 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
 
     setIsSaving(true);
     try {
+      const isNewBus = draft.id?.startsWith('bus-');
       const nextBus = await upsertAdminBus({
         ...draft,
         status: draft.status || 'draft',
@@ -598,7 +603,7 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
       });
       setSelectedBusId(nextBus.id);
       setDraft(nextBus);
-      navigate(`/admin/bus-service/edit/${nextBus.id}`);
+      navigate(isNewBus ? '/admin/bus-service' : `/admin/bus-service/edit/${nextBus.id}`);
       toast.success('Bus service saved');
     } catch (error) {
       toast.error(error?.message || 'Failed to save bus service');

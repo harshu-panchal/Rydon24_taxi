@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Phone, ChevronRight, ShieldCheck, Briefcase, UserRound, Sparkles, Building2, CheckCircle2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -38,6 +38,8 @@ const PhoneRegistration = () => {
     const [agreed, setAgreed] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const phoneCardRef = useRef(null);
+    const phoneInputRef = useRef(null);
     const isLoginPage = location.pathname === '/taxi/driver/login' || location.pathname === '/taxi/driver/login/';
     const appName = settings.general?.app_name || 'App';
     
@@ -75,14 +77,32 @@ const PhoneRegistration = () => {
     }, [appName, isLoginPage, role]);
 
     useEffect(() => {
-        if (!isLoginPage) {
-            saveDriverRegistrationSession({
-                ...storedSession,
-                role,
-                phone,
-            });
-        }
+        saveDriverRegistrationSession({
+            ...storedSession,
+            role,
+            phone,
+            loginMode: isLoginPage,
+        });
     }, [isLoginPage, role, phone]);
+
+    useEffect(() => {
+        const scrollPhoneIntoView = () => {
+            phoneCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        };
+
+        const focusTimer = window.setTimeout(() => {
+            scrollPhoneIntoView();
+            phoneInputRef.current?.focus();
+        }, 180);
+
+        const viewport = window.visualViewport;
+        viewport?.addEventListener('resize', scrollPhoneIntoView);
+
+        return () => {
+            window.clearTimeout(focusTimer);
+            viewport?.removeEventListener('resize', scrollPhoneIntoView);
+        };
+    }, []);
 
     const handleSendOTP = async () => {
         if (phone.length !== 10) {
@@ -103,7 +123,7 @@ const PhoneRegistration = () => {
             const response = isLoginPage
                 ? await sendDriverLoginOtp({ phone, role })
                 : await sendDriverOtp({ phone, role });
-            const sessionData = response?.data?.session || {};
+            const sessionData = response?.data?.session || response?.session || {};
             const nextState = saveDriverRegistrationSession({
                 phone,
                 role,
@@ -225,7 +245,9 @@ const PhoneRegistration = () => {
 
                     <motion.section 
                         variants={itemVariants}
+                        ref={phoneCardRef}
                         className="glass-morphism rounded-[32px] p-1 shadow-premium overflow-hidden border-white/50"
+                        style={{ scrollMarginTop: '24vh' }}
                     >
                         <div className="bg-white rounded-[31px] p-6 space-y-6">
                             <div className={`group rounded-[24px] border-2 transition-all p-4 ${error ? 'border-rose-100 bg-rose-50/30' : 'border-slate-50 bg-slate-50/50 focus-within:border-indigo-500 focus-within:bg-white focus-within:shadow-lg focus-within:shadow-indigo-500/10'}`}>
@@ -238,6 +260,7 @@ const PhoneRegistration = () => {
                                         <div className="flex min-w-0 items-center gap-2">
                                             <span className="shrink-0 text-base font-black text-slate-400 sm:text-lg">+91</span>
                                             <input 
+                                                ref={phoneInputRef}
                                                 type="tel" 
                                                 inputMode="numeric"
                                                 pattern="[0-9]*"
@@ -249,6 +272,7 @@ const PhoneRegistration = () => {
                                                     setPhone(val);
                                                     if (error) setError('');
                                                 }}
+                                                onFocus={() => phoneCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
                                                 placeholder="00000 00000"
                                                 className="min-w-0 w-full border-none bg-transparent p-0 text-lg font-bold text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200 sm:text-xl"
                                             />
