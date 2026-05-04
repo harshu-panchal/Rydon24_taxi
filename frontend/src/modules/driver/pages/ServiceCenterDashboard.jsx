@@ -90,7 +90,7 @@ const getCompletionRequirements = (booking) => {
   const meter = Number(inspection.returnMeterReading);
 
   if (!Number.isFinite(meter) || meter < 0) {
-    missing.push('return meter reading');
+    missing.push('return KM reading');
   }
 
   if (!String(inspection.returnFuelLevel || '').trim()) {
@@ -102,10 +102,20 @@ const getCompletionRequirements = (booking) => {
   }
 
   if (!Array.isArray(inspection.afterConditionImages) || inspection.afterConditionImages.filter(Boolean).length === 0) {
-    missing.push('after-condition photos');
+    missing.push('at least one return photo');
   }
 
   return missing;
+};
+
+const getCompletionValidationMessage = (booking) => {
+  const missing = getCompletionRequirements(booking);
+
+  if (missing.length === 0) {
+    return '';
+  }
+
+  return `Before marking this booking as completed, finish the Return Inspection section: ${missing.join(', ')}.`;
 };
 
 const buildStaffForm = () => ({
@@ -612,8 +622,7 @@ const ServiceCenterDashboard = () => {
     }
 
     if (bookingDraft.status === 'completed' && !canCompleteBooking(selectedBooking)) {
-      const missing = getCompletionRequirements(selectedBooking);
-      setError(`Complete the return checklist before marking completed: ${missing.join(', ')}`);
+      setError(getCompletionValidationMessage(selectedBooking));
       return;
     }
 
@@ -640,7 +649,12 @@ const ServiceCenterDashboard = () => {
   };
 
   const completeRide = async () => {
-    if (!selectedBooking || !canFinalizeBooking(selectedBooking)) {
+    if (!selectedBooking) {
+      return;
+    }
+
+    if (!canFinalizeBooking(selectedBooking)) {
+      setError(getCompletionValidationMessage(selectedBooking));
       return;
     }
 
@@ -1091,6 +1105,17 @@ const ServiceCenterDashboard = () => {
                                       <p className="text-[10px] font-black uppercase text-slate-400">Return Fuel</p>
                                       <input type="text" className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-amber-500/20" defaultValue={inspection.returnFuelLevel} onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'returnFuelLevel', e.target.value)} />
                                    </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                   <p className="text-[10px] font-black uppercase text-slate-400">Return Notes</p>
+                                   <textarea
+                                     rows={3}
+                                     className="w-full resize-none rounded-xl bg-slate-50 p-3 text-sm font-medium text-slate-800 focus:ring-2 focus:ring-amber-500/20 border-none"
+                                     placeholder="Add return condition notes, damage observations, fuel remarks, or handover comments..."
+                                     defaultValue={inspection.returnNotes || ''}
+                                     onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'returnNotes', e.target.value)}
+                                   />
                                 </div>
                              </div>
                           </CollapsibleSection>

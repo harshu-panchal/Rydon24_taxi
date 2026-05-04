@@ -32,6 +32,7 @@ import {
   ShieldCheck,
   Smartphone,
   Star,
+  Trash2,
   TrendingUp,
   UserCog,
   Users,
@@ -43,6 +44,7 @@ const ADMIN_MODE = 'admin';
 const OWNER_MODE = 'owner';
 const MODE_STORAGE_KEY = 'adminPanelMode';
 const SIDEBAR_EXPANSION_STORAGE_KEY = 'adminSidebarExpandedGroups';
+const NOTIFICATION_DISMISS_STORAGE_KEY = 'adminNotificationDismissals';
 
 const pathMatches = (pathname, targetPath) =>
   pathname === targetPath || pathname.startsWith(`${targetPath}/`);
@@ -80,6 +82,37 @@ const flattenSearchEntries = (items = [], parentLabels = []) =>
   });
 
 const NOTIFICATION_PAGE_SIZE = 5;
+
+const readDismissedNotifications = () => {
+  if (typeof window === 'undefined') {
+    return { ride_requests: [], bookings: [], chats: [] };
+  }
+
+  try {
+    const saved = window.localStorage.getItem(NOTIFICATION_DISMISS_STORAGE_KEY);
+    const parsed = saved ? JSON.parse(saved) : {};
+
+    return {
+      ride_requests: Array.isArray(parsed?.ride_requests) ? parsed.ride_requests : [],
+      bookings: Array.isArray(parsed?.bookings) ? parsed.bookings : [],
+      chats: Array.isArray(parsed?.chats) ? parsed.chats : [],
+    };
+  } catch (error) {
+    return { ride_requests: [], bookings: [], chats: [] };
+  }
+};
+
+const getNotificationEntryId = (tab, item = {}) => {
+  if (tab === 'ride_requests') {
+    return String(item.id || item.requestId || '').trim();
+  }
+
+  if (tab === 'bookings') {
+    return String(item._id || item.id || item.booking_reference || '').trim();
+  }
+
+  return String(item.id || '').trim();
+};
 
 const dedupeAdminChatNotifications = (items = []) => {
   const seen = new Set();
@@ -427,6 +460,7 @@ const AdminLayout = () => {
   const [rideRequestPage, setRideRequestPage] = useState(1);
   const [bookingPage, setBookingPage] = useState(1);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [dismissedNotifications, setDismissedNotifications] = useState(() => readDismissedNotifications());
   const [expandedSidebarGroups, setExpandedSidebarGroups] = useState(() => {
     if (typeof window === 'undefined') {
       return [];
@@ -445,6 +479,75 @@ const AdminLayout = () => {
 
   const appName = settings.general?.app_name || 'App';
   const appLogo = settings.general?.logo || settings.customization?.logo;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(NOTIFICATION_DISMISS_STORAGE_KEY, JSON.stringify(dismissedNotifications));
+  }, [dismissedNotifications]);
+
+  const dismissedRideRequestSet = useMemo(
+    () => new Set((dismissedNotifications.ride_requests || []).map((item) => String(item).trim()).filter(Boolean)),
+    [dismissedNotifications],
+  );
+
+  const dismissedBookingSet = useMemo(
+    () => new Set((dismissedNotifications.bookings || []).map((item) => String(item).trim()).filter(Boolean)),
+    [dismissedNotifications],
+  );
+
+  const dismissedChatSet = useMemo(
+    () => new Set((dismissedNotifications.chats || []).map((item) => String(item).trim()).filter(Boolean)),
+    [dismissedNotifications],
+  );
+
+  const visibleRideRequestResults = useMemo(
+    () => rideRequestFeed.results.filter((item) => !dismissedRideRequestSet.has(getNotificationEntryId('ride_requests', item))),
+    [dismissedRideRequestSet, rideRequestFeed.results],
+  );
+
+  const visibleBookingsFeed = useMemo(
+    () => bookingsFeed.filter((item) => !dismissedBookingSet.has(getNotificationEntryId('bookings', item))),
+    [bookingsFeed, dismissedBookingSet],
+  );
+
+  const visibleChatNotifications = useMemo(
+    () => chatNotifications.filter((item) => !dismissedChatSet.has(getNotificationEntryId('chats', item))),
+    [chatNotifications, dismissedChatSet],
+  );
+
+  const dismissNotification = (tab, item) => {
+    const id = getNotificationEntryId(tab, item);
+    if (!id) return;
+
+    setDismissedNotifications((current) => {
+      const existingItems = Array.isArray(current?.[tab]) ? current[tab] : [];
+      if (existingItems.includes(id)) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [tab]: [id, ...existingItems].slice(0, 500),
+      };
+    });
+  };
+
+  const dismissCurrentNotifications = () => {
+    if (notificationTab === 'ride_requests') {
+      visibleRideRequestResults.forEach((item) => dismissNotification('ride_requests', item));
+      return;
+    }
+
+    if (notificationTab === 'bookings') {
+      visibleBookingsFeed.forEach((item) => dismissNotification('bookings', item));
+      return;
+    }
+
+    visibleChatNotifications.forEach((item) => dismissNotification('chats', item));
+  };
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -723,20 +826,20 @@ const AdminLayout = () => {
   }, [searchEntries, searchTerm]);
 
   const pagedBookings = useMemo(() => {
-    const total = bookingsFeed.length;
+    const total = visibleBookingsFeed.length;
     const lastPage = Math.max(1, Math.ceil(total / NOTIFICATION_PAGE_SIZE));
     const currentPage = Math.min(bookingPage, lastPage);
     const start = (currentPage - 1) * NOTIFICATION_PAGE_SIZE;
 
     return {
-      results: bookingsFeed.slice(start, start + NOTIFICATION_PAGE_SIZE),
+      results: visibleBookingsFeed.slice(start, start + NOTIFICATION_PAGE_SIZE),
       paginator: {
         current_page: currentPage,
         last_page: lastPage,
         total,
       },
     };
-  }, [bookingPage, bookingsFeed]);
+  }, [bookingPage, visibleBookingsFeed]);
 
   const activeNotificationMeta =
     notificationTab === 'ride_requests'
@@ -746,7 +849,16 @@ const AdminLayout = () => {
         : { current_page: 1, last_page: 1, total: chatNotifications.length };
 
   const totalNotificationItems =
-    Number(rideRequestFeed?.paginator?.total || 0) + Number(bookingsFeed.length || 0) + Number(chatNotifications.length || 0);
+    Math.max(0, Number(rideRequestFeed?.paginator?.total || 0) - dismissedRideRequestSet.size) +
+    visibleBookingsFeed.length +
+    visibleChatNotifications.length;
+
+  const currentNotificationCount =
+    notificationTab === 'ride_requests'
+      ? visibleRideRequestResults.length
+      : notificationTab === 'bookings'
+        ? pagedBookings.results.length
+        : visibleChatNotifications.length;
 
   const setMode = (nextMode) => {
     localStorage.setItem(MODE_STORAGE_KEY, nextMode);
@@ -1062,9 +1174,20 @@ const AdminLayout = () => {
                           Latest bookings, ride requests, and support chats
                         </p>
                       </div>
-                      <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700">
-                        {totalNotificationItems}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {currentNotificationCount > 0 ? (
+                          <button
+                            type="button"
+                            onClick={dismissCurrentNotifications}
+                            className="rounded-full border border-slate-200 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500 transition-all hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+                          >
+                            Clear
+                          </button>
+                        ) : null}
+                        <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700">
+                          {totalNotificationItems}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-slate-50 p-1">
@@ -1118,14 +1241,14 @@ const AdminLayout = () => {
                         Loading notifications...
                       </div>
                     ) : notificationTab === 'ride_requests' ? (
-                      rideRequestFeed.results.length === 0 ? (
+                      visibleRideRequestResults.length === 0 ? (
                         <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-8 text-center">
                           <p className="text-sm font-bold text-slate-900">No ride requests found</p>
                           <p className="mt-1 text-xs font-semibold text-slate-500">New ride requests will show up here.</p>
                         </div>
                       ) : (
                         <div className="space-y-2">
-                          {rideRequestFeed.results.map((item) => (
+                          {visibleRideRequestResults.map((item) => (
                             <button
                               key={item.id || item.requestId}
                               type="button"
@@ -1133,7 +1256,7 @@ const AdminLayout = () => {
                                 navigate('/admin/trips');
                                 setIsNotificationsOpen(false);
                               }}
-                              className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
+                              className="relative w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
@@ -1148,13 +1271,33 @@ const AdminLayout = () => {
                                   {item.tripStatus || 'Upcoming'}
                                 </span>
                               </div>
-                              <div className="mt-2 flex items-center justify-between gap-3 text-[11px] font-semibold text-slate-400">
-                                <span>
-                                  Destination: {formatAdminNotificationLocation(item.dropLabel, 'Destination set')}
-                                </span>
-                                <span>{formatRelativeAdminTime(item.date)}</span>
-                              </div>
-                            </button>
+                            <div className="mt-2 flex items-center justify-between gap-3 text-[11px] font-semibold text-slate-400">
+                              <span>
+                                Destination: {formatAdminNotificationLocation(item.dropLabel, 'Destination set')}
+                              </span>
+                              <span>{formatRelativeAdminTime(item.date)}</span>
+                            </div>
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                dismissNotification('ride_requests', item);
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  dismissNotification('ride_requests', item);
+                                }
+                              }}
+                              className="absolute right-3 top-3 inline-flex rounded-lg p-1.5 text-slate-400 transition-all hover:bg-rose-50 hover:text-rose-600"
+                              aria-label="Delete notification"
+                            >
+                              <Trash2 size={14} />
+                            </span>
+                          </button>
                           ))}
                         </div>
                       )
@@ -1173,7 +1316,7 @@ const AdminLayout = () => {
                               navigate('/admin/owners/bookings');
                               setIsNotificationsOpen(false);
                             }}
-                            className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
+                            className="relative w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
@@ -1192,17 +1335,37 @@ const AdminLayout = () => {
                               <span>{item.owner_id?.name || item.owner_id?.company_name || 'Owner booking'}</span>
                               <span>{formatRelativeAdminTime(item.trip_date || item.createdAt)}</span>
                             </div>
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                dismissNotification('bookings', item);
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  dismissNotification('bookings', item);
+                                }
+                              }}
+                              className="absolute right-3 top-3 inline-flex rounded-lg p-1.5 text-slate-400 transition-all hover:bg-rose-50 hover:text-rose-600"
+                              aria-label="Delete notification"
+                            >
+                              <Trash2 size={14} />
+                            </span>
                           </button>
                         ))}
                       </div>
-                    ) : chatNotifications.length === 0 ? (
+                    ) : visibleChatNotifications.length === 0 ? (
                       <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-8 text-center">
                         <p className="text-sm font-bold text-slate-900">No new chats found</p>
                         <p className="mt-1 text-xs font-semibold text-slate-500">New user and driver support messages will show up here.</p>
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {chatNotifications.map((item) => (
+                        {visibleChatNotifications.map((item) => (
                           <button
                             key={item.id}
                             type="button"
@@ -1211,7 +1374,7 @@ const AdminLayout = () => {
                               setChatNotifications([]);
                               setIsNotificationsOpen(false);
                             }}
-                            className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
+                            className="relative w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
@@ -1225,6 +1388,26 @@ const AdminLayout = () => {
                             <div className="mt-2 flex items-center justify-end text-[11px] font-semibold text-slate-400">
                               <span>{formatRelativeAdminTime(item.createdAt)}</span>
                             </div>
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                dismissNotification('chats', item);
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  dismissNotification('chats', item);
+                                }
+                              }}
+                              className="absolute right-3 top-3 inline-flex rounded-lg p-1.5 text-slate-400 transition-all hover:bg-rose-50 hover:text-rose-600"
+                              aria-label="Delete notification"
+                            >
+                              <Trash2 size={14} />
+                            </span>
                           </button>
                         ))}
                       </div>

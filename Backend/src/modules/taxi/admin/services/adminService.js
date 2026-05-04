@@ -162,6 +162,7 @@ const toDocumentKey = (value = '') => {
 const normalizeVehicleTransportType = (value = '') => {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'delivery') return 'delivery';
+  if (normalized === 'pooling') return 'pooling';
   if (normalized === 'both' || normalized === 'all') return 'both';
   return 'taxi';
 };
@@ -8242,6 +8243,7 @@ export const listOwnerDocumentUploadFields = async ({ activeOnly = true } = {}) 
     const defaults = [
       { name: 'taxi', display_name: 'Taxi' },
       { name: 'delivery', display_name: 'Delivery' },
+      { name: 'pooling', display_name: 'Pooling' },
       { name: 'both', display_name: 'Both' }
     ];
     

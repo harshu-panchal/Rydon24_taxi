@@ -21,6 +21,7 @@ export const useTaxiTransportTypes = () => {
         setTransportTypes([
           { name: 'taxi', display_name: 'Taxi' },
           { name: 'delivery', display_name: 'Delivery' },
+          { name: 'pooling', display_name: 'Pooling' },
           { name: 'both', display_name: 'Both' }
         ]);
       } finally {

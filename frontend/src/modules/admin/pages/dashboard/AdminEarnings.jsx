@@ -212,6 +212,11 @@ const AdminEarnings = () => {
     setFilters((current) => ({ ...current, [key]: value }));
   };
 
+  const clearFilters = React.useCallback(() => {
+    setPage(1);
+    setFilters(emptyFilters);
+  }, []);
+
   const loadOptions = React.useCallback(async () => {
     try {
       const [zoneRes, vehicleRes] = await Promise.all([
@@ -267,6 +272,7 @@ const AdminEarnings = () => {
 
   const summary = data.summary || {};
   const paginator = data.paginator || {};
+  const hasActiveFilters = Object.values(filters).some((value) => String(value || '').trim() !== '');
 
   return (
     <div className="min-h-screen bg-[#f7fafc] p-4 text-slate-950 lg:p-6">
@@ -342,6 +348,17 @@ const AdminEarnings = () => {
               <input value={filters.search} onChange={(event) => updateFilter('search', event.target.value)} placeholder="Trip, rider, driver" className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm font-semibold outline-none focus:border-emerald-400" />
             </div>
           </label>
+        </div>
+
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={clearFilters}
+            disabled={!hasActiveFilters}
+            className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Clear Filter
+          </button>
         </div>
       </div>
 

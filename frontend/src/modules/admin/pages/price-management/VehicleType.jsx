@@ -55,6 +55,11 @@ const iconMap = {
 const ICON_TYPE_ALIASES = {
   motor_bike: 'bike',
   motorbike: 'bike',
+  mini_truck: 'truck',
+  'mini truck': 'truck',
+  pooling_truck: 'truck',
+  'pooling truck': 'truck',
+  loader: 'truck',
   hcv: 'HCV',
   lcv: 'LCV',
   mcv: 'MCV',
@@ -75,6 +80,7 @@ const OBJECT_ID_PATTERN = /^[a-fA-F0-9]{24}$/;
 const normalizeTransportType = (value = '') => {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'delivery') return 'delivery';
+  if (normalized === 'pooling') return 'pooling';
   if (normalized === 'both' || normalized === 'all') return 'both';
   return 'taxi';
 };
@@ -82,6 +88,7 @@ const normalizeTransportType = (value = '') => {
 const normalizeTaxiMode = (value = '') => {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'delivery') return 'delivery';
+  if (normalized === 'pooling') return 'pooling';
   if (normalized === 'both' || normalized === 'all') return 'both';
   return 'taxi';
 };
@@ -149,6 +156,7 @@ const DELIVERY_CATEGORY_OPTIONS = [
 const TRANSPORT_TYPE_OPTIONS = [
   { id: 'taxi', name: 'taxi', display_name: 'Ride' },
   { id: 'delivery', name: 'delivery', display_name: 'Delivery' },
+  { id: 'pooling', name: 'pooling', display_name: 'Pooling' },
   { id: 'both', name: 'both', display_name: 'Both' },
 ];
 
