@@ -76,6 +76,21 @@ const UserDetails = () => {
             }
           });
         }
+
+        const userReviews = Array.isArray(userData.data?.reviews)
+          ? userData.data.reviews
+          : Array.isArray(u?.reviews)
+            ? u.reviews
+            : [];
+        setReviews(
+          userReviews.map((review) => ({
+            _id: review._id,
+            rating: Number(review.rating || 0),
+            comment: review.comment || '',
+            createdAt: review.createdAt || null,
+            driver_id: review.driver_id || null,
+          })),
+        );
       }
 
       // Fetch Requests

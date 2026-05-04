@@ -124,6 +124,21 @@ const toMapPoint = (latitude, longitude) => {
   return null;
 };
 
+const buildRentalMapPinIcon = (color = '#10b981', isSelected = false) => {
+  const pinSvg = `
+    <svg width="34" height="42" viewBox="0 0 34 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17 41C17 41 31 27.2 31 17C31 9.26801 24.732 3 17 3C9.26801 3 3 9.26801 3 17C3 27.2 17 41 17 41Z" fill="${color}" stroke="${isSelected ? '#ffffff' : '#E2E8F0'}" stroke-width="${isSelected ? 3 : 2}"/>
+      <circle cx="17" cy="17" r="5.5" fill="white"/>
+    </svg>
+  `;
+
+  return {
+    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(pinSvg)}`,
+    scaledSize: new window.google.maps.Size(isSelected ? 34 : 30, isSelected ? 42 : 38),
+    anchor: new window.google.maps.Point(isSelected ? 17 : 15, isSelected ? 42 : 38),
+  };
+};
+
 const normalizeListResponse = (payload) => {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.results)) return payload.results;
@@ -246,6 +261,11 @@ const RentalVehicleDetail = () => {
         setVehicle((current) => ({
           ...current,
           ...latestVehicle,
+          rawPricing: Array.isArray(latestVehicle.pricing)
+            ? latestVehicle.pricing
+            : Array.isArray(current?.rawPricing)
+              ? current.rawPricing
+              : [],
           galleryImages: mergedGallery,
           gallery: [
             latestVehicle.coverImage,
@@ -303,7 +323,11 @@ const RentalVehicleDetail = () => {
     ? [...vehicle.rawPricing].sort(
         (a, b) => Number(a.durationHours || 0) - Number(b.durationHours || 0),
       )
-    : [];
+    : Array.isArray(vehicle.pricing)
+      ? [...vehicle.pricing].sort(
+          (a, b) => Number(a.durationHours || 0) - Number(b.durationHours || 0),
+        )
+      : [];
 
   const defaultPackage = useMemo(() => {
     if (!pricingRows.length) return null;
@@ -962,34 +986,14 @@ const RentalVehicleDetail = () => {
                               position={marker.position}
                               title={marker.title}
                               onClick={() => setSelectedServiceLocationId(String(marker.locationId))}
-                              icon={{
-                                path: window.google.maps.SymbolPath.CIRCLE,
-                                fillColor: marker.isSelected ? '#10b981' : marker.type === 'location' ? '#0f172a' : '#f59e0b',
-                                fillOpacity: 1,
-                                strokeColor: marker.isClosest ? '#ecfeff' : '#ffffff',
-                                strokeWeight: marker.isSelected ? 3 : 2,
-                                scale: marker.isSelected ? (marker.type === 'location' ? 11 : 9) : marker.type === 'location' ? 8 : 6,
-                              }}
+                              icon={buildRentalMapPinIcon(
+                                marker.isSelected ? '#10b981' : marker.type === 'location' ? '#0f172a' : '#f59e0b',
+                                marker.isSelected || marker.isClosest,
+                              )}
                             />
                           ))}
                         </GoogleMap>
                       )}
-
-                      {selectedServiceLocation ? (
-                        <div className="pointer-events-none absolute left-3 top-3 rounded-[14px] border border-white/80 bg-white/92 px-3 py-2 shadow-sm">
-                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                            {selectedServiceLocation.id === serviceLocations[0]?.id && selectedServiceLocation.distanceLabel
-                              ? 'Closest Service Point'
-                              : 'Selected Service Point'}
-                          </p>
-                          <p className="mt-1 text-[12px] font-black text-slate-900">
-                            {selectedServiceLocation.name}
-                          </p>
-                          <p className="mt-0.5 max-w-[180px] text-[10px] font-bold text-slate-500">
-                            {selectedServiceLocation.address || `${appName} pickup point`}
-                          </p>
-                        </div>
-                      ) : null}
                     </div>
                   </div>
 

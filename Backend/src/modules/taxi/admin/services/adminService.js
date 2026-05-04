@@ -3032,7 +3032,30 @@ export const getUserById = async (id) => {
     throw new ApiError(404, 'User not found');
   }
 
-  return serializeUser(user);
+  const rides = await Ride.find({
+    userId: id,
+    'feedback.rating': { $gte: 1 },
+  })
+    .sort({ completedAt: -1, createdAt: -1 })
+    .populate('driverId', 'name')
+    .lean();
+
+  return {
+    ...serializeUser(user),
+    reviews: rides.map((ride) => ({
+      _id: ride._id,
+      request_id: String(ride._id),
+      rating: Number(ride.feedback?.rating || 0),
+      comment: String(ride.feedback?.comment || '').trim(),
+      createdAt: ride.feedback?.submittedAt || ride.completedAt || ride.createdAt || null,
+      driver_id: ride.driverId
+        ? {
+            _id: ride.driverId._id || ride.driverId,
+            name: ride.driverId.name || 'Unknown',
+          }
+        : null,
+    })),
+  };
 };
 
 export const listUserRequests = async (id) => {
@@ -6223,7 +6246,7 @@ export const getDashboardData = async () => {
       total_earnings: Number(totalOverallFare.toFixed(2)),
       payment_success_rate: 99.4,
       notifiedSos: {
-        total: supportTicketCounts.pending,
+        total: supportTicketCounts.pending + supportTicketCounts.assigned,
         pending: supportTicketCounts.pending,
         assigned: supportTicketCounts.assigned,
         closed: supportTicketCounts.closed,
@@ -7904,26 +7927,86 @@ export const listOwnerDocumentUploadFields = async ({ activeOnly = true } = {}) 
     };
   };
 
-  export const buildDriverDutyReport = async (query = {}) => {
-    const { service_location_id, driver_id, date_option, from_date, to_date } = query;
-    const filter = {};
-    
-    if (service_location_id) filter.service_location_id = service_location_id;
-    if (driver_id) filter._id = driver_id;
+export const buildDriverDutyReport = async (query = {}) => {
+    const {
+      service_location_id,
+      driver_id,
+      driver,
+      status,
+      date_option,
+      from_date,
+      to_date,
+    } = query;
+    const selectedDriverId = driver_id || driver;
+    const driverFilter = {};
+
+    if (service_location_id) {
+      driverFilter.service_location_id = service_location_id;
+    }
+    if (selectedDriverId) {
+      driverFilter._id = selectedDriverId;
+    }
+
+    const drivers = await Driver.find(driverFilter)
+      .select('name phone city registerFor vehicleType service_location_id')
+      .lean();
+    const driverIds = drivers.map((item) => item._id);
+    const driverMap = new Map(drivers.map((item) => [String(item._id), item]));
+
+    if (driverIds.length === 0) {
+      return {
+        headers: ['ride_id', 'driver', 'driver_phone', 'transport_type', 'vehicle_type', 'pickup', 'drop', 'payment_method', 'fare', 'status', 'ride_time'],
+        rows: [],
+      };
+    }
+
+    const rideFilter = {
+      driverId: { $in: driverIds },
+    };
+
+    if (status) {
+      rideFilter.status = String(status).trim().toLowerCase();
+    }
 
     const dateFilter = buildDateFilter(date_option, from_date, to_date);
-    if (dateFilter) filter.updatedAt = dateFilter; // Assuming updatedAt tracks duty activity
+    if (dateFilter) {
+      rideFilter.createdAt = dateFilter;
+    }
 
-    const items = await Driver.find(filter).lean();
+    const rides = await Ride.find(rideFilter)
+      .sort({ createdAt: -1 })
+      .select('driverId pickupAddress dropAddress paymentMethod fare status createdAt transport_type vehicleTypeId')
+      .populate('vehicleTypeId', 'name type_name transport_type')
+      .lean();
+
     return {
-      headers: ['driver', 'city', 'status', 'rating', 'last_duty_at'],
-      rows: items.map((item) => ({ 
-        driver: item.name, 
-        city: item.city, 
-        status: item.status, 
-        rating: item.rating,
-        last_duty_at: item.updatedAt ? new Date(item.updatedAt).toLocaleString() : ''
-      }))
+      headers: ['ride_id', 'driver', 'driver_phone', 'transport_type', 'vehicle_type', 'pickup', 'drop', 'payment_method', 'fare', 'status', 'ride_time'],
+      rows: rides.map((ride) => {
+        const rideDriver = driverMap.get(String(ride.driverId || '')) || {};
+        const vehicleType =
+          ride?.vehicleTypeId?.type_name ||
+          ride?.vehicleTypeId?.name ||
+          rideDriver?.vehicleType ||
+          '';
+
+        return {
+          ride_id: String(ride._id),
+          driver: rideDriver.name || 'Unknown Driver',
+          driver_phone: rideDriver.phone || '',
+          transport_type:
+            ride?.vehicleTypeId?.transport_type ||
+            ride?.transport_type ||
+            rideDriver?.registerFor ||
+            'taxi',
+          vehicle_type: vehicleType,
+          pickup: ride.pickupAddress || '',
+          drop: ride.dropAddress || '',
+          payment_method: ride.paymentMethod || '',
+          fare: Number(ride.fare || 0),
+          status: ride.status || '',
+          ride_time: ride.createdAt ? new Date(ride.createdAt).toLocaleString() : '',
+        };
+      }),
     };
   };
 
@@ -7953,26 +8036,90 @@ export const listOwnerDocumentUploadFields = async ({ activeOnly = true } = {}) 
   };
 
   export const buildFinanceReport = async (query = {}) => {
-    const { transport_type, vehicle_type, status, payment_type, date_option, from_date, to_date } = query;
-    const filter = {};
-    
-    if (status) filter.status = status;
-    if (payment_type) filter.payment_method = payment_type;
+    const {
+      transport_type,
+      vehicle_type,
+      status,
+      trip_status,
+      payment_type,
+      date_option,
+      from_date,
+      to_date,
+    } = query;
+    const rideFilter = {};
+    const effectiveStatus = status || trip_status;
+
+    if (effectiveStatus) {
+      rideFilter.status = String(effectiveStatus).trim().toLowerCase();
+    }
+    if (payment_type) {
+      rideFilter.paymentMethod = String(payment_type).trim().toLowerCase();
+    }
 
     const dateFilter = buildDateFilter(date_option, from_date, to_date);
-    if (dateFilter) filter.createdAt = dateFilter;
+    if (dateFilter) {
+      rideFilter.createdAt = dateFilter;
+    }
 
-    const items = await WithdrawalRequest.find(filter).populate('driver_id').lean();
+    const items = await Ride.find(rideFilter)
+      .sort({ createdAt: -1 })
+      .select('driverId userId fare status paymentMethod createdAt transport_type commissionAmount driverEarnings')
+      .populate('driverId', 'name phone registerFor vehicleType')
+      .populate('userId', 'name phone')
+      .lean();
+
+    const normalizedTransportType = String(transport_type || '').trim().toLowerCase();
+    const normalizedVehicleType = String(vehicle_type || '').trim().toLowerCase();
+
+    const rows = items
+      .map((item) => {
+        const resolvedTransportType =
+          String(
+            item.transport_type ||
+            item.driverId?.registerFor ||
+            item.driverId?.vehicleType ||
+            'taxi',
+          )
+            .trim()
+            .toLowerCase();
+        const resolvedVehicleType = String(item.driverId?.vehicleType || '').trim().toLowerCase();
+        const fare = Number(item.fare || 0);
+        const commission =
+          item.commissionAmount !== undefined && item.commissionAmount !== null
+            ? Number(item.commissionAmount || 0)
+            : Math.max(fare - Number(item.driverEarnings || 0), 0);
+
+        return {
+          ride_id: String(item._id),
+          driver: item.driverId?.name || 'Unassigned',
+          driver_phone: item.driverId?.phone || '',
+          user: item.userId?.name || '',
+          user_phone: item.userId?.phone || '',
+          transport_type: resolvedTransportType,
+          vehicle_type: resolvedVehicleType,
+          payment_method: String(item.paymentMethod || '').toLowerCase(),
+          fare,
+          admin_commission: Number(commission.toFixed(2)),
+          driver_earnings: Number(Math.max(fare - commission, 0).toFixed(2)),
+          status: item.status || '',
+          createdAt: item.createdAt ? new Date(item.createdAt).toLocaleString() : '',
+        };
+      })
+      .filter((item) => {
+        const transportMatches =
+          !normalizedTransportType ||
+          normalizedTransportType === 'all' ||
+          normalizedTransportType === 'both' ||
+          item.transport_type === normalizedTransportType;
+        const vehicleMatches =
+          !normalizedVehicleType ||
+          item.vehicle_type === normalizedVehicleType;
+        return transportMatches && vehicleMatches;
+      });
+
     return {
-      headers: ['transactionId', 'driver', 'amount', 'payment_method', 'status', 'createdAt'],
-      rows: items.map((item) => ({
-        transactionId: item.transactionId,
-        driver: item.driver_id?.name,
-        amount: item.amount,
-        payment_method: item.payment_method,
-        status: item.status,
-        createdAt: item.createdAt ? new Date(item.createdAt).toLocaleString() : ''
-      }))
+      headers: ['ride_id', 'driver', 'driver_phone', 'user', 'user_phone', 'transport_type', 'vehicle_type', 'payment_method', 'fare', 'admin_commission', 'driver_earnings', 'status', 'createdAt'],
+      rows,
     };
   };
 
@@ -8229,6 +8376,77 @@ export const listOwnerDocumentUploadFields = async ({ activeOnly = true } = {}) 
       query.$or = [{ audience: audience }, { screen: audience }];
     }
     return OnboardingScreen.find(query).sort({ order: 1 }).lean();
+  };
+
+  export const createOnboardingScreen = async (payload = {}) => {
+    const audience = String(payload.audience || payload.screen || 'user').trim().toLowerCase();
+    if (!['user', 'driver', 'owner'].includes(audience)) {
+      throw new ApiError(400, 'Valid onboarding audience is required');
+    }
+
+    const title = String(payload.title || '').trim();
+    if (!title) {
+      throw new ApiError(400, 'Onboarding title is required');
+    }
+
+    const item = await OnboardingScreen.create({
+      audience,
+      screen: audience,
+      order: Number(payload.order || 1),
+      title,
+      description: String(payload.description || '').trim(),
+      active: payload.active !== undefined ? normalizeBoolean(payload.active) : true,
+    });
+
+    return item.toObject();
+  };
+
+  export const updateOnboardingScreen = async (id, payload = {}) => {
+    const update = {};
+
+    if (payload.audience !== undefined || payload.screen !== undefined) {
+      const audience = String(payload.audience || payload.screen || '').trim().toLowerCase();
+      if (!['user', 'driver', 'owner'].includes(audience)) {
+        throw new ApiError(400, 'Valid onboarding audience is required');
+      }
+      update.audience = audience;
+      update.screen = audience;
+    }
+    if (payload.order !== undefined) {
+      update.order = Number(payload.order || 1);
+    }
+    if (payload.title !== undefined) {
+      const title = String(payload.title || '').trim();
+      if (!title) {
+        throw new ApiError(400, 'Onboarding title is required');
+      }
+      update.title = title;
+    }
+    if (payload.description !== undefined) {
+      update.description = String(payload.description || '').trim();
+    }
+    if (payload.active !== undefined) {
+      update.active = normalizeBoolean(payload.active);
+    }
+
+    const item = await OnboardingScreen.findByIdAndUpdate(
+      id,
+      { $set: update },
+      { returnDocument: 'after', runValidators: true },
+    );
+    if (!item) {
+      throw new ApiError(404, 'Onboarding screen not found');
+    }
+
+    return item.toObject();
+  };
+
+  export const deleteOnboardingScreen = async (id) => {
+    const deleted = await OnboardingScreen.findByIdAndDelete(id);
+    if (!deleted) {
+      throw new ApiError(404, 'Onboarding screen not found');
+    }
+    return true;
   };
 
   export const listTransportTypes = async () => {

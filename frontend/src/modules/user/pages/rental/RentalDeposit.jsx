@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, ChevronRight, ShieldCheck, CreditCard, Wallet, Smartphone } from 'lucide-react';
 import { userService } from '../../services/userService';
+import { userAuthService } from '../../services/authService';
 
 const PAYMENT_METHODS = [
   { id: 'upi', label: 'UPI', icon: Smartphone },
@@ -112,22 +113,57 @@ const RentalDeposit = () => {
     };
   }, [state.vehicle?.id]);
 
-  if (!vehicleSnapshot) {
-    navigate('/rental');
-    return null;
-  }
-
   const { totalCost, selectedPackage, serviceLocation } = state;
-  const vehicle = vehicleSnapshot;
+  const vehicle = vehicleSnapshot || {};
   const advancePayment = vehicle.advancePayment || {};
   const payableNow = useMemo(
     () => (advancePayment.enabled ? Number(advancePayment.amount || 0) : 0),
     [advancePayment.amount, advancePayment.enabled],
   );
   const advancePaymentLabel = advancePayment.label || 'Advance booking payment';
+  const bookingReference = useMemo(
+    () => state.bookingReference || `RNT-${Date.now().toString(36).slice(-6).toUpperCase()}`,
+    [state.bookingReference],
+  );
   const [method, setMethod] = useState('upi');
   const [paying, setPaying] = useState(false);
   const [paymentError, setPaymentError] = useState('');
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [walletLoading, setWalletLoading] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadWallet = async () => {
+      setWalletLoading(true);
+      try {
+        const response = await userAuthService.getWallet();
+        const data = response?.data || response || {};
+        if (mounted) {
+          setWalletBalance(Number(data.balance || 0));
+        }
+      } catch {
+        if (mounted) {
+          setWalletBalance(0);
+        }
+      } finally {
+        if (mounted) {
+          setWalletLoading(false);
+        }
+      }
+    };
+
+    loadWallet();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  if (!vehicleSnapshot) {
+    navigate('/rental');
+    return null;
+  }
 
   const submitBookingRequest = async ({
     paymentStatus,
@@ -170,7 +206,7 @@ const RentalDeposit = () => {
             amount: 0,
             currency: 'INR',
           },
-          bookingReference: '',
+          bookingReference,
         });
 
         navigate('/rental/confirmed', {
@@ -193,6 +229,43 @@ const RentalDeposit = () => {
     setPaying(true);
 
     try {
+      if (method === 'wallet') {
+        if (Number(walletBalance || 0) < payableNow) {
+          throw new Error('Not enough wallet balance for this advance payment');
+        }
+
+        const walletResponse = await userService.payRentalAdvanceWithWallet({
+          amount: payableNow,
+          bookingReference,
+          vehicleId: vehicle.id || vehicle._id,
+          vehicleName: vehicle.name,
+        });
+        const payment = walletResponse?.data || walletResponse || {};
+        const bookingRequest = await submitBookingRequest({
+          paymentStatus: 'paid',
+          paymentMethod: 'wallet',
+          paymentMethodLabel: 'Wallet',
+          payment,
+          bookingReference,
+        });
+        setWalletBalance(Number(payment.balance || 0));
+        navigate('/rental/confirmed', {
+          replace: true,
+          state: {
+            ...state,
+            vehicle,
+            deposit: payableNow,
+            paymentMethod: 'wallet',
+            paymentMethodLabel: 'Wallet',
+            paymentStatus: 'paid',
+            payment,
+            bookingReference: bookingRequest.bookingReference || bookingReference,
+            bookingRequest,
+          },
+        });
+        return;
+      }
+
       const scriptLoaded = await loadRazorpayScript();
       if (!scriptLoaded) {
         throw new Error('Razorpay SDK failed to load');
@@ -260,7 +333,7 @@ const RentalDeposit = () => {
                 paymentMethodLabel: methodLabel,
                 paymentStatus: 'paid',
                 payment,
-                bookingReference: bookingRequest.bookingReference || order.bookingReference || '',
+                bookingReference: bookingRequest.bookingReference || order.bookingReference || bookingReference,
                 bookingRequest,
               },
             });
@@ -398,6 +471,13 @@ const RentalDeposit = () => {
               </button>
             ))}
           </div>
+          {method === 'wallet' ? (
+            <div className="rounded-[14px] border border-emerald-100 bg-emerald-50 px-3 py-2 text-[11px] font-bold text-emerald-700">
+              {walletLoading
+                ? 'Loading wallet balance...'
+                : `Wallet balance: Rs.${Number(walletBalance || 0).toFixed(2)}`}
+            </div>
+          ) : null}
           {paymentError ? (
             <div className="rounded-[14px] border border-rose-100 bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-500">
               {paymentError}
@@ -410,14 +490,14 @@ const RentalDeposit = () => {
         <motion.button
           whileTap={{ scale: 0.98 }}
           onClick={handlePay}
-          disabled={paying}
+          disabled={paying || (method === 'wallet' && !walletLoading && Number(walletBalance || 0) < payableNow)}
           className="pointer-events-auto w-full bg-slate-900 py-4 rounded-[18px] text-[15px] font-black text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] flex items-center justify-center gap-2"
         >
           {paying ? (
             <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
           ) : (
             <>
-              <CreditCard size={16} strokeWidth={2.5} /> Confirm & Pay Rs.{payableNow}
+              {method === 'wallet' ? <Wallet size={16} strokeWidth={2.5} /> : <CreditCard size={16} strokeWidth={2.5} />} Confirm & Pay Rs.{payableNow}
             </>
           )}
         </motion.button>

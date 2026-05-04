@@ -10,6 +10,7 @@ import { uploadDataUrlToCloudinary } from '../../../../../utils/cloudinaryUpload
 import { sendPushNotificationToAudience } from '../../../services/pushNotificationService.js';
 
 const nextId = () => new mongoose.Types.ObjectId().toString();
+const PROMO_TRANSPORT_TYPES = ['taxi', 'delivery', 'pooling', 'bus', 'self_drive', 'all'];
 
 const buildPaginator = (items, page = 1, limit = 50) => {
   const safePage = Math.max(1, Number(page) || 1);
@@ -51,7 +52,22 @@ const normalizeDate = (value, fieldName) => {
   return date;
 };
 
+const normalizeEndOfDay = (value, fieldName) => {
+  const date = normalizeDate(value, fieldName);
+  date.setHours(23, 59, 59, 999);
+  return date;
+};
+
 const normalizeText = (value) => String(value ?? '').trim();
+
+const normalizeTransportType = (value, fallback = 'all') => {
+  const normalized = normalizeText(value ?? fallback).toLowerCase().replace(/\s+/g, '_');
+
+  if (normalized === 'texi') return 'taxi';
+  if (normalized === 'selfdrive') return 'self_drive';
+
+  return normalized || fallback;
+};
 
 const toObjectIdOrThrow = (value, fieldName = 'id') => {
   if (!mongoose.isValidObjectId(value)) {
@@ -75,6 +91,16 @@ const serializePromoCode = (item) => ({
   _id: item._id,
   service_location_id: item.service_location_id || '',
   service_location_name: item.service_location_name || '',
+  service_location_ids: Array.isArray(item.service_location_ids) && item.service_location_ids.length > 0
+    ? item.service_location_ids
+    : item.service_location_id
+      ? [item.service_location_id]
+      : [],
+  service_location_names: Array.isArray(item.service_location_names) && item.service_location_names.length > 0
+    ? item.service_location_names
+    : item.service_location_name
+      ? [item.service_location_name]
+      : [],
   user_id: item.user_id || '',
   user_name: item.user_name || '',
   user_specific: item.user_specific === true,
@@ -172,6 +198,34 @@ const ensureServiceLocationExists = async (serviceLocationId) => {
   return location;
 };
 
+const normalizeServiceLocationIds = async (payload, existing = null) => {
+  const payloadIds = Array.isArray(payload.service_location_ids)
+    ? payload.service_location_ids
+    : Array.isArray(payload.serviceLocationIds)
+      ? payload.serviceLocationIds
+      : null;
+  const fallbackIds = Array.isArray(existing?.service_location_ids) && existing.service_location_ids.length > 0
+    ? existing.service_location_ids
+    : existing?.service_location_id
+      ? [existing.service_location_id]
+      : [];
+  const rawIds = payloadIds ?? (payload.service_location_id ? [payload.service_location_id] : fallbackIds);
+  const normalizedIds = [...new Set(rawIds.map((value) => String(value || '').trim()).filter(Boolean))];
+
+  if (normalizedIds.length === 0) {
+    throw new ApiError(400, 'At least one service location is required');
+  }
+
+  const serviceLocations = await Promise.all(normalizedIds.map((serviceLocationId) => ensureServiceLocationExists(serviceLocationId)));
+
+  return {
+    service_location_id: serviceLocations[0]._id,
+    service_location_name: serviceLocations[0].service_location_name || serviceLocations[0].name || '',
+    service_location_ids: serviceLocations.map((location) => location._id),
+    service_location_names: serviceLocations.map((location) => location.service_location_name || location.name || ''),
+  };
+};
+
 const ensurePromoCodeUnique = async (code, ignoreId = null) => {
   const query = { code: String(code).trim().toUpperCase() };
   if (ignoreId) {
@@ -185,12 +239,7 @@ const ensurePromoCodeUnique = async (code, ignoreId = null) => {
 };
 
 const normalizePromoPayload = async (payload, existing = null) => {
-  const serviceLocationId = payload.service_location_id || existing?.service_location_id;
-  if (!serviceLocationId) {
-    throw new ApiError(400, 'Service location is required');
-  }
-
-  const serviceLocation = await ensureServiceLocationExists(serviceLocationId);
+  const serviceLocationData = await normalizeServiceLocationIds(payload, existing);
   const state = await ensureAdminState();
   const userSpecific = normalizeBoolean(payload.user_specific, existing?.user_specific ?? false);
   const userId = normalizeText(payload.user_id ?? existing?.user_id);
@@ -217,9 +266,9 @@ const normalizePromoPayload = async (payload, existing = null) => {
     throw new ApiError(400, 'Promo code is required');
   }
 
-  const transportType = normalizeText(payload.transport_type ?? existing?.transport_type ?? 'all');
-  if (!['taxi', 'delivery', 'all'].includes(transportType)) {
-    throw new ApiError(400, 'Transport type must be taxi, delivery, or all');
+  const transportType = normalizeTransportType(payload.transport_type ?? existing?.transport_type ?? 'all');
+  if (!PROMO_TRANSPORT_TYPES.includes(transportType)) {
+    throw new ApiError(400, 'Transport type must be one of taxi, delivery, pooling, bus, self_drive, or all');
   }
 
   const minimumTripAmount = parseNumber(payload.minimum_trip_amount ?? existing?.minimum_trip_amount, 0);
@@ -232,7 +281,7 @@ const normalizePromoPayload = async (payload, existing = null) => {
   const usesPerUser = Math.max(1, Math.floor(parseNumber(payload.uses_per_user ?? existing?.uses_per_user, 1)));
   const maxUsesTotal = Math.max(0, Math.floor(parseNumber(payload.max_uses_total ?? existing?.max_uses_total, 0)));
   const fromDate = normalizeDate(payload.from ?? payload.from_date ?? existing?.from_date, 'From date');
-  const toDate = normalizeDate(payload.to ?? payload.to_date ?? existing?.to_date, 'To date');
+  const toDate = normalizeEndOfDay(payload.to ?? payload.to_date ?? existing?.to_date, 'To date');
 
   if (minimumTripAmount < 0) {
     throw new ApiError(400, 'Minimum trip amount must be greater than or equal to 0');
@@ -252,8 +301,7 @@ const normalizePromoPayload = async (payload, existing = null) => {
   }
 
   return {
-    service_location_id: serviceLocation._id,
-    service_location_name: serviceLocation.service_location_name || serviceLocation.name || '',
+    ...serviceLocationData,
     user_id: userSpecific ? user?._id || userId : '',
     user_name: userSpecific ? user?.name || '' : '',
     user_specific: userSpecific,
@@ -374,11 +422,15 @@ export const listPromoCodes = async ({ page = 1, limit = 50, search, service_loc
   }
 
   if (service_location_id) {
-    query.service_location_id = toObjectIdOrThrow(service_location_id, 'service location id');
+    const serviceLocationObjectId = toObjectIdOrThrow(service_location_id, 'service location id');
+    query.$or = [
+      { service_location_id: serviceLocationObjectId },
+      { service_location_ids: serviceLocationObjectId },
+    ];
   }
 
   if (transport_type) {
-    query.transport_type = normalizeText(transport_type);
+    query.transport_type = normalizeTransportType(transport_type);
   }
 
   if (active !== undefined) {

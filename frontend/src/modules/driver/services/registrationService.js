@@ -268,6 +268,12 @@ export const getServiceCenterStaff = () =>
 export const createServiceCenterStaff = (payload) =>
   api.post("/drivers/service-center/staff", payload, withDriverAuth());
 
+export const updateServiceCenterStaff = (staffId, payload) =>
+  api.patch(`/drivers/service-center/staff/${staffId}`, payload, withDriverAuth());
+
+export const deleteServiceCenterStaff = (staffId) =>
+  api.delete(`/drivers/service-center/staff/${staffId}`, withDriverAuth());
+
 export const getServiceCenterBookings = () =>
   api.get("/drivers/service-center/bookings", withDriverAuth());
 

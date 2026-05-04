@@ -278,10 +278,7 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
 
     const center = getZoneCenter(zone);
     setMapCenter(center);
-
-    if (!formData.latitude || !formData.longitude) {
-      updatePinnedLocation(center.lat, center.lng);
-    }
+    mapRef.current?.panTo(center);
   };
 
   const handleEdit = (store, zoneItems = zones) => {
@@ -687,9 +684,14 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
                         type="tel"
                         value={formData.owner_phone}
                         onChange={(event) =>
-                          setFormData((current) => ({ ...current, owner_phone: event.target.value }))
+                          setFormData((current) => ({
+                            ...current,
+                            owner_phone: event.target.value.replace(/[^\d+]/g, '').slice(0, 15),
+                          }))
                         }
                         placeholder="Enter owner mobile number"
+                        inputMode="numeric"
+                        maxLength={15}
                         className={inputClass}
                       />
                     </div>

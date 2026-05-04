@@ -29,11 +29,13 @@ import { uploadService } from '../../../shared/services/uploadService';
 import {
   clearDriverAuthState,
   createServiceCenterStaff,
+  deleteServiceCenterStaff,
   deleteServiceCenterVehicle,
   getCurrentDriver,
   getServiceCenterBookings,
   getServiceCenterStaff,
   getServiceCenterVehicles,
+  updateServiceCenterStaff,
   updateServiceCenterBooking,
 } from '../services/registrationService';
 
@@ -119,8 +121,22 @@ const getCompletionValidationMessage = (booking) => {
 };
 
 const buildStaffForm = () => ({
+  id: '',
   name: '',
   phone: '',
+});
+
+const mergeRentalInspection = (current = {}, patch = {}) => ({
+  ...current,
+  ...patch,
+  beforeHandover: {
+    ...(current?.beforeHandover || {}),
+    ...(patch?.beforeHandover || {}),
+  },
+  afterReturn: {
+    ...(current?.afterReturn || {}),
+    ...(patch?.afterReturn || {}),
+  },
 });
 
 const formatDateTime = (value) => {
@@ -317,6 +333,22 @@ const ServiceCenterDashboard = () => {
     };
   }, [bookings, vehicles]);
 
+  const activeBookingCountByStaffId = useMemo(() => {
+    const counts = new Map();
+
+    bookings.forEach((item) => {
+      const staffId = String(item?.assignedStaff?.id || item?.assignedStaffId || '').trim();
+      const status = String(item?.status || '').toLowerCase();
+      if (!staffId || ['completed', 'cancelled'].includes(status)) {
+        return;
+      }
+
+      counts.set(staffId, (counts.get(staffId) || 0) + 1);
+    });
+
+    return counts;
+  }, [bookings]);
+
   const tabs = useMemo(() => {
     const nextTabs = [
       { id: 'overview', label: 'Overview', shortLabel: 'Home', helper: 'Center info', Icon: Building2 },
@@ -482,7 +514,11 @@ const ServiceCenterDashboard = () => {
     }
   };
 
-  const handleCreateStaff = async () => {
+  const openCreateVehicleForm = () => {
+    navigate('/taxi/driver/service-center/vehicles/new');
+  };
+
+  const handleSaveStaff = async () => {
     if (!staffForm.name.trim()) {
       setError('Staff name is required');
       return;
@@ -497,24 +533,73 @@ const ServiceCenterDashboard = () => {
     setError('');
 
     try {
-      const response = await createServiceCenterStaff({
-        name: staffForm.name.trim(),
-        phone: staffForm.phone.replace(/\D/g, '').slice(-10),
-      });
-      const created = unwrap(response);
-      setStaff((current) => [created, ...current]);
-      setBookingStaffOptions((current) => [created, ...current]);
+      if (staffForm.id) {
+        const response = await updateServiceCenterStaff(staffForm.id, {
+          name: staffForm.name.trim(),
+          phone: staffForm.phone.replace(/\D/g, '').slice(-10),
+        });
+        const updated = unwrap(response);
+        setStaff((current) =>
+          current.map((item) => (String(item.id || item._id) === String(updated.id || updated._id) ? updated : item)),
+        );
+        setBookingStaffOptions((current) =>
+          current.map((item) => (String(item.id || item._id) === String(updated.id || updated._id) ? updated : item)),
+        );
+      } else {
+        const response = await createServiceCenterStaff({
+          name: staffForm.name.trim(),
+          phone: staffForm.phone.replace(/\D/g, '').slice(-10),
+        });
+        const created = unwrap(response);
+        setStaff((current) => [created, ...current]);
+        setBookingStaffOptions((current) => [created, ...current]);
+      }
+
       setStaffForm(buildStaffForm());
       setShowStaffForm(false);
     } catch (err) {
-      setError(err?.message || 'Unable to add staff');
+      setError(err?.message || `Unable to ${staffForm.id ? 'update' : 'add'} staff`);
     } finally {
       setSavingStaff(false);
     }
   };
 
-  const openCreateVehicleForm = () => {
-    navigate('/taxi/driver/service-center/vehicles/new');
+  const handleEditStaff = (member) => {
+    setStaffForm({
+      id: String(member?.id || member?._id || ''),
+      name: String(member?.name || ''),
+      phone: String(member?.phone || ''),
+    });
+    setShowStaffForm(true);
+    setError('');
+  };
+
+  const handleDeleteStaff = async (member) => {
+    const staffId = member?.id || member?._id;
+    if (!staffId) {
+      return;
+    }
+
+    if (!window.confirm(`Delete ${member?.name || 'this staff member'}?`)) {
+      return;
+    }
+
+    setSavingStaff(true);
+    setError('');
+
+    try {
+      await deleteServiceCenterStaff(staffId);
+      setStaff((current) => current.filter((item) => String(item.id || item._id) !== String(staffId)));
+      setBookingStaffOptions((current) => current.filter((item) => String(item.id || item._id) !== String(staffId)));
+      if (String(staffForm.id || '') === String(staffId)) {
+        setStaffForm(buildStaffForm());
+        setShowStaffForm(false);
+      }
+    } catch (err) {
+      setError(err?.message || 'Unable to delete staff');
+    } finally {
+      setSavingStaff(false);
+    }
   };
 
   const openVehicleEditor = (vehicle) => {
@@ -528,9 +613,23 @@ const ServiceCenterDashboard = () => {
   const patchBookingLocal = (bookingId, patch) => {
     setBookings((current) =>
       current.map((item) =>
-        String(item.id || item._id) === String(bookingId) ? { ...item, ...patch } : item,
+        String(item.id || item._id) === String(bookingId)
+          ? {
+              ...item,
+              ...patch,
+              rentalInspection: patch?.rentalInspection
+                ? mergeRentalInspection(item.rentalInspection, patch.rentalInspection)
+                : item.rentalInspection,
+            }
+          : item,
       ),
     );
+  };
+
+  const patchBookingInspectionLocal = (bookingId, patch) => {
+    patchBookingLocal(bookingId, {
+      rentalInspection: patch,
+    });
   };
 
   const updateBookingInspection = async (bookingId, section, key, value) => {
@@ -631,6 +730,10 @@ const ServiceCenterDashboard = () => {
       serviceCenterNote: bookingDraft.serviceCenterNote,
     };
 
+    if (bookingDraft.status === 'completed' && selectedBooking?.rentalInspection) {
+      payload.rentalInspection = selectedBooking.rentalInspection;
+    }
+
     if (permissions.canAssignBookings) {
       payload.assignedStaffId = bookingDraft.assignedStaffId;
     }
@@ -660,6 +763,7 @@ const ServiceCenterDashboard = () => {
 
     await handleBookingUpdate(selectedBooking.id || selectedBooking._id, {
       status: 'completed',
+      rentalInspection: selectedBooking.rentalInspection,
     });
   };
 
@@ -737,50 +841,34 @@ const ServiceCenterDashboard = () => {
               <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                   <div>
-                    <h2 className="text-lg font-bold text-slate-950">Center Details</h2>
-                    <p className="mt-1 text-sm text-slate-500">Primary service-center information for this operational panel.</p>
+                    <h2 className="text-lg font-bold text-slate-950">Overview</h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {isStaffUser
+                        ? 'See the current booking workload and your assigned service-center activity at a glance.'
+                        : 'Keep an eye on the live service-center workload, team activity, and fleet readiness.'}
+                    </p>
                   </div>
                   <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
                     <Building2 size={14} />
-                    {profile?.status || 'active'}
+                    {isStaffUser ? 'staff view' : 'owner view'}
                   </div>
                 </div>
 
-                <div className="mt-5 grid gap-4 md:grid-cols-2">
+                <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Center Name</p>
-                    <p className="mt-2 text-base font-bold text-slate-900">{profile?.name || '-'}</p>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Pending Queue</p>
+                    <p className="mt-2 text-2xl font-black tracking-tight text-slate-900">{stats.pendingBookings}</p>
+                    <p className="mt-1 text-sm text-slate-500">Requests waiting for action</p>
                   </div>
                   <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Contact Number</p>
-                    <div className="mt-2 inline-flex items-center gap-2 text-sm font-medium text-slate-700">
-                      <Phone size={15} className="text-emerald-600" />
-                      {profile?.phone || profile?.ownerPhone || '-'}
-                    </div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Assigned Jobs</p>
+                    <p className="mt-2 text-2xl font-black tracking-tight text-slate-900">{stats.assignedBookings}</p>
+                    <p className="mt-1 text-sm text-slate-500">Live bookings being handled now</p>
                   </div>
                   <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Zone</p>
-                    <p className="mt-2 text-sm font-semibold text-slate-800">{profile?.zone?.name || '-'}</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Service Location</p>
-                    <p className="mt-2 text-sm font-semibold text-slate-800">{profile?.serviceLocation?.name || 'No service location'}</p>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Address</p>
-                    <p className="mt-2 text-sm font-medium leading-6 text-slate-700">{profile?.address || '-'}</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Pinned Location</p>
-                    <div className="mt-2 inline-flex items-center gap-2 text-sm font-medium text-slate-700">
-                      <MapPin size={15} className="text-emerald-600" />
-                      {Number.isFinite(Number(profile?.latitude)) && Number.isFinite(Number(profile?.longitude))
-                        ? `${Number(profile.latitude).toFixed(5)}, ${Number(profile.longitude).toFixed(5)}`
-                        : '-'}
-                    </div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Completed Jobs</p>
+                    <p className="mt-2 text-2xl font-black tracking-tight text-slate-900">{stats.completedBookings}</p>
+                    <p className="mt-1 text-sm text-slate-500">Finished rental requests</p>
                   </div>
                 </div>
               </div>
@@ -831,27 +919,46 @@ const ServiceCenterDashboard = () => {
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Account Name</p>
-                  <p className="mt-2 text-base font-bold text-slate-900">{profile?.name || '-'}</p>
-                </div>
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Account Name</p>
+                    <p className="mt-2 text-base font-bold text-slate-900">{profile?.name || '-'}</p>
+                  </div>
                 <div className="rounded-2xl bg-slate-50 p-4">
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Phone Number</p>
                   <p className="mt-2 text-base font-bold text-slate-900">{profile?.phone || profile?.ownerPhone || '-'}</p>
                 </div>
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Zone</p>
-                  <p className="mt-2 text-sm font-semibold text-slate-800">{profile?.zone?.name || '-'}</p>
-                </div>
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Service Location</p>
-                  <p className="mt-2 text-sm font-semibold text-slate-800">{profile?.serviceLocation?.name || 'No service location'}</p>
-                </div>
-                <div className="rounded-2xl bg-slate-50 p-4 md:col-span-2">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Address</p>
-                  <p className="mt-2 text-sm font-medium leading-6 text-slate-700">{profile?.address || '-'}</p>
-                </div>
+                {isStaffUser ? (
+                  <>
+                    <div className="rounded-2xl bg-slate-50 p-4">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Assigned Center</p>
+                      <p className="mt-2 text-sm font-semibold text-slate-800">{profile?.vehicleMake || profile?.ownerName || '-'}</p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 p-4">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Service Location</p>
+                      <p className="mt-2 text-sm font-semibold text-slate-800">{profile?.serviceLocation?.name || 'No service location'}</p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 p-4 md:col-span-2">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Work Access</p>
+                      <p className="mt-2 text-sm font-medium leading-6 text-slate-700">This login can work on assigned rental bookings and update inspection details for the linked service center.</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="rounded-2xl bg-slate-50 p-4">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Zone</p>
+                      <p className="mt-2 text-sm font-semibold text-slate-800">{profile?.zone?.name || '-'}</p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 p-4">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Service Location</p>
+                      <p className="mt-2 text-sm font-semibold text-slate-800">{profile?.serviceLocation?.name || 'No service location'}</p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 p-4 md:col-span-2">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Address</p>
+                      <p className="mt-2 text-sm font-medium leading-6 text-slate-700">{profile?.address || '-'}</p>
+                    </div>
+                  </>
+                )}
               </div>
             </section>
 
@@ -1046,11 +1153,23 @@ const ServiceCenterDashboard = () => {
                                 <div className="grid grid-cols-2 gap-3">
                                    <div className="space-y-1">
                                       <p className="text-[10px] font-black uppercase text-slate-400">Pickup KM</p>
-                                      <input type="number" className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-emerald-500/20" defaultValue={inspection.pickupMeterReading} onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'pickupMeterReading', e.target.value)} />
+                                      <input
+                                        type="number"
+                                        className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-emerald-500/20"
+                                        value={inspection.pickupMeterReading ?? ''}
+                                        onChange={(e) => patchBookingInspectionLocal(selectedBooking.id || selectedBooking._id, { pickupMeterReading: e.target.value })}
+                                        onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'pickupMeterReading', e.target.value)}
+                                      />
                                    </div>
                                    <div className="space-y-1">
                                       <p className="text-[10px] font-black uppercase text-slate-400">Fuel Level</p>
-                                      <input type="text" className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-emerald-500/20" defaultValue={inspection.pickupFuelLevel} onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'pickupFuelLevel', e.target.value)} />
+                                      <input
+                                        type="text"
+                                        className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-emerald-500/20"
+                                        value={inspection.pickupFuelLevel || ''}
+                                        onChange={(e) => patchBookingInspectionLocal(selectedBooking.id || selectedBooking._id, { pickupFuelLevel: e.target.value })}
+                                        onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'pickupFuelLevel', e.target.value)}
+                                      />
                                    </div>
                                 </div>
                              </div>
@@ -1099,11 +1218,23 @@ const ServiceCenterDashboard = () => {
                                 <div className="grid grid-cols-2 gap-3">
                                    <div className="space-y-1">
                                       <p className="text-[10px] font-black uppercase text-slate-400">Return KM</p>
-                                      <input type="number" className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-amber-500/20" defaultValue={inspection.returnMeterReading} onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'returnMeterReading', e.target.value)} />
+                                      <input
+                                        type="number"
+                                        className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-amber-500/20"
+                                        value={inspection.returnMeterReading ?? ''}
+                                        onChange={(e) => patchBookingInspectionLocal(selectedBooking.id || selectedBooking._id, { returnMeterReading: e.target.value })}
+                                        onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'returnMeterReading', e.target.value)}
+                                      />
                                    </div>
                                    <div className="space-y-1">
                                       <p className="text-[10px] font-black uppercase text-slate-400">Return Fuel</p>
-                                      <input type="text" className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-amber-500/20" defaultValue={inspection.returnFuelLevel} onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'returnFuelLevel', e.target.value)} />
+                                      <input
+                                        type="text"
+                                        className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-amber-500/20"
+                                        value={inspection.returnFuelLevel || ''}
+                                        onChange={(e) => patchBookingInspectionLocal(selectedBooking.id || selectedBooking._id, { returnFuelLevel: e.target.value })}
+                                        onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'returnFuelLevel', e.target.value)}
+                                      />
                                    </div>
                                 </div>
 
@@ -1113,7 +1244,8 @@ const ServiceCenterDashboard = () => {
                                      rows={3}
                                      className="w-full resize-none rounded-xl bg-slate-50 p-3 text-sm font-medium text-slate-800 focus:ring-2 focus:ring-amber-500/20 border-none"
                                      placeholder="Add return condition notes, damage observations, fuel remarks, or handover comments..."
-                                     defaultValue={inspection.returnNotes || ''}
+                                     value={inspection.returnNotes || ''}
+                                     onChange={(e) => patchBookingInspectionLocal(selectedBooking.id || selectedBooking._id, { returnNotes: e.target.value })}
                                      onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'returnNotes', e.target.value)}
                                    />
                                 </div>
@@ -1308,8 +1440,25 @@ const ServiceCenterDashboard = () => {
                         <p className="text-sm font-bold text-slate-900">{member.name}</p>
                         <p className="mt-1 text-sm text-slate-500">{member.phone}</p>
                       </div>
-                      <div className="rounded-full bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
-                        {member.bookingCount || 0} bookings
+                      <div className="flex items-center gap-2">
+                        <div className="rounded-full bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
+                          {(activeBookingCountByStaffId.get(String(member.id || member._id)) ?? member.bookingCount ?? 0)} bookings
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleEditStaff(member)}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savingStaff}
+                          onClick={() => handleDeleteStaff(member)}
+                          className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
+                        >
+                          Delete
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1455,8 +1604,12 @@ const ServiceCenterDashboard = () => {
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="w-full rounded-[30px] bg-white p-6 shadow-[0_28px_100px_rgba(15,23,42,0.22)]">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h3 className="text-2xl font-bold tracking-[-0.04em] text-slate-950">Add Staff Member</h3>
-                    <p className="mt-1 text-sm text-slate-500">The staff member can log into the same panel using this number.</p>
+                    <h3 className="text-2xl font-bold tracking-[-0.04em] text-slate-950">{staffForm.id ? 'Edit Staff Member' : 'Add Staff Member'}</h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {staffForm.id
+                        ? 'Update the staff member details used for service-center login.'
+                        : 'The staff member can log into the same panel using this number.'}
+                    </p>
                   </div>
                   <button type="button" onClick={() => setShowStaffForm(false)} className="rounded-2xl border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50">
                     <X size={18} />
@@ -1478,9 +1631,9 @@ const ServiceCenterDashboard = () => {
                   <button type="button" onClick={() => setShowStaffForm(false)} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">
                     Cancel
                   </button>
-                  <button type="button" disabled={savingStaff} onClick={handleCreateStaff} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60">
+                  <button type="button" disabled={savingStaff} onClick={handleSaveStaff} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60">
                     {savingStaff ? <Loader2 size={16} className="animate-spin" /> : <Users size={16} />}
-                    Save Staff
+                    {staffForm.id ? 'Update Staff' : 'Save Staff'}
                   </button>
                 </div>
               </motion.div>

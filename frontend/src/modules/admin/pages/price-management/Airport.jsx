@@ -32,6 +32,7 @@ const AIRPORT_STATUS_OPTIONS = [
   { value: 'active', label: 'Active' },
   { value: 'inactive', label: 'Inactive' },
 ];
+const AIRPORT_FORM_STATUS_OPTIONS = AIRPORT_STATUS_OPTIONS.filter((option) => option.value);
 
 const MAP_CONTAINER_STYLE = {
   width: '100%',
@@ -226,6 +227,34 @@ const Airport = ({ mode: initialMode = "list" }) => {
     }
   };
 
+  const handleStatusUpdate = async (airport, nextStatus) => {
+    const airportId = airport._id || airport.id;
+    try {
+      const res = await adminService.updateAirport(airportId, { status: nextStatus });
+      const updatedAirport = res?.data || res;
+      if (res?.success || res?.status === 200 || updatedAirport?._id || updatedAirport?.id) {
+        setAirports((prev) =>
+          prev.map((item) => {
+            if ((item._id || item.id) !== airportId) {
+              return item;
+            }
+
+            return {
+              ...item,
+              ...updatedAirport,
+              status: updatedAirport?.status || nextStatus,
+              active: updatedAirport?.active ?? (nextStatus === 'active'),
+            };
+          }),
+        );
+      } else {
+        alert(res?.message || 'Failed to update airport status');
+      }
+    } catch (err) {
+      alert(err?.response?.data?.message || 'Failed to update airport status');
+    }
+  };
+
   const handleBoundaryComplete = (polygon) => {
     setBoundaryCoords(polygon.getPath().getArray().map(p => ({ lat: p.lat(), lng: p.lng() })));
     polygon.setMap(null);
@@ -377,9 +406,17 @@ const Airport = ({ mode: initialMode = "list" }) => {
                             {airport.service_location_id?.name || 'N/A'}
                           </td>
                           <td className="px-6 py-4 text-center">
-                            <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${airport.status === 'active' ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-50 text-gray-400'}`}>
-                              {airport.status || 'active'}
-                            </span>
+                            <select
+                              value={String(airport.status || 'active').toLowerCase()}
+                              onChange={(event) => handleStatusUpdate(airport, event.target.value)}
+                              className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-700 outline-none transition-colors hover:border-indigo-200 focus:border-indigo-500"
+                            >
+                              {AIRPORT_FORM_STATUS_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex justify-end gap-2 text-gray-400">
@@ -509,6 +546,24 @@ const Airport = ({ mode: initialMode = "list" }) => {
                             className={inputClass}
                           />
                         </div>
+                      </div>
+
+                      <div>
+                        <label className={labelClass}>
+                          <Tag size={12} className="inline mr-1 text-gray-400" />
+                          Status
+                        </label>
+                        <select
+                          value={formData.status}
+                          onChange={(e) => setFormData((p) => ({ ...p, status: e.target.value }))}
+                          className={inputClass}
+                        >
+                          {AIRPORT_FORM_STATUS_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                    </div>
                 </div>

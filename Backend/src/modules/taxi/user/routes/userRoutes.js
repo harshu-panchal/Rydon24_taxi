@@ -5,6 +5,7 @@ import {
   cancelMyBusBooking,
   createBusBookingOrder,
   createRentalAdvancePaymentOrder,
+  payRentalAdvanceWithWallet,
   createRentalBookingRequest,
   createRentalQuoteRequest,
   createRazorpayWalletTopupOrder,
@@ -82,6 +83,7 @@ userRouter.post('/wallet/razorpay/order', authenticateOrResolveUser(['user']), a
 userRouter.post('/wallet/razorpay/verify', authenticateOrResolveUser(['user']), asyncHandler(verifyRazorpayWalletTopup));
 userRouter.post('/rental-advance/razorpay/order', authenticateOrResolveUser(['user']), asyncHandler(createRentalAdvancePaymentOrder));
 userRouter.post('/rental-advance/razorpay/verify', authenticateOrResolveUser(['user']), asyncHandler(verifyRentalAdvancePayment));
+userRouter.post('/rental-advance/wallet', authenticateOrResolveUser(['user']), asyncHandler(payRentalAdvanceWithWallet));
 userRouter.get('/buses/routes', authenticateOrResolveUser(['user']), asyncHandler(getBusRouteSuggestions));
 userRouter.get('/buses/search', authenticateOrResolveUser(['user']), asyncHandler(searchBuses));
 userRouter.get('/buses/:id/seats', authenticateOrResolveUser(['user']), asyncHandler(getBusSeatLayout));

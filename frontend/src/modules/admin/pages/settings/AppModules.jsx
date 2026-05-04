@@ -12,7 +12,8 @@ import {
   Save,
   ImageIcon,
   FileSearch,
-  ChevronDown
+  ChevronDown,
+  X
 } from 'lucide-react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
@@ -276,6 +277,18 @@ const AppModules = ({ mode: propMode }) => {
                     exit={{ opacity: 0, height: 0 }}
                     className="overflow-hidden border-t border-gray-100"
                   >
+                    <div className="flex items-center justify-between px-8 pt-5">
+                      <div className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
+                        Filter Sub Module List
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsFilterOpen(false)}
+                        className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-bold text-slate-600 transition-colors hover:bg-slate-50"
+                      >
+                        <X size={14} /> Close
+                      </button>
+                    </div>
                     <div className="grid grid-cols-1 gap-4 px-8 py-6 md:grid-cols-4">
                       <div>
                         <label className={labelClass}>Module Service</label>

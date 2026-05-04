@@ -13,6 +13,20 @@ const promoCodeSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    service_location_ids: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'TaxiServiceLocation',
+        },
+      ],
+      default: [],
+      index: true,
+    },
+    service_location_names: {
+      type: [String],
+      default: [],
+    },
     user_id: {
       type: String,
       default: '',
@@ -31,7 +45,7 @@ const promoCodeSchema = new mongoose.Schema(
     },
     transport_type: {
       type: String,
-      enum: ['taxi', 'delivery', 'all'],
+      enum: ['taxi', 'delivery', 'pooling', 'bus', 'self_drive', 'all'],
       default: 'all',
       trim: true,
       index: true,
@@ -100,5 +114,6 @@ const promoCodeSchema = new mongoose.Schema(
 );
 
 promoCodeSchema.index({ service_location_id: 1, transport_type: 1, active: 1, createdAt: -1 });
+promoCodeSchema.index({ service_location_ids: 1, transport_type: 1, active: 1, createdAt: -1 });
 
 export const PromoCode = mongoose.models.TaxiPromoCode || mongoose.model('TaxiPromoCode', promoCodeSchema);

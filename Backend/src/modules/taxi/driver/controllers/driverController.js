@@ -2442,6 +2442,7 @@ export const getServiceCenterStaffMembers = async (req, res) => {
         $match: {
           assignedStaffId: { $ne: null },
           serviceCenterIds: center._id,
+          status: { $in: ["pending", "confirmed", "assigned", "end_requested"] },
         },
       },
       {
@@ -2502,6 +2503,120 @@ export const createServiceCenterStaffMember = async (req, res) => {
   res.json({
     success: true,
     data: serializeServiceCenterStaff(created.toObject(), 0),
+  });
+};
+
+export const updateServiceCenterStaffMember = async (req, res) => {
+  const access = await resolveAuthenticatedServiceCenterAccess(req);
+  const center = access?.center;
+
+  if (!center?._id || !access?.canManageStaff) {
+    throw new ApiError(403, "Only service center owners can manage staff");
+  }
+
+  const staffId = String(req.params?.staffId || "").trim();
+  if (!mongoose.Types.ObjectId.isValid(staffId)) {
+    throw new ApiError(400, "Valid staff id is required");
+  }
+
+  const staff = await ServiceCenterStaff.findOne({
+    _id: staffId,
+    serviceCenterId: center._id,
+  });
+
+  if (!staff) {
+    throw new ApiError(404, "Service center staff member not found");
+  }
+
+  if (req.body?.name !== undefined) {
+    const name = String(req.body.name || "").trim();
+    if (!name) {
+      throw new ApiError(400, "Staff name is required");
+    }
+    staff.name = name;
+  }
+
+  if (req.body?.phone !== undefined) {
+    const phone = String(req.body.phone || "").replace(/\D/g, "").slice(-10);
+    if (!/^\d{10}$/.test(phone)) {
+      throw new ApiError(400, "Staff login number must be a valid 10-digit number");
+    }
+
+    const existing = await ServiceCenterStaff.findOne({
+      phone,
+      _id: { $ne: staff._id },
+    }).lean();
+
+    if (existing) {
+      throw new ApiError(409, "A staff account already exists with this number");
+    }
+
+    staff.phone = phone;
+  }
+
+  if (req.body?.active !== undefined || req.body?.status !== undefined) {
+    const nextActive = req.body?.active !== undefined ? Boolean(req.body.active) : staff.active !== false;
+    const nextStatus = String(req.body?.status || (nextActive ? "active" : "inactive")).trim().toLowerCase();
+
+    staff.active = nextActive;
+    staff.status = nextStatus === "inactive" ? "inactive" : "active";
+  }
+
+  await staff.save();
+
+  const bookingCount = await RentalBookingRequest.countDocuments({
+    assignedStaffId: staff._id,
+    serviceCenterIds: center._id,
+    status: { $in: ["pending", "confirmed", "assigned", "end_requested"] },
+  });
+
+  res.json({
+    success: true,
+    data: serializeServiceCenterStaff(staff.toObject(), bookingCount),
+  });
+};
+
+export const deleteServiceCenterStaffMember = async (req, res) => {
+  const access = await resolveAuthenticatedServiceCenterAccess(req);
+  const center = access?.center;
+
+  if (!center?._id || !access?.canManageStaff) {
+    throw new ApiError(403, "Only service center owners can manage staff");
+  }
+
+  const staffId = String(req.params?.staffId || "").trim();
+  if (!mongoose.Types.ObjectId.isValid(staffId)) {
+    throw new ApiError(400, "Valid staff id is required");
+  }
+
+  const staff = await ServiceCenterStaff.findOne({
+    _id: staffId,
+    serviceCenterId: center._id,
+  }).lean();
+
+  if (!staff) {
+    throw new ApiError(404, "Service center staff member not found");
+  }
+
+  await RentalBookingRequest.updateMany(
+    {
+      assignedStaffId: staff._id,
+      serviceCenterIds: center._id,
+    },
+    {
+      $set: {
+        assignedStaffId: null,
+        assignedStaffName: "",
+        assignedStaffPhone: "",
+      },
+    },
+  );
+
+  await ServiceCenterStaff.deleteOne({ _id: staff._id });
+
+  res.json({
+    success: true,
+    data: true,
   });
 };
 

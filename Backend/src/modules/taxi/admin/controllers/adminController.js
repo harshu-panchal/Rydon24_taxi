@@ -1610,6 +1610,15 @@ export const getOwnerOnboarding = asyncHandler(async (_req, res) =>
     results: await adminService.listOnboardingScreens("owner"),
   }),
 );
+export const createOnboardingScreen = asyncHandler(async (req, res) =>
+  ok(res, await adminService.createOnboardingScreen(req.body)),
+);
+export const updateOnboardingScreen = asyncHandler(async (req, res) =>
+  ok(res, await adminService.updateOnboardingScreen(req.params.id, req.body)),
+);
+export const deleteOnboardingScreen = asyncHandler(async (req, res) =>
+  ok(res, await adminService.deleteOnboardingScreen(req.params.id)),
+);
 
 export const downloadUserReport = asyncHandler(async (req, res) => {
   const format = req.query.file_format || 'csv';

@@ -14,6 +14,7 @@ import {
   createRentalPackageType,
   createOwner,
   createOwnerBooking,
+  createOnboardingScreen,
   createOwnerNeededDocument,
   createPreference,
   createRole,
@@ -34,6 +35,7 @@ import {
   deleteDriver,
   deleteDriverNeededDocument,
   deleteGoodsType,
+  deleteOnboardingScreen,
   deleteRentalPackageType,
   deleteLanguage,
   deleteOngoingRide,
@@ -162,6 +164,7 @@ import {
   updateDriverNeededDocument,
   updateDriverPassword,
   updateFirebaseSettings,
+  updateOnboardingScreen,
   updateGoodsType,
   updateRentalPackageType,
   updateGeneralSettingsCategory,
@@ -429,6 +432,9 @@ adminRouter.get('/admin/general-settings/:category', getGeneralSettingsCategory)
 adminRouter.patch('/admin/general-settings/:category', updateGeneralSettingsCategory);
 
 adminRouter.get('/on-boarding', getUserOnboarding);
+adminRouter.post('/on-boarding', createOnboardingScreen);
+adminRouter.patch('/on-boarding/:id', updateOnboardingScreen);
+adminRouter.delete('/on-boarding/:id', deleteOnboardingScreen);
 adminRouter.get('/on-boarding-driver', getDriverOnboarding);
 adminRouter.get('/on-boarding-owner', getOwnerOnboarding);
 

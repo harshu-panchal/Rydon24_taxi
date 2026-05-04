@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, CarFront, CheckCircle2, Image as ImageIcon, Loader2, Save, Trash2 } from 'lucide-react';
+import { ArrowLeft, CarFront, CheckCircle2, Image as ImageIcon, Loader2, Plus, Save, Trash2, X } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
@@ -28,17 +28,16 @@ const buildVehicleForm = () => ({
   coverImage: '',
   galleryImages: [],
   amenities: 'AC, GPS, Charging Port',
-  price6: '799',
-  price12: '1299',
-  price24: '1999',
+  pricing: [
+    { id: 'pkg-6h', label: '6 Hours', durationHours: '6', price: '799', includedKm: '60', extraHourPrice: '120', extraKmPrice: '12', active: true },
+    { id: 'pkg-12h', label: '12 Hours', durationHours: '12', price: '1299', includedKm: '120', extraHourPrice: '110', extraKmPrice: '11', active: true },
+    { id: 'pkg-24h', label: '24 Hours', durationHours: '24', price: '1999', includedKm: '240', extraHourPrice: '95', extraKmPrice: '10', active: true },
+  ],
   status: 'active',
 });
 
 const normalizeVehicleToForm = (vehicle) => {
   const pricing = Array.isArray(vehicle?.pricing) ? vehicle.pricing : [];
-  const sixHour = pricing.find((item) => Number(item?.durationHours) === 6);
-  const twelveHour = pricing.find((item) => Number(item?.durationHours) === 12);
-  const twentyFourHour = pricing.find((item) => Number(item?.durationHours) === 24);
 
   return {
     name: vehicle?.name || '',
@@ -51,9 +50,18 @@ const normalizeVehicleToForm = (vehicle) => {
     coverImage: vehicle?.coverImage || vehicle?.image || '',
     galleryImages: Array.isArray(vehicle?.galleryImages) ? vehicle.galleryImages.filter(Boolean) : [],
     amenities: Array.isArray(vehicle?.amenities) ? vehicle.amenities.join(', ') : '',
-    price6: String(sixHour?.price ?? 0),
-    price12: String(twelveHour?.price ?? 0),
-    price24: String(twentyFourHour?.price ?? 0),
+    pricing: pricing.length
+      ? pricing.map((item, index) => ({
+          id: item?.id || `pkg-${index + 1}`,
+          label: String(item?.label || `${item?.durationHours || index + 1} Hours`),
+          durationHours: String(item?.durationHours ?? ''),
+          price: String(item?.price ?? 0),
+          includedKm: String(item?.includedKm ?? 0),
+          extraHourPrice: String(item?.extraHourPrice ?? 0),
+          extraKmPrice: String(item?.extraKmPrice ?? 0),
+          active: item?.active !== false,
+        }))
+      : buildVehicleForm().pricing,
     status: vehicle?.status === 'inactive' ? 'inactive' : 'active',
   };
 };
@@ -152,9 +160,49 @@ const ServiceCenterVehicleDetails = () => {
     setFormData((current) => ({ ...current, [field]: value }));
   };
 
+  const updatePricingPackage = (index, field, value) => {
+    setFormData((current) => ({
+      ...current,
+      pricing: current.pricing.map((item, packageIndex) =>
+        packageIndex === index ? { ...item, [field]: value } : item,
+      ),
+    }));
+  };
+
+  const addPricingPackage = () => {
+    setFormData((current) => ({
+      ...current,
+      pricing: [
+        ...current.pricing,
+        {
+          id: `pkg-${Date.now()}`,
+          label: '',
+          durationHours: '',
+          price: '',
+          includedKm: '0',
+          extraHourPrice: '0',
+          extraKmPrice: '0',
+          active: true,
+        },
+      ],
+    }));
+  };
+
+  const removePricingPackage = (index) => {
+    setFormData((current) => ({
+      ...current,
+      pricing: current.pricing.filter((_, packageIndex) => packageIndex !== index),
+    }));
+  };
+
   const handleSave = async () => {
     if (!formData.name.trim()) {
       setErrorMessage('Vehicle name is required');
+      return;
+    }
+
+    if (!Array.isArray(formData.pricing) || formData.pricing.length === 0) {
+      setErrorMessage('Add at least one pricing package');
       return;
     }
 
@@ -162,6 +210,25 @@ const ServiceCenterVehicleDetails = () => {
     setErrorMessage('');
 
     try {
+      const normalizedPricing = formData.pricing
+        .map((item, index) => ({
+          id: String(item?.id || `pkg-${Date.now()}-${index}`),
+          label: String(item?.label || '').trim(),
+          durationHours: Number(item?.durationHours || 0),
+          price: Number(item?.price || 0),
+          includedKm: Number(item?.includedKm || 0),
+          extraHourPrice: Number(item?.extraHourPrice || 0),
+          extraKmPrice: Number(item?.extraKmPrice || 0),
+          active: item?.active !== false,
+        }))
+        .filter((item) => item.label && item.durationHours > 0);
+
+      if (!normalizedPricing.length) {
+        setErrorMessage('Every pricing package needs a label and valid duration');
+        setSaving(false);
+        return;
+      }
+
       const payload = {
         transport_type: 'rental',
         name: formData.name.trim(),
@@ -174,11 +241,7 @@ const ServiceCenterVehicleDetails = () => {
         capacity: Number(formData.capacity || 4),
         luggageCapacity: Number(formData.luggageCapacity || 0),
         amenities,
-        pricing: [
-          { id: 'pkg-6h', label: '6 Hours', durationHours: 6, price: Number(formData.price6 || 0), includedKm: 60, extraHourPrice: 120, extraKmPrice: 12, active: true },
-          { id: 'pkg-12h', label: '12 Hours', durationHours: 12, price: Number(formData.price12 || 0), includedKm: 120, extraHourPrice: 110, extraKmPrice: 11, active: true },
-          { id: 'pkg-24h', label: '24 Hours', durationHours: 24, price: Number(formData.price24 || 0), includedKm: 240, extraHourPrice: 95, extraKmPrice: 10, active: true },
-        ],
+        pricing: normalizedPricing,
         status: formData.status,
       };
 
@@ -288,8 +351,8 @@ const ServiceCenterVehicleDetails = () => {
                     <p className="mt-1 text-lg font-black text-slate-900">{formData.luggageCapacity || 0}</p>
                   </div>
                   <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">6 Hours</p>
-                    <p className="mt-1 text-lg font-black text-slate-900">Rs {formData.price6 || 0}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Packages</p>
+                    <p className="mt-1 text-lg font-black text-slate-900">{formData.pricing.length}</p>
                   </div>
                   <div className="rounded-2xl bg-slate-50 px-4 py-3">
                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Status</p>
@@ -418,22 +481,66 @@ const ServiceCenterVehicleDetails = () => {
                 <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 px-5 py-4">
                   <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-600">Section 3</p>
                   <h2 className="mt-1 text-lg font-black text-slate-900">Pricing Packages</h2>
-                  <p className="mt-1 text-sm font-medium text-slate-500">Keep the quick rental pricing fully editable from the separate page.</p>
+                  <p className="mt-1 text-sm font-medium text-slate-500">Every package assigned to this vehicle is shown here, including newly added ones.</p>
                 </div>
 
-                <div className="mt-6 grid gap-5 md:grid-cols-3">
-                  <div>
-                    <label className={labelClass}>6 Hour Price</label>
-                    <input type="number" min="0" value={formData.price6} onChange={(event) => updateForm('price6', event.target.value)} className={inputClass} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>12 Hour Price</label>
-                    <input type="number" min="0" value={formData.price12} onChange={(event) => updateForm('price12', event.target.value)} className={inputClass} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>24 Hour Price</label>
-                    <input type="number" min="0" value={formData.price24} onChange={(event) => updateForm('price24', event.target.value)} className={inputClass} />
-                  </div>
+                <div className="mt-6 space-y-4">
+                  {formData.pricing.map((pkg, index) => (
+                    <div key={pkg.id || index} className="rounded-[24px] border border-slate-200 bg-slate-50/60 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">Package {index + 1}</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-500">Edit the visible package label, duration, and charges.</p>
+                        </div>
+                        {formData.pricing.length > 1 ? (
+                          <button
+                            type="button"
+                            onClick={() => removePricingPackage(index)}
+                            className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-600 transition hover:bg-rose-50"
+                          >
+                            <X size={14} />
+                            Remove
+                          </button>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-4 grid gap-4 md:grid-cols-3">
+                        <div>
+                          <label className={labelClass}>Label</label>
+                          <input value={pkg.label} onChange={(event) => updatePricingPackage(index, 'label', event.target.value)} className={inputClass} placeholder="6 Hours" />
+                        </div>
+                        <div>
+                          <label className={labelClass}>Duration Hours</label>
+                          <input type="number" min="1" value={pkg.durationHours} onChange={(event) => updatePricingPackage(index, 'durationHours', event.target.value)} className={inputClass} />
+                        </div>
+                        <div>
+                          <label className={labelClass}>Price</label>
+                          <input type="number" min="0" value={pkg.price} onChange={(event) => updatePricingPackage(index, 'price', event.target.value)} className={inputClass} />
+                        </div>
+                        <div>
+                          <label className={labelClass}>Included KM</label>
+                          <input type="number" min="0" value={pkg.includedKm} onChange={(event) => updatePricingPackage(index, 'includedKm', event.target.value)} className={inputClass} />
+                        </div>
+                        <div>
+                          <label className={labelClass}>Extra Hour Price</label>
+                          <input type="number" min="0" value={pkg.extraHourPrice} onChange={(event) => updatePricingPackage(index, 'extraHourPrice', event.target.value)} className={inputClass} />
+                        </div>
+                        <div>
+                          <label className={labelClass}>Extra KM Price</label>
+                          <input type="number" min="0" value={pkg.extraKmPrice} onChange={(event) => updatePricingPackage(index, 'extraKmPrice', event.target.value)} className={inputClass} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={addPricingPackage}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                  >
+                    <Plus size={16} />
+                    Add Package
+                  </button>
                 </div>
               </section>
 

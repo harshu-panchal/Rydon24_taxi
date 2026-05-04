@@ -292,6 +292,11 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
     setPolygonCoords(parsedCoords);
   };
 
+  const handleExplore = (zone) => {
+    handleEdit(zone);
+    setView('form');
+  };
+
   const selectedServiceLocation = serviceLocations.find(l => String(l._id || l.id) === String(formData.service_location_id));
   const selectedCountry = selectedServiceLocation?.country || selectedServiceLocation?.name || '';
 
@@ -420,7 +425,13 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                             <div className="flex items-center justify-end gap-2">
                                <button onClick={() => navigate(`edit/${zone._id || zone.id}`)} className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Edit2 size={14} /></button>
                                <button onClick={() => handleDelete(zone._id || zone.id)} className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"><Trash2 size={14} /></button>
-                               <button onClick={() => handleEdit(zone)} className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Globe size={14} /></button>
+                               <button
+                                 onClick={() => handleExplore(zone)}
+                                 title="Explore Zone"
+                                 className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                               >
+                                 <Globe size={14} />
+                               </button>
                             </div>
                           </td>
                         </tr>

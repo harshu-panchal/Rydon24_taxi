@@ -11,9 +11,10 @@ import { triggerFileDownload } from '../../../../shared/utils/downloadHelper';
 const DriverDutyReport = () => {
   const [filters, setFilters] = useState({
     service_location_id: '',
-    driver: '',
+    driver_id: '',
     date_option: '',
-    file_format: ''
+    file_format: '',
+    status: '',
   });
 
   const [drivers, setDrivers] = useState([]);
@@ -64,7 +65,7 @@ const DriverDutyReport = () => {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
 
-  const isFormValid = filters.service_location_id && filters.driver && filters.date_option && filters.file_format && (filters.date_option !== 'range' || (filters.from_date && filters.to_date));
+  const isFormValid = filters.service_location_id && filters.driver_id && filters.date_option && filters.file_format && (filters.date_option !== 'range' || (filters.from_date && filters.to_date));
 
   const inputClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors appearance-none shadow-sm";
   const labelClass = "block text-[13px] font-bold text-gray-600 mb-2";
@@ -126,8 +127,8 @@ const DriverDutyReport = () => {
               </label>
               <div className="relative">
                 <select 
-                  value={filters.driver}
-                  onChange={(e) => updateFilter('driver', e.target.value)}
+                  value={filters.driver_id}
+                  onChange={(e) => updateFilter('driver_id', e.target.value)}
                   className={inputClass}
                 >
                   <option value="">Select</option>
@@ -178,6 +179,26 @@ const DriverDutyReport = () => {
                 </div>
               </>
             )}
+
+            <div className="space-y-1">
+              <label className={labelClass}>Ride Status</label>
+              <div className="relative">
+                <select
+                  value={filters.status}
+                  onChange={(e) => updateFilter('status', e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">All</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                  <option value="accepted">Accepted</option>
+                  <option value="ongoing">Ongoing</option>
+                </select>
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                  <ChevronRight size={18} className="rotate-90 opacity-60" />
+                </div>
+              </div>
+            </div>
 
             {/* File Format */}
             <div className="space-y-1">

@@ -368,7 +368,11 @@ const MainDashboard = () => {
         />
       </div>
 
-      <div className="overflow-hidden rounded-[28px] border border-gray-100 bg-white p-8 text-center shadow-sm">
+      <button
+        type="button"
+        onClick={() => navigate('/admin/safety')}
+        className="w-full overflow-hidden rounded-[28px] border border-gray-100 bg-white p-8 text-center shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+      >
         <h3 className="mb-4 text-left text-[14px] font-semibold uppercase tracking-wider text-gray-400">Notified SOS</h3>
         <div className="flex flex-col items-center py-6">
           <div className="relative mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-blue-50/50">
@@ -390,7 +394,7 @@ const MainDashboard = () => {
             Assigned: {notifiedSos.assigned || 0} | Closed: {notifiedSos.closed || 0}
           </p>
         </div>
-      </div>
+      </button>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         <div className="flex flex-col rounded-[32px] border border-gray-100 bg-white p-8 shadow-sm">

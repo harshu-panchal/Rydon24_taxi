@@ -1763,6 +1763,66 @@ export const createRentalAdvancePaymentOrder = async (req, res) => {
   });
 };
 
+export const payRentalAdvanceWithWallet = async (req, res) => {
+  const amount = normalizeMoneyAmount(req.body?.amount);
+  const bookingReference =
+    toCleanString(req.body?.bookingReference) || `RNT-${Date.now().toString(36).slice(-6).toUpperCase()}`;
+  const userId = req.auth?.sub;
+
+  await ensureUserWallet(userId);
+
+  const wallet = await UserWallet.findOne({ userId });
+  if (!wallet) {
+    throw new ApiError(404, 'User wallet not found');
+  }
+
+  const referenceKey = `rental_advance_${bookingReference}`;
+  const existingTransaction = Array.isArray(wallet.transactions)
+    ? wallet.transactions.find(
+        (item) => item?.kind === 'debit' && String(item.referenceKey || '') === referenceKey,
+      )
+    : null;
+
+  if (!existingTransaction) {
+    if (Number(wallet.balance || 0) < amount) {
+      throw new ApiError(400, 'Insufficient wallet balance');
+    }
+
+    wallet.balance = Math.round((Number(wallet.balance || 0) - amount) * 100) / 100;
+    wallet.transactions.push({
+      kind: 'debit',
+      amount,
+      title: 'Rental Advance Payment',
+      provider: 'wallet',
+      providerPaymentId: bookingReference,
+      referenceKey,
+    });
+
+    if (wallet.transactions.length > 50) {
+      wallet.transactions = wallet.transactions.slice(-50);
+    }
+
+    await wallet.save();
+  }
+
+  res.status(201).json({
+    success: true,
+    data: {
+      provider: 'wallet',
+      status: 'paid',
+      amount,
+      currency: 'INR',
+      orderId: '',
+      paymentId: bookingReference,
+      signature: '',
+      referenceKey,
+      bookingReference,
+      balance: Number(wallet.balance || 0),
+    },
+    message: 'Rental advance payment collected from wallet successfully',
+  });
+};
+
 export const verifyRazorpayWalletTopup = async (req, res) => {
   const orderId = String(req.body?.razorpay_order_id || '');
   const paymentId = String(req.body?.razorpay_payment_id || '');

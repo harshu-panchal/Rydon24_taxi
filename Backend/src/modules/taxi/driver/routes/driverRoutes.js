@@ -6,12 +6,14 @@ import {
   completeOnboarding,
   createDriverPaymentQr,
   createServiceCenterStaffMember,
+  updateServiceCenterStaffMember,
   createDriverWithdrawalRequest,
   createServiceCenterVehicle,
   createOwnerFleetDriver,
   updateOwnerFleetDriver,
   deleteCurrentDriverAccount,
   deleteServiceCenterVehicle,
+  deleteServiceCenterStaffMember,
   updateServiceCenterVehicle,
   deleteDriverEmergencyContact,
   claimDriverIncentiveReward,
@@ -248,6 +250,16 @@ driverRouter.post(
   "/service-center/staff",
   authenticate(["service_center"]),
   asyncHandler(createServiceCenterStaffMember),
+);
+driverRouter.patch(
+  "/service-center/staff/:staffId",
+  authenticate(["service_center"]),
+  asyncHandler(updateServiceCenterStaffMember),
+);
+driverRouter.delete(
+  "/service-center/staff/:staffId",
+  authenticate(["service_center"]),
+  asyncHandler(deleteServiceCenterStaffMember),
 );
 driverRouter.get(
   "/service-center/bookings",

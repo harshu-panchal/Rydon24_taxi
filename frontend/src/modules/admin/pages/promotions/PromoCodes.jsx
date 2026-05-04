@@ -25,6 +25,14 @@ const BASE = globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin/promos';
 const LIST_PATH = '/admin/promotions/promo-codes';
 const CREATE_PATH = '/admin/promotions/promo-codes/create';
 const Motion = motion;
+const PROMO_TRANSPORT_OPTIONS = [
+  { value: 'all', label: 'All Modules' },
+  { value: 'self_drive', label: 'Self Drive' },
+  { value: 'bus', label: 'Bus' },
+  { value: 'taxi', label: 'Taxi' },
+  { value: 'delivery', label: 'Delivery' },
+  { value: 'pooling', label: 'Pooling' },
+];
 
 const inputClass =
   'w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed';
@@ -32,6 +40,7 @@ const labelClass = 'block text-xs font-semibold text-gray-500 mb-1.5';
 
 const createInitialFormData = () => ({
   service_location_id: '',
+  service_location_ids: [],
   transport_type: '',
   user_specific: false,
   user_id: '',
@@ -51,6 +60,39 @@ const createInitialFilters = () => ({
   transport_type: '',
   active: '',
 });
+
+const getPromoLocationIds = (promo) => {
+  if (Array.isArray(promo?.service_location_ids) && promo.service_location_ids.length > 0) {
+    return promo.service_location_ids.map((value) => String(value));
+  }
+
+  if (promo?.service_location_id) {
+    return [String(promo.service_location_id)];
+  }
+
+  return [];
+};
+
+const getPromoLocationLabel = (promo) => {
+  const names = Array.isArray(promo?.service_location_names) ? promo.service_location_names.filter(Boolean) : [];
+  if (names.length > 0) {
+    return names.join(', ');
+  }
+
+  return promo?.service_location_name || '-';
+};
+
+const normalizeTransportType = (value) => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/\s+/g, '_');
+  if (normalized === 'texi') return 'taxi';
+  if (normalized === 'selfdrive') return 'self_drive';
+  return normalized;
+};
+
+const getTransportTypeLabel = (value) => {
+  const normalized = normalizeTransportType(value);
+  return PROMO_TRANSPORT_OPTIONS.find((item) => item.value === normalized)?.label || value || '-';
+};
 
 const HeaderBlock = ({ isCreateRoute, isEditRoute, onBack }) => {
   const title = isEditRoute ? 'Edit Promo Code' : isCreateRoute ? 'Create Promo Code' : 'Promo Code';
@@ -196,6 +238,7 @@ const PromoCodes = () => {
       if (promo) {
         setFormData({
           service_location_id: promo.service_location_id || '',
+          service_location_ids: getPromoLocationIds(promo),
           transport_type: promo.transport_type || '',
           user_specific: promo.user_specific === true,
           user_id: promo.user_id || '',
@@ -217,6 +260,12 @@ const PromoCodes = () => {
 
   const handleFieldChange = (key, value) => {
     setFormData((current) => ({ ...current, [key]: value }));
+  };
+
+  const handleServiceLocationSelection = (event) => {
+    const selectedIds = Array.from(event.target.selectedOptions, (option) => option.value).filter(Boolean);
+    handleFieldChange('service_location_ids', selectedIds);
+    handleFieldChange('service_location_id', selectedIds[0] || '');
   };
 
   const handleUserSpecificChange = (checked) => {
@@ -248,6 +297,9 @@ const PromoCodes = () => {
     try {
       const payload = {
         ...formData,
+        transport_type: normalizeTransportType(formData.transport_type),
+        service_location_id: formData.service_location_ids[0] || formData.service_location_id,
+        service_location_ids: formData.service_location_ids,
         user_id: formData.user_specific ? formData.user_id : '',
       };
 
@@ -282,10 +334,10 @@ const PromoCodes = () => {
   const filteredPromos = promos.filter((promo) => {
     const matchesLocation =
       !filters.service_location_id ||
-      String(promo.service_location_id || '') === String(filters.service_location_id);
+      getPromoLocationIds(promo).includes(String(filters.service_location_id));
     const matchesTransport =
       !filters.transport_type ||
-      String(promo.transport_type || '').toLowerCase() === String(filters.transport_type).toLowerCase();
+      normalizeTransportType(promo.transport_type || 'all') === normalizeTransportType(filters.transport_type);
     
     const statusInfo = getStatusInfo(promo);
     const matchesStatus =
@@ -310,6 +362,24 @@ const PromoCodes = () => {
         await fetchData();
       } else {
         alert(data.message || 'Failed to delete');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Network Error');
+    }
+  };
+
+  const handleToggleStatus = async (promoId) => {
+    try {
+      const res = await fetch(`${BASE}/${promoId}/toggle`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchData();
+      } else {
+        alert(data.message || 'Failed to update promo status');
       }
     } catch (err) {
       console.error(err);
@@ -385,9 +455,11 @@ const PromoCodes = () => {
                       className={inputClass}
                     >
                       <option value="">All transport types</option>
-                      <option value="taxi">Taxi</option>
-                      <option value="delivery">Delivery</option>
-                      <option value="all">All</option>
+                      {PROMO_TRANSPORT_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
@@ -456,8 +528,8 @@ const PromoCodes = () => {
                               {promo.code}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-700 capitalize">{promo.transport_type}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{promo.service_location_name || '-'}</td>
+                          <td className="px-6 py-4 text-sm text-gray-700">{getTransportTypeLabel(promo.transport_type)}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{getPromoLocationLabel(promo)}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">
                             {formatDate(promo.from)} to {formatDate(promo.to)}
                           </td>
@@ -473,6 +545,17 @@ const PromoCodes = () => {
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleStatus(promo._id)}
+                                className={`inline-flex rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                                  promo.active !== false
+                                    ? 'border-amber-200 text-amber-700 hover:bg-amber-50'
+                                    : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                                }`}
+                              >
+                                {promo.active !== false ? 'Deactivate' : 'Activate'}
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => navigate(`/admin/promotions/promo-codes/edit/${promo._id}`)}
@@ -519,17 +602,18 @@ const PromoCodes = () => {
                     </FieldLabel>
                     <select
                       required
-                      value={formData.service_location_id}
-                      onChange={(e) => handleFieldChange('service_location_id', e.target.value)}
-                      className={inputClass}
+                      multiple
+                      value={formData.service_location_ids}
+                      onChange={handleServiceLocationSelection}
+                      className={`${inputClass} min-h-[140px]`}
                     >
-                      <option value="">Select Service Locations</option>
                       {locations.map((locationItem) => (
                         <option key={locationItem._id} value={locationItem._id}>
-                          {locationItem.name}
+                          {locationItem.service_location_name || locationItem.name}
                         </option>
                       ))}
                     </select>
+                    <p className="mt-1 text-xs text-gray-400">Hold Ctrl or Cmd to select multiple service locations.</p>
                   </div>
 
                   <div>
@@ -543,9 +627,11 @@ const PromoCodes = () => {
                       className={inputClass}
                     >
                       <option value="">Select</option>
-                      <option value="taxi">Taxi</option>
-                      <option value="delivery">Delivery</option>
-                      <option value="all">All</option>
+                      {PROMO_TRANSPORT_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
@@ -703,6 +789,22 @@ const PromoCodes = () => {
                       className={inputClass}
                     />
                   </div>
+
+                  <div className="md:col-span-2">
+                    <FieldLabel icon={ShieldCheck}>Promo Status</FieldLabel>
+                    <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={formData.active}
+                        onChange={(e) => handleFieldChange('active', e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">Promo is active</p>
+                        <p className="text-xs text-gray-400">Uncheck to save this promo in deactivated state.</p>
+                      </div>
+                    </label>
+                  </div>
                 </div>
               </SectionCard>
             </div>
@@ -729,7 +831,7 @@ const PromoCodes = () => {
               <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <h3 className="text-sm font-semibold text-gray-900 mb-2">How It Works</h3>
                 <p className="text-xs leading-5 text-gray-500">
-                  Service location, user targeting, discount limits, trip minimum, date range, and uses-per-user sab fields active hain.
+                  Service location, transport module, discount limits, end-of-day expiry, status control, and uses-per-user sab fields active hain.
                 </p>
               </div>
             </div>

@@ -9,7 +9,9 @@ const normalizeText = (value) => String(value ?? '').trim();
 export const normalizePromoCode = (value) => normalizeText(value).toUpperCase();
 
 const normalizeTransportType = (value) => {
-  const normalized = normalizeText(value || 'taxi').toLowerCase();
+  const normalized = normalizeText(value || 'taxi').toLowerCase().replace(/\s+/g, '_');
+  if (normalized === 'texi') return 'taxi';
+  if (normalized === 'selfdrive') return 'self_drive';
   return normalized || 'taxi';
 };
 
@@ -21,6 +23,16 @@ const toObjectIdOrThrow = (value, fieldName = 'id') => {
 };
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const getPromoServiceLocationIds = (promo) => {
+  const locationIds = Array.isArray(promo?.service_location_ids) && promo.service_location_ids.length > 0
+    ? promo.service_location_ids
+    : promo?.service_location_id
+      ? [promo.service_location_id]
+      : [];
+
+  return [...new Set(locationIds.map((value) => String(value || '').trim()).filter(Boolean))];
+};
 
 export const computePromoDiscount = ({ fare, promo, userCounter }) => {
   const safeFare = Number(fare);
@@ -77,7 +89,7 @@ export const validatePromoForContext = async ({
 
   const transportType = normalizeTransportType(transport_type);
   const serviceLocationId = service_location_id ? String(service_location_id) : '';
-  const promoServiceLocationId = promo.service_location_id ? String(promo.service_location_id) : '';
+  const promoServiceLocationIds = getPromoServiceLocationIds(promo);
 
   if (promo.active === false) {
     return { eligible: false, reason: 'INACTIVE', message: 'Promo code is inactive' };
@@ -95,7 +107,7 @@ export const validatePromoForContext = async ({
     return { eligible: false, reason: 'SERVICE_LOCATION_REQUIRED', message: 'service_location_id is required' };
   }
 
-  if (promoServiceLocationId && promoServiceLocationId !== serviceLocationId) {
+  if (promoServiceLocationIds.length > 0 && !promoServiceLocationIds.includes(serviceLocationId)) {
     return {
       eligible: false,
       reason: 'SERVICE_LOCATION_MISMATCH',
@@ -155,6 +167,7 @@ export const validatePromoForContext = async ({
       _id: promo._id,
       code: promo.code,
       service_location_id: promo.service_location_id,
+      service_location_ids: promoServiceLocationIds,
       transport_type: promo.transport_type,
       user_specific: promo.user_specific === true,
       user_id: promo.user_id || '',
@@ -213,7 +226,8 @@ export const applyPromoToRideInTransaction = async ({
     throw new ApiError(400, 'Promo code has expired');
   }
 
-  if (String(promo.service_location_id) !== String(serviceLocationId)) {
+  const promoServiceLocationIds = getPromoServiceLocationIds(promo);
+  if (promoServiceLocationIds.length > 0 && !promoServiceLocationIds.includes(String(serviceLocationId))) {
     throw new ApiError(400, 'Promo code is not valid for this service location');
   }
 
@@ -350,14 +364,21 @@ export const listAvailablePromosForUser = async ({
 
   const query = {
     active: true,
-    service_location_id: serviceLocationId,
     from_date: { $lte: now },
     to_date: { $gte: now },
     transport_type: { $in: ['all', transportType] },
+    $and: [
+      {
+        $or: [
+          { service_location_id: serviceLocationId },
+          { service_location_ids: serviceLocationId },
+        ],
+      },
+    ],
   };
 
   if (userId) {
-    query.$or = [{ user_specific: { $ne: true } }, { user_id: String(userId) }];
+    query.$and.push({ $or: [{ user_specific: { $ne: true } }, { user_id: String(userId) }] });
   } else {
     query.user_specific = { $ne: true };
   }
@@ -369,6 +390,7 @@ export const listAvailablePromosForUser = async ({
     code: promo.code,
     transport_type: promo.transport_type,
     service_location_id: promo.service_location_id,
+    service_location_ids: getPromoServiceLocationIds(promo),
     user_specific: promo.user_specific === true,
     minimum_trip_amount: Number(promo.minimum_trip_amount || 0),
     maximum_discount_amount: Number(promo.maximum_discount_amount || 0),

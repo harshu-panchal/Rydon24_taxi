@@ -129,9 +129,9 @@ const RENTAL_BLUEPRINT_TEMPLATES = [
 ];
 
 const DEFAULT_PRICING = [
-  { id: 'pkg-6h', label: '6 Hours', durationHours: 6, price: 799, includedKm: 60, extraHourPrice: 120, extraKmPrice: 12, active: true },
-  { id: 'pkg-12h', label: '12 Hours', durationHours: 12, price: 1299, includedKm: 120, extraHourPrice: 110, extraKmPrice: 11, active: true },
-  { id: 'pkg-24h', label: '24 Hours', durationHours: 24, price: 1999, includedKm: 240, extraHourPrice: 95, extraKmPrice: 10, active: true },
+  { id: 'pkg-6h', label: '6 Hours', durationHours: '', price: '', includedKm: '', extraHourPrice: '', extraKmPrice: '', active: true },
+  { id: 'pkg-12h', label: '12 Hours', durationHours: '', price: '', includedKm: '', extraHourPrice: '', extraKmPrice: '', active: true },
+  { id: 'pkg-24h', label: '24 Hours', durationHours: '', price: '', includedKm: '', extraHourPrice: '', extraKmPrice: '', active: true },
 ];
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -147,15 +147,37 @@ const countSeats = (blueprint = {}) =>
     .flat()
     .filter((cell) => cell?.kind === 'seat').length;
 
+const normalizeNumberInput = (value) => {
+  if (value === '' || value === null || value === undefined) return '';
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : '';
+};
+
+const toNumberOrZero = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const createEmptyPricingRow = (id, label = 'Custom Package') => ({
+  id,
+  label,
+  durationHours: '',
+  price: '',
+  includedKm: '',
+  extraHourPrice: '',
+  extraKmPrice: '',
+  active: true,
+});
+
 const normalizePricing = (items = DEFAULT_PRICING) =>
   (Array.isArray(items) && items.length ? items : DEFAULT_PRICING).map((item, index) => ({
     id: String(item.id || `pkg-${index + 1}`),
     label: String(item.label || `${item.durationHours || index + 1} Hours`),
-    durationHours: Number(item.durationHours || index + 1),
-    price: Number(item.price || 0),
-    includedKm: Number(item.includedKm || 0),
-    extraHourPrice: Number(item.extraHourPrice || 0),
-    extraKmPrice: Number(item.extraKmPrice || 0),
+    durationHours: normalizeNumberInput(item.durationHours),
+    price: normalizeNumberInput(item.price),
+    includedKm: normalizeNumberInput(item.includedKm),
+    extraHourPrice: normalizeNumberInput(item.extraHourPrice),
+    extraKmPrice: normalizeNumberInput(item.extraKmPrice),
     active: item.active !== false,
   }));
 
@@ -185,7 +207,6 @@ const getGalleryImages = (item = {}) => {
 };
 
 const buildDefaultForm = () => {
-  const blueprint = createBlueprintFromTemplate('compact_4');
   return {
     transport_type: 'rental',
     name: '',
@@ -196,9 +217,9 @@ const buildDefaultForm = () => {
     coverImage: '',
     galleryImages: [],
     map_icon: '',
-    capacity: countSeats(blueprint),
+    capacity: 0,
     luggageCapacity: 2,
-    amenities: ['AC', 'GPS', 'Charging Port'],
+    amenities: [],
     serviceStoreIds: [],
     poolingEnabled: false,
     advancePayment: {
@@ -208,7 +229,7 @@ const buildDefaultForm = () => {
       label: 'Advance booking payment',
       notes: '',
     },
-    blueprint,
+    blueprint: null,
     pricing: normalizePricing(),
     active: true,
     status: 'active',
@@ -265,6 +286,11 @@ const SeatPreview = ({ blueprint, onToggleSeat }) => (
           ))}
         </div>
       ))}
+      {!blueprint?.lowerDeck?.length ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm font-medium text-slate-400">
+          Select a layout blueprint first.
+        </div>
+      ) : null}
     </div>
   </div>
 );
@@ -333,7 +359,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                 label: selected.advancePayment?.label || 'Advance booking payment',
                 notes: selected.advancePayment?.notes || '',
               },
-              blueprint: selected.blueprint?.lowerDeck?.length ? clone(selected.blueprint) : createBlueprintFromTemplate('compact_4'),
+              blueprint: selected.blueprint?.lowerDeck?.length ? clone(selected.blueprint) : null,
               pricing: normalizePricing(selected.pricing),
               active: selected.active !== false,
               status: selected.status || 'active',
@@ -483,7 +509,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
               ...item,
               [field]:
                 ['durationHours', 'price', 'includedKm', 'extraHourPrice', 'extraKmPrice'].includes(field)
-                  ? Number(value || 0)
+                  ? normalizeNumberInput(value)
                   : value,
             }
           : item,
@@ -499,11 +525,11 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
         {
           id: `pkg-${Date.now()}`,
           label: 'Custom Package',
-          durationHours: 1,
-          price: 0,
-          includedKm: 0,
-          extraHourPrice: 0,
-          extraKmPrice: 0,
+          durationHours: '',
+          price: '',
+          includedKm: '',
+          extraHourPrice: '',
+          extraKmPrice: '',
           active: true,
         },
       ],
@@ -530,13 +556,26 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
         capacity: countSeats(formData.blueprint),
         active: formData.active,
         status: formData.active ? 'active' : 'inactive',
+        blueprint: formData.blueprint,
         amenities: (Array.isArray(formData.amenities) ? formData.amenities : [])
           .map((item) => String(item).trim())
           .filter(Boolean),
+        pricing: (Array.isArray(formData.pricing) ? formData.pricing : []).map((item) => ({
+          ...item,
+          durationHours: toNumberOrZero(item.durationHours),
+          price: toNumberOrZero(item.price),
+          includedKm: toNumberOrZero(item.includedKm),
+          extraHourPrice: toNumberOrZero(item.extraHourPrice),
+          extraKmPrice: toNumberOrZero(item.extraKmPrice),
+        })),
       };
 
       if (!payload.name.trim()) {
         throw new Error('Vehicle name is required');
+      }
+
+      if (!payload.blueprint?.lowerDeck?.length) {
+        throw new Error('Please select a layout blueprint');
       }
 
       if (id) {

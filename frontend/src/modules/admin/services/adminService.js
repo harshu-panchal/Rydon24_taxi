@@ -310,18 +310,12 @@ export const adminService = {
 
   /**
    * Onboarding Screens Management
-   * Note: Backend currently only supports public GET (DB/seed only)
    */
   getOnboardingScreens: (role = 'user') => {
-    // role: 'user' | 'driver' | 'owner'
     const path = role === 'user' ? '/on-boarding' : `/on-boarding-${role}`;
     return api.get(path);
   },
-  createOnboardingScreen: (formData) => api.post('/on-boarding', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }),
-  updateOnboardingScreen: (id, formData) => api.patch(`/on-boarding/${id}`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }),
+  createOnboardingScreen: (payload) => api.post('/on-boarding', payload),
+  updateOnboardingScreen: (id, payload) => api.patch(`/on-boarding/${id}`, payload),
   deleteOnboardingScreen: (id) => api.delete(`/on-boarding/${id}`),
 };

@@ -21,6 +21,10 @@ export const userService = {
     const response = await api.post('/users/rental-advance/razorpay/order', payload);
     return response;
   },
+  payRentalAdvanceWithWallet: async (payload) => {
+    const response = await api.post('/users/rental-advance/wallet', payload);
+    return response;
+  },
   verifyRentalAdvancePayment: async (payload) => {
     const response = await api.post('/users/rental-advance/razorpay/verify', payload);
     return response;
