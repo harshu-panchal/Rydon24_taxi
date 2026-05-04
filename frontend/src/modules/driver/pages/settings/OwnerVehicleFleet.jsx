@@ -68,6 +68,17 @@ const formatDispatchType = (value = "") => {
   return "Normal";
 };
 
+const isReverificationPending = (vehicle = {}) => {
+  if (String(vehicle.status || "").toLowerCase() !== "pending") {
+    return false;
+  }
+
+  const createdAt = new Date(vehicle.createdAt || 0).getTime();
+  const updatedAt = new Date(vehicle.updatedAt || 0).getTime();
+
+  return Boolean(createdAt && updatedAt && updatedAt > createdAt);
+};
+
 const fileToDataUrl = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -184,6 +195,8 @@ const OwnerVehicleFleet = () => {
                 fleetVehicle.documents?.document ||
                 fleetVehicle.documents?.file ||
                 "",
+              createdAt: fleetVehicle.createdAt,
+              updatedAt: fleetVehicle.updatedAt,
               isFleetVehicle: true,
             });
           });
@@ -378,6 +391,8 @@ const OwnerVehicleFleet = () => {
                   rcFileUrl ||
                   v.rcDocument ||
                   "",
+                createdAt: updated.createdAt || v.createdAt,
+                updatedAt: updated.updatedAt || v.updatedAt,
                 isFleetVehicle: v.isFleetVehicle,
               }
             : v,
@@ -949,6 +964,10 @@ const OwnerVehicleFleet = () => {
                 String(vehicle.status || "").toLowerCase() === "rejected"
                   ? getVehicleReason(vehicle) || "Rejected without a reason."
                   : "";
+              const reverificationPending = isReverificationPending(vehicle);
+              const pendingLabel = reverificationPending
+                ? "Re-verify Pending"
+                : "Pending";
 
               return (
                 <motion.div
@@ -985,7 +1004,7 @@ const OwnerVehicleFleet = () => {
                         vehicle.status === "pending" && (
                           <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-700 text-xs font-semibold flex-shrink-0">
                             <div className="w-1.5 h-1.5 rounded-full bg-yellow-600 animate-pulse" />
-                            Pending
+                            {pendingLabel}
                           </div>
                         )}
                       {vehicle.isFleetVehicle &&
@@ -1022,6 +1041,20 @@ const OwnerVehicleFleet = () => {
                         </span>
                       </p>
                     </div>
+                    {vehicle.isFleetVehicle && vehicle.status === "pending" && (
+                      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+                        <p className="text-[11px] font-black uppercase tracking-widest text-amber-700">
+                          {reverificationPending
+                            ? "Re-Verification"
+                            : "Verification Pending"}
+                        </p>
+                        <p className="mt-1 text-xs sm:text-sm font-medium text-amber-800">
+                          {reverificationPending
+                            ? "Corrections were submitted and this vehicle is back in the admin review queue."
+                            : "This vehicle is waiting for admin approval before it becomes active."}
+                        </p>
+                      </div>
+                    )}
                     {rejectionReason && (
                       <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2">
                         <p className="text-[11px] font-black uppercase tracking-widest text-red-600">

@@ -3962,6 +3962,7 @@ export const getOwnerFleetVehicles = async (req, res) => {
         transport_type: vehicle.transport_type || "taxi",
         active: vehicle.active,
         createdAt: vehicle.createdAt,
+        updatedAt: vehicle.updatedAt,
       })),
     },
   });
@@ -4104,6 +4105,7 @@ export const updateOwnerFleetVehicle = async (req, res) => {
       transport_type: populated.transport_type || "taxi",
       active: populated.active,
       createdAt: populated.createdAt,
+      updatedAt: populated.updatedAt,
     },
   });
 };
