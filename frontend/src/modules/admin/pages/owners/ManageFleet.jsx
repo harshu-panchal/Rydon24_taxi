@@ -101,6 +101,8 @@ const ManageFleet = () => {
   const [updatingFleetId, setUpdatingFleetId] = useState('');
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [page, setPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   const [formData, setFormData] = useState({
     owner_id: '', // Added owner_id
@@ -193,6 +195,10 @@ const ManageFleet = () => {
   useEffect(() => {
     setPage(1);
   }, [itemsPerPage]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, statusFilter]);
 
   const resetForm = () => {
     setFormData({
@@ -317,10 +323,39 @@ const ManageFleet = () => {
     }
   };
 
-  const totalEntries = fleet.length;
+  const filteredFleet = fleet.filter((item) => {
+    const normalizedStatus = String(item?.status || 'pending').toLowerCase();
+    const matchesStatus =
+      statusFilter === 'all' ? true : normalizedStatus === statusFilter;
+
+    const searchValue = searchTerm.trim().toLowerCase();
+    if (!searchValue) {
+      return matchesStatus;
+    }
+
+    const haystack = [
+      item.vehicle_type_id?.name,
+      item.vehicle_type_id?.type_name,
+      item.vehicle_type,
+      item.car_brand,
+      item.car_model,
+      item.license_plate_number,
+      item.owner_id?.company_name,
+      item.owner_id?.name,
+      item.owner_id?.owner_name,
+      getFleetStatusReason(item),
+      item.status,
+    ]
+      .map((value) => String(value || '').toLowerCase())
+      .join(' ');
+
+    return matchesStatus && haystack.includes(searchValue);
+  });
+
+  const totalEntries = filteredFleet.length;
   const totalPages = Math.max(1, Math.ceil(totalEntries / itemsPerPage));
   const safePage = Math.min(page, totalPages);
-  const pagedFleet = fleet.slice((safePage - 1) * itemsPerPage, safePage * itemsPerPage);
+  const pagedFleet = filteredFleet.slice((safePage - 1) * itemsPerPage, safePage * itemsPerPage);
   const showingFrom = totalEntries === 0 ? 0 : (safePage - 1) * itemsPerPage + 1;
   const showingTo = totalEntries === 0 ? 0 : Math.min(showingFrom + pagedFleet.length - 1, totalEntries);
 
@@ -614,13 +649,36 @@ const ManageFleet = () => {
                 <span>entries</span>
               </div>
 
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  className="flex h-12 w-12 items-center justify-center rounded-full border border-gray-300 bg-white text-slate-500 transition-colors hover:border-indigo-500 hover:text-indigo-600"
-                >
-                  <Search size={17} />
-                </button>
+              <div className="flex flex-col items-stretch gap-3 md:flex-row md:items-center">
+                <div className="relative">
+                  <Search
+                    size={16}
+                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                  />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search brand, model, plate, owner..."
+                    className="h-12 w-full rounded-xl border border-gray-300 bg-white pl-11 pr-4 text-sm text-gray-950 outline-none transition-colors focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 md:w-72"
+                  />
+                </div>
+                <div className="relative">
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="h-12 w-full appearance-none rounded-xl border border-gray-300 bg-white px-4 pr-10 text-sm text-gray-950 outline-none transition-colors focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 md:w-44"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                  <ChevronDown
+                    size={16}
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-700"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => navigate('/admin/fleet/manage/create')}
