@@ -3960,6 +3960,119 @@ export const getOwnerFleetVehicles = async (req, res) => {
   });
 };
 
+export const updateOwnerFleetVehicle = async (req, res) => {
+  const owner = await resolveAuthenticatedOwner(req);
+
+  if (!owner?._id) {
+    throw new ApiError(
+      403,
+      "Fleet vehicle access is only available for owner accounts",
+    );
+  }
+
+  const vehicleId = String(req.params?.vehicleId || "").trim();
+  if (!vehicleId || !mongoose.isValidObjectId(vehicleId)) {
+    throw new ApiError(400, "A valid vehicle id is required");
+  }
+
+  const vehicle = await FleetVehicle.findOne({
+    _id: vehicleId,
+    owner_id: owner._id,
+    active: true,
+  });
+
+  if (!vehicle) {
+    throw new ApiError(404, "Fleet vehicle not found");
+  }
+
+  const vehicleTypeId =
+    req.body?.vehicleTypeId || req.body?.vehicle_type_id || null;
+  const make = String(
+    req.body?.vehicleMake || req.body?.make || req.body?.car_brand || "",
+  ).trim();
+  const model = String(
+    req.body?.vehicleModel || req.body?.model || req.body?.car_model || "",
+  ).trim();
+  const number = String(
+    req.body?.vehicleNumber ||
+      req.body?.number ||
+      req.body?.license_plate_number ||
+      "",
+  )
+    .trim()
+    .toUpperCase();
+  const color = String(
+    req.body?.vehicleColor || req.body?.color || req.body?.car_color || "",
+  ).trim();
+
+  if (!vehicleTypeId || !mongoose.isValidObjectId(vehicleTypeId)) {
+    throw new ApiError(400, "A valid vehicle type is required");
+  }
+
+  if (!make) {
+    throw new ApiError(400, "Car brand/make is required");
+  }
+
+  if (!model) {
+    throw new ApiError(400, "Car model is required");
+  }
+
+  if (!number) {
+    throw new ApiError(400, "License plate number is required");
+  }
+
+  if (!color) {
+    throw new ApiError(400, "Car color is required");
+  }
+
+  const duplicate = await FleetVehicle.findOne({
+    owner_id: owner._id,
+    license_plate_number: number,
+    _id: { $ne: vehicle._id },
+  }).lean();
+
+  if (duplicate) {
+    throw new ApiError(
+      409,
+      "Fleet vehicle with this license plate already exists for this owner",
+    );
+  }
+
+  vehicle.vehicle_type_id = vehicleTypeId;
+  vehicle.car_brand = make;
+  vehicle.car_model = model;
+  vehicle.license_plate_number = number;
+  vehicle.car_color = color;
+
+  await vehicle.save();
+
+  const populated = await FleetVehicle.findById(vehicle._id)
+    .populate("vehicle_type_id", "name type_name transport_type icon_types")
+    .lean();
+
+  res.json({
+    success: true,
+    message: "Vehicle updated successfully",
+    data: {
+      _id: String(populated._id),
+      id: String(populated._id),
+      vehicle_type_id: populated.vehicle_type_id?._id || null,
+      vehicle_type_name:
+        populated.vehicle_type_id?.name ||
+        populated.vehicle_type_id?.type_name ||
+        "",
+      car_brand: populated.car_brand || "",
+      car_model: populated.car_model || "",
+      license_plate_number: populated.license_plate_number || "",
+      car_color: populated.car_color || "",
+      status: populated.status || "pending",
+      transport_type: populated.transport_type || "taxi",
+      active: populated.active,
+      createdAt: populated.createdAt,
+    },
+  });
+};
+
 export const deleteOwnerFleetVehicle = async (req, res) => {
   const owner = await resolveAuthenticatedOwner(req);
 

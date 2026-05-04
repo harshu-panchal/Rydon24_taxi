@@ -11,6 +11,7 @@ import {
   createServiceCenterVehicle,
   createOwnerFleetDriver,
   updateOwnerFleetDriver,
+  updateOwnerFleetVehicle,
   deleteCurrentDriverAccount,
   deleteServiceCenterVehicle,
   deleteServiceCenterStaffMember,
@@ -241,6 +242,11 @@ driverRouter.post(
   "/fleet/vehicles",
   authenticate(["driver", "owner"]),
   asyncHandler(addOwnerVehicle),
+);
+driverRouter.patch(
+  "/fleet/vehicles/:vehicleId",
+  authenticate(["driver", "owner"]),
+  asyncHandler(updateOwnerFleetVehicle),
 );
 driverRouter.delete(
   "/fleet/vehicles/:vehicleId",

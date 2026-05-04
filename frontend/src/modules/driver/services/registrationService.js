@@ -250,6 +250,9 @@ export const getOwnerFleetVehicles = () =>
 export const createOwnerFleetVehicle = (payload) =>
   api.post("/drivers/fleet/vehicles", payload, withDriverAuth());
 
+export const updateOwnerFleetVehicle = (vehicleId, payload) =>
+  api.patch(`/drivers/fleet/vehicles/${vehicleId}`, payload, withDriverAuth());
+
 export const deleteOwnerFleetVehicle = (vehicleId) =>
   api.delete(`/drivers/fleet/vehicles/${vehicleId}`, withDriverAuth());
 

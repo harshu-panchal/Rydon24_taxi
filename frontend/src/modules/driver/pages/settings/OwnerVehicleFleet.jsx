@@ -16,9 +16,9 @@ import { useNavigate } from "react-router-dom";
 import {
   getCurrentDriver,
   getDriverVehicleTypes,
-  updateDriverVehicle,
   deleteDriverVehicle,
   getOwnerFleetVehicles,
+  updateOwnerFleetVehicle,
   deleteOwnerFleetVehicle,
 } from "../../services/registrationService";
 import { useImageUpload } from "../../../../shared/hooks/useImageUpload";
@@ -201,7 +201,7 @@ const OwnerVehicleFleet = () => {
     setMessage("");
 
     try {
-      const response = await updateDriverVehicle(formData);
+      const response = await updateOwnerFleetVehicle(editingVehicle._id, formData);
       const updated = unwrap(response);
 
       // Update the vehicle in the list, preserving fleet vehicle status
@@ -210,15 +210,15 @@ const OwnerVehicleFleet = () => {
           v._id === editingVehicle._id
             ? {
                 ...v,
-                vehicleTypeId: updated.vehicleTypeId || formData.vehicleTypeId,
-                vehicleMake: updated.vehicleMake || formData.vehicleMake,
-                vehicleModel: updated.vehicleModel || formData.vehicleModel,
-                vehicleNumber: updated.vehicleNumber || formData.vehicleNumber,
-                vehicleColor: updated.vehicleColor || formData.vehicleColor,
+                vehicleTypeId: updated.vehicle_type_id || formData.vehicleTypeId,
+                vehicleMake: updated.car_brand || formData.vehicleMake,
+                vehicleModel: updated.car_model || formData.vehicleModel,
+                vehicleNumber: updated.license_plate_number || formData.vehicleNumber,
+                vehicleColor: updated.car_color || formData.vehicleColor,
                 vehicleImage: updated.vehicleImage || v.vehicleImage,
                 // Preserve immutable properties
                 isPrimary: v.isPrimary,
-                status: v.status,
+                status: updated.status || v.status,
                 isFleetVehicle: v.isFleetVehicle,
               }
             : v,
