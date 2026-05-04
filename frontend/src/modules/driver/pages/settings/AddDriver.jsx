@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, UserPlus, CheckCircle2, ChevronRight, Upload, X, ShieldCheck, Mail, Phone, MapPin } from 'lucide-react';
+import { ArrowLeft, UserPlus, CheckCircle2, ChevronRight, Upload, X, ShieldCheck, Mail, Phone, MapPin, IndianRupee } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { createOwnerFleetDriver, getOwnerFleetDrivers, updateOwnerFleetDriver } from '../../services/registrationService';
 
@@ -19,6 +19,7 @@ const AddDriver = () => {
         mobile: '',
         email: '',
         address: '',
+        salary: '',
         adhaarFile: null,
         licenseFile: null
     });
@@ -34,6 +35,7 @@ const AddDriver = () => {
                 mobile: stateDriver.phone || '',
                 email: stateDriver.email || '',
                 address: stateDriver.address || '',
+                salary: stateDriver.salary ? String(stateDriver.salary) : '',
             }));
             return;
         }
@@ -58,6 +60,7 @@ const AddDriver = () => {
                     mobile: match.phone || '',
                     email: match.email || '',
                     address: match.city || '',
+                    salary: match.salary ? String(match.salary) : '',
                 }));
             })
             .catch((err) => {
@@ -101,6 +104,7 @@ const AddDriver = () => {
                 email: formData.email,
                 address: formData.address,
                 city: formData.address,
+                salary: Number(formData.salary || 0),
             };
 
             if (isEditMode) {
@@ -146,7 +150,7 @@ const AddDriver = () => {
                         >
                             <div className="space-y-1.5">
                                 <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-none uppercase">{isEditMode ? 'Edit Driver' : 'Driver Details'}</h1>
-                                <p className="text-[11px] font-bold text-slate-400 opacity-80 uppercase tracking-widest leading-relaxed">{isEditMode ? 'Update fleet driver information' : 'Register a new driver for your fleet'}</p>
+                                <p className="text-[11px] font-bold text-slate-400 opacity-80 uppercase tracking-widest leading-relaxed">{isEditMode ? 'Update fleet driver information and monthly salary' : 'Register a new driver for your fleet and set monthly salary'}</p>
                             </div>
 
                             <div className="space-y-4">
@@ -195,6 +199,17 @@ const AddDriver = () => {
                                         onChange={(e) => setFormData(p => ({ ...p, address: e.target.value }))}
                                         placeholder="Full residential address"
                                         className="w-full bg-transparent border-none p-0 text-[13px] font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200 resize-none"
+                                    />
+                                </div>
+
+                                <div className="bg-slate-50 p-3.5 rounded-2xl shadow-sm">
+                                    <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1 flex items-center gap-1.5"><IndianRupee size={8} /> Monthly Salary</label>
+                                    <input
+                                        value={formData.salary}
+                                        onChange={(e) => setFormData(p => ({ ...p, salary: e.target.value.replace(/[^\d.]/g, '') }))}
+                                        placeholder="Enter monthly salary"
+                                        inputMode="decimal"
+                                        className="w-full bg-transparent border-none p-0 text-[13px] font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
                                     />
                                 </div>
                             </div>

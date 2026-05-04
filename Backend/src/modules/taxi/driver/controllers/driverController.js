@@ -1647,6 +1647,8 @@ export const getCurrentDriver = async (req, res) => {
       name: driver.name,
       phone: driver.phone,
       email: driver.email,
+      owner_id: driver.owner_id || null,
+      salary: Number(driver.salary || 0),
       profileImage: driver.profileImage || "",
       gender: driver.gender,
       vehicleType: driver.vehicleType,
@@ -3998,7 +4000,7 @@ export const getOwnerFleetDrivers = async (req, res) => {
 
   const drivers = await Driver.find({ owner_id: owner._id, deletedAt: null })
     .sort({ createdAt: -1 })
-    .select("name phone email city approve status isOnline isOnRide createdAt")
+    .select("name phone email city salary approve status isOnline isOnRide createdAt")
     .lean();
 
   res.json({
@@ -4010,6 +4012,7 @@ export const getOwnerFleetDrivers = async (req, res) => {
         phone: driver.phone || "",
         email: driver.email || "",
         city: driver.city || "",
+        salary: Number(driver.salary || 0),
         approve: driver.approve,
         status: driver.status,
         isOnline: Boolean(driver.isOnline),
@@ -4076,6 +4079,7 @@ export const createOwnerFleetDriver = async (req, res) => {
     name,
     phone,
     email,
+    salary: salaryValue,
     gender: "",
     password: await hashPassword(tempPassword),
     vehicleType: "car",
@@ -4496,6 +4500,9 @@ export const updateOwnerFleetDriver = async (req, res) => {
   const email = String(req.body?.email || "")
     .trim()
     .toLowerCase();
+  const salaryValue = Number(
+    req.body?.salary ?? req.body?.monthly_salary ?? req.body?.monthlySalary ?? 0,
+  );
   const city = String(req.body?.city || req.body?.address || "").trim();
 
   if (!name) {
@@ -4504,6 +4511,10 @@ export const updateOwnerFleetDriver = async (req, res) => {
 
   if (!/^\d{10}$/.test(phone)) {
     throw new ApiError(400, "A valid 10-digit mobile number is required");
+  }
+
+  if (!Number.isFinite(salaryValue) || salaryValue < 0) {
+    throw new ApiError(400, "A valid non-negative salary is required");
   }
 
   const existing = await Driver.findOne({
@@ -4518,6 +4529,7 @@ export const updateOwnerFleetDriver = async (req, res) => {
   driver.phone = phone;
   driver.email = email;
   driver.city = city || driver.city || "";
+  driver.salary = salaryValue;
 
   await driver.save();
 
@@ -4530,6 +4542,7 @@ export const updateOwnerFleetDriver = async (req, res) => {
       phone: driver.phone || "",
       email: driver.email || "",
       city: driver.city || "",
+      salary: Number(driver.salary || 0),
       approve: driver.approve,
       status: driver.status,
       isOnline: Boolean(driver.isOnline),

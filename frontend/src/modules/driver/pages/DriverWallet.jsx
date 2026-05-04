@@ -150,6 +150,15 @@ const StatPill = ({ label, value, tone = 'dark' }) => {
     );
 };
 
+const isOwnerManagedDriverProfile = (driver = {}) =>
+    Boolean(
+        driver?.owner_id
+        || driver?.ownerId
+        || driver?.fleet_id
+        || driver?.fleetId
+        || driver?.owner?._id,
+    );
+
 const DriverWallet = () => {
     const navigate = useNavigate();
     const { settings: appSettings } = useSettings();
@@ -170,18 +179,30 @@ const DriverWallet = () => {
     const [withdrawAmount, setWithdrawAmount] = useState('');
     const [processingWithdraw, setProcessingWithdraw] = useState(false);
     const [withdrawSuccess, setWithdrawSuccess] = useState(false);
+    const [driverProfile, setDriverProfile] = useState({
+        salary: 0,
+        isOwnerManagedDriver: false,
+    });
 
     const loadWallet = useCallback(async ({ quiet = false } = {}) => {
         if (!quiet) setRefreshing(true);
         setError('');
 
         try {
-            const response = await api.get('/drivers/wallet');
-            const next = normalizeWalletResponse(response);
+            const [walletResponse, profileResponse] = await Promise.all([
+                api.get('/drivers/wallet'),
+                api.get('/drivers/me').catch(() => null),
+            ]);
+            const next = normalizeWalletResponse(walletResponse);
+            const profile = profileResponse?.data?.data || profileResponse?.data || profileResponse || {};
             setWallet(next.wallet);
             setTransactions(next.transactions);
             setWithdrawalRequests(next.withdrawalRequests);
             setSettings(next.settings);
+            setDriverProfile({
+                salary: toNumber(profile.salary, 0),
+                isOwnerManagedDriver: isOwnerManagedDriverProfile(profile),
+            });
         } catch (requestError) {
             setError(requestError?.response?.data?.message || requestError?.message || 'Could not load wallet.');
         } finally {
@@ -455,6 +476,10 @@ const DriverWallet = () => {
             : 'Top up to receive orders'
         : 'Wallet disabled';
 
+    const walletIntro = driverProfile.isOwnerManagedDriver
+        ? 'Monthly salary and wallet activity'
+        : 'Cash commission and online earnings';
+
     return (
         <div className="min-h-screen bg-[#f5f1e8] px-4 pb-28 pt-4 text-slate-950">
             <div className="mx-auto max-w-md">
@@ -469,7 +494,7 @@ const DriverWallet = () => {
                     </button>
                     <div className="text-center">
                         <h1 className="text-lg font-black tracking-tight">Driver wallet</h1>
-                        <p className="text-xs font-bold text-slate-500">Cash commission and online earnings</p>
+                        <p className="text-xs font-bold text-slate-500">{walletIntro}</p>
                     </div>
                     <button
                         type="button"
@@ -491,7 +516,7 @@ const DriverWallet = () => {
                     </div>
                 ) : (
                     <main className="space-y-4">
-                        <section className="rounded-[2rem] bg-[#101521] p-5 text-white shadow-xl">
+                        <section className="overflow-hidden rounded-[2rem] bg-[#101521] p-5 text-white shadow-xl">
                             <div className="flex items-start justify-between gap-4">
                                 <div>
                                     <p className="text-xs font-black uppercase tracking-[0.18em] text-white/45">Current balance</p>
@@ -505,7 +530,24 @@ const DriverWallet = () => {
                                 </div>
                             </div>
 
-                            <div className="mt-5 grid grid-cols-2 gap-3">
+                            {driverProfile.isOwnerManagedDriver && (
+                                <div className="mt-5 rounded-3xl border border-white/10 bg-gradient-to-r from-white/12 to-white/5 p-4">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Monthly salary</p>
+                                            <p className="mt-1 text-2xl font-black text-emerald-200">{money(driverProfile.salary)}</p>
+                                            <p className="mt-1 text-[11px] font-bold text-white/55">
+                                                Set by fleet owner for this driver profile
+                                            </p>
+                                        </div>
+                                        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-400/15 text-emerald-200">
+                                            <IndianRupee size={22} />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className={`mt-5 grid gap-3 ${driverProfile.isOwnerManagedDriver ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-2'}`}>
                                 <div className="rounded-2xl bg-white/10 p-3">
                                     <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Minimum needed</p>
                                     <p className="mt-1 text-lg font-black">{money(rules.minimumBalance)}</p>
@@ -575,21 +617,38 @@ const DriverWallet = () => {
                         <section className="rounded-[1.7rem] bg-white p-4 shadow-sm">
                             <div className="mb-3 flex items-center gap-2">
                                 <IndianRupee size={18} className="text-emerald-700" />
-                                <h3 className="text-sm font-black text-slate-950">How it reflects</h3>
+                                <h3 className="text-sm font-black text-slate-950">
+                                    {driverProfile.isOwnerManagedDriver ? 'Wallet activity guide' : 'How it reflects'}
+                                </h3>
                             </div>
                             <div className="grid gap-2">
                                 <div className="rounded-2xl bg-slate-50 p-3">
-                                    <p className="text-sm font-black text-slate-900">Cash / COD ride</p>
-                                    <p className="mt-1 text-xs font-bold leading-relaxed text-slate-500">Driver collects the full cash fare. Wallet deducts only admin commission.</p>
+                                    <p className="text-sm font-black text-slate-900">
+                                        {driverProfile.isOwnerManagedDriver ? 'Monthly salary' : 'Cash / COD ride'}
+                                    </p>
+                                    <p className="mt-1 text-xs font-bold leading-relaxed text-slate-500">
+                                        {driverProfile.isOwnerManagedDriver
+                                            ? 'This fixed amount is the monthly salary configured by the fleet owner for this driver.'
+                                            : 'Driver collects the full cash fare. Wallet deducts only admin commission.'}
+                                    </p>
                                 </div>
                                 <div className="rounded-2xl bg-slate-50 p-3">
-                                    <p className="text-sm font-black text-slate-900">Online ride</p>
-                                    <p className="mt-1 text-xs font-bold leading-relaxed text-slate-500">Platform receives the fare. Wallet credits driver earning after commission.</p>
+                                    <p className="text-sm font-black text-slate-900">
+                                        {driverProfile.isOwnerManagedDriver ? 'Wallet balance' : 'Online ride'}
+                                    </p>
+                                    <p className="mt-1 text-xs font-bold leading-relaxed text-slate-500">
+                                        {driverProfile.isOwnerManagedDriver
+                                            ? 'Wallet entries here still show live collections, transfers, top-ups, and deductions separately from salary.'
+                                            : 'Platform receives the fare. Wallet credits driver earning after commission.'}
+                                    </p>
                                 </div>
                             </div>
                         </section>
 
                         <section className="grid grid-cols-1 gap-3">
+                            {driverProfile.isOwnerManagedDriver && (
+                                <StatPill label="Monthly salary" value={money(driverProfile.salary)} tone="good" />
+                            )}
                             <StatPill label={`${appName} earnings`} value={money(walletSummary.totalAppEarnings)} tone="good" />
                             <StatPill label="Top-up minimum" value={money(rules.minimumTopUp)} tone="dark" />
                             <div className="grid grid-cols-2 gap-3">

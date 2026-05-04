@@ -275,7 +275,27 @@ const formatFareLabel = (value) => {
     return `Rs ${amount}`;
 };
 
-const getWalletAlertState = (wallet = {}) => {
+const isOwnerManagedDriverProfile = (driver = {}) => {
+    const accountType = String(
+        driver?.accountType
+        || driver?.onboarding?.accountType
+        || driver?.onboarding?.role
+        || driver?.role
+        || '',
+    ).toLowerCase();
+
+    return Boolean(
+        driver?.owner_id
+        || driver?.ownerId
+        || driver?.fleet_id
+        || driver?.fleetId
+        || driver?.owner?._id
+        || driver?.onboarding?.owner_id
+        || ['fleet_driver', 'fleet_drivers'].includes(accountType),
+    );
+};
+
+const getWalletAlertState = (wallet = {}, { ignoreRestrictions = false } = {}) => {
     const balance = Number(wallet.balance || 0);
     const cashLimit = Math.max(0, Number(wallet.cashLimit || 0));
     const minimumBalanceForOrders = Number(wallet.minimumBalanceForOrders || 0);
@@ -286,8 +306,9 @@ const getWalletAlertState = (wallet = {}) => {
         : 0;
     const belowMinimumBalance = balance <= minimumBalanceForOrders;
     const cashLimitExceeded = cashLimit > 0 && remainingCashLimit <= 0;
-    const isBlocked = Boolean(wallet.isBlocked) || belowMinimumBalance || cashLimitExceeded;
-    const isWarning = !isBlocked && cashLimitUsed > 0 && remainingCashLimit <= warningThreshold;
+    const rawBlocked = Boolean(wallet.isBlocked) || belowMinimumBalance || cashLimitExceeded;
+    const isBlocked = ignoreRestrictions ? false : rawBlocked;
+    const isWarning = ignoreRestrictions ? false : (!isBlocked && cashLimitUsed > 0 && remainingCashLimit <= warningThreshold);
 
     return {
         balance,
@@ -296,8 +317,8 @@ const getWalletAlertState = (wallet = {}) => {
         cashLimitUsed,
         remainingCashLimit,
         warningThreshold,
-        belowMinimumBalance,
-        cashLimitExceeded,
+        belowMinimumBalance: ignoreRestrictions ? false : belowMinimumBalance,
+        cashLimitExceeded: ignoreRestrictions ? false : cashLimitExceeded,
         isBlocked,
         isWarning,
     };
@@ -507,6 +528,7 @@ const DriverHome = () => {
     const appName = settings.general?.app_name || 'App';
     const appLogo = settings.general?.logo || settings.customization?.logo;
     const storedDriverInfo = useMemo(() => readStoredDriverInfo(), []);
+    const [isOwnerManagedDriver, setIsOwnerManagedDriver] = useState(() => isOwnerManagedDriverProfile(storedDriverInfo));
     const [isOnline, setIsOnline] = useState(false);
     const [showRequest, setShowRequest] = useState(false);
     const [showLowBalanceModal, setShowLowBalanceModal] = useState(false);
@@ -567,7 +589,10 @@ const DriverHome = () => {
         [vehicleIconType, vehicleIconUrl],
     );
 
-    const walletAlertState = useMemo(() => getWalletAlertState(walletSummary), [walletSummary]);
+    const walletAlertState = useMemo(
+        () => getWalletAlertState(walletSummary, { ignoreRestrictions: isOwnerManagedDriver }),
+        [walletSummary, isOwnerManagedDriver],
+    );
 
     const { isLoaded } = useAppGoogleMapsLoader();
 
@@ -685,6 +710,12 @@ const DriverHome = () => {
             setShowLowBalanceModal(true);
         }
     }, [walletAlertState, isOnline, isHydratingDriver]);
+
+    useEffect(() => {
+        if (isOwnerManagedDriver) {
+            setShowLowBalanceModal(false);
+        }
+    }, [isOwnerManagedDriver]);
 
     useEffect(() => {
         currentRequestRef.current = currentRequest;
@@ -832,6 +863,7 @@ const DriverHome = () => {
         setVehicleIconType(driver?.vehicleIconType || driver?.vehicleType || 'car');
         setVehicleIconUrl(driver?.vehicleIconUrl || '');
         setIsOnline(Boolean(driver?.isOnline));
+        setIsOwnerManagedDriver(isOwnerManagedDriverProfile(driver));
         if (driver?.wallet) {
             setWalletSummary(driver.wallet);
         }
@@ -850,6 +882,7 @@ const DriverHome = () => {
 
         const storedDriverInfoSnapshot = readStoredDriverInfo();
         persistStoredDriverInfo({
+            owner_id: driver?.owner_id || storedDriverInfoSnapshot?.owner_id || null,
             vehicleIconType: driver?.vehicleIconType || storedDriverInfoSnapshot?.vehicleIconType || '',
             vehicleType: driver?.vehicleType || storedDriverInfoSnapshot?.vehicleType || '',
             vehicleIconUrl: driver?.vehicleIconUrl || storedDriverInfoSnapshot?.vehicleIconUrl || '',
@@ -1487,7 +1520,9 @@ const DriverHome = () => {
                 if (payload?.wallet) {
                     setWalletSummary(payload.wallet);
 
-                    const nextWalletAlertState = getWalletAlertState(payload.wallet);
+                    const nextWalletAlertState = getWalletAlertState(payload.wallet, {
+                        ignoreRestrictions: isOwnerManagedDriver,
+                    });
 
                     if (nextWalletAlertState.isBlocked) {
                         setShowRequest(false);
@@ -1572,7 +1607,7 @@ const DriverHome = () => {
             socketService.disconnect();
         }
         return undefined;
-    }, [clearRecoveryBurst, fetchActiveJob, isOnline, loadScheduledRides, navigate, scheduleRecoveryBurst]);
+    }, [clearRecoveryBurst, fetchActiveJob, isOnline, isOwnerManagedDriver, loadScheduledRides, navigate, scheduleRecoveryBurst]);
 
     useEffect(() => {
         if (!isOnline) {

@@ -6,6 +6,7 @@ import {
   Mail,
   Phone,
   MapPin,
+  IndianRupee,
   Trash2,
   Edit3,
   Briefcase,
@@ -48,6 +49,7 @@ const ManageDrivers = () => {
             phone: item.phone || "-",
             email: item.email || "-",
             address: item.city || "-",
+            salary: Number(item.salary || 0),
             status:
               item.approve === true ||
               item.approve === 1 ||
@@ -191,21 +193,27 @@ const ManageDrivers = () => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 pt-1">
-                    <div className="flex items-center gap-2 text-slate-400">
-                      <Phone size={12} strokeWidth={2.5} />
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div className="flex items-center gap-2 text-slate-400">
+                        <Phone size={12} strokeWidth={2.5} />
                       <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tighter">
                         {d.phone}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 text-slate-400">
-                      <Mail size={12} strokeWidth={2.5} />
-                      <span className="text-[10px] font-bold text-slate-600 truncate">
-                        {d.email}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-slate-400 col-span-2">
-                      <MapPin size={12} strokeWidth={2.5} />
+                      <div className="flex items-center gap-2 text-slate-400">
+                        <Mail size={12} strokeWidth={2.5} />
+                        <span className="text-[10px] font-bold text-slate-600 truncate">
+                          {d.email}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-slate-400">
+                        <IndianRupee size={12} strokeWidth={2.5} />
+                        <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tighter">
+                          Monthly Salary Rs {Number(d.salary || 0).toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-slate-400 col-span-2">
+                        <MapPin size={12} strokeWidth={2.5} />
                       <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tighter">
                         {d.address}
                       </span>
