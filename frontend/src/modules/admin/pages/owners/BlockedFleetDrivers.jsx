@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  CheckCircle2,
   ChevronDown,
-  ChevronRight,
   Eye,
   FileSearch,
   FileText,
@@ -13,15 +13,15 @@ import {
   Plus,
   Search,
   Star,
+  XCircle,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AdminPageHeader from '../../components/ui/AdminPageHeader';
-
-const BASE = `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin`;
-
-const isPending = (driver) => driver?.approve === false || String(driver?.status || '').toLowerCase() === 'pending';
+import { adminService } from '../../services/adminService';
 
 const isFleetDriver = (driver) => Boolean(driver?.owner_id || driver?.fleet_id);
+
+const getDriverId = (driver) => String(driver?._id || driver?.id || '');
 
 const getDriverName = (driver) => driver?.name || driver?.user_id?.name || driver?.full_name || '-';
 
@@ -56,41 +56,117 @@ const getDeclinedReason = (driver) =>
   driver?.reason ||
   '-';
 
+const getDriverStatus = (driver) => {
+  const rawStatus = String(driver?.status || '').trim().toLowerCase();
+  const approveValue = driver?.approve;
+  const normalizedApprove = String(approveValue ?? '').trim().toLowerCase();
+
+  if (
+    approveValue === true ||
+    approveValue === 1 ||
+    ['true', '1', 'yes', 'approved'].includes(normalizedApprove) ||
+    ['approved', 'active', 'verified'].includes(rawStatus)
+  ) {
+    return 'approved';
+  }
+
+  if (['inactive', 'disapproved', 'rejected', 'blocked'].includes(rawStatus)) {
+    return rawStatus;
+  }
+
+  return 'pending';
+};
+
+const getStatusClasses = (status) => {
+  switch (status) {
+    case 'approved':
+      return 'bg-emerald-50 text-emerald-700';
+    case 'inactive':
+    case 'disapproved':
+    case 'rejected':
+    case 'blocked':
+      return 'bg-rose-50 text-rose-700';
+    default:
+      return 'bg-amber-50 text-amber-700';
+  }
+};
+
+const toStatusLabel = (status) =>
+  String(status || 'pending')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
 const BlockedFleetDrivers = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
   const [drivers, setDrivers] = useState([]);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [page, setPage] = useState(1);
+  const [actionDriverId, setActionDriverId] = useState('');
+
+  const fetchData = async () => {
+    setIsLoading(true);
+
+    try {
+      const response = await adminService.getDrivers(1, 100);
+      const items = response?.data?.data?.results || response?.data?.results || [];
+      setDrivers(
+        items.filter((driver) => isFleetDriver(driver) && getDriverStatus(driver) !== 'approved'),
+      );
+    } catch (error) {
+      console.error('Failed to fetch blocked fleet drivers:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-
-      try {
-        const token = localStorage.getItem('adminToken') || '';
-        const response = await fetch(`${BASE}/drivers?page=1&limit=100`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        const json = await response.json();
-
-        if (response.ok && json.success) {
-          const allDrivers = json.data?.results || [];
-          setDrivers(allDrivers.filter((driver) => isPending(driver) && isFleetDriver(driver)));
-        }
-      } catch (error) {
-        console.error('Failed to fetch pending fleet drivers:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchData();
   }, []);
 
   useEffect(() => {
     setPage(1);
   }, [itemsPerPage]);
+
+  const handleApproval = async (driver, approve) => {
+    const driverId = getDriverId(driver);
+    if (!driverId) {
+      return;
+    }
+
+    const nextStatus = approve ? 'approved' : 'inactive';
+    const confirmationMessage = approve
+      ? 'Approve this fleet driver?'
+      : 'Mark this fleet driver as inactive?';
+
+    if (!window.confirm(confirmationMessage)) {
+      return;
+    }
+
+    setActionDriverId(driverId);
+
+    try {
+      await adminService.updateDriverStatus(driverId, {
+        approve,
+        active: approve,
+        status: nextStatus,
+      });
+
+      setDrivers((current) =>
+        current
+          .map((item) =>
+            getDriverId(item) === driverId
+              ? { ...item, approve, active: approve, status: nextStatus }
+              : item,
+          )
+          .filter((item) => getDriverStatus(item) !== 'approved'),
+      );
+    } catch (error) {
+      alert(error?.response?.data?.message || error?.message || 'Failed to update driver approval status');
+    } finally {
+      setActionDriverId('');
+    }
+  };
 
   const totalEntries = drivers.length;
   const totalPages = Math.max(1, Math.ceil(totalEntries / itemsPerPage));
@@ -105,7 +181,7 @@ const BlockedFleetDrivers = () => {
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-950">
       <div className="px-5 pt-3">
-        <AdminPageHeader module="Fleet Management" page="Pending Fleet Drivers" title="Pending Fleet Drivers" />
+        <AdminPageHeader module="Fleet Management" page="Blocked Fleet Drivers" title="Blocked Fleet Drivers" />
       </div>
 
       <div className="px-5 pb-6">
@@ -173,25 +249,26 @@ const BlockedFleetDrivers = () => {
                     <th className="px-3 py-4 text-sm font-bold text-gray-950">Mobile Number</th>
                     <th className="px-3 py-4 text-sm font-bold text-gray-950">Transport Type</th>
                     <th className="px-3 py-4 text-sm font-bold text-gray-950">Document View</th>
-                    <th className="px-3 py-4 text-sm font-bold text-gray-950">Approved Status</th>
+                    <th className="px-3 py-4 text-sm font-bold text-gray-950">Status</th>
                     <th className="px-3 py-4 text-sm font-bold text-gray-950">Declined Reason</th>
                     <th className="px-3 py-4 text-sm font-bold text-gray-950">Rating</th>
+                    <th className="px-3 py-4 text-sm font-bold text-gray-950">Approval</th>
                     <th className="px-3 py-4 text-sm font-bold text-gray-950">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {isLoading ? (
                     <tr>
-                      <td colSpan="10" className="px-3 py-24 text-center">
+                      <td colSpan="11" className="px-3 py-24 text-center">
                         <div className="flex flex-col items-center gap-4 text-slate-400">
                           <Loader2 size={34} className="animate-spin text-teal-500" />
-                          <p className="text-sm font-semibold">Loading pending drivers...</p>
+                          <p className="text-sm font-semibold">Loading blocked fleet drivers...</p>
                         </div>
                       </td>
                     </tr>
                   ) : pagedDrivers.length === 0 ? (
                     <tr>
-                      <td colSpan="10" className="border-b border-gray-200 px-3 py-12 text-center">
+                      <td colSpan="11" className="border-b border-gray-200 px-3 py-12 text-center">
                         <div className="flex min-h-[130px] flex-col items-center justify-center text-slate-700">
                           <FileSearch size={92} strokeWidth={1.7} className="mb-2 text-indigo-950" />
                           <p className="text-xl font-medium">No Data Found</p>
@@ -199,46 +276,75 @@ const BlockedFleetDrivers = () => {
                       </td>
                     </tr>
                   ) : (
-                    pagedDrivers.map((driver) => (
-                      <tr key={driver._id} className="bg-white transition-colors hover:bg-gray-50">
-                        <td className="px-3 py-5 text-sm text-gray-950">{getDriverName(driver)}</td>
-                        <td className="px-3 py-5 text-sm text-gray-950">{getServiceLocation(driver)}</td>
-                        <td className="px-3 py-5 text-sm text-gray-950">{getEmail(driver)}</td>
-                        <td className="px-3 py-5 text-sm text-gray-950">{getMobile(driver)}</td>
-                        <td className="px-3 py-5 text-sm capitalize text-gray-950">{getTransportType(driver)}</td>
-                        <td className="px-3 py-5">
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/admin/drivers/${driver._id}?tab=Documents`)}
-                            className="text-indigo-950 transition-colors hover:text-indigo-700"
-                          >
-                            <FileText size={28} fill="currentColor" strokeWidth={1.5} />
-                          </button>
-                        </td>
-                        <td className="px-3 py-5">
-                          <span className="inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
-                            Pending
-                          </span>
-                        </td>
-                        <td className="px-3 py-5 text-sm text-gray-950">{getDeclinedReason(driver)}</td>
-                        <td className="px-3 py-5">
-                          <span className="inline-flex items-center gap-1 text-sm font-semibold text-amber-500">
-                            <Star size={15} fill="currentColor" />
-                            {Number(driver.rating || 0).toFixed(1)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-5">
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/admin/drivers/${driver._id}`)}
-                            className="inline-flex h-9 w-10 items-center justify-center rounded bg-teal-50 text-teal-500 transition-colors hover:bg-teal-100"
-                            title="View driver"
-                          >
-                            <Eye size={17} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                    pagedDrivers.map((driver) => {
+                      const driverId = getDriverId(driver);
+                      const status = getDriverStatus(driver);
+                      const isSaving = actionDriverId === driverId;
+
+                      return (
+                        <tr key={driverId} className="bg-white transition-colors hover:bg-gray-50">
+                          <td className="px-3 py-5 text-sm text-gray-950">{getDriverName(driver)}</td>
+                          <td className="px-3 py-5 text-sm text-gray-950">{getServiceLocation(driver)}</td>
+                          <td className="px-3 py-5 text-sm text-gray-950">{getEmail(driver)}</td>
+                          <td className="px-3 py-5 text-sm text-gray-950">{getMobile(driver)}</td>
+                          <td className="px-3 py-5 text-sm capitalize text-gray-950">{getTransportType(driver)}</td>
+                          <td className="px-3 py-5">
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/admin/drivers/${driverId}?tab=Documents`)}
+                              className="text-indigo-950 transition-colors hover:text-indigo-700"
+                              title="View documents"
+                            >
+                              <FileText size={28} fill="currentColor" strokeWidth={1.5} />
+                            </button>
+                          </td>
+                          <td className="px-3 py-5">
+                            <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClasses(status)}`}>
+                              {toStatusLabel(status)}
+                            </span>
+                          </td>
+                          <td className="px-3 py-5 text-sm text-gray-950">{getDeclinedReason(driver)}</td>
+                          <td className="px-3 py-5">
+                            <span className="inline-flex items-center gap-1 text-sm font-semibold text-amber-500">
+                              <Star size={15} fill="currentColor" />
+                              {Number(driver.rating || 0).toFixed(1)}
+                            </span>
+                          </td>
+                          <td className="px-3 py-5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleApproval(driver, true)}
+                                disabled={isSaving}
+                                className="inline-flex items-center gap-1 rounded bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {isSaving ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                                Approve
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleApproval(driver, false)}
+                                disabled={isSaving}
+                                className="inline-flex items-center gap-1 rounded bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <XCircle size={14} />
+                                Inactive
+                              </button>
+                            </div>
+                          </td>
+                          <td className="px-3 py-5">
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/admin/drivers/${driverId}`)}
+                              className="inline-flex h-9 w-10 items-center justify-center rounded bg-teal-50 text-teal-500 transition-colors hover:bg-teal-100"
+                              title="View driver"
+                            >
+                              <Eye size={17} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
