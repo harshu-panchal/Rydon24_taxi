@@ -72,6 +72,21 @@ const getFleetDocumentUrls = (documents = {}) => {
   return urls.filter((url, index) => urls.indexOf(url) === index);
 };
 
+const getFleetStatusReason = (item = {}) => {
+  const candidates = [
+    item.reason,
+    item.rejection_reason,
+    item.rejectionReason,
+    item.reject_reason,
+    item.comment,
+    item.admin_comment,
+    item.adminComment,
+  ];
+
+  const match = candidates.find((value) => String(value || '').trim());
+  return String(match || '').trim();
+};
+
 const ManageFleet = () => {
   const navigate = useNavigate();
   const [view, setView] = useState('list'); // 'list' | 'create' | 'edit'
@@ -258,7 +273,7 @@ const ManageFleet = () => {
 
     let reason = '';
     if (nextStatus === 'rejected') {
-      reason = window.prompt('Add a rejection reason for this fleet vehicle:', item?.reason || '')?.trim() || '';
+      reason = window.prompt('Add a rejection reason for this fleet vehicle:', getFleetStatusReason(item))?.trim() || '';
       if (!reason) {
         window.alert('A rejection reason is required.');
         return;
@@ -289,7 +304,7 @@ const ManageFleet = () => {
                 ...fleetItem,
                 ...(json.data || {}),
                 status: json.data?.status || nextStatus,
-                reason: json.data?.reason ?? (nextStatus === 'rejected' ? reason : ''),
+                reason: getFleetStatusReason(json.data) || (nextStatus === 'rejected' ? reason : ''),
               }
             : fleetItem
         )
@@ -717,7 +732,9 @@ const ManageFleet = () => {
 
                         {/* Reason */}
                         <td className="px-3 py-5">
-                          <span className="text-[12px] text-gray-400 italic">{item.reason || '—'}</span>
+                          <span className="text-[12px] text-gray-400 italic">
+                            {item.status?.toLowerCase() === 'rejected' ? (getFleetStatusReason(item) || 'Rejected without a reason') : '—'}
+                          </span>
                         </td>
 
                         {/* Approval */}
