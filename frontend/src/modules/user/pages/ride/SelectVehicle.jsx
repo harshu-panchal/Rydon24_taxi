@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Users, X, Banknote, CreditCard, ChevronDown, ChevronRight, Clock3, LoaderCircle } from 'lucide-react';
+import { ArrowLeft, Users, X, Banknote, CreditCard, ChevronDown, ChevronRight, Clock3, LoaderCircle, Eye } from 'lucide-react';
 import { GoogleMap, MarkerF, PolylineF } from '@react-google-maps/api';
 import api from '../../../../shared/api/axiosInstance';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../../admin/utils/googleMaps';
@@ -600,6 +600,19 @@ const formatAvailabilityLine = (availability) => {
   return `Closest driver ${formatDistanceLabel(availability.closestDriverDistanceMeters)} away - ${etaMinutes} mins away - Drop ${dropTime}`;
 };
 
+const formatDispatchLabel = (vehicle) => {
+  if (vehicle?.supportsBidding) {
+    return 'Bid or instant booking';
+  }
+
+  const dispatchType = String(vehicle?.dispatchType || '').toLowerCase();
+  if (dispatchType === 'bidding') {
+    return 'Bid booking';
+  }
+
+  return 'Instant booking';
+};
+
 const getAvailabilityBadge = (availability) => {
   if (!availability?.totalDrivers) {
     return 'NOT AVAILABLE';
@@ -666,6 +679,7 @@ const SelectVehicle = () => {
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showBidModal, setShowBidModal] = useState(false);
+  const [previewVehicleId, setPreviewVehicleId] = useState('');
   const [rideMode, setRideMode] = useState(() => (location.state?.rideMode === 'schedule' ? 'schedule' : 'now'));
   const [scheduledAt, setScheduledAt] = useState(() => (
     location.state?.scheduledAt ? String(location.state.scheduledAt).slice(0, 16) : getMinScheduledDateTime()
@@ -943,7 +957,12 @@ const SelectVehicle = () => {
   }, [availabilityByVehicleId, hasAvailabilityResults, pricedVehicles]);
 
   const selectedVehicle = useMemo(() => pricedVehicles.find((v) => v.id === selected), [pricedVehicles, selected]);
+  const previewVehicle = useMemo(
+    () => pricedVehicles.find((vehicle) => vehicle.id === previewVehicleId) || null,
+    [previewVehicleId, pricedVehicles],
+  );
   const selectedAvailability = selectedVehicle ? (availabilityByVehicleId[selectedVehicle.id] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
+  const previewAvailability = previewVehicle ? (availabilityByVehicleId[previewVehicle.id] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
   const canProceed = Boolean(selectedVehicle) && !isFarePending && (rideMode === 'schedule' || Boolean(selectedAvailability.totalDrivers));
   const selectedBidStepAmount = Number(selectedVehicle?.bidStepAmount || 10);
   const selectedBidSteps = Number(selectedVehicle?.maxBidSteps || 5);
@@ -1251,18 +1270,11 @@ const SelectVehicle = () => {
             const canSelectVehicle = rideMode === 'schedule' || !isUnavailable;
 
             return (
-              <motion.button
+              <motion.div
                 key={v.id}
-                type="button"
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: i * 0.04, ease: [0.23, 1, 0.32, 1] }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => {
-                  if (canSelectVehicle) {
-                    setSelected(v.id);
-                  }
-                }}
                 className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[24px] border-2 transition-all text-left relative overflow-hidden min-h-[74px] ${
                   isSelected
                     ? 'bg-orange-50/50 border-orange-500 shadow-[0_12px_24px_-8px_rgba(249,115,22,0.22)]'
@@ -1278,52 +1290,70 @@ const SelectVehicle = () => {
                   />
                 )}
 
-                <div className={`w-16 h-14 rounded-[18px] flex items-center justify-center shrink-0 transition-all duration-300 ${
-                  isSelected ? 'bg-white shadow-sm scale-105' : isUnavailable ? 'bg-slate-200' : 'bg-slate-50'
-                }`}>
-                  <img src={v.icon} alt={v.name} className="h-12 w-16 max-w-none object-contain drop-shadow-sm" draggable={false} />
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (canSelectVehicle) {
+                      setSelected(v.id);
+                    }
+                  }}
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                >
+                  <div className={`w-16 h-14 rounded-[18px] flex items-center justify-center shrink-0 transition-all duration-300 ${
+                    isSelected ? 'bg-white shadow-sm scale-105' : isUnavailable ? 'bg-slate-200' : 'bg-slate-50'
+                  }`}>
+                    <img src={v.icon} alt={v.name} className="h-12 w-16 max-w-none object-contain drop-shadow-sm" draggable={false} />
+                  </div>
 
-                <div className="flex-1 min-w-0 z-10">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className={`text-[13px] font-extrabold leading-tight ${isUnavailable ? 'text-slate-500' : 'text-slate-900'}`}>
-                      {v.name}
-                    </span>
-                    <div className="flex items-center gap-1 text-slate-400 bg-slate-50 px-1 py-0.5 rounded-md">
-                      <Users size={10} strokeWidth={3} />
-                      <span className="text-[9px] font-bold">{v.capacity}</span>
+                  <div className="flex-1 min-w-0 z-10">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className={`text-[13px] font-extrabold leading-tight ${isUnavailable ? 'text-slate-500' : 'text-slate-900'}`}>
+                        {v.name}
+                      </span>
+                      <div className="flex items-center gap-1 text-slate-400 bg-slate-50 px-1 py-0.5 rounded-md">
+                        <Users size={10} strokeWidth={3} />
+                        <span className="text-[9px] font-bold">{v.capacity}</span>
+                      </div>
+                      {badge && (
+                        <span className={`text-[7px] font-black px-1 py-0.5 rounded-md border uppercase tracking-tighter ${
+                          isUnavailable
+                            ? 'bg-white text-slate-300 border-slate-100'
+                            : badge === 'FASTEST'
+                              ? 'bg-orange-500 text-white border-orange-400'
+                              : 'bg-orange-50 text-orange-600 border-orange-100'
+                        }`}>
+                          {badge}
+                        </span>
+                      )}
                     </div>
-                    {badge && (
-                      <span className={`text-[7px] font-black px-1 py-0.5 rounded-md border uppercase tracking-tighter ${
-                        isUnavailable 
-                          ? 'bg-white text-slate-300 border-slate-100' 
-                          : badge === 'FASTEST' 
-                            ? 'bg-orange-500 text-white border-orange-400' 
-                            : 'bg-orange-50 text-orange-600 border-orange-100'
-                      }`}>
-                        {badge}
-                      </span>
-                    )}
+                    <p className="text-[10px] font-bold text-slate-400 leading-tight truncate max-w-[140px]">{v.sublabel}</p>
+                    <div className="flex items-center gap-1.5 mt-1 border-t border-slate-50 pt-0.5">
+                      <div className={`w-1 h-1 rounded-full ${isUnavailable ? 'bg-slate-300' : 'bg-emerald-500 animate-pulse'}`} />
+                      <p className={`text-[9px] font-bold truncate flex-1 ${isUnavailable && rideMode !== 'schedule' ? 'text-slate-400' : 'text-slate-600'}`}>
+                        {isUnavailable
+                          ? rideMode === 'schedule'
+                            ? 'Can be scheduled for later'
+                            : 'Unavailable'
+                          : formatAvailabilityLine(availability)}
+                      </p>
+                      {(!isUnavailable || rideMode === 'schedule') && !isFarePending && tripMetrics.distanceMeters > 0 && (
+                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter shrink-0 bg-slate-100 px-1 py-0.5 rounded">
+                          {tripMetrics.durationMinutes || 1}m
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-[10px] font-bold text-slate-400 leading-tight truncate max-w-[140px]">{v.sublabel}</p>
-                  <div className="flex items-center gap-1.5 mt-1 border-t border-slate-50 pt-0.5">
-                    <div className={`w-1 h-1 rounded-full ${isUnavailable ? 'bg-slate-300' : 'bg-emerald-500 animate-pulse'}`} />
-                    <p className={`text-[9px] font-bold truncate flex-1 ${isUnavailable && rideMode !== 'schedule' ? 'text-slate-400' : 'text-slate-600'}`}>
-                      {isUnavailable
-                        ? rideMode === 'schedule'
-                          ? 'Can be scheduled for later'
-                          : 'Unavailable'
-                        : formatAvailabilityLine(availability)}
-                    </p>
-                    {(!isUnavailable || rideMode === 'schedule') && !isFarePending && tripMetrics.distanceMeters > 0 && (
-                      <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter shrink-0 bg-slate-100 px-1 py-0.5 rounded">
-                        {tripMetrics.durationMinutes || 1}m
-                      </span>
-                    )}
-                  </div>
-                </div>
+                </button>
 
-                <div className="flex flex-col items-end gap-1 shrink-0 z-10">
+                <div className="flex flex-col items-end gap-2 shrink-0 z-10">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewVehicleId(v.id)}
+                    aria-label={`View details for ${v.name}`}
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-orange-200 hover:text-orange-500"
+                  >
+                    <Eye size={15} strokeWidth={2.4} />
+                  </button>
                   <div className="text-right">
                     <span className={`text-[15px] font-black tracking-tight block ${isUnavailable ? 'text-slate-300' : 'text-slate-900'}`}>
                       {isUnavailable ? 'N/A' : isFarePending ? '...' : formatVehicleFare(v)}
@@ -1347,7 +1377,7 @@ const SelectVehicle = () => {
                     </motion.div>
                   )}
                 </div>
-              </motion.button>
+              </motion.div>
             );
           })}
           </div>
@@ -1462,6 +1492,85 @@ const SelectVehicle = () => {
       </div>
 
       <AnimatePresence>
+        {previewVehicle && (
+          <React.Fragment key="vehicle-preview-modal">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setPreviewVehicleId('')}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] max-w-lg mx-auto"
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 26, stiffness: 320 }}
+              className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white rounded-t-[28px] px-5 pt-4 pb-8 z-[101]"
+            >
+              <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-5" />
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-orange-500 mb-1">Vehicle details</p>
+                  <h3 className="text-[20px] font-extrabold text-slate-900">{previewVehicle.name}</h3>
+                  <p className="mt-1 text-[12px] font-bold text-slate-500">
+                    {previewVehicle.sublabel || 'Comfortable ride option for this route.'}
+                  </p>
+                </div>
+                <div className="flex h-16 w-16 items-center justify-center rounded-[18px] bg-slate-50">
+                  <img src={previewVehicle.icon} alt={previewVehicle.name} className="h-12 w-14 object-contain" draggable={false} />
+                </div>
+              </div>
+
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-[18px] border border-slate-100 bg-slate-50/70 px-4 py-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Estimated fare</p>
+                  <p className="mt-1 text-[17px] font-extrabold text-slate-900">
+                    {isFarePending ? 'Calculating...' : formatVehicleFare(previewVehicle)}
+                  </p>
+                </div>
+                <div className="rounded-[18px] border border-slate-100 bg-slate-50/70 px-4 py-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Seats</p>
+                  <p className="mt-1 text-[17px] font-extrabold text-slate-900">{previewVehicle.capacity}</p>
+                </div>
+                <div className="rounded-[18px] border border-slate-100 bg-slate-50/70 px-4 py-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Booking type</p>
+                  <p className="mt-1 text-[14px] font-extrabold text-slate-900">{formatDispatchLabel(previewVehicle)}</p>
+                </div>
+                <div className="rounded-[18px] border border-slate-100 bg-slate-50/70 px-4 py-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Availability</p>
+                  <p className="mt-1 text-[14px] font-extrabold text-slate-900">
+                    {rideMode === 'schedule'
+                      ? 'Can be scheduled'
+                      : previewAvailability.totalDrivers
+                        ? `${previewAvailability.totalDrivers} nearby`
+                        : 'Unavailable now'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-[20px] border border-orange-100 bg-orange-50/60 px-4 py-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-500">Trip snapshot</p>
+                <p className="mt-2 text-[12px] font-bold leading-5 text-slate-700">
+                  {rideMode === 'schedule'
+                    ? 'This vehicle can be reserved for a later trip at your chosen time.'
+                    : previewAvailability.totalDrivers
+                      ? formatAvailabilityLine(previewAvailability)
+                      : 'No driver is currently online for this vehicle around your pickup.'}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPreviewVehicleId('')}
+                className="mt-5 w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-[13px] font-black uppercase tracking-[0.14em] text-slate-700"
+              >
+                Close
+              </button>
+            </motion.div>
+          </React.Fragment>
+        )}
+
         {showBidModal && selectedVehicle?.supportsBidding && (
           <React.Fragment key="bid-modal">
             <motion.div

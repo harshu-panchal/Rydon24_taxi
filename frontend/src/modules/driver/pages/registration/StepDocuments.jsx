@@ -60,7 +60,8 @@ const normalizeSignupRole = (role) =>
   String(role || 'driver').toLowerCase() === 'owner' ? 'owner' : 'driver';
 
 const matchesDocumentRole = (accountType, role) => {
-  const normalizedAccountType = String(accountType || 'individual').trim().toLowerCase();
+  const rawAccountType = String(accountType || '').trim().toLowerCase();
+  const normalizedAccountType = rawAccountType || 'individual';
   const normalizedRole = normalizeSignupRole(role);
 
   if (normalizedAccountType === 'both') {
@@ -68,7 +69,11 @@ const matchesDocumentRole = (accountType, role) => {
   }
 
   if (normalizedRole === 'owner') {
-    return normalizedAccountType === 'fleet_drivers';
+    if (!rawAccountType) {
+      return true;
+    }
+
+    return ['fleet_drivers', 'owner', 'owners', 'fleet_owner', 'fleet_owners'].includes(normalizedAccountType);
   }
 
   return normalizedAccountType === 'individual';

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Bike, Camera, Car, CheckCircle2, Edit3, ImagePlus, LoaderCircle, Save, Truck, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -170,6 +170,8 @@ const VehicleFleet = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState('');
     const [isOwner, setIsOwner] = useState(false);
+    const galleryInputRef = useRef(null);
+    const cameraInputRef = useRef(null);
     const {
         uploading: imageUploading,
         preview: imagePreview,
@@ -269,6 +271,22 @@ const VehicleFleet = () => {
 
     const handleVehicleImageSelected = (event) => {
         onVehicleImageChange(event);
+    };
+
+    const openVehicleGalleryPicker = () => {
+        if (imageUploading) {
+            return;
+        }
+
+        galleryInputRef.current?.click();
+    };
+
+    const openVehicleCameraPicker = () => {
+        if (imageUploading) {
+            return;
+        }
+
+        cameraInputRef.current?.click();
     };
 
     const handleSave = async () => {
@@ -482,6 +500,23 @@ const VehicleFleet = () => {
 
                                 <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl">
                                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-3">Vehicle Image</label>
+                                    <input
+                                        ref={galleryInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        className="sr-only"
+                                        onChange={handleVehicleImageSelected}
+                                        disabled={imageUploading}
+                                    />
+                                    <input
+                                        ref={cameraInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        capture="environment"
+                                        className="sr-only"
+                                        onChange={handleVehicleImageSelected}
+                                        disabled={imageUploading}
+                                    />
                                     <div className="flex items-center gap-3">
                                         <div className="h-16 w-20 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shrink-0">
                                             {imagePreview || formData.vehicleImage ? (
@@ -497,29 +532,24 @@ const VehicleFleet = () => {
                                             )}
                                         </div>
                                         <div className="flex flex-1 flex-col gap-2">
-                                            <label className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-[12px] font-bold text-slate-700">
+                                            <button
+                                                type="button"
+                                                onClick={openVehicleGalleryPicker}
+                                                disabled={imageUploading}
+                                                className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-[12px] font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                            >
                                                 {imageUploading ? <LoaderCircle size={16} className="animate-spin" /> : <ImagePlus size={16} />}
                                                 {imageUploading ? 'Uploading...' : 'Choose From Gallery'}
-                                                <input
-                                                    type="file"
-                                                    accept="image/*"
-                                                    className="hidden"
-                                                    onChange={handleVehicleImageSelected}
-                                                    disabled={imageUploading}
-                                                />
-                                            </label>
-                                            <label className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-[12px] font-bold text-slate-700">
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={openVehicleCameraPicker}
+                                                disabled={imageUploading}
+                                                className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-[12px] font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                            >
                                                 {imageUploading ? <LoaderCircle size={16} className="animate-spin" /> : <Camera size={16} />}
                                                 {imageUploading ? 'Uploading...' : 'Use Camera'}
-                                                <input
-                                                    type="file"
-                                                    accept="image/*"
-                                                    capture="environment"
-                                                    className="hidden"
-                                                    onChange={handleVehicleImageSelected}
-                                                    disabled={imageUploading}
-                                                />
-                                            </label>
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
