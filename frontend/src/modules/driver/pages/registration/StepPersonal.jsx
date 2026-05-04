@@ -13,13 +13,18 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const StepPersonal = () => {
     const navigate = useNavigate();
     const location = useLocation();
+    const routePrefix = location.pathname.startsWith('/taxi/owner')
+        ? '/taxi/owner'
+        : '/taxi/driver';
     const session = {
         ...getStoredDriverRegistrationSession(),
         ...(location.state || {}),
     };
     const phone = String(session.phone || '').replace(/\D/g, '').slice(-10);
     const registrationId = session.registrationId || '';
-    const role = session.role || 'driver';
+    const role = routePrefix === '/taxi/owner'
+        ? 'owner'
+        : (session.role || 'driver');
     const isOwner = role === 'owner';
 
     const [formData, setFormData] = useState({
@@ -88,7 +93,7 @@ const StepPersonal = () => {
                     personalSession: response?.data?.session || null,
                 });
 
-                navigate('/taxi/driver/step-referral', { state: nextState });
+                navigate(`${routePrefix}/step-referral`, { state: nextState });
             } catch (err) {
                 setError(err?.message || 'Unable to save personal details');
             } finally {
@@ -117,7 +122,7 @@ const StepPersonal = () => {
                         </div>
                         <div className="space-y-2">
                             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9a7b50]">
-                                Driver onboarding
+                                {isOwner ? 'Owner onboarding' : 'Driver onboarding'}
                             </p>
                             <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.04em] text-slate-950">
                                 Personal details
