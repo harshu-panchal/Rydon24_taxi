@@ -324,6 +324,8 @@ const OwnerVehicleFleet = () => {
 
     setIsSaving(true);
     setMessage("");
+    const wasRejected =
+      String(editingVehicle?.status || "").toLowerCase() === "rejected";
 
     try {
       let rcFileUrl = formData.existingRcUrl || "";
@@ -366,7 +368,10 @@ const OwnerVehicleFleet = () => {
                 // Preserve immutable properties
                 isPrimary: v.isPrimary,
                 status: updated.status || v.status,
-                reason: getVehicleReason(updated) || v.reason || "",
+                reason:
+                  updated.status === "pending"
+                    ? ""
+                    : getVehicleReason(updated) || v.reason || "",
                 rcDocument:
                   updated.rc_document ||
                   updated.documents?.rc ||
@@ -380,7 +385,11 @@ const OwnerVehicleFleet = () => {
       );
 
       closeEditor();
-      setMessage("Vehicle updated successfully.");
+      setMessage(
+        wasRejected
+          ? "Corrections saved. The vehicle has been sent again for verification."
+          : "Vehicle updated successfully.",
+      );
       setMessageType("success");
       setTimeout(() => setMessage(""), 3000);
     } catch (error) {

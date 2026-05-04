@@ -4064,6 +4064,10 @@ export const updateOwnerFleetVehicle = async (req, res) => {
     };
     vehicle.markModified("documents");
   }
+  if (String(vehicle.status || "").toLowerCase() === "rejected") {
+    vehicle.status = "pending";
+    vehicle.reason = "";
+  }
 
   await vehicle.save();
 
@@ -4073,7 +4077,10 @@ export const updateOwnerFleetVehicle = async (req, res) => {
 
   res.json({
     success: true,
-    message: "Vehicle updated successfully",
+    message:
+      String(populated.status || "").toLowerCase() === "pending"
+        ? "Vehicle updated and resubmitted for verification"
+        : "Vehicle updated successfully",
     data: {
       _id: String(populated._id),
       id: String(populated._id),
