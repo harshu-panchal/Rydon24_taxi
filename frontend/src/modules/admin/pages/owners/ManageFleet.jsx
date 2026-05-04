@@ -83,6 +83,7 @@ const ManageFleet = () => {
   const [transportTypes, setTransportTypes] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [updatingFleetId, setUpdatingFleetId] = useState('');
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [page, setPage] = useState(1);
 
@@ -248,6 +249,56 @@ const ManageFleet = () => {
       else alert(json.message || 'Delete failed');
     } catch {
       alert('Delete failed');
+    }
+  };
+
+  const handleStatusUpdate = async (item, nextStatus) => {
+    const fleetId = item?._id;
+    if (!fleetId) return;
+
+    let reason = '';
+    if (nextStatus === 'rejected') {
+      reason = window.prompt('Add a rejection reason for this fleet vehicle:', item?.reason || '')?.trim() || '';
+      if (!reason) {
+        window.alert('A rejection reason is required.');
+        return;
+      }
+    }
+
+    setUpdatingFleetId(fleetId);
+    try {
+      const res = await fetch(`${BASE}/owner-management/manage-fleet/${fleetId}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          status: nextStatus,
+          reason: nextStatus === 'rejected' ? reason : '',
+        })
+      });
+      const json = await res.json();
+
+      if (!json.success) {
+        window.alert(json.message || 'Status update failed');
+        return;
+      }
+
+      setFleet((current) =>
+        current.map((fleetItem) =>
+          fleetItem._id === fleetId
+            ? {
+                ...fleetItem,
+                ...(json.data || {}),
+                status: json.data?.status || nextStatus,
+                reason: json.data?.reason ?? (nextStatus === 'rejected' ? reason : ''),
+              }
+            : fleetItem
+        )
+      );
+    } catch (error) {
+      console.error('Failed to update fleet status:', error);
+      window.alert('Status update failed');
+    } finally {
+      setUpdatingFleetId('');
     }
   };
 
@@ -578,13 +629,14 @@ const ManageFleet = () => {
                       <th className="px-3 py-4 text-sm font-bold text-gray-950">License Plate Number</th>
                       <th className="px-3 py-4 text-sm font-bold text-gray-950">Status</th>
                       <th className="px-3 py-4 text-sm font-bold text-gray-950">Reason</th>
+                      <th className="px-3 py-4 text-sm font-bold text-gray-950">Approval</th>
                       <th className="px-3 py-4 text-sm font-bold text-gray-950">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                   {isLoading ? (
                     <tr>
-                      <td colSpan="8" className="px-3 py-24 text-center">
+                      <td colSpan="9" className="px-3 py-24 text-center">
                         <div className="flex flex-col items-center gap-4 text-slate-400">
                           <Loader2 size={34} className="animate-spin text-teal-500" />
                           <p className="text-sm font-semibold">Loading fleet...</p>
@@ -593,7 +645,7 @@ const ManageFleet = () => {
                     </tr>
                   ) : pagedFleet.length === 0 ? (
                     <tr>
-                      <td colSpan="8" className="border-b border-gray-200 px-3 py-10 text-center">
+                      <td colSpan="9" className="border-b border-gray-200 px-3 py-10 text-center">
                         <div className="flex min-h-[130px] flex-col items-center justify-center text-slate-700">
                           <FileSearch size={92} strokeWidth={1.7} className="mb-2 text-indigo-950" />
                           <p className="text-xl font-medium">No Data Found</p>
@@ -666,6 +718,32 @@ const ManageFleet = () => {
                         {/* Reason */}
                         <td className="px-3 py-5">
                           <span className="text-[12px] text-gray-400 italic">{item.reason || '—'}</span>
+                        </td>
+
+                        {/* Approval */}
+                        <td className="px-3 py-5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleStatusUpdate(item, 'approved')}
+                              disabled={updatingFleetId === item._id || item.status?.toLowerCase() === 'approved'}
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-emerald-700 transition-all hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                              title="Approve fleet"
+                            >
+                              {updatingFleetId === item._id ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleStatusUpdate(item, 'rejected')}
+                              disabled={updatingFleetId === item._id || item.status?.toLowerCase() === 'rejected'}
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-rose-700 transition-all hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                              title="Reject fleet"
+                            >
+                              {updatingFleetId === item._id ? <Loader2 size={12} className="animate-spin" /> : <XCircle size={12} />}
+                              Reject
+                            </button>
+                          </div>
                         </td>
 
                         {/* Actions */}
