@@ -36,6 +36,16 @@ const getVehicleTypes = (response) => {
 const getTypeLabel = (type) =>
   type?.name || type?.vehicle_type || type?.label || "Vehicle";
 
+const getVehicleReason = (vehicle = {}) =>
+  String(
+    vehicle?.reason ||
+      vehicle?.rejection_reason ||
+      vehicle?.rejectionReason ||
+      vehicle?.comment ||
+      vehicle?.admin_comment ||
+      "",
+  ).trim();
+
 const iconFor = (iconType = "") => {
   const value = String(iconType).toLowerCase();
   if (value.includes("bike")) return Bike;
@@ -147,6 +157,7 @@ const OwnerVehicleFleet = () => {
               vehicleImage: "",
               isPrimary: false,
               status: fleetVehicle.status || "pending",
+              reason: getVehicleReason(fleetVehicle),
               isFleetVehicle: true,
             });
           });
@@ -296,6 +307,7 @@ const OwnerVehicleFleet = () => {
                 // Preserve immutable properties
                 isPrimary: v.isPrimary,
                 status: updated.status || v.status,
+                reason: getVehicleReason(updated) || v.reason || "",
                 isFleetVehicle: v.isFleetVehicle,
               }
             : v,
@@ -446,13 +458,17 @@ const OwnerVehicleFleet = () => {
                     String(vehicle.vehicleTypeId?._id || vehicle.vehicleTypeId),
                 ),
               );
+              const rejectionReason =
+                String(vehicle.status || "").toLowerCase() === "rejected"
+                  ? getVehicleReason(vehicle) || "Rejected without a reason."
+                  : "";
 
               return (
                 <motion.div
                   key={vehicle._id || `vehicle-${index}`}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
-                  className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow flex items-center gap-4">
+                  className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow flex items-start gap-4">
                   {/* Vehicle Icon */}
                   <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-indigo-50 to-blue-50 rounded-lg flex items-center justify-center border border-indigo-100 flex-shrink-0">
                     {vehicle.vehicleImage ? (
@@ -503,6 +519,10 @@ const OwnerVehicleFleet = () => {
 
                     <div className="text-xs sm:text-sm text-gray-600 space-y-0.5">
                       <p>
+                        Type:{" "}
+                        <span className="font-medium">{vehicleTypeLabel}</span>
+                      </p>
+                      <p>
                         Plate:{" "}
                         <span className="font-medium">
                           {vehicle.vehicleNumber}
@@ -515,6 +535,16 @@ const OwnerVehicleFleet = () => {
                         </span>
                       </p>
                     </div>
+                    {rejectionReason && (
+                      <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2">
+                        <p className="text-[11px] font-black uppercase tracking-widest text-red-600">
+                          Rejection Reason
+                        </p>
+                        <p className="mt-1 text-xs sm:text-sm font-medium text-red-700">
+                          {rejectionReason}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Action Buttons */}
