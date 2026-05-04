@@ -12,7 +12,7 @@ import {
   AlertCircle,
   X,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   getCurrentDriver,
   getDriverVehicleTypes,
@@ -52,7 +52,16 @@ const iconFor = (iconType = "") => {
 
 const OwnerVehicleFleet = () => {
   const navigate = useNavigate();
-  const routePrefix = "/taxi/owner";
+  const location = useLocation();
+  const { vehicleId } = useParams();
+  const routePrefix = useMemo(
+    () =>
+      location.pathname.startsWith("/taxi/owner")
+        ? "/taxi/owner"
+        : "/taxi/driver",
+    [location.pathname],
+  );
+  const vehicleFleetRoute = `${routePrefix}/vehicle-fleet`;
   const [vehicles, setVehicles] = useState([]);
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -170,7 +179,20 @@ const OwnerVehicleFleet = () => {
 
   const ActiveIcon = iconFor(selectedType?.icon_types || selectedType?.name);
 
-  const handleEdit = (vehicle) => {
+  const resetEditForm = () => {
+    setEditingVehicle(null);
+    setFormData({
+      vehicleTypeId: "",
+      vehicleMake: "",
+      vehicleModel: "",
+      vehicleNumber: "",
+      vehicleColor: "",
+      vehicleImage: "",
+    });
+    setVehicleImagePreview(null);
+  };
+
+  const openEditor = (vehicle) => {
     setEditingVehicle(vehicle);
     setFormData({
       vehicleTypeId: String(
@@ -185,6 +207,61 @@ const OwnerVehicleFleet = () => {
     setVehicleImagePreview(vehicle.vehicleImage || null);
     setIsEditing(true);
   };
+
+  const closeEditor = (syncRoute = true) => {
+    setIsEditing(false);
+    resetEditForm();
+
+    if (syncRoute && vehicleId) {
+      navigate(vehicleFleetRoute, { replace: true });
+    }
+  };
+
+  const handleEdit = (vehicle) => {
+    if (!vehicle?._id) {
+      openEditor(vehicle);
+      return;
+    }
+
+    navigate(`${vehicleFleetRoute}/edit/${vehicle._id}`);
+  };
+
+  useEffect(() => {
+    if (isLoading) {
+      return;
+    }
+
+    if (!vehicleId) {
+      if (isEditing || editingVehicle) {
+        setIsEditing(false);
+        resetEditForm();
+      }
+      return;
+    }
+
+    const matchedVehicle = vehicles.find(
+      (vehicle) => String(vehicle._id) === String(vehicleId),
+    );
+
+    if (!matchedVehicle) {
+      setMessage("That vehicle could not be found.");
+      setMessageType("error");
+      navigate(vehicleFleetRoute, { replace: true });
+      return;
+    }
+
+    if (String(editingVehicle?._id) !== String(matchedVehicle._id) || !isEditing) {
+      openEditor(matchedVehicle);
+    }
+  }, [
+    editingVehicle,
+    isEditing,
+    isLoading,
+    navigate,
+    vehicleFleetRoute,
+    vehicleId,
+    vehicles,
+  ]);
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -225,16 +302,7 @@ const OwnerVehicleFleet = () => {
         ),
       );
 
-      setIsEditing(false);
-      setEditingVehicle(null);
-      setFormData({
-        vehicleTypeId: "",
-        vehicleMake: "",
-        vehicleModel: "",
-        vehicleNumber: "",
-        vehicleColor: "",
-        vehicleImage: "",
-      });
+      closeEditor();
       setMessage("Vehicle updated successfully.");
       setMessageType("success");
       setTimeout(() => setMessage(""), 3000);
@@ -480,7 +548,7 @@ const OwnerVehicleFleet = () => {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                onClick={() => setIsEditing(false)}
+                onClick={() => closeEditor()}
                 className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
               />
               <motion.div
@@ -501,7 +569,7 @@ const OwnerVehicleFleet = () => {
                   <motion.button
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
-                    onClick={() => setIsEditing(false)}
+                    onClick={() => closeEditor()}
                     className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors">
                     <X size={22} />
                   </motion.button>
@@ -610,7 +678,7 @@ const OwnerVehicleFleet = () => {
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => setIsEditing(false)}
+                    onClick={() => closeEditor()}
                     className="flex-1 px-4 py-3 bg-slate-100 text-slate-900 rounded-xl font-bold hover:bg-slate-200 transition-colors uppercase text-sm">
                     Cancel
                   </motion.button>
