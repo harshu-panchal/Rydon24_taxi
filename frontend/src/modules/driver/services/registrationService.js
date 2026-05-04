@@ -235,6 +235,9 @@ export const getDriverApprovalStatus = () => {
 export const getOwnerFleetDrivers = () =>
   api.get("/drivers/fleet/drivers", withDriverAuth());
 
+export const getOwnerFleetDashboard = () =>
+  api.get("/drivers/fleet/dashboard", withDriverAuth());
+
 export const createOwnerFleetDriver = (payload) =>
   api.post("/drivers/fleet/drivers", payload, withDriverAuth());
 

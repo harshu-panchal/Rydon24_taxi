@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, AlertTriangle, ShieldCheck, X } from 'lucide-react';
 import {
@@ -31,6 +31,8 @@ const CONSEQUENCES = [
 
 const DriverDeleteAccount = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const routePrefix = location.pathname.startsWith('/taxi/owner') ? '/taxi/owner' : '/taxi/driver';
   const [reason, setReason] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -121,7 +123,7 @@ const DriverDeleteAccount = () => {
       setSuccess('Your driver account has been deleted.');
       setShowConfirm(false);
       window.setTimeout(() => {
-        navigate('/taxi/driver/login', { replace: true });
+        navigate(`${routePrefix}/login`, { replace: true });
       }, 900);
     } catch (requestError) {
       setError(requestError?.message || 'OTP verification or deletion failed. Please try again.');
@@ -137,7 +139,7 @@ const DriverDeleteAccount = () => {
 
       <header className="bg-white/90 backdrop-blur-md px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-white/80 shadow-[0_4px_20px_rgba(15,23,42,0.05)]">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/taxi/driver/profile')} className="w-9 h-9 rounded-[12px] border border-white/80 bg-white/90 flex items-center justify-center shadow-sm active:scale-95 transition-all">
+          <button onClick={() => navigate(`${routePrefix}/profile`)} className="w-9 h-9 rounded-[12px] border border-white/80 bg-white/90 flex items-center justify-center shadow-sm active:scale-95 transition-all">
             <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
           </button>
           <div className="flex-1">
@@ -211,7 +213,7 @@ const DriverDeleteAccount = () => {
             }`}>
             <AlertTriangle size={15} strokeWidth={2.5} /> {hasPendingRequest ? 'Request Already Sent' : 'Delete My Account'}
           </MotionButton>
-          <button onClick={() => navigate('/taxi/driver/profile')}
+          <button onClick={() => navigate(`${routePrefix}/profile`)}
             className="w-full py-4 rounded-[18px] text-[14px] font-black text-slate-500 uppercase tracking-widest border border-slate-100 bg-white/80">
             Cancel
           </button>

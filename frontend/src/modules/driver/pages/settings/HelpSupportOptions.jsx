@@ -1,15 +1,17 @@
 import React from 'react';
 import { ArrowLeft, ChevronRight, Headset, MessageCircle } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const HelpSupportOptions = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const routePrefix = location.pathname.startsWith('/taxi/owner') ? '/taxi/owner' : '/taxi/driver';
 
   return (
     <div className="min-h-screen bg-[#f8f9fb] p-6 pt-10 font-sans">
       <header className="mb-8 flex items-center gap-4 text-slate-900">
         <button
-          onClick={() => navigate('/taxi/driver/profile')}
+          onClick={() => navigate(`${routePrefix}/profile`)}
           className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-100 bg-white shadow-sm"
         >
           <ArrowLeft size={18} />
@@ -20,7 +22,7 @@ const HelpSupportOptions = () => {
       <div className="space-y-4">
         <button
           type="button"
-          onClick={() => navigate('/taxi/driver/support/chat')}
+          onClick={() => navigate(`${routePrefix}/support/chat`)}
           className="flex w-full items-center justify-between rounded-2xl border border-slate-100 bg-white px-5 py-5 shadow-sm"
         >
           <div className="flex items-center gap-4">
@@ -37,7 +39,7 @@ const HelpSupportOptions = () => {
 
         <button
           type="button"
-          onClick={() => navigate('/taxi/driver/support/tickets')}
+          onClick={() => navigate(`${routePrefix}/support/tickets`)}
           className="flex w-full items-center justify-between rounded-2xl border border-slate-100 bg-white px-5 py-5 shadow-sm"
         >
           <div className="flex items-center gap-4">

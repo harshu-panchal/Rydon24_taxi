@@ -10,6 +10,13 @@ import {
 import DriverRideRequestListener from './DriverRideRequestListener';
 
 const unwrapDriver = (response) => response?.data?.data || response?.data || response;
+const getPortalPrefix = (pathname = '', role = '') => {
+    if (pathname.startsWith('/taxi/owner')) {
+        return '/taxi/owner';
+    }
+
+    return String(role || '').toLowerCase() === 'owner' ? '/taxi/owner' : '/taxi/driver';
+};
 
 const isDriverApproved = (driver) => {
     if (!driver) {
@@ -44,25 +51,37 @@ const onboardingRoutes = new Set([
     '/taxi/driver/step-documents',
     '/taxi/driver/registration-status',
     '/taxi/driver/status',
+    '/taxi/owner/lang-select',
+    '/taxi/owner/login',
+    '/taxi/owner/reg-phone',
+    '/taxi/owner/otp-verify',
+    '/taxi/owner/step-personal',
+    '/taxi/owner/step-referral',
+    '/taxi/owner/step-vehicle',
+    '/taxi/owner/step-documents',
+    '/taxi/owner/registration-status',
+    '/taxi/owner/status',
 ]);
 
 const softEntryRoutes = new Set([
     '/taxi/driver/welcome',
     '/taxi/driver/login',
     '/taxi/driver/reg-phone',
+    '/taxi/owner/login',
+    '/taxi/owner/reg-phone',
 ]);
 
-const redirectToDriverLogin = (navigate) => {
+const redirectToDriverLogin = (navigate, pathname = '', role = '') => {
     clearDriverAuthState();
-    navigate('/taxi/driver/login', { replace: true });
+    navigate(`${getPortalPrefix(pathname, role)}/login`, { replace: true });
 };
 
 const getStoredRole = () => String(getStoredDriverRole() || 'driver').toLowerCase();
 const getAuthenticatedRole = () => String(getAuthenticatedDriverRole() || 'driver').toLowerCase();
 
-const getAuthenticatedDriverHome = () => (
+const getAuthenticatedDriverHome = (pathname = '') => (
     getAuthenticatedRole() === 'owner'
-        ? '/taxi/driver/profile'
+        ? `${getPortalPrefix(pathname, 'owner')}/dashboard`
         : getAuthenticatedRole() === 'service_center'
             ? '/taxi/driver/service-center'
         : getAuthenticatedRole() === 'service_center_staff'
@@ -72,7 +91,7 @@ const getAuthenticatedDriverHome = () => (
             : '/taxi/driver/home'
 );
 
-const getPendingDriverRoute = () => '/taxi/driver/registration-status';
+const getPendingDriverRoute = (pathname = '') => `${getPortalPrefix(pathname)}/registration-status`;
 const isBusConsoleRoute = (pathname = '') => pathname.startsWith('/taxi/driver/bus-home');
 const isServiceCenterRoute = (pathname = '') => pathname.startsWith('/taxi/driver/service-center');
 
@@ -87,14 +106,14 @@ const DriverLayout = () => {
         const currentPath = location.pathname;
         const onboardingState = location.state || {};
         const token = getLocalDriverToken();
-        const authenticatedHome = getAuthenticatedDriverHome();
+        const authenticatedHome = getAuthenticatedDriverHome(currentPath);
         const authenticatedRole = getAuthenticatedRole();
         const shouldVerifyOnboardingRoute =
             Boolean(token)
             && (
                 softEntryRoutes.has(currentPath)
                 || (
-                    currentPath === '/taxi/driver/lang-select'
+                    (currentPath === '/taxi/driver/lang-select' || currentPath === '/taxi/owner/lang-select')
                     && !onboardingState.registrationFlow
                     && !onboardingState.allowAuthenticated
                 )
@@ -109,7 +128,7 @@ const DriverLayout = () => {
         if (!token) {
             setIsAllowed(false);
             verifiedTokenRef.current = '';
-            redirectToDriverLogin(navigate);
+            redirectToDriverLogin(navigate, currentPath, authenticatedRole);
             return;
         }
 
@@ -150,7 +169,7 @@ const DriverLayout = () => {
 
                 if (!isApproved) {
                     setIsAllowed(false);
-                    navigate(getPendingDriverRoute(), { replace: true });
+                    navigate(getPendingDriverRoute(currentPath), { replace: true });
                     return;
                 }
 
@@ -158,7 +177,7 @@ const DriverLayout = () => {
                 verifiedTokenRef.current = token;
 
                 if (isBusConsoleRoute(currentPath) && effectiveRole !== 'bus_driver') {
-                    navigate(getAuthenticatedDriverHome(), { replace: true });
+                    navigate(getAuthenticatedDriverHome(currentPath), { replace: true });
                     return;
                 }
 
@@ -166,7 +185,7 @@ const DriverLayout = () => {
                     isServiceCenterRoute(currentPath)
                     && !['service_center', 'service_center_staff'].includes(effectiveRole)
                 ) {
-                    navigate(getAuthenticatedDriverHome(), { replace: true });
+                    navigate(getAuthenticatedDriverHome(currentPath), { replace: true });
                     return;
                 }
 
@@ -176,7 +195,7 @@ const DriverLayout = () => {
                 }
 
                 if (
-                    currentPath === '/taxi/driver/lang-select'
+                    (currentPath === '/taxi/driver/lang-select' || currentPath === '/taxi/owner/lang-select')
                     && !onboardingState.registrationFlow
                     && !onboardingState.allowAuthenticated
                 ) {
@@ -191,21 +210,21 @@ const DriverLayout = () => {
                 verifiedTokenRef.current = '';
 
                 if (error?.status === 401) {
-                    redirectToDriverLogin(navigate);
+                    redirectToDriverLogin(navigate, currentPath, authenticatedRole);
                     return;
                 }
 
                 if (error?.status === 404) {
-                    redirectToDriverLogin(navigate);
+                    redirectToDriverLogin(navigate, currentPath, authenticatedRole);
                     return;
                 }
 
                 if (error?.status === 403) {
-                    navigate(getPendingDriverRoute(), { replace: true });
+                    navigate(getPendingDriverRoute(currentPath), { replace: true });
                     return;
                 }
 
-                navigate(getPendingDriverRoute(), { replace: true });
+                navigate(getPendingDriverRoute(currentPath), { replace: true });
             } finally {
                 if (active) {
                     setIsChecking(false);

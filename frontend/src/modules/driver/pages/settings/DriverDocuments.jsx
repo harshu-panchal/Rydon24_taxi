@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, Camera, CheckCircle2, Eye, FileText, Loader2, RefreshCw, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { getCurrentDriver, getDriverDocumentTemplates, updateDriverDocument } from '../../services/registrationService';
 import { useImageUpload } from '../../../../shared/hooks/useImageUpload';
 import {
@@ -53,6 +53,8 @@ const unwrapDriver = (response) => response?.data?.data || response?.data || res
 
 const DriverDocuments = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const routePrefix = location.pathname.startsWith('/taxi/owner') ? '/taxi/owner' : '/taxi/driver';
   const [isSyncing, setIsSyncing] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [driver, setDriver] = useState(null);
@@ -160,7 +162,7 @@ const DriverDocuments = () => {
   return (
     <div className="min-h-screen bg-[#f8f9fb] font-sans p-6 pt-10 pb-32 overflow-x-hidden">
       <header className="flex items-center gap-4 mb-10 text-slate-900 uppercase">
-        <button onClick={() => navigate('/taxi/driver/profile')} className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center">
+        <button onClick={() => navigate(`${routePrefix}/profile`)} className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center">
           <ArrowLeft size={18} />
         </button>
         <h1 className="text-lg font-black tracking-tight tracking-tighter uppercase underline decoration-emerald-500/20">Documents</h1>

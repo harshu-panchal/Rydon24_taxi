@@ -12,7 +12,7 @@ import {
   User,
   Smartphone,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   addDriverEmergencyContact,
   deleteDriverEmergencyContact,
@@ -29,8 +29,10 @@ const normalizeName = (value) => String(value || '').replace(/[^A-Za-z .'-]/g, '
 
 const SecuritySOS = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { settings } = useSettings();
   const appName = settings.general?.app_name || 'App';
+  const routePrefix = location.pathname.startsWith('/taxi/owner') ? '/taxi/owner' : '/taxi/driver';
   
   const [contacts, setContacts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -223,7 +225,7 @@ const SecuritySOS = () => {
   return (
     <div className="min-h-screen bg-[#f8f9fb] font-sans p-6 pt-10 pb-32">
       <header className="flex items-center gap-4 mb-8 text-slate-900 uppercase">
-        <button onClick={() => navigate('/taxi/driver/profile')} className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center">
+        <button onClick={() => navigate(`${routePrefix}/profile`)} className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center">
           <ArrowLeft size={18} />
         </button>
         <h1 className="text-lg font-black tracking-tight">SOS</h1>

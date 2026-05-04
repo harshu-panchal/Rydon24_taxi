@@ -40,7 +40,8 @@ const PhoneRegistration = () => {
     const [error, setError] = useState('');
     const phoneCardRef = useRef(null);
     const phoneInputRef = useRef(null);
-    const isLoginPage = location.pathname === '/taxi/driver/login' || location.pathname === '/taxi/driver/login/';
+    const routePrefix = location.pathname.startsWith('/taxi/owner') ? '/taxi/owner' : '/taxi/driver';
+    const isLoginPage = location.pathname === `${routePrefix}/login` || location.pathname === `${routePrefix}/login/`;
     const appName = settings.general?.app_name || 'App';
     
     const roleOptions = isLoginPage
@@ -132,7 +133,7 @@ const PhoneRegistration = () => {
                 loginMode: isLoginPage,
             });
 
-            navigate('/taxi/driver/otp-verify', {
+            navigate(`${routePrefix}/otp-verify`, {
                 state: nextState,
             });
         } catch (err) {
@@ -348,7 +349,7 @@ const PhoneRegistration = () => {
                         <motion.button 
                             variants={itemVariants}
                             whileHover={{ y: -1 }}
-                            onClick={() => navigate(isLoginPage ? '/taxi/driver/reg-phone' : '/taxi/driver/login')}
+                            onClick={() => navigate(isLoginPage ? `${routePrefix}/reg-phone` : `${routePrefix}/login`)}
                             className="w-full text-[14px] font-bold text-slate-400 hover:text-slate-900 transition-colors py-2"
                         >
                             {isLoginPage ? (

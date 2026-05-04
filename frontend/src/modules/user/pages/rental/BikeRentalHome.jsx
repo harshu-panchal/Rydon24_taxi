@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Fuel, Shield, ChevronRight, Star, Info, Car } from 'lucide-react';
+import { ArrowLeft, Fuel, Shield, ChevronRight, Star, Info, Car, Search, X } from 'lucide-react';
 import { userService } from '../../services/userService';
 
 const DURATION_TABS = ['Hourly', 'Half-Day', 'Daily'];
 const RENTAL_SELECTED_VEHICLE_STORAGE_KEY = 'selectedRentalVehicleDetail';
+const RENTAL_PAGE_SIZE = 10;
 
 const infoBanner = {
   Hourly: 'Short rentals for quick city use.',
@@ -22,6 +23,8 @@ const gradientPairs = [
   ['#FDF4FF', '#FFFFFF'],
   ['#FEF2F2', '#FFFFFF'],
 ];
+
+const normalizeSearchValue = (value = '') => String(value || '').trim().toLowerCase();
 
 const findPricingBucket = (pricing = [], minHours, maxHours = Infinity) =>
   pricing.find(
@@ -138,6 +141,8 @@ const BikeRentalHome = () => {
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const navigate = useNavigate();
 
   const openVehicleDetail = (vehicle) => {
@@ -199,6 +204,77 @@ const BikeRentalHome = () => {
     return `${vehicles.length} vehicles`;
   }, [vehicles]);
 
+  const rentalSuggestions = useMemo(() => {
+    const seen = new Set();
+    const suggestions = [];
+
+    vehicles.forEach((vehicle) => {
+      [vehicle.name, vehicle.vehicleCategory, ...(vehicle.amenities || []), ...(vehicle.features || [])]
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+        .forEach((item) => {
+          const key = item.toLowerCase();
+          if (!seen.has(key)) {
+            seen.add(key);
+            suggestions.push(item);
+          }
+        });
+    });
+
+    return suggestions;
+  }, [vehicles]);
+
+  const visibleSuggestions = useMemo(() => {
+    const query = normalizeSearchValue(searchQuery);
+
+    if (!query) {
+      return rentalSuggestions.slice(0, 6);
+    }
+
+    return rentalSuggestions
+      .filter((item) => normalizeSearchValue(item).includes(query))
+      .slice(0, 6);
+  }, [rentalSuggestions, searchQuery]);
+
+  const filteredVehicles = useMemo(() => {
+    const query = normalizeSearchValue(searchQuery);
+
+    if (!query) {
+      return vehicles;
+    }
+
+    return vehicles.filter((vehicle) => {
+      const haystack = [
+        vehicle.name,
+        vehicle.vehicleCategory,
+        vehicle.shortDescription,
+        vehicle.description,
+        vehicle.fuel,
+        ...(vehicle.amenities || []),
+        ...(vehicle.features || []),
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(query);
+    });
+  }, [searchQuery, vehicles]);
+
+  const filteredCountLabel = `${filteredVehicles.length} result${filteredVehicles.length === 1 ? '' : 's'}`;
+  const totalPages = Math.max(1, Math.ceil(filteredVehicles.length / RENTAL_PAGE_SIZE));
+  const paginatedVehicles = useMemo(() => {
+    const startIndex = (currentPage - 1) * RENTAL_PAGE_SIZE;
+    return filteredVehicles.slice(startIndex, startIndex + RENTAL_PAGE_SIZE);
+  }, [currentPage, filteredVehicles]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    setCurrentPage((previousPage) => Math.min(previousPage, totalPages));
+  }, [totalPages]);
+
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_38%,#EEF2F7_100%)] max-w-lg mx-auto font-sans relative overflow-hidden pb-12">
       <div className="absolute -top-16 right-[-40px] h-44 w-44 rounded-full bg-orange-100/60 blur-3xl pointer-events-none" />
@@ -243,6 +319,42 @@ const BikeRentalHome = () => {
             </motion.button>
           ))}
         </div>
+
+        <div className="mt-3 space-y-2">
+          <div className="flex items-center gap-3 rounded-[16px] border border-slate-200 bg-white px-4 py-3 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
+            <Search size={16} className="text-slate-400 shrink-0" strokeWidth={2.6} />
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search rental vehicle, category, seats or amenity"
+              className="w-full bg-transparent text-[13px] font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none"
+            />
+            {searchQuery ? (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-slate-400 shrink-0"
+              >
+                <X size={14} strokeWidth={2.8} />
+              </button>
+            ) : null}
+          </div>
+
+          {visibleSuggestions.length ? (
+            <div className="flex flex-wrap gap-2">
+              {visibleSuggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => setSearchQuery(suggestion)}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 shadow-sm"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </motion.header>
 
       <div className="px-5 pt-4 space-y-4">
@@ -264,7 +376,12 @@ const BikeRentalHome = () => {
 
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">Available Rentals</p>
-          <h2 className="mt-0.5 text-[16px] font-black tracking-tight text-slate-900">Choose your ride</h2>
+          <div className="mt-0.5 flex items-end justify-between gap-3">
+            <h2 className="text-[16px] font-black tracking-tight text-slate-900">Choose your ride</h2>
+            {searchQuery ? (
+              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{filteredCountLabel}</span>
+            ) : null}
+          </div>
         </div>
 
         {loading ? (
@@ -283,8 +400,16 @@ const BikeRentalHome = () => {
             <p className="mt-4 text-[15px] font-black text-slate-900">No rental vehicles available</p>
             <p className="mt-1 text-[12px] font-bold text-slate-400">Admin has not published any active rental vehicles yet.</p>
           </div>
+        ) : filteredVehicles.length === 0 ? (
+          <div className="rounded-[24px] border border-white/80 bg-white/90 p-6 text-center shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-[16px] bg-slate-100 text-slate-400">
+              <Search size={22} />
+            </div>
+            <p className="mt-4 text-[15px] font-black text-slate-900">No rentals matched your search</p>
+            <p className="mt-1 text-[12px] font-bold text-slate-400">Try another vehicle name, category, or amenity.</p>
+          </div>
         ) : (
-          vehicles.map((v, idx) => (
+          paginatedVehicles.map((v, idx) => (
             <motion.div
               key={v.id}
               initial={{ opacity: 0, y: 16 }}
@@ -353,6 +478,31 @@ const BikeRentalHome = () => {
             </motion.div>
           ))
         )}
+
+        {!loading && !errorMessage && filteredVehicles.length > RENTAL_PAGE_SIZE ? (
+          <div className="flex items-center justify-between gap-3 rounded-[20px] border border-white/80 bg-white/90 px-4 py-3.5 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
+            <button
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={currentPage === 1}
+              className="rounded-[12px] border border-slate-200 bg-white px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-600 disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <div className="text-center">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Page</p>
+              <p className="mt-1 text-[13px] font-black text-slate-900">{currentPage} / {totalPages}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={currentPage === totalPages}
+              className="rounded-[12px] border border-slate-200 bg-white px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-600 disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        ) : null}
 
         <div className="flex items-center gap-3 rounded-[16px] border border-white/80 bg-white/90 px-4 py-3.5 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
           <div className="w-8 h-8 rounded-[10px] bg-slate-50 flex items-center justify-center shrink-0">

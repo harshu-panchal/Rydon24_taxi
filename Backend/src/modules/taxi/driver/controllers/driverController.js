@@ -4098,6 +4098,374 @@ export const createOwnerFleetDriver = async (req, res) => {
   });
 };
 
+export const getOwnerFleetDashboard = async (req, res) => {
+  const owner = await resolveAuthenticatedOwner(req);
+
+  if (!owner?._id) {
+    throw new ApiError(
+      403,
+      "Owner dashboard is only available for owner accounts",
+    );
+  }
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const [serviceLocation, drivers, vehicles] = await Promise.all([
+    owner.service_location_id
+      ? ServiceLocation.findById(owner.service_location_id)
+          .select(
+            "name service_location_name address city status active latitude longitude location currency_symbol currency_code timezone",
+          )
+          .lean()
+      : null,
+    Driver.find({ owner_id: owner._id, deletedAt: null })
+      .select("name phone email city approve status isOnline isOnRide createdAt")
+      .sort({ createdAt: -1 })
+      .lean(),
+    FleetVehicle.find({ owner_id: owner._id, active: true })
+      .populate("vehicle_type_id", "name type_name transport_type")
+      .sort({ createdAt: -1 })
+      .lean(),
+  ]);
+
+  const driverIds = drivers.map((driver) => driver._id);
+
+  const emptyMetrics = {
+    totalBookings: 0,
+    completedBookings: 0,
+    cancelledBookings: 0,
+    activeBookings: 0,
+    grossRevenue: 0,
+    ownerEarnings: 0,
+    cashTrips: 0,
+    onlineTrips: 0,
+  };
+
+  let rideMetrics = emptyMetrics;
+  let todayMetrics = emptyMetrics;
+  let transportBreakdown = [];
+  let recentRides = [];
+
+  if (driverIds.length > 0) {
+    const [rideMetricsResult, todayMetricsResult, transportBreakdownResult, recentRideDocs] =
+      await Promise.all([
+        Ride.aggregate([
+          { $match: { driverId: { $in: driverIds } } },
+          {
+            $group: {
+              _id: null,
+              totalBookings: { $sum: 1 },
+              completedBookings: {
+                $sum: {
+                  $cond: [{ $eq: ["$status", RIDE_STATUS.COMPLETED] }, 1, 0],
+                },
+              },
+              cancelledBookings: {
+                $sum: {
+                  $cond: [{ $eq: ["$status", RIDE_STATUS.CANCELLED] }, 1, 0],
+                },
+              },
+              activeBookings: {
+                $sum: {
+                  $cond: [
+                    {
+                      $in: [
+                        "$status",
+                        [RIDE_STATUS.ACCEPTED, RIDE_STATUS.ONGOING],
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+              grossRevenue: {
+                $sum: {
+                  $cond: [
+                    { $eq: ["$status", RIDE_STATUS.COMPLETED] },
+                    { $ifNull: ["$fare", 0] },
+                    0,
+                  ],
+                },
+              },
+              ownerEarnings: {
+                $sum: {
+                  $cond: [
+                    { $eq: ["$status", RIDE_STATUS.COMPLETED] },
+                    { $ifNull: ["$driverEarnings", 0] },
+                    0,
+                  ],
+                },
+              },
+              cashTrips: {
+                $sum: {
+                  $cond: [{ $eq: ["$paymentMethod", "cash"] }, 1, 0],
+                },
+              },
+              onlineTrips: {
+                $sum: {
+                  $cond: [{ $eq: ["$paymentMethod", "online"] }, 1, 0],
+                },
+              },
+            },
+          },
+        ]),
+        Ride.aggregate([
+          {
+            $match: {
+              driverId: { $in: driverIds },
+              createdAt: { $gte: startOfToday },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              totalBookings: { $sum: 1 },
+              completedBookings: {
+                $sum: {
+                  $cond: [{ $eq: ["$status", RIDE_STATUS.COMPLETED] }, 1, 0],
+                },
+              },
+              cancelledBookings: {
+                $sum: {
+                  $cond: [{ $eq: ["$status", RIDE_STATUS.CANCELLED] }, 1, 0],
+                },
+              },
+              activeBookings: {
+                $sum: {
+                  $cond: [
+                    {
+                      $in: [
+                        "$status",
+                        [RIDE_STATUS.ACCEPTED, RIDE_STATUS.ONGOING],
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+              grossRevenue: {
+                $sum: {
+                  $cond: [
+                    { $eq: ["$status", RIDE_STATUS.COMPLETED] },
+                    { $ifNull: ["$fare", 0] },
+                    0,
+                  ],
+                },
+              },
+              ownerEarnings: {
+                $sum: {
+                  $cond: [
+                    { $eq: ["$status", RIDE_STATUS.COMPLETED] },
+                    { $ifNull: ["$driverEarnings", 0] },
+                    0,
+                  ],
+                },
+              },
+              cashTrips: {
+                $sum: {
+                  $cond: [{ $eq: ["$paymentMethod", "cash"] }, 1, 0],
+                },
+              },
+              onlineTrips: {
+                $sum: {
+                  $cond: [{ $eq: ["$paymentMethod", "online"] }, 1, 0],
+                },
+              },
+            },
+          },
+        ]),
+        Ride.aggregate([
+          { $match: { driverId: { $in: driverIds } } },
+          {
+            $group: {
+              _id: { $ifNull: ["$transport_type", "taxi"] },
+              trips: { $sum: 1 },
+              completedTrips: {
+                $sum: {
+                  $cond: [{ $eq: ["$status", RIDE_STATUS.COMPLETED] }, 1, 0],
+                },
+              },
+              earnings: {
+                $sum: {
+                  $cond: [
+                    { $eq: ["$status", RIDE_STATUS.COMPLETED] },
+                    { $ifNull: ["$driverEarnings", 0] },
+                    0,
+                  ],
+                },
+              },
+            },
+          },
+          { $sort: { trips: -1, _id: 1 } },
+        ]),
+        Ride.find({ driverId: { $in: driverIds } })
+          .select(
+            "pickupAddress dropAddress status fare driverEarnings paymentMethod transport_type createdAt driverId",
+          )
+          .populate("driverId", "name phone")
+          .sort({ createdAt: -1 })
+          .limit(6)
+          .lean(),
+      ]);
+
+    const normalizeMetrics = (value = {}) => ({
+      totalBookings: Number(value.totalBookings || 0),
+      completedBookings: Number(value.completedBookings || 0),
+      cancelledBookings: Number(value.cancelledBookings || 0),
+      activeBookings: Number(value.activeBookings || 0),
+      grossRevenue: Number(value.grossRevenue || 0),
+      ownerEarnings: Number(value.ownerEarnings || 0),
+      cashTrips: Number(value.cashTrips || 0),
+      onlineTrips: Number(value.onlineTrips || 0),
+    });
+
+    rideMetrics = normalizeMetrics(rideMetricsResult[0] || emptyMetrics);
+    todayMetrics = normalizeMetrics(todayMetricsResult[0] || emptyMetrics);
+    transportBreakdown = transportBreakdownResult.map((item) => ({
+      transportType: String(item._id || "taxi"),
+      trips: Number(item.trips || 0),
+      completedTrips: Number(item.completedTrips || 0),
+      earnings: Number(item.earnings || 0),
+    }));
+    recentRides = recentRideDocs.map((ride) => ({
+      id: String(ride._id),
+      pickupAddress: ride.pickupAddress || "",
+      dropAddress: ride.dropAddress || "",
+      status: ride.status || "",
+      fare: Number(ride.fare || 0),
+      earnings: Number(ride.driverEarnings || 0),
+      paymentMethod: ride.paymentMethod || "cash",
+      transportType: ride.transport_type || "taxi",
+      createdAt: ride.createdAt,
+      driver: {
+        id: String(ride.driverId?._id || ""),
+        name: ride.driverId?.name || "",
+        phone: ride.driverId?.phone || "",
+      },
+    }));
+  }
+
+  const approvedDrivers = drivers.filter(
+    (driver) =>
+      driver.approve === true ||
+      String(driver.status || "").toLowerCase() === "approved",
+  );
+  const onlineDrivers = approvedDrivers.filter((driver) => driver.isOnline);
+  const busyDrivers = approvedDrivers.filter((driver) => driver.isOnRide);
+  const availableDrivers = approvedDrivers.filter(
+    (driver) => driver.isOnline && !driver.isOnRide,
+  );
+
+  const approvedVehicles = vehicles.filter(
+    (vehicle) => String(vehicle.status || "").toLowerCase() === "approved",
+  );
+  const pendingVehicles = vehicles.filter(
+    (vehicle) => String(vehicle.status || "").toLowerCase() === "pending",
+  );
+  const rejectedVehicles = vehicles.filter(
+    (vehicle) => String(vehicle.status || "").toLowerCase() === "rejected",
+  );
+
+  res.json({
+    success: true,
+    data: {
+      profile: {
+        id: String(owner._id),
+        companyName: owner.company_name || owner.name || "",
+        ownerName: owner.owner_name || owner.name || "",
+        phone: owner.mobile || owner.phone || "",
+        email: owner.email || "",
+        city: owner.city || "",
+        address: owner.address || "",
+        transportType: owner.transport_type || "taxi",
+        status: owner.status || "approved",
+        walletBalance: Number(owner.wallet?.balance || 0),
+        noOfVehicles: Number(owner.no_of_vehicles || 0),
+      },
+      serviceLocation: serviceLocation
+        ? {
+            id: String(serviceLocation._id),
+            name:
+              serviceLocation.service_location_name ||
+              serviceLocation.name ||
+              "",
+            address: serviceLocation.address || "",
+            status: serviceLocation.status || "active",
+            active: serviceLocation.active !== false,
+            latitude: Number(serviceLocation.latitude || 0),
+            longitude: Number(serviceLocation.longitude || 0),
+            currencySymbol:
+              serviceLocation.currency_symbol &&
+              serviceLocation.currency_symbol !== "â‚¹"
+                ? serviceLocation.currency_symbol
+                : "₹",
+            currencyCode: serviceLocation.currency_code || "INR",
+            timezone: serviceLocation.timezone || "Asia/Kolkata",
+          }
+        : null,
+      fleet: {
+        totalDrivers: drivers.length,
+        approvedDrivers: approvedDrivers.length,
+        onlineDrivers: onlineDrivers.length,
+        busyDrivers: busyDrivers.length,
+        availableDrivers: availableDrivers.length,
+        pendingDrivers: Math.max(0, drivers.length - approvedDrivers.length),
+        totalVehicles: vehicles.length,
+        approvedVehicles: approvedVehicles.length,
+        pendingVehicles: pendingVehicles.length,
+        rejectedVehicles: rejectedVehicles.length,
+      },
+      bookings: {
+        total: rideMetrics.totalBookings,
+        active: rideMetrics.activeBookings,
+        completed: rideMetrics.completedBookings,
+        cancelled: rideMetrics.cancelledBookings,
+        todayTotal: todayMetrics.totalBookings,
+        todayCompleted: todayMetrics.completedBookings,
+        todayCancelled: todayMetrics.cancelledBookings,
+      },
+      earnings: {
+        walletBalance: Number(owner.wallet?.balance || 0),
+        grossRevenue: rideMetrics.grossRevenue,
+        ownerEarnings: rideMetrics.ownerEarnings,
+        todayGrossRevenue: todayMetrics.grossRevenue,
+        todayOwnerEarnings: todayMetrics.ownerEarnings,
+        onlineTrips: rideMetrics.onlineTrips,
+        cashTrips: rideMetrics.cashTrips,
+      },
+      transportBreakdown,
+      recentDrivers: drivers.slice(0, 5).map((driver) => ({
+        id: String(driver._id),
+        name: driver.name || "",
+        phone: driver.phone || "",
+        city: driver.city || "",
+        status: driver.status || "pending",
+        isOnline: Boolean(driver.isOnline),
+        isOnRide: Boolean(driver.isOnRide),
+        createdAt: driver.createdAt,
+      })),
+      recentVehicles: vehicles.slice(0, 5).map((vehicle) => ({
+        id: String(vehicle._id),
+        brand: vehicle.car_brand || "",
+        model: vehicle.car_model || "",
+        color: vehicle.car_color || "",
+        number: vehicle.license_plate_number || "",
+        status: vehicle.status || "pending",
+        transportType: vehicle.transport_type || "taxi",
+        vehicleTypeName:
+          vehicle.vehicle_type_id?.name ||
+          vehicle.vehicle_type_id?.type_name ||
+          "",
+        createdAt: vehicle.createdAt,
+      })),
+      recentRides,
+    },
+  });
+};
+
 export const updateOwnerFleetDriver = async (req, res) => {
   const owner = await resolveAuthenticatedOwner(req);
 

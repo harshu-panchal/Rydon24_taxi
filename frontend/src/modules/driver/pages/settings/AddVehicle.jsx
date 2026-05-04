@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
-  Car,
   CheckCircle2,
   ChevronRight,
   Upload,
@@ -10,12 +9,16 @@ import {
   ShieldCheck,
   AlertCircle,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { getDriverVehicleTypes } from "../../services/registrationService";
 import api from "../../../../shared/api/axiosInstance";
 
 const AddVehicle = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const routePrefix = location.pathname.startsWith("/taxi/owner")
+    ? "/taxi/owner"
+    : "/taxi/driver";
   const [step, setStep] = useState(1); // 1: Details, 2: Document, 3: Success
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -69,7 +72,7 @@ const AddVehicle = () => {
       setStep(3);
       // Auto redirect after 5 seconds
       setTimeout(() => {
-        navigate("/taxi/driver/vehicle-fleet");
+        navigate(`${routePrefix}/vehicle-fleet`);
       }, 5000);
     } catch (err) {
       setError(

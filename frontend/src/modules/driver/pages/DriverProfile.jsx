@@ -79,6 +79,9 @@ const DriverProfile = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
     const [routeBookingBusy, setRouteBookingBusy] = useState(false);
+    const role = localStorage.getItem('role') || 'driver';
+    const isOwner = role === 'owner';
+    const routePrefix = isOwner ? '/taxi/owner' : '/taxi/driver';
 
     useEffect(() => {
         let active = true;
@@ -114,12 +117,10 @@ const DriverProfile = () => {
     const handleLogout = () => {
         clearDriverAuthState();
         setIsLogoutOpen(false);
-        navigate('/taxi/driver/login', { replace: true });
+        navigate(`${routePrefix}/login`, { replace: true });
     };
 
     // Dynamic Section Data with Project-mapped Paths
-    const role = localStorage.getItem('role') || 'driver';
-    const isOwner = role === 'owner';
     const driverName = useMemo(() => {
         if (!driver?.name) return 'Driver';
         return String(driver.name);
@@ -218,42 +219,42 @@ const DriverProfile = () => {
         ...(isOwner ? [{
             title: 'Fleet Management',
             items: [
-                { id: 'fleet', label: 'Manage Fleet', icon: <Car size={20} />, path: '/taxi/driver/vehicle-fleet' },
-                { id: 'drivers', label: 'Manage Drivers', icon: <UserPlus size={20} />, path: '/taxi/driver/manage-drivers' },
+                { id: 'fleet', label: 'Manage Fleet', icon: <Car size={20} />, path: `${routePrefix}/vehicle-fleet` },
+                { id: 'drivers', label: 'Manage Drivers', icon: <UserPlus size={20} />, path: `${routePrefix}/manage-drivers` },
             ]
         }] : []),
                 {
                     title: 'Your Account',
                     items: [
-                { id: 'personal', label: 'Personal Information', sub: driverPhone, icon: <User size={20} />, path: '/taxi/driver/edit-profile' },
-                { id: 'wallet', label: 'Wallet', icon: <Wallet size={20} />, path: '/taxi/driver/wallet' },
+                { id: 'personal', label: 'Personal Information', sub: driverPhone, icon: <User size={20} />, path: `${routePrefix}/edit-profile` },
+                { id: 'wallet', label: 'Wallet', icon: <Wallet size={20} />, path: `${routePrefix}/wallet` },
                 ...(!isOwner ? [
-                    { id: 'vehicle', label: 'My Vehicle', icon: <Car size={20} />, path: '/taxi/driver/vehicle-fleet' },
+                    { id: 'vehicle', label: 'My Vehicle', icon: <Car size={20} />, path: `${routePrefix}/vehicle-fleet` },
                 ] : []),
-                { id: 'docs', label: 'Documents', icon: <FileText size={20} />, path: '/taxi/driver/documents' },
-                { id: 'history', label: 'Ride History', icon: <History size={20} />, path: '/taxi/driver/history' },
-                { id: 'notifications', label: 'Notifications', icon: <Bell size={20} />, path: '/taxi/driver/notifications' },
+                { id: 'docs', label: 'Documents', icon: <FileText size={20} />, path: `${routePrefix}/documents` },
+                { id: 'history', label: 'Ride History', icon: <History size={20} />, path: `${routePrefix}/history` },
+                { id: 'notifications', label: 'Notifications', icon: <Bell size={20} />, path: `${routePrefix}/notifications` },
             ]
         },
         {
             title: 'Benefits',
             items: [
-                { id: 'refer', label: 'Refer & Earn', icon: <Gift size={20} />, path: '/taxi/driver/referral' },
-                { id: 'incentives', label: 'Incentives', icon: <BadgePercent size={20} />, path: '/taxi/driver/incentives' },
-                { id: 'sos', label: 'Emergency SOS', icon: <Shield size={20} />, path: '/taxi/driver/security' },
+                { id: 'refer', label: 'Refer & Earn', icon: <Gift size={20} />, path: `${routePrefix}/referral` },
+                { id: 'incentives', label: 'Incentives', icon: <BadgePercent size={20} />, path: `${routePrefix}/incentives` },
+                { id: 'sos', label: 'Emergency SOS', icon: <Shield size={20} />, path: `${routePrefix}/security` },
             ]
         },
         {
             title: 'Preferences',
             items: [
-                { id: 'languages', label: 'App Language', icon: <Languages size={20} />, path: '/taxi/driver/lang-select', state: { allowAuthenticated: true } },
+                { id: 'languages', label: 'App Language', icon: <Languages size={20} />, path: `${routePrefix}/lang-select`, state: { allowAuthenticated: true } },
                 { id: 'routeBooking', label: 'My Route Booking', sub: routeBookingSubtitle, icon: <Route size={20} />, type: 'toggle' },
             ]
         },
         {
             title: 'Danger Zone',
             items: [
-                { id: 'deleteAccount', label: 'Delete Account', icon: <LogOut size={20} />, path: '/taxi/driver/delete-account' },
+                { id: 'deleteAccount', label: 'Delete Account', icon: <LogOut size={20} />, path: `${routePrefix}/delete-account` },
             ]
         }
     ];
@@ -264,7 +265,7 @@ const DriverProfile = () => {
             <header className="px-5 pt-4 pb-4 border-b border-slate-50 sticky top-0 bg-white z-[60]">
                 <div className="flex items-center justify-between mb-4">
                     <div className="w-8" />
-                    <button onClick={() => navigate('/taxi/driver/help-support')} className="flex items-center gap-1.5 text-[#88B04B] font-bold text-[13px] tracking-wide">
+                    <button onClick={() => navigate(`${routePrefix}/help-support`)} className="flex items-center gap-1.5 text-[#88B04B] font-bold text-[13px] tracking-wide">
                         <Info size={18} />
                         Help & Support
                     </button>

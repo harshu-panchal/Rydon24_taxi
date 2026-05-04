@@ -131,6 +131,7 @@ const ApplicationStatus = lazy(() => import('./modules/driver/pages/registration
 
 // Driver Module - Core
 const DriverHome = lazy(() => import('./modules/driver/pages/DriverHome'));
+const OwnerDashboard = lazy(() => import('./modules/driver/pages/OwnerDashboard'));
 const ActiveTrip = lazy(() => import('./modules/driver/pages/ActiveTrip'));
 const DriverWallet = lazy(() => import('./modules/driver/pages/DriverWallet'));
 const DriverProfile = lazy(() => import('./modules/driver/pages/DriverProfile'));
@@ -152,6 +153,7 @@ const DriverSupport = lazy(() => import('./modules/driver/pages/settings/Support
 const DriverHelpSupportOptions = lazy(() => import('./modules/driver/pages/settings/HelpSupportOptions'));
 const DriverSupportChat = lazy(() => import('./modules/driver/pages/settings/SupportChat'));
 const VehicleFleet = lazy(() => import('./modules/driver/pages/settings/VehicleFleet'));
+const OwnerVehicleFleet = lazy(() => import('./modules/driver/pages/settings/OwnerVehicleFleet'));
 const AddVehicle = lazy(() => import('./modules/driver/pages/settings/AddVehicle'));
 const ManageDrivers = lazy(() => import('./modules/driver/pages/settings/ManageDrivers'));
 const AddDriver = lazy(() => import('./modules/driver/pages/settings/AddDriver'));
@@ -617,7 +619,7 @@ const DriverEntryRedirect = () => {
     <Navigate
       to={
         role === 'owner'
-          ? '/taxi/driver/profile'
+          ? '/taxi/owner/dashboard'
           : role === 'service_center'
             ? '/taxi/driver/service-center'
             : role === 'service_center_staff'
@@ -991,6 +993,42 @@ function App() {
                   path="support/ticket/:id"
                   element={<SupportTicketDetail />}
                 />
+                <Route path="vehicle-fleet" element={<OwnerVehicleFleet />} />
+                <Route path="add-vehicle" element={<AddVehicle />} />
+                <Route path="manage-drivers" element={<ManageDrivers />} />
+                <Route path="add-driver" element={<AddDriver />} />
+                <Route path="edit-driver/:driverId" element={<AddDriver />} />
+              </Route>
+
+              <Route path="/taxi/owner" element={<DriverLayout />}>
+                <Route index element={<DriverEntryRedirect />} />
+                <Route path="login" element={<PhoneRegistration />} />
+                <Route path="reg-phone" element={<PhoneRegistration />} />
+                <Route path="otp-verify" element={<OTPVerification />} />
+                <Route path="lang-select" element={<LanguageSelect />} />
+                <Route path="step-personal" element={<StepPersonal />} />
+                <Route path="step-referral" element={<StepReferral />} />
+                <Route path="step-vehicle" element={<StepVehicle />} />
+                <Route path="step-documents" element={<StepDocuments />} />
+                <Route path="registration-status" element={<RegistrationStatus />} />
+                <Route path="status" element={<ApplicationStatus />} />
+                <Route path="home" element={<OwnerDashboard />} />
+                <Route path="dashboard" element={<OwnerDashboard />} />
+                <Route path="profile" element={<DriverProfile />} />
+                <Route path="wallet" element={<DriverWallet />} />
+                <Route path="history" element={<RideRequests />} />
+                <Route path="edit-profile" element={<EditProfile />} />
+                <Route path="documents" element={<DriverDocuments />} />
+                <Route path="notifications" element={<Notifications />} />
+                <Route path="payout-methods" element={<PayoutMethods />} />
+                <Route path="referral" element={<Referral />} />
+                <Route path="delete-account" element={<DriverDeleteAccount />} />
+                <Route path="security" element={<SecuritySOS />} />
+                <Route path="support" element={<DriverSupport />} />
+                <Route path="help-support" element={<DriverHelpSupportOptions />} />
+                <Route path="support/chat" element={<DriverSupportChat />} />
+                <Route path="support/tickets" element={<SupportTickets />} />
+                <Route path="support/ticket/:id" element={<SupportTicketDetail />} />
                 <Route path="vehicle-fleet" element={<VehicleFleet />} />
                 <Route path="add-vehicle" element={<AddVehicle />} />
                 <Route path="manage-drivers" element={<ManageDrivers />} />

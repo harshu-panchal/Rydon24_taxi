@@ -37,6 +37,7 @@ import {
   getServiceCenterVehicles,
   saveDriverFcmToken,
   getOwnerFleetDrivers,
+  getOwnerFleetDashboard,
   getMyWallet,
   getOnboardingSession,
   getServiceLocations,
@@ -211,6 +212,11 @@ driverRouter.patch(
   asyncHandler(updateDriverVehicle),
 );
 driverRouter.get("/approval-status", asyncHandler(getDriverApprovalStatus));
+driverRouter.get(
+  "/fleet/dashboard",
+  authenticate(["owner"]),
+  asyncHandler(getOwnerFleetDashboard),
+);
 driverRouter.get(
   "/fleet/drivers",
   authenticate(["driver", "owner"]),

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, CheckCircle2, Copy, Gift, Loader2, Share2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { getCurrentDriver } from '../../services/registrationService';
 import {
   getReferralSettingsContent,
@@ -32,7 +32,9 @@ const replaceLegacyReferralBrand = (value, appName) => {
 
 const DriverReferral = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { settings } = useSettings();
+  const routePrefix = location.pathname.startsWith('/taxi/owner') ? '/taxi/owner' : '/taxi/driver';
   const [activeTab, setActiveTab] = useState('refer');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -185,7 +187,7 @@ const DriverReferral = () => {
     <div className="min-h-screen bg-[#f5f7fb] font-sans p-5 pt-8 pb-10">
       <header className="mb-5 flex items-center gap-3">
         <button
-          onClick={() => navigate('/taxi/driver/profile')}
+          onClick={() => navigate(`${routePrefix}/profile`)}
           className="w-9 h-9 rounded-xl border border-gray-200 bg-white flex items-center justify-center shadow-sm"
         >
           <ArrowLeft size={18} className="text-gray-900" strokeWidth={2.3} />

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, CreditCard, Plus, HelpCircle, ArrowRight, ShieldCheck, Banknote, X, CheckSquare } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const PayoutMethods = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    const routePrefix = location.pathname.startsWith('/taxi/owner') ? '/taxi/owner' : '/taxi/driver';
     const [accounts, setAccounts] = useState([
         { id: 1, type: 'Bank Account', name: 'Zeto Bank Savings', info: '**** 5678', status: 'Primary', icon: <Banknote size={20} /> },
         { id: 2, type: 'UPI ID', name: 'Google Pay', info: '95898@okaxis', status: 'Active', icon: <CreditCard size={20} /> }
@@ -16,7 +18,7 @@ const PayoutMethods = () => {
     return (
         <div className="min-h-screen bg-[#f8f9fb] font-sans p-6 pt-10 pb-32">
             <header className="flex items-center gap-4 mb-10 text-slate-900 uppercase">
-                <button onClick={() => navigate('/taxi/driver/profile')} className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center">
+                <button onClick={() => navigate(`${routePrefix}/profile`)} className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center">
                     <ArrowLeft size={18} />
                 </button>
                 <h1 className="text-lg font-black tracking-tight tracking-tighter uppercase">Payout Portfolio</h1>

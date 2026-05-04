@@ -52,6 +52,7 @@ const iconFor = (iconType = "") => {
 
 const OwnerVehicleFleet = () => {
   const navigate = useNavigate();
+  const routePrefix = "/taxi/owner";
   const [vehicles, setVehicles] = useState([]);
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -272,7 +273,7 @@ const OwnerVehicleFleet = () => {
   };
 
   const handleAddVehicle = () => {
-    navigate("/taxi/driver/add-vehicle");
+    navigate(`${routePrefix}/add-vehicle`);
   };
 
   if (isLoading) {
@@ -293,7 +294,7 @@ const OwnerVehicleFleet = () => {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => navigate("/taxi/driver/profile")}
+                onClick={() => navigate(`${routePrefix}/profile`)}
                 className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-200 flex items-center justify-center hover:shadow-md transition-all flex-shrink-0">
                 <ArrowLeft size={16} className="text-indigo-600" />
               </motion.button>

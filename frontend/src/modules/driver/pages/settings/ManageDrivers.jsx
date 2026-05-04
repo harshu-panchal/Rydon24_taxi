@@ -17,6 +17,9 @@ import DriverBottomNav from "../../../shared/components/DriverBottomNav";
 
 const ManageDrivers = () => {
   const navigate = useNavigate();
+  const routePrefix = String(localStorage.getItem("role") || "driver").toLowerCase() === "owner"
+    ? "/taxi/owner"
+    : "/taxi/driver";
   const [drivers, setDrivers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -82,7 +85,7 @@ const ManageDrivers = () => {
     <div className="min-h-screen bg-[#f8f9fb] font-sans p-6 pt-10 pb-32 overflow-x-hidden">
       <header className="flex items-center gap-4 mb-8 text-slate-900 uppercase">
         <button
-          onClick={() => navigate("/taxi/driver/profile")}
+          onClick={() => navigate(`${routePrefix}/profile`)}
           className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center">
           <ArrowLeft size={18} />
         </button>
@@ -112,7 +115,7 @@ const ManageDrivers = () => {
               </div>
             </div>
             <button
-              onClick={() => navigate("/taxi/driver/add-driver")}
+              onClick={() => navigate(`${routePrefix}/add-driver`)}
               className="bg-white/10 hover:bg-white/20 border border-white/10 text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl transition-all">
               + Add New Driver
             </button>
@@ -170,10 +173,10 @@ const ManageDrivers = () => {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() =>
-                          navigate(`/taxi/driver/edit-driver/${d.id}`, {
+                          navigate(`${routePrefix}/edit-driver/${d.id}`, {
                             state: {
                               driver: d,
-                              returnTo: "/taxi/driver/manage-drivers",
+                              returnTo: `${routePrefix}/manage-drivers`,
                             },
                           })
                         }
@@ -217,7 +220,7 @@ const ManageDrivers = () => {
 
       <div className="fixed bottom-24 right-6">
         <button
-          onClick={() => navigate("/taxi/driver/add-driver")}
+          onClick={() => navigate(`${routePrefix}/add-driver`)}
           className="w-14 h-14 bg-slate-900 text-white rounded-2xl shadow-2xl flex items-center justify-center active:scale-95 transition-transform">
           <Plus size={24} strokeWidth={3} />
         </button>

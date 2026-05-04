@@ -15,6 +15,7 @@ const DriverBottomNav = () => {
   const location = useLocation();
   const role = String(localStorage.getItem("role") || "driver").toLowerCase();
   const isOwner = role === "owner";
+  const routePrefix = isOwner ? "/taxi/owner" : "/taxi/driver";
 
   // Matching user's latest screenshot labels: Home, History, Earnings, Accounts
   const navItems = isOwner
@@ -22,45 +23,45 @@ const DriverBottomNav = () => {
         {
           icon: <Home size={22} />,
           label: "Dashboard",
-          path: "/taxi/driver/dashboard",
+          path: `${routePrefix}/dashboard`,
         },
         {
           icon: <Users size={22} />,
           label: "Drivers",
-          path: "/taxi/driver/manage-drivers",
+          path: `${routePrefix}/manage-drivers`,
         },
         {
           icon: <Car size={22} />,
           label: "Vehicle",
-          path: "/taxi/driver/vehicle-fleet",
+          path: `${routePrefix}/vehicle-fleet`,
         },
         {
           icon: <User size={22} />,
           label: "Account",
-          path: "/taxi/driver/profile",
+          path: `${routePrefix}/profile`,
         },
       ]
     : [
-        { icon: <Home size={22} />, label: "Home", path: "/taxi/driver/home" },
+        { icon: <Home size={22} />, label: "Home", path: `${routePrefix}/home` },
         {
           icon: <History size={22} />,
           label: "History",
-          path: "/taxi/driver/history",
+          path: `${routePrefix}/history`,
         },
         {
           icon: <IndianRupee size={22} />,
           label: "Wallet",
-          path: "/taxi/driver/wallet",
+          path: `${routePrefix}/wallet`,
         },
         {
           icon: <Trophy size={22} />,
           label: "Milestone",
-          path: "/taxi/driver/incentives",
+          path: `${routePrefix}/incentives`,
         },
         {
           icon: <User size={22} />,
           label: "Accounts",
-          path: "/taxi/driver/profile",
+          path: `${routePrefix}/profile`,
         },
       ];
 
@@ -73,8 +74,8 @@ const DriverBottomNav = () => {
       {navItems.map((item) => {
         const isActive =
           location.pathname === item.path ||
-          (item.path === "/taxi/driver/home" &&
-            location.pathname === "/taxi/driver/dashboard");
+          (item.path === `${routePrefix}/home` &&
+            location.pathname === `${routePrefix}/dashboard`);
         return (
           <NavLink
             key={item.path}

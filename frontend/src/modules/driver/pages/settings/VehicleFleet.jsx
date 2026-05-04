@@ -162,6 +162,7 @@ const buildVisibleVehicleTypes = (allTypes, driver) => {
 
 const VehicleFleet = () => {
     const navigate = useNavigate();
+    const [isOwner] = useState(() => String(localStorage.getItem('role') || 'driver').toLowerCase() === 'owner');
     const [driver, setDriver] = useState(null);
     const [vehicleTypes, setVehicleTypes] = useState([]);
     const [formData, setFormData] = useState(buildForm(null));
@@ -169,7 +170,6 @@ const VehicleFleet = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState('');
-    const [isOwner, setIsOwner] = useState(false);
     const galleryInputRef = useRef(null);
     const cameraInputRef = useRef(null);
     const {
@@ -194,6 +194,10 @@ const VehicleFleet = () => {
     const vehicleModel = [driver?.vehicleMake, driver?.vehicleModel].filter(Boolean).join(' ') || activeVehicleName;
 
     useEffect(() => {
+        if (isOwner) {
+            return undefined;
+        }
+
         let active = true;
 
         const load = async () => {
@@ -212,10 +216,6 @@ const VehicleFleet = () => {
 
                 const nextDriver = unwrap(driverResponse);
                 const nextTypes = buildVisibleVehicleTypes(getVehicleTypes(typeResponse), nextDriver);
-
-                // Check if user is owner
-                const userRole = localStorage.getItem('role') || 'driver';
-                setIsOwner(userRole === 'owner');
 
                 const savedDraft = readVehicleFleetDraft();
                 const wasEditing = sessionStorage.getItem(VEHICLE_FLEET_EDITING_KEY) === 'true';
@@ -241,7 +241,7 @@ const VehicleFleet = () => {
         return () => {
             active = false;
         };
-    }, []);
+    }, [isOwner]);
 
     useEffect(() => {
         sessionStorage.setItem(VEHICLE_FLEET_DRAFT_KEY, JSON.stringify(formData));

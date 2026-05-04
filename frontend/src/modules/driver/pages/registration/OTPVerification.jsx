@@ -46,6 +46,7 @@ const OTPVerification = () => {
         ...getStoredDriverRegistrationSession(),
         ...(location.state || {}),
     };
+    const routePrefix = location.pathname.startsWith('/taxi/owner') ? '/taxi/owner' : '/taxi/driver';
 
     const phone = String(session.phone || '').replace(/\D/g, '').slice(-10);
     const role = session.role || 'driver';
@@ -55,7 +56,7 @@ const OTPVerification = () => {
 
     useEffect(() => {
         if (!phone) {
-            navigate(isLoginFlow ? '/taxi/driver/login' : '/taxi/driver/reg-phone', { replace: true });
+            navigate(isLoginFlow ? `${routePrefix}/login` : `${routePrefix}/reg-phone`, { replace: true });
             return undefined;
         }
 
@@ -63,7 +64,7 @@ const OTPVerification = () => {
             setTimer(prev => (prev > 0 ? prev - 1 : 0));
         }, 1000);
         return () => clearInterval(interval);
-    }, [navigate, phone, isLoginFlow]);
+    }, [isLoginFlow, navigate, phone, routePrefix]);
 
     useEffect(() => {
         const scrollOtpIntoView = () => {
@@ -129,7 +130,7 @@ const OTPVerification = () => {
                 clearDriverRegistrationSession();
                 const nextPath =
                     normalizeDriverRole(role) === 'owner'
-                        ? '/taxi/driver/profile'
+                        ? '/taxi/owner/dashboard'
                         : normalizeDriverRole(role) === 'service_center'
                             ? '/taxi/driver/service-center'
                             : normalizeDriverRole(role) === 'service_center_staff'
@@ -154,7 +155,7 @@ const OTPVerification = () => {
                 otpSession: payload?.session || null,
             });
 
-            navigate('/taxi/driver/step-personal', { state: nextState });
+            navigate(`${routePrefix}/step-personal`, { state: nextState });
         } catch (err) {
             setError(err?.message || 'Invalid OTP. Please try again.');
         } finally {
@@ -209,7 +210,7 @@ const OTPVerification = () => {
                     <div className="flex items-center justify-between">
                         <button
                             onClick={() =>
-                                navigate(isLoginFlow ? '/taxi/driver/login' : '/taxi/driver/reg-phone', {
+                                navigate(isLoginFlow ? `${routePrefix}/login` : `${routePrefix}/reg-phone`, {
                                     state: session,
                                 })
                             }

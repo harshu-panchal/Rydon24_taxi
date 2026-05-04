@@ -8,6 +8,7 @@ const AddDriver = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { driverId } = useParams();
+    const routePrefix = location.pathname.startsWith('/taxi/owner') ? '/taxi/owner' : '/taxi/driver';
     const isEditMode = Boolean(driverId);
     const [submitting, setSubmitting] = useState(false);
     const [loadingDriver, setLoadingDriver] = useState(false);
@@ -81,7 +82,7 @@ const AddDriver = () => {
         () =>
             typeof location.state?.returnTo === 'string' && location.state.returnTo.trim()
                 ? location.state.returnTo.trim()
-                : '/taxi/driver/manage-drivers',
+                : `${routePrefix}/manage-drivers`,
         [location.state?.returnTo]
     );
 
