@@ -13,6 +13,7 @@ import {
   DRIVER_REFERRAL_TRANSLATION_FIELDS,
   getStoredReferralLanguageCode,
 } from '../../../shared/utils/referralTranslationFields';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const readStoredDriverInfo = () => {
   try {
@@ -22,8 +23,16 @@ const readStoredDriverInfo = () => {
   }
 };
 
+const LEGACY_BRAND_REGEX = /\bzyder\b/gi;
+
+const replaceLegacyReferralBrand = (value, appName) => {
+  const safeAppName = String(appName || '').trim() || 'App';
+  return String(value || '').replace(LEGACY_BRAND_REGEX, safeAppName);
+};
+
 const DriverReferral = () => {
   const navigate = useNavigate();
+  const { settings } = useSettings();
   const [activeTab, setActiveTab] = useState('refer');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -115,10 +124,17 @@ const DriverReferral = () => {
     loadDriverReferral();
   }, []);
 
+  const appName = settings.general?.app_name || 'App';
   const referralCode = driverProfile.referralCode || '';
-  const bannerText = translation.driver_referral?.banner_text || 'Refer and Earn';
+  const normalizedDriverReferral = Object.fromEntries(
+    Object.entries(translation.driver_referral || {}).map(([key, value]) => [
+      key,
+      replaceLegacyReferralBrand(value, appName),
+    ]),
+  );
+  const bannerText = normalizedDriverReferral.banner_text || `${appName} Refer and Earn`;
   const infoBlocks = buildReferralPreviewBlocks(
-    translation.driver_referral,
+    normalizedDriverReferral,
     DRIVER_REFERRAL_TRANSLATION_FIELDS,
   );
 

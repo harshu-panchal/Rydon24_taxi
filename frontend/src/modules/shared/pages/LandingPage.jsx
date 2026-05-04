@@ -99,8 +99,8 @@ function LandingPage() {
         <section id="home" className="new-hero-section">
           <div className="new-hero-left">
             <span className="new-hero-subtitle">Travel securely with us!</span>
-            <h1 className="new-hero-title">Book your taxi from<br/>anywhare today!</h1>
-            <p className="new-hero-desc">Everything your taxi business needs is already here!<br/>Ridek made for taxi service companies!</p>
+            <h1 className="new-hero-title">Book your taxi from<br/>anywhere today!</h1>
+            <p className="new-hero-desc">Everything your taxi business needs is already here!<br/>Rydon made for taxi service companies!</p>
             <button className="new-hero-action-btn" onClick={() => window.open('https://play.google.com/store/apps/details?id=com.rydon24.user', '_blank')}>Book Your Ride</button>
           </div>
           

@@ -14,6 +14,7 @@ import {
   getStoredReferralLanguageCode,
   USER_REFERRAL_TRANSLATION_FIELDS,
 } from '../../shared/utils/referralTranslationFields';
+import { useSettings } from '../../../shared/context/SettingsContext';
 
 const readStoredUserInfo = () => {
   try {
@@ -23,8 +24,16 @@ const readStoredUserInfo = () => {
   }
 };
 
+const LEGACY_BRAND_REGEX = /\bzyder\b/gi;
+
+const replaceLegacyReferralBrand = (value, appName) => {
+  const safeAppName = String(appName || '').trim() || 'App';
+  return String(value || '').replace(LEGACY_BRAND_REGEX, safeAppName);
+};
+
 const Referral = () => {
   const navigate = useNavigate();
+  const { settings } = useSettings();
   const [activeTab, setActiveTab] = useState('refer');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -120,10 +129,17 @@ const Referral = () => {
     loadReferralPage();
   }, []);
 
+  const appName = settings.general?.app_name || 'App';
   const referralCode = profile.referralCode || '';
-  const bannerText = translation.user_referral?.banner_text || 'Refer and Earn';
+  const normalizedUserReferral = Object.fromEntries(
+    Object.entries(translation.user_referral || {}).map(([key, value]) => [
+      key,
+      replaceLegacyReferralBrand(value, appName),
+    ]),
+  );
+  const bannerText = normalizedUserReferral.banner_text || `${appName} Refer and Earn`;
   const infoBlocks = buildReferralPreviewBlocks(
-    translation.user_referral,
+    normalizedUserReferral,
     USER_REFERRAL_TRANSLATION_FIELDS,
   );
 
