@@ -14,6 +14,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import { getDriverVehicleTypes } from "../../services/registrationService";
 import api from "../../../../shared/api/axiosInstance";
+import { uploadService } from "../../../../shared/services/uploadService";
 
 import CarIcon from "../../../../assets/icons/car.png";
 import BikeIcon from "../../../../assets/icons/bike.png";
@@ -98,6 +99,14 @@ const formatDispatchType = (value = "") => {
   return "Normal";
 };
 
+const fileToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
 const AddVehicle = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -160,13 +169,28 @@ const AddVehicle = () => {
       setError("");
       setIsSubmitting(true);
 
+      let rcFileUrl = null;
+
+      if (formData.rcFile) {
+        if (!String(formData.rcFile.type || "").startsWith("image/")) {
+          throw new Error("RC upload currently supports image files only.");
+        }
+
+        const dataUrl = await fileToDataUrl(formData.rcFile);
+        const uploadResult = await uploadService.uploadImage(
+          dataUrl,
+          "fleet-vehicle-documents",
+        );
+        rcFileUrl = uploadResult?.url || uploadResult?.secureUrl || null;
+      }
+
       await api.post("/drivers/fleet/vehicles", {
         vehicleTypeId: formData.vehicleTypeId,
         make: formData.make,
         model: formData.model,
         number: formData.number,
         color: formData.color,
-        rcFile: formData.rcFile?.name || null,
+        rcFile: rcFileUrl,
       });
 
       setStep(3);

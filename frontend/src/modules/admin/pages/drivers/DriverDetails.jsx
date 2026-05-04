@@ -56,12 +56,41 @@ const getDocumentImages = (doc = {}) => {
   }
 
   return [
+    doc?.imageUrl,
     doc?.previewUrl,
     doc?.secureUrl,
     doc?.image,
     doc?.url,
     doc?.fileUrl,
+    doc?.document,
+    doc?.file,
   ].filter(Boolean);
+};
+
+const normalizeDocumentEntry = (doc = {}, fallbackKey = '') => {
+  if (typeof doc === 'string') {
+    return {
+      sourceKey: fallbackKey,
+      name: fallbackKey || 'Document',
+      identify_number: '',
+      expiry_date: '',
+      status: '',
+      comment: '',
+      images: [doc].filter(Boolean),
+    };
+  }
+
+  const images = getDocumentImages(doc);
+
+  return {
+    sourceKey: doc?.key || doc?.documentKey || doc?.type || fallbackKey || doc?.name || '',
+    name: doc?.name || doc?.label || doc?.fileName || fallbackKey || 'Document',
+    identify_number: doc?.identify_number ?? doc?.identifyNumber ?? doc?.number ?? doc?.id_number ?? '',
+    expiry_date: doc?.expiry_date ?? doc?.expiryDate ?? doc?.expiry ?? '',
+    status: doc?.status ?? doc?.verificationStatus ?? doc?.approvalStatus ?? doc?.reviewStatus ?? '',
+    comment: doc?.comment ?? doc?.remarks ?? doc?.reason ?? '',
+    images,
+  };
 };
 
 const DriverDetails = () => {
@@ -156,40 +185,40 @@ const DriverDetails = () => {
   const withdrawals = profile?.withdrawals || [];
   const backRoute = location.state?.from || '/admin/drivers';
   const documents = useMemo(() => {
-    const raw = profile?.documents;
-    if (Array.isArray(raw)) {
-      return raw.map((doc) => {
-        const images = getDocumentImages(doc);
-        return {
-          sourceKey: doc?.key || doc?.documentKey || doc?.type || doc?.name || '',
-          name: doc?.name || '',
-          identify_number: doc?.identify_number ?? doc?.identifyNumber ?? doc?.number ?? doc?.id_number ?? '',
-          expiry_date: doc?.expiry_date ?? doc?.expiryDate ?? doc?.expiry ?? '',
-          status: doc?.status ?? '',
-          comment: doc?.comment ?? '',
-          images,
-        };
+    const candidateSources = [
+      profile?.documents,
+      profile?.onboarding?.documents,
+      profile?.user_snapshot?.documents,
+      profile?.owner_snapshot?.documents,
+    ].filter(Boolean);
+
+    const normalized = candidateSources.flatMap((raw) => {
+      if (Array.isArray(raw)) {
+        return raw.map((doc) => normalizeDocumentEntry(doc));
+      }
+
+      if (!raw || typeof raw !== 'object') {
+        return [];
+      }
+
+      return Object.entries(raw).flatMap(([key, value]) => {
+        if (!value) return [];
+        return Array.isArray(value)
+          ? value.map((doc) => normalizeDocumentEntry(doc, key))
+          : [normalizeDocumentEntry(value, key)];
       });
-    }
-    if (!raw || typeof raw !== 'object') {
-      return [];
-    }
-    return Object.entries(raw).flatMap(([key, value]) => {
-      if (!value) return [];
-      const normalizeOne = (doc) => {
-        const images = getDocumentImages(doc);
-        return {
-          sourceKey: key,
-          name: doc?.name || key,
-          identify_number: doc?.identify_number ?? doc?.identifyNumber ?? doc?.number ?? doc?.id_number ?? '',
-          expiry_date: doc?.expiry_date ?? doc?.expiryDate ?? doc?.expiry ?? '',
-          status: doc?.status ?? '',
-          comment: doc?.comment ?? '',
-          images,
-        };
-      };
-      return Array.isArray(value) ? value.map(normalizeOne) : [normalizeOne(value)];
     });
+
+    return normalized.filter(
+      (doc, index, items) =>
+        (doc.images.length > 0 || doc.name || doc.sourceKey) &&
+        items.findIndex(
+          (item) =>
+            item.sourceKey === doc.sourceKey &&
+            item.name === doc.name &&
+            JSON.stringify(item.images) === JSON.stringify(doc.images),
+        ) === index,
+    );
   }, [profile]);
   const chart = profile?.chart || { months: [], earnings: [], trips: { completed: [], cancelled: [] } };
   const profileImage = String(profile?.image || '').trim();

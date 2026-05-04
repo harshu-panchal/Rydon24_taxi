@@ -21,6 +21,56 @@ import AdminPageHeader from '../../components/ui/AdminPageHeader';
 
 const BASE = globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin';
 const MotionDiv = motion.div;
+const FILE_BASE = globalThis.__LEGACY_BACKEND_ORIGIN__ || '';
+
+const resolveFleetDocumentUrl = (value = '') => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  if (/^(https?:|data:|blob:)/i.test(raw)) {
+    return raw;
+  }
+
+  if (raw.startsWith('/')) {
+    return `${FILE_BASE}${raw}`;
+  }
+
+  return `${FILE_BASE}/${raw.replace(/^\.?\//, '')}`;
+};
+
+const getFleetDocumentUrls = (documents = {}) => {
+  if (!documents) return [];
+
+  const collectUrls = (value) => {
+    if (!value) return [];
+    if (typeof value === 'string') return [value];
+    if (Array.isArray(value)) return value.flatMap(collectUrls);
+
+    return [
+      value.previewUrl,
+      value.secureUrl,
+      value.url,
+      value.imageUrl,
+      value.image,
+      value.fileUrl,
+      value.document,
+      value.file,
+    ]
+      .map(resolveFleetDocumentUrl)
+      .filter(Boolean);
+  };
+
+  const urls = Array.isArray(documents)
+    ? documents.flatMap(collectUrls)
+    : Object.values(documents).flatMap((value) => {
+        if (typeof value === 'string') {
+          return [resolveFleetDocumentUrl(value)].filter(Boolean);
+        }
+        return collectUrls(value);
+      });
+
+  return urls.filter((url, index) => urls.indexOf(url) === index);
+};
 
 const ManageFleet = () => {
   const navigate = useNavigate();
@@ -207,6 +257,19 @@ const ManageFleet = () => {
   const pagedFleet = fleet.slice((safePage - 1) * itemsPerPage, safePage * itemsPerPage);
   const showingFrom = totalEntries === 0 ? 0 : (safePage - 1) * itemsPerPage + 1;
   const showingTo = totalEntries === 0 ? 0 : Math.min(showingFrom + pagedFleet.length - 1, totalEntries);
+
+  const handleViewDocuments = (item) => {
+    const urls = getFleetDocumentUrls(item?.documents);
+
+    if (urls.length === 0) {
+      window.alert('No documents uploaded for this fleet vehicle.');
+      return;
+    }
+
+    urls.forEach((url) => {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    });
+  };
 
   /* ── Status badge ── */
   const StatusBadge = ({ status }) => {
@@ -569,8 +632,22 @@ const ManageFleet = () => {
 
                         {/* Document View */}
                         <td className="px-3 py-5">
-                          <button className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-[11px] font-black uppercase tracking-wider hover:bg-indigo-100 transition-all">
-                            <Eye size={12} /> View
+                          <button
+                            type="button"
+                            onClick={() => handleViewDocuments(item)}
+                            disabled={getFleetDocumentUrls(item?.documents).length === 0}
+                            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-black uppercase tracking-wider transition-all ${
+                              getFleetDocumentUrls(item?.documents).length > 0
+                                ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+                                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                            }`}
+                            title={
+                              getFleetDocumentUrls(item?.documents).length > 0
+                                ? 'View uploaded documents'
+                                : 'No documents uploaded'
+                            }
+                          >
+                            <Eye size={12} /> {getFleetDocumentUrls(item?.documents).length > 0 ? 'View' : 'No Docs'}
                           </button>
                         </td>
 
