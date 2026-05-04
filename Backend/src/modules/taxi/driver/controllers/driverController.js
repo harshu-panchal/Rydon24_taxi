@@ -3953,6 +3953,12 @@ export const getOwnerFleetVehicles = async (req, res) => {
         car_color: vehicle.car_color || "",
         status: vehicle.status || "pending",
         reason: vehicle.reason || "",
+        documents: vehicle.documents || {},
+        rc_document:
+          vehicle.documents?.rc ||
+          vehicle.documents?.document ||
+          vehicle.documents?.file ||
+          "",
         transport_type: vehicle.transport_type || "taxi",
         active: vehicle.active,
         createdAt: vehicle.createdAt,
@@ -4005,6 +4011,13 @@ export const updateOwnerFleetVehicle = async (req, res) => {
   const color = String(
     req.body?.vehicleColor || req.body?.color || req.body?.car_color || "",
   ).trim();
+  const rcFile = String(
+    req.body?.rcFile ||
+      req.body?.documents?.rc ||
+      req.body?.document ||
+      req.body?.file ||
+      "",
+  ).trim();
 
   if (!vehicleTypeId || !mongoose.isValidObjectId(vehicleTypeId)) {
     throw new ApiError(400, "A valid vehicle type is required");
@@ -4044,6 +4057,13 @@ export const updateOwnerFleetVehicle = async (req, res) => {
   vehicle.car_model = model;
   vehicle.license_plate_number = number;
   vehicle.car_color = color;
+  if (rcFile) {
+    vehicle.documents = {
+      ...(vehicle.documents || {}),
+      rc: rcFile,
+    };
+    vehicle.markModified("documents");
+  }
 
   await vehicle.save();
 
@@ -4068,6 +4088,12 @@ export const updateOwnerFleetVehicle = async (req, res) => {
       car_color: populated.car_color || "",
       status: populated.status || "pending",
       reason: populated.reason || "",
+      documents: populated.documents || {},
+      rc_document:
+        populated.documents?.rc ||
+        populated.documents?.document ||
+        populated.documents?.file ||
+        "",
       transport_type: populated.transport_type || "taxi",
       active: populated.active,
       createdAt: populated.createdAt,

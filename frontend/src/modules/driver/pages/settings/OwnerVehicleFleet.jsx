@@ -4,12 +4,16 @@ import {
   ArrowLeft,
   Bike,
   Car,
+  ChevronRight,
   Edit3,
+  FileText,
   LoaderCircle,
   Plus,
   Trash2,
   Truck,
   AlertCircle,
+  Upload,
+  Users,
   X,
 } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -21,8 +25,12 @@ import {
   updateOwnerFleetVehicle,
   deleteOwnerFleetVehicle,
 } from "../../services/registrationService";
-import { useImageUpload } from "../../../../shared/hooks/useImageUpload";
 import DriverBottomNav from "../../../shared/components/DriverBottomNav";
+import { uploadService } from "../../../../shared/services/uploadService";
+
+const inputClass =
+  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-orange-300 focus:ring-2 focus:ring-orange-100";
+const labelClass = "mb-2 block text-[12px] font-bold text-slate-700";
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
 
@@ -45,6 +53,28 @@ const getVehicleReason = (vehicle = {}) =>
       vehicle?.admin_comment ||
       "",
   ).trim();
+
+const formatTransportType = (value = "") => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "both") return "Ride + Delivery";
+  if (!normalized) return "Taxi";
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+};
+
+const formatDispatchType = (value = "") => {
+  const normalized = String(value || "normal").trim().toLowerCase();
+  if (normalized === "bidding") return "Bidding";
+  if (normalized === "pooling") return "Pooling";
+  return "Normal";
+};
+
+const fileToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 
 const iconFor = (iconType = "") => {
   const value = String(iconType).toLowerCase();
@@ -83,23 +113,13 @@ const OwnerVehicleFleet = () => {
     vehicleModel: "",
     vehicleNumber: "",
     vehicleColor: "",
-    vehicleImage: "",
+    rcFile: null,
+    existingRcUrl: "",
   });
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState(""); // 'success' or 'error'
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
-  const {
-    uploading: imageUploading,
-    preview: imagePreview,
-    handleFileChange: onVehicleImageChange,
-    setPreview: setVehicleImagePreview,
-  } = useImageUpload({
-    folder: "driver-vehicles",
-    onSuccess: (url) => {
-      setFormData((prev) => ({ ...prev, vehicleImage: url }));
-    },
-  });
 
   useEffect(() => {
     let active = true;
@@ -158,6 +178,12 @@ const OwnerVehicleFleet = () => {
               isPrimary: false,
               status: fleetVehicle.status || "pending",
               reason: getVehicleReason(fleetVehicle),
+              rcDocument:
+                fleetVehicle.rc_document ||
+                fleetVehicle.documents?.rc ||
+                fleetVehicle.documents?.document ||
+                fleetVehicle.documents?.file ||
+                "",
               isFleetVehicle: true,
             });
           });
@@ -189,6 +215,12 @@ const OwnerVehicleFleet = () => {
   }, [formData.vehicleTypeId, vehicleTypes]);
 
   const ActiveIcon = iconFor(selectedType?.icon_types || selectedType?.name);
+  const canSave =
+    Boolean(formData.vehicleTypeId) &&
+    Boolean(String(formData.vehicleMake || "").trim()) &&
+    Boolean(String(formData.vehicleModel || "").trim()) &&
+    Boolean(String(formData.vehicleNumber || "").trim()) &&
+    Boolean(String(formData.vehicleColor || "").trim());
 
   const resetEditForm = () => {
     setEditingVehicle(null);
@@ -198,9 +230,9 @@ const OwnerVehicleFleet = () => {
       vehicleModel: "",
       vehicleNumber: "",
       vehicleColor: "",
-      vehicleImage: "",
+      rcFile: null,
+      existingRcUrl: "",
     });
-    setVehicleImagePreview(null);
   };
 
   const openEditor = (vehicle) => {
@@ -213,9 +245,9 @@ const OwnerVehicleFleet = () => {
       vehicleModel: vehicle.vehicleModel || "",
       vehicleNumber: vehicle.vehicleNumber || "",
       vehicleColor: vehicle.vehicleColor || "",
-      vehicleImage: vehicle.vehicleImage || "",
+      rcFile: null,
+      existingRcUrl: vehicle.rcDocument || "",
     });
-    setVehicleImagePreview(vehicle.vehicleImage || null);
     setIsEditing(true);
   };
 
@@ -278,6 +310,11 @@ const OwnerVehicleFleet = () => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleRcUpload = (event) => {
+    const file = event.target.files?.[0] || null;
+    setFormData((prev) => ({ ...prev, rcFile: file }));
+  };
+
   const handleSave = async () => {
     if (!formData.vehicleTypeId) {
       setMessage("Select a vehicle type first.");
@@ -289,7 +326,29 @@ const OwnerVehicleFleet = () => {
     setMessage("");
 
     try {
-      const response = await updateOwnerFleetVehicle(editingVehicle._id, formData);
+      let rcFileUrl = formData.existingRcUrl || "";
+
+      if (formData.rcFile) {
+        if (!String(formData.rcFile.type || "").startsWith("image/")) {
+          throw new Error("RC upload currently supports image files only.");
+        }
+
+        const dataUrl = await fileToDataUrl(formData.rcFile);
+        const uploadResult = await uploadService.uploadImage(
+          dataUrl,
+          "fleet-vehicle-documents",
+        );
+        rcFileUrl = uploadResult?.url || uploadResult?.secureUrl || "";
+      }
+
+      const response = await updateOwnerFleetVehicle(editingVehicle._id, {
+        vehicleTypeId: formData.vehicleTypeId,
+        vehicleMake: formData.vehicleMake,
+        vehicleModel: formData.vehicleModel,
+        vehicleNumber: formData.vehicleNumber,
+        vehicleColor: formData.vehicleColor,
+        rcFile: rcFileUrl || undefined,
+      });
       const updated = unwrap(response);
 
       // Update the vehicle in the list, preserving fleet vehicle status
@@ -308,6 +367,12 @@ const OwnerVehicleFleet = () => {
                 isPrimary: v.isPrimary,
                 status: updated.status || v.status,
                 reason: getVehicleReason(updated) || v.reason || "",
+                rcDocument:
+                  updated.rc_document ||
+                  updated.documents?.rc ||
+                  rcFileUrl ||
+                  v.rcDocument ||
+                  "",
                 isFleetVehicle: v.isFleetVehicle,
               }
             : v,
@@ -360,6 +425,419 @@ const OwnerVehicleFleet = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <LoaderCircle size={32} className="animate-spin text-indigo-600" />
+      </div>
+    );
+  }
+
+  if (isEditing && editingVehicle) {
+    const rejectionReason =
+      String(editingVehicle.status || "").toLowerCase() === "rejected"
+        ? getVehicleReason(editingVehicle) || "Rejected without a reason."
+        : "";
+
+    return (
+      <div className="min-h-screen bg-[#f6f7fb] p-4 pb-32 sm:p-6 lg:p-8">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-6 flex items-center justify-between gap-4">
+            <div>
+              <div className="mb-2 flex items-center gap-1.5 text-xs text-slate-400">
+                <span>{routePrefix === "/taxi/owner" ? "Owner" : "Driver"}</span>
+                <ChevronRight size={12} />
+                <span>Vehicle Fleet</span>
+                <ChevronRight size={12} />
+                <span className="text-slate-700">Edit Vehicle</span>
+              </div>
+              <h1 className="text-2xl font-bold text-slate-900">Edit Vehicle</h1>
+              <p className="mt-1 text-sm text-slate-500">
+                Update this fleet vehicle using the same structured form as the add vehicle flow.
+              </p>
+            </div>
+            <button
+              onClick={() => closeEditor()}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              <ArrowLeft size={16} />
+              Back
+            </button>
+          </div>
+
+          {message ? (
+            <div
+              className={`mb-5 rounded-xl border px-4 py-3 text-sm font-medium ${
+                messageType === "error"
+                  ? "border-red-200 bg-red-50 text-red-600"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
+              }`}
+            >
+              {message}
+            </div>
+          ) : null}
+
+          {rejectionReason ? (
+            <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-red-600">
+                Rejection Reason
+              </p>
+              <p className="mt-2 text-sm font-medium leading-6 text-red-700">
+                {rejectionReason}
+              </p>
+            </div>
+          ) : null}
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 px-6 py-5">
+                <h2 className="text-lg font-bold text-slate-900">Vehicle Details</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Adjust the fleet vehicle details and keep them aligned with the approved catalog.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-5 p-6 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <label className={labelClass}>Vehicle Type *</label>
+                  <select
+                    value={formData.vehicleTypeId}
+                    onChange={(event) =>
+                      handleChange("vehicleTypeId", event.target.value)
+                    }
+                    className={inputClass}
+                  >
+                    <option value="">Select Vehicle Type</option>
+                    {vehicleTypes.map((type) => (
+                      <option key={type._id || type.id} value={type._id || type.id}>
+                        {type.name || type.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-2 text-xs text-slate-500">
+                    Pick the same service class this vehicle should run under.
+                  </p>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Car Brand *</label>
+                  <input
+                    value={formData.vehicleMake}
+                    onChange={(event) =>
+                      handleChange("vehicleMake", event.target.value)
+                    }
+                    placeholder="Maruti, Hyundai, Tata..."
+                    className={inputClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Car Model *</label>
+                  <input
+                    value={formData.vehicleModel}
+                    onChange={(event) =>
+                      handleChange("vehicleModel", event.target.value)
+                    }
+                    placeholder="Swift, WagonR, Nexon..."
+                    className={inputClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>License Plate Number *</label>
+                  <input
+                    value={formData.vehicleNumber}
+                    onChange={(event) =>
+                      handleChange(
+                        "vehicleNumber",
+                        event.target.value.toUpperCase(),
+                      )
+                    }
+                    placeholder="MP09AB1234"
+                    className={`${inputClass} uppercase`}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Vehicle Color *</label>
+                  <input
+                    value={formData.vehicleColor}
+                    onChange={(event) =>
+                      handleChange("vehicleColor", event.target.value)
+                    }
+                    placeholder="White"
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-100 px-6 py-5">
+                  <h2 className="text-lg font-bold text-slate-900">Selected Vehicle Type</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    This mirrors the current admin vehicle type setup for this fleet entry.
+                  </p>
+                </div>
+
+                {selectedType ? (
+                  <div className="p-6">
+                    <div className="rounded-[24px] border border-orange-100 bg-gradient-to-br from-white via-orange-50/40 to-slate-50 p-4 shadow-sm">
+                      <div className="mb-4 flex items-center gap-4">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm text-orange-500">
+                          <ActiveIcon size={30} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-lg font-bold text-slate-900">
+                            {selectedType.name || selectedType.label || "Vehicle"}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-500">
+                            {selectedType.short_description ||
+                              selectedType.description ||
+                              "No short description available."}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                            Transport
+                          </p>
+                          <p className="mt-2 text-sm font-semibold text-slate-900">
+                            {formatTransportType(
+                              selectedType.transport_type || selectedType.is_taxi,
+                            )}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                            Dispatch
+                          </p>
+                          <p className="mt-2 text-sm font-semibold text-slate-900">
+                            {formatDispatchType(
+                              selectedType.dispatch_type ||
+                                selectedType.trip_dispatch_type,
+                            )}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                            Capacity
+                          </p>
+                          <p className="mt-2 text-sm font-semibold text-slate-900">
+                            {selectedType.capacity || 0}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                            Size
+                          </p>
+                          <p className="mt-2 text-sm font-semibold capitalize text-slate-900">
+                            {selectedType.size || "Standard"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
+                          <Users size={16} className="text-orange-500" />
+                          Service Notes
+                        </div>
+                        <div className="space-y-2 text-sm text-slate-600">
+                          <p>
+                            Share ride:{" "}
+                            <span className="font-semibold text-slate-900">
+                              {Number(selectedType.is_accept_share_ride || 0) === 1
+                                ? "Enabled"
+                                : "Not enabled"}
+                            </span>
+                          </p>
+                          <p>
+                            Status:{" "}
+                            <span className="font-semibold text-slate-900">
+                              {selectedType.active !== false &&
+                              Number(selectedType.status ?? 1) !== 0
+                                ? "Active"
+                                : "Inactive"}
+                            </span>
+                          </p>
+                          {selectedType.description ? (
+                            <p>{selectedType.description}</p>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
+                      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
+                        <FileText size={16} className="text-orange-500" />
+                        Edit Summary
+                      </div>
+                      <div className="space-y-2 text-sm text-slate-600">
+                        <p>
+                          Brand & Model:{" "}
+                          <span className="font-semibold text-slate-900">
+                            {[formData.vehicleMake, formData.vehicleModel]
+                              .filter(Boolean)
+                              .join(" ")}
+                          </span>
+                        </p>
+                        <p>
+                          Plate Number:{" "}
+                          <span className="font-semibold text-slate-900">
+                            {formData.vehicleNumber || "-"}
+                          </span>
+                        </p>
+                        <p>
+                          Color:{" "}
+                          <span className="font-semibold text-slate-900">
+                            {formData.vehicleColor || "-"}
+                          </span>
+                        </p>
+                        <p>
+                          Current Status:{" "}
+                          <span className="font-semibold capitalize text-slate-900">
+                            {editingVehicle.status || "pending"}
+                          </span>
+                        </p>
+                        <p>
+                          RC Document:{" "}
+                          <span className="font-semibold text-slate-900">
+                            {formData.rcFile?.name
+                              ? `Replacing with ${formData.rcFile.name}`
+                              : formData.existingRcUrl
+                                ? "Current file attached"
+                                : "No file attached"}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-6">
+                    <div className="flex min-h-[320px] flex-col items-center justify-center rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-6 text-center">
+                      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-orange-500 shadow-sm">
+                        <Car size={24} />
+                      </div>
+                      <p className="text-base font-semibold text-slate-800">
+                        Select a vehicle type to preview it
+                      </p>
+                      <p className="mt-2 max-w-xs text-sm text-slate-500">
+                        You'll see the transport mode, dispatch type, capacity, and service notes here.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-100 px-6 py-5">
+                  <h2 className="text-lg font-bold text-slate-900">RC Document</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Keep the vehicle proof up to date by reviewing the current RC file and uploading a replacement when needed.
+                  </p>
+                </div>
+
+                <div className="space-y-4 p-6">
+                  {formData.existingRcUrl ? (
+                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                      <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">
+                        Current RC File
+                      </p>
+                      <div className="mt-2 flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-emerald-800">
+                          A document is already attached for this vehicle.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            window.open(
+                              formData.existingRcUrl,
+                              "_blank",
+                              "noopener,noreferrer",
+                            )
+                          }
+                          className="shrink-0 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                        >
+                          View File
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                      No RC file is attached to this vehicle yet.
+                    </div>
+                  )}
+
+                  <div>
+                    <label className={labelClass}>Replace RC Document</label>
+                    <div className="rounded-2xl border border-dashed border-slate-300 p-4">
+                      <label className="relative flex min-h-[180px] cursor-pointer items-center justify-center overflow-hidden rounded-2xl bg-slate-50">
+                        <input
+                          type="file"
+                          className="absolute inset-0 cursor-pointer opacity-0"
+                          onChange={handleRcUpload}
+                          accept="image/*"
+                        />
+                        <div className="flex flex-col items-center gap-3 text-center">
+                          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-orange-500 shadow-sm">
+                            <Upload size={20} />
+                          </span>
+                          <span className="text-sm font-semibold text-slate-700">
+                            Upload new RC image
+                          </span>
+                          <span className="text-xs text-slate-400">
+                            JPG, PNG, WEBP
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  {formData.rcFile ? (
+                    <div className="flex items-center justify-between rounded-2xl border border-orange-200 bg-orange-50 p-4">
+                      <div>
+                        <p className="text-sm font-semibold text-orange-800">
+                          {formData.rcFile.name}
+                        </p>
+                        <p className="text-xs text-orange-600">
+                          This file will replace the current RC document after save.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            rcFile: null,
+                          }))
+                        }
+                        className="rounded-xl p-2 text-orange-700 transition hover:bg-white hover:text-rose-500"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => closeEditor()}
+                  className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={!canSave || isSaving}
+                  className="flex-1 rounded-2xl bg-[#ff6b4a] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-200 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSaving ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <DriverBottomNav />
       </div>
     );
   }
@@ -569,162 +1047,6 @@ const OwnerVehicleFleet = () => {
             })}
           </div>
         )}
-
-        {/* Edit Modal */}
-        <AnimatePresence>
-          {isEditing && (
-            <>
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => closeEditor()}
-                className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
-              />
-              <motion.div
-                initial={{ y: "100%" }}
-                animate={{ y: 0 }}
-                exit={{ y: "100%" }}
-                transition={{ type: "spring", damping: 28, stiffness: 320 }}
-                className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl p-6 pb-28 shadow-2xl max-w-lg mx-auto space-y-6 max-h-[90vh] overflow-y-auto">
-                <div className="flex items-center justify-between sticky -top-6 bg-white pb-4">
-                  <div>
-                    <p className="text-xs font-black text-indigo-600 uppercase tracking-widest">
-                      Edit Vehicle
-                    </p>
-                    <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
-                      Update Details
-                    </h2>
-                  </div>
-                  <motion.button
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => closeEditor()}
-                    className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors">
-                    <X size={22} />
-                  </motion.button>
-                </div>
-
-                <div className="space-y-4">
-                  {/* Vehicle Type Selection */}
-                  <div className="space-y-3">
-                    <label className="text-xs font-black text-slate-600 uppercase tracking-widest">
-                      Vehicle Type
-                    </label>
-                    <div className="grid grid-cols-3 gap-3">
-                      {vehicleTypes.map((type) => {
-                        const id = String(type._id || type.id);
-                        const TypeIcon = iconFor(type.icon_types || type.name);
-                        const selected = String(formData.vehicleTypeId) === id;
-
-                        return (
-                          <motion.button
-                            key={id}
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            type="button"
-                            onClick={() => handleChange("vehicleTypeId", id)}
-                            className={`flex flex-col items-center justify-center gap-2 p-3 rounded-xl transition-all min-h-[100px] border-2 font-bold ${
-                              selected
-                                ? "bg-indigo-50 border-indigo-600 text-indigo-600 shadow-lg"
-                                : "bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300"
-                            }`}>
-                            <TypeIcon size={28} strokeWidth={1.5} />
-                            <span className="text-xs uppercase tracking-wider text-center">
-                              {getTypeLabel(type)}
-                            </span>
-                          </motion.button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Make & Model */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-slate-50 border-2 border-slate-200 p-4 rounded-xl focus-within:border-indigo-500 transition-colors">
-                      <label className="text-xs font-black text-slate-600 uppercase tracking-widest block mb-2">
-                        Make
-                      </label>
-                      <input
-                        value={formData.vehicleMake}
-                        onChange={(e) =>
-                          handleChange("vehicleMake", e.target.value)
-                        }
-                        placeholder="Suzuki"
-                        className="w-full bg-transparent border-none p-0 text-sm font-bold text-slate-900 focus:outline-none placeholder:text-slate-400"
-                      />
-                    </div>
-                    <div className="bg-slate-50 border-2 border-slate-200 p-4 rounded-xl focus-within:border-indigo-500 transition-colors">
-                      <label className="text-xs font-black text-slate-600 uppercase tracking-widest block mb-2">
-                        Model
-                      </label>
-                      <input
-                        value={formData.vehicleModel}
-                        onChange={(e) =>
-                          handleChange("vehicleModel", e.target.value)
-                        }
-                        placeholder="WagonR"
-                        className="w-full bg-transparent border-none p-0 text-sm font-bold text-slate-900 focus:outline-none placeholder:text-slate-400"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Plate Number */}
-                  <div className="bg-slate-50 border-2 border-slate-200 p-4 rounded-xl focus-within:border-indigo-500 transition-colors">
-                    <label className="text-xs font-black text-slate-600 uppercase tracking-widest block mb-2">
-                      Plate Number
-                    </label>
-                    <input
-                      value={formData.vehicleNumber}
-                      onChange={(e) =>
-                        handleChange(
-                          "vehicleNumber",
-                          e.target.value.toUpperCase(),
-                        )
-                      }
-                      placeholder="MP 09 KK 2222"
-                      className="w-full bg-transparent border-none p-0 text-sm font-bold text-slate-900 focus:outline-none placeholder:text-slate-400 uppercase"
-                    />
-                  </div>
-
-                  {/* Color */}
-                  <div className="bg-slate-50 border-2 border-slate-200 p-4 rounded-xl focus-within:border-indigo-500 transition-colors">
-                    <label className="text-xs font-black text-slate-600 uppercase tracking-widest block mb-2">
-                      Color
-                    </label>
-                    <input
-                      value={formData.vehicleColor}
-                      onChange={(e) =>
-                        handleChange("vehicleColor", e.target.value)
-                      }
-                      placeholder="White, Black"
-                      className="w-full bg-transparent border-none p-0 text-sm font-bold text-slate-900 focus:outline-none placeholder:text-slate-400"
-                    />
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex gap-3 pt-4 border-t-2 border-slate-100">
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => closeEditor()}
-                    className="flex-1 px-4 py-3 bg-slate-100 text-slate-900 rounded-xl font-bold hover:bg-slate-200 transition-colors uppercase text-sm">
-                    Cancel
-                  </motion.button>
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className="flex-1 px-4 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl font-bold hover:shadow-lg transition-all disabled:opacity-50 uppercase text-sm">
-                    {isSaving ? "Saving..." : "Save Changes"}
-                  </motion.button>
-                </div>
-              </motion.div>
-            </>
-          )}
-        </AnimatePresence>
 
         {/* Delete Confirmation Modal */}
         <AnimatePresence>
