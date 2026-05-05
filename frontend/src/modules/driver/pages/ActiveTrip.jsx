@@ -1951,6 +1951,28 @@ const ActiveTrip = () => {
                                     <p className="text-[11px] font-bold text-red-500">{paymentQrError}</p>
                                 </div>
                             )}
+                            {selectedPaymentMode === 'cash' && driverPaymentStatus === 'success' && (
+                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mb-6 rounded-3xl border border-emerald-100 bg-emerald-50/80 p-5 text-center shadow-lg">
+                                    <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl text-white shadow-lg" style={{ backgroundColor: routeStrokeColor }}>
+                                        <Banknote size={24} strokeWidth={2.5} />
+                                    </div>
+                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Cash Selected</p>
+                                    <p className="mt-2 text-[16px] font-black text-slate-900">Collect {displayFare} from the rider</p>
+                                    <p className="mt-1 text-[11px] font-bold text-slate-500">
+                                        Once you have the cash in hand, tap below to finish the ride.
+                                    </p>
+                                    <button
+                                        onClick={async () => {
+                                            await completeRideForUserSync('cash');
+                                            setPhase('review');
+                                        }}
+                                        className="mt-4 w-full rounded-xl py-3 text-[11px] font-black uppercase tracking-[0.16em] text-white shadow-lg"
+                                        style={{ backgroundColor: routeStrokeColor, boxShadow: `0 16px 28px ${routeAccentMuted}` }}
+                                    >
+                                        Cash Received
+                                    </button>
+                                </motion.div>
+                            )}
                             {driverPaymentStatus === 'qr_generated' && (
                                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-3xl p-5 mb-6 text-center shadow-2xl text-white" style={{ backgroundColor: routeStrokeColor }}>
                                     <div className="bg-white p-3 rounded-2xl inline-block mb-3 relative overflow-hidden">
@@ -1980,16 +2002,20 @@ const ActiveTrip = () => {
                             )}
                             <motion.button
                                 whileTap={{ scale: 0.96 }}
-                                disabled={driverPaymentStatus !== 'success'}
+                                disabled={driverPaymentStatus !== 'success' || selectedPaymentMode === 'cash'}
                                 onClick={async () => {
                                     const paymentMode = selectedPaymentMode || effectiveState?.paymentMethod || liveRequest?.payment || '';
                                     await completeRideForUserSync(paymentMode);
                                     setPhase('review');
                                 }}
-                                className={`w-full h-15 rounded-xl flex items-center justify-center gap-3 text-[14px] font-semibold uppercase tracking-wide shadow-xl transition-all ${driverPaymentStatus === 'success' ? 'text-white' : 'bg-slate-100 text-slate-300 pointer-events-none'}`}
-                                style={driverPaymentStatus === 'success' ? { backgroundColor: routeStrokeColor, boxShadow: `0 18px 30px ${routeAccentMuted}` } : undefined}
+                                className={`w-full h-15 rounded-xl flex items-center justify-center gap-3 text-[14px] font-semibold uppercase tracking-wide shadow-xl transition-all ${driverPaymentStatus === 'success' && selectedPaymentMode !== 'cash' ? 'text-white' : 'bg-slate-100 text-slate-300 pointer-events-none'}`}
+                                style={driverPaymentStatus === 'success' && selectedPaymentMode !== 'cash' ? { backgroundColor: routeStrokeColor, boxShadow: `0 18px 30px ${routeAccentMuted}` } : undefined}
                             >
-                                {driverPaymentStatus === 'success' ? 'Finalize Earnings' : 'Waiting...'} <ChevronRight size={18} strokeWidth={3} />
+                                {selectedPaymentMode === 'cash'
+                                    ? 'Use Cash Received Button'
+                                    : driverPaymentStatus === 'success'
+                                        ? 'Finalize Earnings'
+                                        : 'Waiting...'} <ChevronRight size={18} strokeWidth={3} />
                             </motion.button>
                         </motion.div>
                     )}

@@ -238,6 +238,13 @@ const rideSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
+    pricingNegotiationMode: {
+      type: String,
+      enum: ['none', 'driver_bid', 'user_increment_only'],
+      default: 'none',
+      lowercase: true,
+      trim: true,
+    },
     biddingStatus: {
       type: String,
       enum: ['none', 'open', 'accepted', 'expired', 'cancelled'],
@@ -254,6 +261,15 @@ const rideSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0,
+    },
+    fareIncreaseWaitMinutes: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    nextFareIncreaseAt: {
+      type: Date,
+      default: null,
     },
     acceptedBidId: {
       type: mongoose.Schema.Types.ObjectId,

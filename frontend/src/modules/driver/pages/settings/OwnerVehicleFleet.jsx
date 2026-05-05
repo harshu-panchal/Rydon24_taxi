@@ -8,7 +8,6 @@ import {
   Edit3,
   FileText,
   LoaderCircle,
-  Plus,
   Trash2,
   Truck,
   AlertCircle,
@@ -439,10 +438,6 @@ const OwnerVehicleFleet = () => {
       setMessage(error.message || "Could not delete vehicle.");
       setMessageType("error");
     }
-  };
-
-  const handleAddVehicle = () => {
-    navigate(`${routePrefix}/add-vehicle`);
   };
 
   if (isLoading) {
@@ -896,14 +891,6 @@ const OwnerVehicleFleet = () => {
                 </p>
               </div>
             </div>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleAddVehicle}
-              className="flex items-center gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-lg sm:rounded-xl font-bold text-xs sm:text-sm shadow-lg hover:shadow-xl transition-all flex-shrink-0">
-              <Plus size={16} strokeWidth={2.5} />
-              <span className="hidden sm:inline">Add</span>
-            </motion.button>
           </div>
         </div>
       </div>
@@ -932,15 +919,9 @@ const OwnerVehicleFleet = () => {
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
               No vehicles yet
             </h3>
-            <p className="text-gray-600 mb-6">
-              Add your first vehicle to get started
+            <p className="text-gray-600">
+              No fleet vehicles are available right now
             </p>
-            <button
-              onClick={handleAddVehicle}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors">
-              <Plus size={18} />
-              Add Vehicle
-            </button>
           </div>
         ) : (
           <div className="space-y-3">

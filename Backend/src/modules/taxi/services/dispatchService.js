@@ -95,6 +95,27 @@ export const stopDispatchFlow = (rideId) => {
   activeDispatches.delete(String(rideId));
 };
 
+export const restartRideDispatchWithLatestFare = async (rideId) => {
+  if (!rideId) {
+    return;
+  }
+
+  const state = getDispatchState(rideId);
+  closeDriverRequestWindow(rideId, [
+    ...state.driverIds,
+    ...state.notifiedDriverIds,
+    ...state.rejectedDriverIds,
+  ]);
+  stopDispatchFlow(rideId);
+
+  const ride = await Ride.findById(rideId).populate('userId', 'name phone countryCode');
+  if (!ride || ride.status !== RIDE_STATUS.SEARCHING || ride.liveStatus !== RIDE_LIVE_STATUS.SEARCHING) {
+    return;
+  }
+
+  await startDispatchFlow(ride);
+};
+
 const getDispatchState = (rideId) => {
   const rideKey = String(rideId);
   const state = activeDispatches.get(rideKey) || {};
@@ -172,8 +193,9 @@ const emitRideRequestToDrivers = async ({
       fare: ride.fare,
       baseFare: Number(ride.baseFare || ride.fare || 0),
       bookingMode: ride.bookingMode || 'normal',
+      pricingNegotiationMode: ride.pricingNegotiationMode || 'none',
       biddingStatus: ride.biddingStatus || 'none',
-      bidding: ride.bookingMode === 'bidding'
+      bidding: ride.pricingNegotiationMode === 'driver_bid'
         ? {
             enabled: true,
             baseFare: Number(ride.baseFare || ride.fare || 0),
@@ -183,6 +205,8 @@ const emitRideRequestToDrivers = async ({
         : {
             enabled: false,
           },
+      fareIncreaseWaitMinutes: Number(ride.fareIncreaseWaitMinutes || 0),
+      nextFareIncreaseAt: ride.nextFareIncreaseAt || null,
       paymentMethod: ride.paymentMethod,
       parcel: ride.parcel || null,
       intercity: ride.intercity || null,
@@ -858,9 +882,14 @@ export const notifyRideBidUpdated = async ({ ride, bid }) => {
   const payload = {
     rideId: String(safeRide._id),
     bookingMode: safeRide.bookingMode || 'normal',
+    pricingNegotiationMode: safeRide.pricingNegotiationMode || 'none',
     biddingStatus: safeRide.biddingStatus || 'none',
+    fare: Number(safeRide.fare || 0),
+    baseFare: Number(safeRide.baseFare || safeRide.fare || 0),
     userMaxBidFare: Number(safeRide.userMaxBidFare || safeRide.fare || 0),
     bidStepAmount: Number(safeRide.bidStepAmount || 10),
+    fareIncreaseWaitMinutes: Number(safeRide.fareIncreaseWaitMinutes || 0),
+    nextFareIncreaseAt: safeRide.nextFareIncreaseAt || null,
     bid,
   };
 
@@ -878,10 +907,14 @@ export const notifyRideBiddingUpdated = async (ride) => {
   const payload = {
     rideId: String(safeRide._id),
     bookingMode: safeRide.bookingMode || 'normal',
+    pricingNegotiationMode: safeRide.pricingNegotiationMode || 'none',
     biddingStatus: safeRide.biddingStatus || 'none',
+    fare: Number(safeRide.fare || 0),
     baseFare: Number(safeRide.baseFare || safeRide.fare || 0),
     userMaxBidFare: Number(safeRide.userMaxBidFare || safeRide.fare || 0),
     bidStepAmount: Number(safeRide.bidStepAmount || 10),
+    fareIncreaseWaitMinutes: Number(safeRide.fareIncreaseWaitMinutes || 0),
+    nextFareIncreaseAt: safeRide.nextFareIncreaseAt || null,
   };
 
   emitToRoom(getUserRoom(safeRide.userId), 'rideBiddingUpdated', payload);

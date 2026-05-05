@@ -993,10 +993,10 @@ function App() {
                   path="support/ticket/:id"
                   element={<SupportTicketDetail />}
                 />
-                <Route path="vehicle-fleet" element={<OwnerVehicleFleet />} />
+                <Route path="vehicle-fleet" element={<VehicleFleet />} />
                 <Route
                   path="vehicle-fleet/edit/:vehicleId"
-                  element={<OwnerVehicleFleet />}
+                  element={<VehicleFleet />}
                 />
                 <Route path="add-vehicle" element={<AddVehicle />} />
                 <Route path="manage-drivers" element={<ManageDrivers />} />
@@ -1033,10 +1033,10 @@ function App() {
                 <Route path="support/chat" element={<DriverSupportChat />} />
                 <Route path="support/tickets" element={<SupportTickets />} />
                 <Route path="support/ticket/:id" element={<SupportTicketDetail />} />
-                <Route path="vehicle-fleet" element={<VehicleFleet />} />
+                <Route path="vehicle-fleet" element={<OwnerVehicleFleet />} />
                 <Route
                   path="vehicle-fleet/edit/:vehicleId"
-                  element={<VehicleFleet />}
+                  element={<OwnerVehicleFleet />}
                 />
                 <Route path="add-vehicle" element={<AddVehicle />} />
                 <Route path="manage-drivers" element={<ManageDrivers />} />

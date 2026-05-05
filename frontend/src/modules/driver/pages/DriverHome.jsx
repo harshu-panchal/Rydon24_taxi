@@ -1538,16 +1538,25 @@ const DriverHome = () => {
                         return current;
                     }
 
+                    const pricingNegotiationMode = payload.pricingNegotiationMode || current.raw?.pricingNegotiationMode || 'none';
+                    const isDriverBidMode = pricingNegotiationMode === 'driver_bid';
+
                     return {
                         ...current,
+                        fare: `Rs ${payload.fare || current.raw?.fare || 0}`,
+                        bookingMode: payload.bookingMode || current.bookingMode || 'normal',
                         raw: {
                             ...(current.raw || {}),
+                            fare: payload.fare || current.raw?.fare || 0,
                             bookingMode: payload.bookingMode || current.raw?.bookingMode || 'bidding',
+                            pricingNegotiationMode,
+                            fareIncreaseWaitMinutes: payload.fareIncreaseWaitMinutes || current.raw?.fareIncreaseWaitMinutes || 0,
+                            nextFareIncreaseAt: payload.nextFareIncreaseAt || current.raw?.nextFareIncreaseAt || null,
                             bidding: {
                                 ...(current.raw?.bidding || {}),
-                                enabled: true,
+                                enabled: isDriverBidMode,
                                 baseFare: payload.baseFare || current.raw?.bidding?.baseFare || current.raw?.baseFare || current.raw?.fare || 0,
-                                userMaxBidFare: payload.userMaxBidFare || current.raw?.bidding?.userMaxBidFare || current.raw?.userMaxBidFare || 0,
+                                userMaxBidFare: payload.userMaxBidFare || payload.fare || current.raw?.bidding?.userMaxBidFare || current.raw?.userMaxBidFare || 0,
                                 bidStepAmount: payload.bidStepAmount || current.raw?.bidding?.bidStepAmount || 10,
                             },
                         },
@@ -1801,7 +1810,7 @@ const DriverHome = () => {
     };
 
     const handleSubmitBid = (bidFare) => {
-        if (!currentRequest?.rideId || acceptingRideId) {
+        if (!currentRequest?.rideId || acceptingRideId || currentRequest?.raw?.pricingNegotiationMode !== 'driver_bid') {
             return;
         }
 

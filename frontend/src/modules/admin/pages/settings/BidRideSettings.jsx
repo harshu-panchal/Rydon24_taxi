@@ -148,7 +148,7 @@ const BidRideSettings = () => {
         <div className="flex items-center justify-between mb-2">
            <div></div>
            <div className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-400">
-             <span>Bid Ride Settings</span>
+             <span>Pricing Flow Settings</span>
              <ChevronRight size={14} />
              <span className="text-indigo-600">Bid Ride Settings</span>
            </div>
@@ -161,7 +161,7 @@ const BidRideSettings = () => {
                  <SectionHeader title="Driver" />
                  <div className="space-y-6 mt-6">
                     <InputField 
-                       label="Bidding Low Percentage(Least Bidding Level)" 
+                       label="Driver Bidding Low Percentage (Least Bid Level)" 
                        name="bidding_low_percentage" 
                        value={settings.bidding_low_percentage} 
                        onChange={handleChange} 
@@ -170,7 +170,7 @@ const BidRideSettings = () => {
                        helpLink
                     />
                     <InputField 
-                       label="Bidding High Percentage(Highest Bidding Level)" 
+                       label="Driver Bidding High Percentage (Highest Bid Level)" 
                        name="bidding_high_percentage" 
                        value={settings.bidding_high_percentage} 
                        onChange={handleChange} 
@@ -179,7 +179,7 @@ const BidRideSettings = () => {
                        helpLink
                     />
                     <InputField 
-                       label="Increase/Decrease Amount Range From Recommended Price" 
+                       label="Driver Bid Range From Recommended Price" 
                        name="bidding_amount_increase_or_decrease" 
                        value={settings.bidding_amount_increase_or_decrease} 
                        onChange={handleChange} 
@@ -209,7 +209,7 @@ const BidRideSettings = () => {
                  <SectionHeader title="User" />
                  <div className="space-y-6 mt-6">
                     <InputField 
-                       label="Bidding Low Percentage(Least Bidding Level)" 
+                       label="User Fare Low Percentage (Starting Level)" 
                        name="user_bidding_low_percentage" 
                        value={settings.user_bidding_low_percentage} 
                        onChange={handleChange} 
@@ -218,7 +218,7 @@ const BidRideSettings = () => {
                        helpLink
                     />
                     <InputField 
-                       label="Bidding High Percentage(Highest Bidding Level)" 
+                       label="User Fare High Percentage (Highest Level)" 
                        name="user_bidding_high_percentage" 
                        value={settings.user_bidding_high_percentage} 
                        onChange={handleChange} 
@@ -227,9 +227,17 @@ const BidRideSettings = () => {
                        helpLink
                     />
                     <InputField 
-                       label="Increase/Decrease Amount Range From Recommended Price" 
+                       label="User Fare Increase Step From Recommended Price" 
                        name="user_bidding_amount_increase_or_decrease" 
                        value={settings.user_bidding_amount_increase_or_decrease} 
+                       onChange={handleChange} 
+                       type="number" 
+                       helpLink
+                    />
+                    <InputField 
+                       label="Wait Time Before User Can Increase Fare (Minutes)" 
+                       name="user_fare_increase_wait_minutes" 
+                       value={settings.user_fare_increase_wait_minutes} 
                        onChange={handleChange} 
                        type="number" 
                        helpLink
