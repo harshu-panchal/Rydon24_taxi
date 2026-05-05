@@ -747,7 +747,6 @@ const DriverDetails = () => {
                         <tr key={`${doc.name}-${idx}`}>
                           <td className="px-6 py-3">
                             <div className="font-semibold text-gray-900">{doc.name}</div>
-                            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{doc.sourceKey}</div>
                           </td>
                           <td className="px-4 py-3">{doc.identify_number}</td>
                           <td className="px-4 py-3">{doc.expiry_date}</td>
