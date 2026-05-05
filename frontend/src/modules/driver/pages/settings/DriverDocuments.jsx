@@ -28,6 +28,16 @@ const getDocumentReviewStatus = (document = {}) =>
     '',
   ).trim().toLowerCase();
 
+const getDocumentReason = (document = {}) =>
+  String(
+    document?.comment ||
+    document?.remarks ||
+    document?.reason ||
+    document?.admin_comment ||
+    document?.rejection_reason ||
+    '',
+  ).trim();
+
 const getDocumentExpiryValue = (document = {}) =>
   document?.expiryDate ||
   document?.expiry_date ||
@@ -50,11 +60,17 @@ const formatExpiryDate = (value) => {
 };
 
 const unwrapDriver = (response) => response?.data?.data || response?.data || response || null;
+const toTimestamp = (value) => {
+  if (!value) return 0;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+};
 
 const DriverDocuments = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const routePrefix = location.pathname.startsWith('/taxi/owner') ? '/taxi/owner' : '/taxi/driver';
+  const focusDocumentKey = String(location.state?.focusDocumentKey || '').trim();
   const [isSyncing, setIsSyncing] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [driver, setDriver] = useState(null);
@@ -63,6 +79,8 @@ const DriverDocuments = () => {
   const [error, setError] = useState('');
   const [uploadingDocumentKey, setUploadingDocumentKey] = useState('');
   const uploadingDocumentKeyRef = useRef('');
+  const documentInputRefs = useRef({});
+  const autoOpenedDocumentRef = useRef('');
 
   const {
     uploading: imageUploading,
@@ -139,25 +157,73 @@ const DriverDocuments = () => {
       const hasDoc = Boolean(previewUrl || doc);
       const expiryDate = getDocumentExpiryValue(doc);
       const expired = isDocumentExpired(doc);
+      const rejected = ['rejected', 'declined'].includes(getDocumentReviewStatus(doc));
       const verified = ['verified', 'approved'].includes(getDocumentReviewStatus(doc));
+      const reason = getDocumentReason(doc);
+      const reverificationPending =
+        getDocumentReviewStatus(doc) === 'pending' &&
+        Math.max(
+          toTimestamp(doc?.reverificationRequestedAt),
+          toTimestamp(doc?.uploadedAt),
+          toTimestamp(doc?.updatedAt),
+        ) > toTimestamp(doc?.reviewedAt);
 
       return {
         id: field.key,
         name: field.label,
         templateName: field.templateName,
         reviewStatus: getDocumentReviewStatus(doc),
-        status: verified ? 'Verified' : expired ? 'Expired' : hasDoc ? 'Uploaded' : 'Missing',
+        status: verified
+          ? 'Verified'
+          : rejected
+            ? 'Rejected'
+            : reverificationPending
+              ? 'Pending Reverification'
+              : expired
+                ? 'Expired'
+                : hasDoc
+                  ? 'Uploaded'
+                  : 'Missing',
         date: hasDoc ? formatDate(uploadedAt) : 'Not uploaded',
         previewUrl,
         fileName: doc?.fileName || field.label,
         uploadedAt,
         expiryDate,
         expired,
+        rejected,
+        reverificationPending,
+        reason,
         verified,
         order: index,
       };
     });
   }, [driver?.documents, templates]);
+
+  useEffect(() => {
+    if (!focusDocumentKey || isLoading || imageUploading) {
+      return;
+    }
+
+    if (autoOpenedDocumentRef.current === focusDocumentKey) {
+      return;
+    }
+
+    const targetDoc = docs.find((doc) => doc.id === focusDocumentKey);
+    const targetInput = documentInputRefs.current[focusDocumentKey];
+
+    if (!targetDoc || !targetInput) {
+      return;
+    }
+
+    if (targetDoc.reviewStatus === 'verified' || targetDoc.reviewStatus === 'approved') {
+      return;
+    }
+
+    autoOpenedDocumentRef.current = focusDocumentKey;
+    setTimeout(() => {
+      targetInput.click();
+    }, 0);
+  }, [docs, focusDocumentKey, imageUploading, isLoading]);
 
   return (
     <div className="min-h-screen bg-[#f8f9fb] font-sans p-6 pt-10 pb-32 overflow-x-hidden">
@@ -191,6 +257,12 @@ const DriverDocuments = () => {
                   <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Document Preview Unavailable</p>
                 )}
               </div>
+              {selectedDoc.reason ? (
+                <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-left">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-rose-500">Admin note</p>
+                  <p className="mt-1 text-xs font-semibold leading-relaxed text-rose-700">{selectedDoc.reason}</p>
+                </div>
+              ) : null}
               <button onClick={() => setSelectedDoc(null)} className="w-full h-12 bg-slate-900 text-white rounded-2xl text-[12px] font-black uppercase tracking-widest mt-2 active:scale-97 transition-all">
                 Close Viewer
               </button>
@@ -261,12 +333,26 @@ const DriverDocuments = () => {
                           {doc.expired ? 'Expired' : 'Expires'} {formatExpiryDate(doc.expiryDate)}
                         </p>
                       ) : null}
+                      {doc.reason ? (
+                        <p className="max-w-[220px] text-[10px] font-bold leading-relaxed text-rose-500">
+                          Reason: {doc.reason}
+                        </p>
+                      ) : null}
+                      {doc.reverificationPending ? (
+                        <p className="max-w-[220px] text-[10px] font-bold leading-relaxed text-blue-500">
+                          Re-uploaded and waiting for admin verification.
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className={`text-[8px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border shadow-sm ${
                       doc.verified
                         ? 'bg-emerald-50 text-emerald-500 border-emerald-500/10'
+                        : doc.reverificationPending
+                          ? 'bg-blue-50 text-blue-500 border-blue-500/10'
+                        : doc.rejected
+                          ? 'bg-rose-50 text-rose-500 border-rose-500/10'
                         : doc.expired
                           ? 'bg-rose-50 text-rose-500 border-rose-500/10'
                           : doc.status === 'Uploaded'
@@ -293,6 +379,13 @@ const DriverDocuments = () => {
                         type="file"
                         accept="image/*"
                         className="hidden"
+                        ref={(node) => {
+                          if (node) {
+                            documentInputRefs.current[doc.id] = node;
+                          } else {
+                            delete documentInputRefs.current[doc.id];
+                          }
+                        }}
                         disabled={imageUploading || doc.reviewStatus === 'verified' || doc.reviewStatus === 'approved'}
                         onChange={(event) => {
                           if (doc.reviewStatus === 'verified' || doc.reviewStatus === 'approved') {

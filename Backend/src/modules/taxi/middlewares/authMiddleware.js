@@ -56,8 +56,9 @@ const resolveOpenUserIdentity = async (req) => {
   });
 };
 
-export const authenticate = (allowedRoles = []) => async (req, _res, next) => {
+export const authenticate = (allowedRoles = [], options = {}) => async (req, _res, next) => {
   try {
+    const allowPending = options?.allowPending === true;
     const authorization = req.headers.authorization || '';
     const [, token] = authorization.split(' ');
 
@@ -95,6 +96,7 @@ export const authenticate = (allowedRoles = []) => async (req, _res, next) => {
 
     if (
       normalizedRole === 'driver' &&
+      !allowPending &&
       (entity.approve === false || String(entity.status || '').toLowerCase() === 'pending')
     ) {
       throw new ApiError(403, 'Driver account is pending approval');
@@ -102,6 +104,7 @@ export const authenticate = (allowedRoles = []) => async (req, _res, next) => {
 
     if (
       normalizedRole === 'owner' &&
+      !allowPending &&
       (entity.active === false ||
         entity.approve === false ||
         String(entity.status || '').toLowerCase() === 'pending')

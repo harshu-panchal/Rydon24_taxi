@@ -94,6 +94,8 @@ const getAuthenticatedDriverHome = (pathname = '') => (
 const getPendingDriverRoute = (pathname = '') => `${getPortalPrefix(pathname)}/registration-status`;
 const isBusConsoleRoute = (pathname = '') => pathname.startsWith('/taxi/driver/bus-home');
 const isServiceCenterRoute = (pathname = '') => pathname.startsWith('/taxi/driver/service-center');
+const isPendingAllowedRoute = (pathname = '') =>
+    pathname === '/taxi/driver/documents' || pathname === '/taxi/owner/documents';
 
 const DriverLayout = () => {
     const location = useLocation();
@@ -101,6 +103,7 @@ const DriverLayout = () => {
     const [isChecking, setIsChecking] = useState(false);
     const [isAllowed, setIsAllowed] = useState(true);
     const verifiedTokenRef = useRef('');
+    const verifiedApprovalRef = useRef(false);
 
     useEffect(() => {
         const currentPath = location.pathname;
@@ -128,6 +131,7 @@ const DriverLayout = () => {
         if (!token) {
             setIsAllowed(false);
             verifiedTokenRef.current = '';
+            verifiedApprovalRef.current = false;
             redirectToDriverLogin(navigate, currentPath, authenticatedRole);
             return;
         }
@@ -147,7 +151,7 @@ const DriverLayout = () => {
             return;
         }
 
-        if (verifiedTokenRef.current === token && isAllowed) {
+        if (verifiedTokenRef.current === token && verifiedApprovalRef.current && isAllowed) {
             setIsChecking(false);
             return;
         }
@@ -168,13 +172,24 @@ const DriverLayout = () => {
                 }
 
                 if (!isApproved) {
+                    if (isPendingAllowedRoute(currentPath)) {
+                        setIsAllowed(true);
+                        verifiedTokenRef.current = '';
+                        verifiedApprovalRef.current = false;
+                        setIsChecking(false);
+                        return;
+                    }
+
                     setIsAllowed(false);
+                    verifiedTokenRef.current = '';
+                    verifiedApprovalRef.current = false;
                     navigate(getPendingDriverRoute(currentPath), { replace: true });
                     return;
                 }
 
                 setIsAllowed(true);
                 verifiedTokenRef.current = token;
+                verifiedApprovalRef.current = true;
 
                 if (isBusConsoleRoute(currentPath) && effectiveRole !== 'bus_driver') {
                     navigate(getAuthenticatedDriverHome(currentPath), { replace: true });
@@ -208,6 +223,7 @@ const DriverLayout = () => {
 
                 setIsAllowed(false);
                 verifiedTokenRef.current = '';
+                verifiedApprovalRef.current = false;
 
                 if (error?.status === 401) {
                     redirectToDriverLogin(navigate, currentPath, authenticatedRole);

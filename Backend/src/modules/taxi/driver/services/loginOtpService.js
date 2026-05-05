@@ -238,28 +238,29 @@ export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
     );
   }
 
-  if (
-    (normalizedRole === 'owner' && !isApprovedOwner(account)) ||
-    (normalizedRole === 'service_center' && !isApprovedServiceCenter(account)) ||
-    (normalizedRole === 'service_center_staff' && !isApprovedServiceCenterStaff(account)) ||
-    (normalizedRole === 'driver' && !isApprovedDriver(account)) ||
-    (normalizedRole === 'bus_driver' && !isApprovedBusDriver(account))
-  ) {
-    throw new ApiError(
-      403,
-      `${
-        normalizedRole === 'owner'
-          ? 'Owner'
-          : normalizedRole === 'service_center'
-            ? 'Service center'
-          : normalizedRole === 'service_center_staff'
-            ? 'Service center staff'
-          : normalizedRole === 'bus_driver'
-            ? 'Bus driver'
-            : 'Driver'
-      } account is pending approval`,
-    );
-  }
+  // Allow login even if account is pending approval to show registration status
+  // if (
+  //   (normalizedRole === 'owner' && !isApprovedOwner(account)) ||
+  //   (normalizedRole === 'service_center' && !isApprovedServiceCenter(account)) ||
+  //   (normalizedRole === 'service_center_staff' && !isApprovedServiceCenterStaff(account)) ||
+  //   (normalizedRole === 'driver' && !isApprovedDriver(account)) ||
+  //   (normalizedRole === 'bus_driver' && !isApprovedBusDriver(account))
+  // ) {
+  //   throw new ApiError(
+  //     403,
+  //     `${
+  //       normalizedRole === 'owner'
+  //         ? 'Owner'
+  //         : normalizedRole === 'service_center'
+  //           ? 'Service center'
+  //         : normalizedRole === 'service_center_staff'
+  //           ? 'Service center staff'
+  //         : normalizedRole === 'bus_driver'
+  //           ? 'Bus driver'
+  //           : 'Driver'
+  //     } account is pending approval`,
+  //   );
+  // }
 
   const { otp, isStatic } = resolveDriverLoginOtpForPhone(normalizedPhone);
   const now = Date.now();
@@ -344,28 +345,29 @@ export const verifyDriverLoginOtp = async ({ phone, otp }) => {
     );
   }
 
-  if (
-    (normalizedRole === 'owner' && !isApprovedOwner(account)) ||
-    (normalizedRole === 'service_center' && !isApprovedServiceCenter(account)) ||
-    (normalizedRole === 'service_center_staff' && !isApprovedServiceCenterStaff(account)) ||
-    (normalizedRole === 'driver' && !isApprovedDriver(account)) ||
-    (normalizedRole === 'bus_driver' && !isApprovedBusDriver(account))
-  ) {
-    throw new ApiError(
-      403,
-      `${
-        normalizedRole === 'owner'
-          ? 'Owner'
-          : normalizedRole === 'service_center'
-            ? 'Service center'
-          : normalizedRole === 'service_center_staff'
-            ? 'Service center staff'
-          : normalizedRole === 'bus_driver'
-            ? 'Bus driver'
-            : 'Driver'
-      } account is pending approval`,
-    );
-  }
+  // Allow verification even if account is pending approval
+  // if (
+  //   (normalizedRole === 'owner' && !isApprovedOwner(account)) ||
+  //   (normalizedRole === 'service_center' && !isApprovedServiceCenter(account)) ||
+  //   (normalizedRole === 'service_center_staff' && !isApprovedServiceCenterStaff(account)) ||
+  //   (normalizedRole === 'driver' && !isApprovedDriver(account)) ||
+  //   (normalizedRole === 'bus_driver' && !isApprovedBusDriver(account))
+  // ) {
+  //   throw new ApiError(
+  //     403,
+  //     `${
+  //       normalizedRole === 'owner'
+  //         ? 'Owner'
+  //         : normalizedRole === 'service_center'
+  //           ? 'Service center'
+  //         : normalizedRole === 'service_center_staff'
+  //           ? 'Service center staff'
+  //         : normalizedRole === 'bus_driver'
+  //           ? 'Bus driver'
+  //           : 'Driver'
+  //       } account is pending approval`,
+  //     );
+  //   }
 
   if (normalizedRole === 'bus_driver') {
     account.lastLoginAt = new Date();

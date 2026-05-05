@@ -13,7 +13,7 @@ export const uploadService = {
         image: base64Image,
         folder
       });
-      return response.data?.data || response.data || response;
+      return response?.data || response;
     } catch (error) {
       console.error('Upload Service Error:', error);
       throw error;

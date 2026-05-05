@@ -77,7 +77,7 @@ driverRouter.post(
 );
 driverRouter.get(
   "/me",
-  authenticate(["driver", "owner", "bus_driver", "service_center", "service_center_staff"]),
+  authenticate(["driver", "owner", "bus_driver", "service_center", "service_center_staff"], { allowPending: true }),
   asyncHandler(getCurrentDriver),
 );
 driverRouter.patch(
@@ -132,7 +132,7 @@ driverRouter.delete(
 );
 driverRouter.patch(
   "/documents/:documentKey",
-  authenticate(["driver"]),
+  authenticate(["driver", "owner"], { allowPending: true }),
   asyncHandler(updateCurrentDriverDocument),
 );
 driverRouter.get(

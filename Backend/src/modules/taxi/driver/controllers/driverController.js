@@ -2205,13 +2205,27 @@ export const updateCurrentDriverDocument = async (req, res) => {
   }
 
   const updatedDocument = {
+    ...(typeof existingDocument === "object" ? existingDocument : {}),
     ...(typeof document === "object" ? document : {}),
     key: documentKey,
     fileName: String(document.fileName || documentKey).trim(),
+    fileNames: [String(document.fileName || documentKey).trim()],
     uploaded: true,
     uploadedAt: new Date().toISOString(),
     previewUrl,
     secureUrl: String(document.secureUrl || previewUrl).trim(),
+    imageUrl: previewUrl,
+    images: [previewUrl],
+    status: "pending",
+    verificationStatus: "pending",
+    reviewStatus: "pending",
+    comment: "",
+    remarks: "",
+    reason: "",
+    admin_comment: "",
+    rejection_reason: "",
+    reviewedAt: null,
+    reverificationRequestedAt: new Date().toISOString(),
   };
 
   driver.documents = {
@@ -3716,6 +3730,8 @@ export const getDriverApprovalStatus = async (req, res) => {
         phone: owner.mobile || owner.phone || "",
         approve: owner.approve,
         status: owner.status,
+        documents: owner.documents || {},
+        onboarding: owner.onboarding || {},
         isOnline: false,
         isOnRide: false,
       },
@@ -3744,6 +3760,8 @@ export const getDriverApprovalStatus = async (req, res) => {
       phone: driver.phone,
       approve: driver.approve,
       status: driver.status,
+      documents: driver.documents || {},
+      onboarding: driver.onboarding || {},
       isOnline: driver.isOnline,
       isOnRide: driver.isOnRide,
     },

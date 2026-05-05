@@ -454,6 +454,23 @@ const getDocumentExpiryValue = (document = {}) => (
     || null
 );
 
+const getDocumentReviewStatus = (document = {}) => String(
+    document?.status
+    || document?.verificationStatus
+    || document?.approvalStatus
+    || document?.reviewStatus
+    || '',
+).trim().toLowerCase();
+
+const getDocumentReason = (document = {}) => String(
+    document?.comment
+    || document?.remarks
+    || document?.reason
+    || document?.admin_comment
+    || document?.rejection_reason
+    || '',
+).trim();
+
 const isExpiredDateValue = (value) => {
     if (!value) {
         return false;
@@ -921,6 +938,34 @@ const DriverHome = () => {
             .map((field) => field.label);
     }, [documentTemplates, driverDocuments]);
 
+    const rejectedDocumentNotes = useMemo(() => {
+        const flattenedTemplates = Array.isArray(documentTemplates)
+            ? documentTemplates.flatMap((template) =>
+                Array.isArray(template?.fields)
+                    ? template.fields.map((field) => ({
+                        key: field?.key,
+                        label: field?.label || field?.name || field?.key || 'Document',
+                    }))
+                    : [],
+            )
+            : [];
+
+        return flattenedTemplates
+            .map((field) => {
+                const document = driverDocuments?.[field.key];
+                const reviewStatus = getDocumentReviewStatus(document);
+                if (!['rejected', 'declined'].includes(reviewStatus)) {
+                    return null;
+                }
+
+                return {
+                    label: field.label,
+                    reason: getDocumentReason(document),
+                };
+            })
+            .filter(Boolean);
+    }, [documentTemplates, driverDocuments]);
+
     useEffect(() => {
         let active = true;
 
@@ -1011,6 +1056,16 @@ const DriverHome = () => {
 
         if (expiredDocumentNames.length > 0) {
             setStatusMessage(`Please reupload expired documents: ${expiredDocumentNames.join(', ')}.`);
+            return;
+        }
+
+        if (rejectedDocumentNotes.length > 0) {
+            const firstRejected = rejectedDocumentNotes[0];
+            setStatusMessage(
+                firstRejected?.reason
+                    ? `${firstRejected.label} was rejected: ${firstRejected.reason}`
+                    : `Please reupload rejected documents: ${rejectedDocumentNotes.map((item) => item.label).join(', ')}.`,
+            );
             return;
         }
 

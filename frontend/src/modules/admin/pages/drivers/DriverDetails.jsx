@@ -51,20 +51,99 @@ const getMapIconForVehicle = (iconType = '') => {
 };
 
 const getDocumentImages = (doc = {}) => {
-  if (Array.isArray(doc?.images) && doc.images.length) {
-    return doc.images.filter(Boolean);
+  const rawImages = Array.isArray(doc?.images) && doc.images.length
+    ? doc.images
+    : [
+        doc?.imageUrl,
+        doc?.previewUrl,
+        doc?.secureUrl,
+        doc?.image,
+        doc?.url,
+        doc?.fileUrl,
+        doc?.document,
+        doc?.file,
+      ];
+
+  return [...new Set(rawImages.filter(Boolean).map((value) => String(value).trim()))];
+};
+
+const getDocumentReviewStatus = (doc = {}) =>
+  String(
+    doc?.status ??
+    doc?.verificationStatus ??
+    doc?.approvalStatus ??
+    doc?.reviewStatus ??
+    '',
+  ).trim().toLowerCase();
+
+const getDocumentReason = (doc = {}) =>
+  String(
+    doc?.comment ??
+    doc?.remarks ??
+    doc?.reason ??
+    doc?.admin_comment ??
+    doc?.rejection_reason ??
+    '',
+  ).trim();
+
+const toTimestamp = (value) => {
+  if (!value) return 0;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+};
+
+const formatDateTime = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
   }
 
-  return [
-    doc?.imageUrl,
-    doc?.previewUrl,
-    doc?.secureUrl,
-    doc?.image,
-    doc?.url,
-    doc?.fileUrl,
-    doc?.document,
-    doc?.file,
-  ].filter(Boolean);
+  return date.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const getDocumentFileNames = (doc = {}, imageUrls = []) => {
+  const rawNames = [];
+
+  if (Array.isArray(doc?.fileNames)) {
+    rawNames.push(...doc.fileNames);
+  }
+
+  rawNames.push(
+    doc?.fileName,
+    doc?.filename,
+    doc?.originalFilename,
+    doc?.originalName,
+    doc?.name,
+    doc?.label,
+  );
+
+  imageUrls.forEach((url, index) => {
+    try {
+      const pathname = new URL(url).pathname;
+      const lastSegment = pathname.split('/').filter(Boolean).pop() || '';
+      if (lastSegment) {
+        rawNames.push(decodeURIComponent(lastSegment));
+      }
+    } catch {
+      const lastSegment = String(url).split('/').filter(Boolean).pop() || '';
+      if (lastSegment) {
+        rawNames.push(lastSegment);
+      }
+    }
+
+    if (!rawNames[index]) {
+      rawNames.push(`document-${index + 1}`);
+    }
+  });
+
+  return [...new Set(rawNames.filter(Boolean).map((value) => String(value).trim()))];
 };
 
 const normalizeDocumentEntry = (doc = {}, fallbackKey = '') => {
@@ -72,6 +151,7 @@ const normalizeDocumentEntry = (doc = {}, fallbackKey = '') => {
     return {
       sourceKey: fallbackKey,
       name: fallbackKey || 'Document',
+      fileNames: getDocumentFileNames({}, [doc]),
       identify_number: '',
       expiry_date: '',
       status: '',
@@ -81,15 +161,20 @@ const normalizeDocumentEntry = (doc = {}, fallbackKey = '') => {
   }
 
   const images = getDocumentImages(doc);
+  const fileNames = getDocumentFileNames(doc, images);
 
   return {
     sourceKey: doc?.key || doc?.documentKey || doc?.type || fallbackKey || doc?.name || '',
     name: doc?.name || doc?.label || doc?.fileName || fallbackKey || 'Document',
+    fileNames,
     identify_number: doc?.identify_number ?? doc?.identifyNumber ?? doc?.number ?? doc?.id_number ?? '',
     expiry_date: doc?.expiry_date ?? doc?.expiryDate ?? doc?.expiry ?? '',
-    status: doc?.status ?? doc?.verificationStatus ?? doc?.approvalStatus ?? doc?.reviewStatus ?? '',
-    comment: doc?.comment ?? doc?.remarks ?? doc?.reason ?? '',
+    status: getDocumentReviewStatus(doc),
+    comment: getDocumentReason(doc),
     images,
+    uploadedAt: doc?.uploadedAt ?? doc?.updatedAt ?? doc?.createdAt ?? null,
+    reviewedAt: doc?.reviewedAt ?? null,
+    reverificationRequestedAt: doc?.reverificationRequestedAt ?? null,
   };
 };
 
@@ -104,6 +189,7 @@ const DriverDetails = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [avatarFailed, setAvatarFailed] = useState(false);
+  const [documentActionKey, setDocumentActionKey] = useState('');
 
   const tabs = [
     'Driver Profile',
@@ -124,8 +210,11 @@ const DriverDetails = () => {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const [res, walletRes] = await Promise.all([
         fetch(
-          `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/drivers/${id}/profile`,
-          { headers },
+          `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/drivers/${id}/profile?t=${Date.now()}`,
+          {
+            headers,
+            cache: 'no-store',
+          },
         ),
         adminService.getDriverWalletHistory(id).catch(() => null),
       ]);
@@ -218,7 +307,22 @@ const DriverDetails = () => {
             item.name === doc.name &&
             JSON.stringify(item.images) === JSON.stringify(doc.images),
         ) === index,
-    );
+    ).map((doc) => {
+      const uploadedAtTime = Math.max(
+        toTimestamp(doc.uploadedAt),
+        toTimestamp(doc.reverificationRequestedAt),
+      );
+      const reviewedAtTime = toTimestamp(doc.reviewedAt);
+
+      return {
+        ...doc,
+        isReuploaded:
+          String(doc.status || '').toLowerCase() === 'pending' &&
+          uploadedAtTime > 0 &&
+          reviewedAtTime > 0 &&
+          uploadedAtTime >= reviewedAtTime,
+      };
+    });
   }, [profile]);
   const chart = profile?.chart || { months: [], earnings: [], trips: { completed: [], cancelled: [] } };
   const profileImage = String(profile?.image || '').trim();
@@ -622,86 +726,215 @@ const DriverDetails = () => {
                     ) : (
                       documents.map((doc, idx) => (
                         <tr key={`${doc.name}-${idx}`}>
-                          <td className="px-6 py-3">{doc.name}</td>
+                          <td className="px-6 py-3">
+                            <div className="font-semibold text-gray-900">{doc.name}</div>
+                            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{doc.sourceKey}</div>
+                          </td>
                           <td className="px-4 py-3">{doc.identify_number}</td>
                           <td className="px-4 py-3">{doc.expiry_date}</td>
-                          <td className="px-4 py-3 capitalize">{doc.status}</td>
-                          <td className="px-4 py-3">{doc.comment}</td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              String(doc.status || '').toLowerCase() === 'approved' 
+                                ? 'bg-emerald-100 text-emerald-800' 
+                                : String(doc.status || '').toLowerCase() === 'rejected' || String(doc.status || '').toLowerCase() === 'declined'
+                                ? 'bg-rose-100 text-rose-800'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}>
+                              {doc.status || 'Pending'}
+                            </span>
+                            {doc.isReuploaded ? (
+                              <div className="mt-1 text-[10px] font-bold uppercase tracking-widest text-blue-600">
+                                Re-uploaded for review
+                              </div>
+                            ) : null}
+                          </td>
+                          <td className="px-4 py-3 max-w-[200px]">
+                            <div className="text-xs text-gray-600 line-clamp-2" title={doc.comment}>
+                              {doc.comment || '-'}
+                            </div>
+                            {(doc.uploadedAt || doc.reviewedAt) ? (
+                              <div className="mt-1 space-y-0.5 text-[10px] text-gray-400">
+                                {doc.uploadedAt ? <div>Uploaded: {formatDateTime(doc.uploadedAt)}</div> : null}
+                                {doc.reviewedAt ? <div>Reviewed: {formatDateTime(doc.reviewedAt)}</div> : null}
+                              </div>
+                            ) : null}
+                          </td>
                           <td className="px-4 py-3">
                             {doc.images?.length ? (
-                              <div className="flex flex-wrap items-center gap-2">
-                                {doc.images.map((url, i) => (
-                                  <button
-                                    key={`view-${i}`}
-                                    type="button"
-                                    onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
-                                    className="px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100 transition-colors inline-flex items-center gap-1"
-                                  >
-                                    <Eye size={12} /> {doc.images.length > 1 ? `View ${i + 1}` : 'View'}
-                                  </button>
-                                ))}
-                                {doc.images.map((url, i) => (
-                                  <a
-                                    key={`download-${i}`}
-                                    href={url}
-                                    download
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="px-3 py-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 rounded-md hover:bg-emerald-100 transition-colors inline-flex items-center gap-1"
-                                  >
-                                    <Download size={12} /> {doc.images.length > 1 ? `Download ${i + 1}` : 'Download'}
-                                  </a>
-                                ))}
+                              <div className="space-y-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {(doc.fileNames?.length ? doc.fileNames : ['Uploaded file']).map((fileName, i) => (
+                                    <span
+                                      key={`file-${i}`}
+                                      className="inline-flex max-w-[180px] truncate rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600"
+                                      title={fileName}
+                                    >
+                                      {fileName}
+                                    </span>
+                                  ))}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {doc.images.map((url, i) => (
+                                    <button
+                                      key={`view-${i}`}
+                                      type="button"
+                                      onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+                                      className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100 transition-colors inline-flex items-center gap-1"
+                                    >
+                                      <Eye size={10} /> View
+                                    </button>
+                                  ))}
+                                </div>
                               </div>
                             ) : (
-                              <span className="text-xs font-medium text-slate-400">No file uploaded</span>
+                              <span className="text-xs font-medium text-slate-400">No file</span>
                             )}
                           </td>
                           <td className="px-4 py-3">
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                if (!doc.sourceKey) return;
-                                const note = window.prompt(`Reason for rejecting "${doc.name}"`, doc.comment || '');
-                                if (note === null) return;
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (!doc.sourceKey) return;
+                                  const confirmApprove = window.confirm(`Are you sure you want to approve "${doc.name}"?`);
+                                  if (!confirmApprove) return;
 
-                                try {
-                                  const token = localStorage.getItem('adminToken');
-                                  const nextDocuments = {
-                                    ...(profile?.documents || {}),
-                                    [doc.sourceKey]: {
-                                      ...(profile?.documents?.[doc.sourceKey] || {}),
-                                      status: 'rejected',
-                                      comment: String(note || '').trim(),
-                                    },
-                                  };
-
-                                  const response = await fetch(
-                                    `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/drivers/${id}`,
-                                    {
-                                      method: 'PATCH',
-                                      headers: {
-                                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                                        'Content-Type': 'application/json',
+                                  try {
+                                    setDocumentActionKey(`${doc.sourceKey}:approve`);
+                                    const token = localStorage.getItem('adminToken');
+                                    const nextDocuments = {
+                                      ...(profile?.documents || {}),
+                                      [doc.sourceKey]: {
+                                        ...(profile?.documents?.[doc.sourceKey] || {}),
+                                        key: doc.sourceKey,
+                                        name: doc.name,
+                                        fileName: doc.fileNames?.[0] || doc.name || doc.sourceKey,
+                                        previewUrl: doc.images?.[0] || profile?.documents?.[doc.sourceKey]?.previewUrl || '',
+                                        secureUrl: doc.images?.[0] || profile?.documents?.[doc.sourceKey]?.secureUrl || '',
+                                        images: doc.images || profile?.documents?.[doc.sourceKey]?.images || [],
+                                        fileNames: doc.fileNames || profile?.documents?.[doc.sourceKey]?.fileNames || [],
+                                        identify_number: doc.identify_number || profile?.documents?.[doc.sourceKey]?.identify_number || '',
+                                        expiry_date: doc.expiry_date || profile?.documents?.[doc.sourceKey]?.expiry_date || '',
+                                        status: 'approved',
+                                        comment: '',
+                                        remarks: '',
+                                        reason: '',
+                                        admin_comment: '',
+                                        rejection_reason: '',
+                                        reviewedAt: new Date().toISOString(),
+                                        reverificationRequestedAt: null,
                                       },
-                                      body: JSON.stringify({ documents: nextDocuments }),
-                                    },
-                                  );
-                                  const data = await response.json();
+                                    };
 
-                                  if (!response.ok || !data?.success) {
-                                    throw new Error(data?.message || 'Unable to reject document');
+                                    const response = await fetch(
+                                      `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/drivers/${id}`,
+                                      {
+                                        method: 'PATCH',
+                                        headers: {
+                                          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                                          'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify({ documents: nextDocuments }),
+                                      },
+                                    );
+                                    const data = await response.json();
+                                    if (!response.ok || !data?.success) throw new Error(data?.message || 'Unable to approve');
+                                    await fetchProfile();
+                                  } catch (err) {
+                                    window.alert(err?.message || 'Unable to approve');
+                                  } finally {
+                                    setDocumentActionKey('');
                                   }
-
-                                  await fetchProfile();
-                                } catch (err) {
-                                  window.alert(err?.message || 'Unable to reject document');
+                                }}
+                                disabled={
+                                  documentActionKey.length > 0 ||
+                                  !doc.images?.length ||
+                                  String(doc.status || '').toLowerCase() === 'approved'
                                 }
-                              }}
-                              className="px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 rounded-md hover:bg-rose-100 transition-colors"
-                            >
-                              Decline
-                            </button>
+                                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                                  documentActionKey === `${doc.sourceKey}:approve`
+                                    ? 'bg-emerald-100 text-emerald-500'
+                                    : !doc.images?.length || String(doc.status || '').toLowerCase() === 'approved' || documentActionKey.length > 0
+                                      ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                      : 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100'
+                                }`}
+                              >
+                                {documentActionKey === `${doc.sourceKey}:approve` ? 'Saving...' : 'Approve'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (!doc.sourceKey) return;
+                                  const note = window.prompt(`Reason for rejecting "${doc.name}"`, doc.comment || '');
+                                  if (note === null) return;
+
+                                  try {
+                                    setDocumentActionKey(`${doc.sourceKey}:reject`);
+                                    const token = localStorage.getItem('adminToken');
+                                    const nextDocuments = {
+                                      ...(profile?.documents || {}),
+                                      [doc.sourceKey]: {
+                                        ...(profile?.documents?.[doc.sourceKey] || {}),
+                                        key: doc.sourceKey,
+                                        name: doc.name,
+                                        fileName: doc.fileNames?.[0] || doc.name || doc.sourceKey,
+                                        previewUrl: doc.images?.[0] || profile?.documents?.[doc.sourceKey]?.previewUrl || '',
+                                        secureUrl: doc.images?.[0] || profile?.documents?.[doc.sourceKey]?.secureUrl || '',
+                                        images: doc.images || profile?.documents?.[doc.sourceKey]?.images || [],
+                                        fileNames: doc.fileNames || profile?.documents?.[doc.sourceKey]?.fileNames || [],
+                                        identify_number: doc.identify_number || profile?.documents?.[doc.sourceKey]?.identify_number || '',
+                                        expiry_date: doc.expiry_date || profile?.documents?.[doc.sourceKey]?.expiry_date || '',
+                                        status: 'rejected',
+                                        comment: String(note || '').trim(),
+                                        remarks: String(note || '').trim(),
+                                        reason: String(note || '').trim(),
+                                        admin_comment: String(note || '').trim(),
+                                        rejection_reason: String(note || '').trim(),
+                                        reviewedAt: new Date().toISOString(),
+                                        reverificationRequestedAt: null,
+                                      },
+                                    };
+
+                                    const response = await fetch(
+                                      `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/drivers/${id}`,
+                                      {
+                                        method: 'PATCH',
+                                        headers: {
+                                          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                                          'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify({ documents: nextDocuments }),
+                                      },
+                                    );
+                                    const data = await response.json();
+
+                                    if (!response.ok || !data?.success) {
+                                      throw new Error(data?.message || 'Unable to reject document');
+                                    }
+
+                                    await fetchProfile();
+                                  } catch (err) {
+                                    window.alert(err?.message || 'Unable to reject document');
+                                  } finally {
+                                    setDocumentActionKey('');
+                                  }
+                                }}
+                                disabled={
+                                  documentActionKey.length > 0 ||
+                                  !doc.images?.length ||
+                                  ['rejected', 'declined'].includes(String(doc.status || '').toLowerCase())
+                                }
+                                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                                  documentActionKey === `${doc.sourceKey}:reject`
+                                    ? 'bg-rose-100 text-rose-500'
+                                    : !doc.images?.length || ['rejected', 'declined'].includes(String(doc.status || '').toLowerCase()) || documentActionKey.length > 0
+                                      ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                      : 'text-rose-600 bg-rose-50 hover:bg-rose-100'
+                                }`}
+                              >
+                                {documentActionKey === `${doc.sourceKey}:reject` ? 'Saving...' : 'Decline'}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))

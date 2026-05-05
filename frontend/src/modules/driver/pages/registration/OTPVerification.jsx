@@ -128,17 +128,25 @@ const OTPVerification = () => {
                 }
 
                 clearDriverRegistrationSession();
+                const normalizedRole = normalizeDriverRole(role);
                 const nextPath =
-                    normalizeDriverRole(role) === 'owner'
-                        ? '/taxi/owner/dashboard'
-                        : normalizeDriverRole(role) === 'service_center'
+                    normalizedRole === 'owner' || normalizedRole === 'driver'
+                        ? `${routePrefix}/registration-status`
+                        : normalizedRole === 'service_center'
                             ? '/taxi/driver/service-center'
-                            : normalizeDriverRole(role) === 'service_center_staff'
-                            ? '/taxi/driver/service-center'
-                        : normalizeDriverRole(role) === 'bus_driver'
-                            ? '/taxi/driver/bus-home'
-                            : '/taxi/driver/home';
-                navigate(nextPath, { replace: true });
+                            : normalizedRole === 'service_center_staff'
+                                ? '/taxi/driver/service-center'
+                                : normalizedRole === 'bus_driver'
+                                    ? '/taxi/driver/bus-home'
+                                    : '/taxi/driver/home';
+                navigate(nextPath, { 
+                    replace: true, 
+                    state: { 
+                        role: normalizedRole,
+                        token: payload?.token,
+                        driver: payload?.driver
+                    } 
+                });
                 return;
             }
 

@@ -4040,6 +4040,14 @@ export const updateDriver = async (id, payload) => {
     update.status = update.approve ? 'approved' : 'pending';
   }
 
+  if (payload.documents !== undefined) {
+    update.documents = payload.documents;
+  }
+
+  if (payload.onboarding !== undefined) {
+    update.onboarding = payload.onboarding;
+  }
+
   const driver = await Driver.findByIdAndUpdate(id, update, { returnDocument: 'after' });
   if (!driver) throw new ApiError(404, 'Driver not found');
   return serializeDriver(driver);
