@@ -79,6 +79,16 @@ body {
   font-size: 0.9rem;
 }
 
+.top-contact-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.top-contact-item svg {
+  color: #FFB300;
+}
+
 .new-main-header {
   position: relative;
   z-index: 100;

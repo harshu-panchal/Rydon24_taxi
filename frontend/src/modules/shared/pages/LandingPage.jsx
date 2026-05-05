@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Home, Clock, Gift, Map, Car } from 'lucide-react';
+import { Home, Clock, Gift, Map, Car, Phone, Mail } from 'lucide-react';
 import './LandingPage.css';
 import { useSettings } from '../../../shared/context/SettingsContext';
 
@@ -63,10 +63,12 @@ function LandingPage() {
           </div>
           <div className="new-top-contacts">
              <div className="top-contact-item">
+               <Phone size={16} />
                <span>7409129517</span>
              </div>
              <div className="top-contact-item">
-               <span>supportrydon24@gmail.com</span>
+               <Mail size={16} />
+               <span>supportrydon@gmail.com</span>
              </div>
           </div>
         </div>

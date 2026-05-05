@@ -10,6 +10,7 @@ import {
     ChevronRight,
     UploadCloud
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   clearDriverRegistrationSession,
@@ -439,26 +440,26 @@ const StepDocuments = () => {
                 >
                     <ArrowLeft size={18} strokeWidth={2.5} />
                 </button>
-                <div className="rounded-full border border-[#dcc9ab] bg-[#f7efe2] px-3 py-1 text-[11px] font-semibold tracking-[0.18em] text-[#8a6a3d] uppercase">
+                <div className="rounded-full bg-slate-900/5 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500 border border-slate-900/5">
                     Step 4 of 4
                 </div>
             </div>
 
-            <section className="rounded-[28px] border border-white/80 bg-white/88 p-6 shadow-[0_22px_60px_rgba(148,116,70,0.12)] backdrop-blur-sm">
-                <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f3e4cd] text-[#8a5a22]">
-                    <ShieldCheck size={18} />
+            <section className="space-y-3">
+                <div className="flex items-center gap-3">
+                     <div className="flex h-11 w-11 items-center justify-center rounded-[1.25rem] bg-slate-900 text-white shadow-xl shadow-slate-900/10">
+                        <ShieldCheck size={22} strokeWidth={2.5} />
+                    </div>
+                    <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 opacity-60">
+                        Identity Verification
+                    </span>
                 </div>
-                <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9a7b50]">
-                        Identity verification
-                    </p>
-                    <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.04em] text-slate-950">
-                        KYC Vault
-                    </h1>
-                    <p className="max-w-[28ch] text-sm leading-6 text-slate-600">
-                        Please upload clear photos of the required documents to verify your identity.
-                    </p>
-                </div>
+                <h1 className="font-['Outfit'] text-[48px] font-black leading-[1] tracking-[-0.04em] text-slate-900">
+                    KYC <span className="text-slate-400">Vault</span>
+                </h1>
+                <p className="text-[15px] leading-relaxed text-slate-500 font-bold opacity-80 max-w-[28ch]">
+                    Upload clear photos of the required documents to verify your identity.
+                </p>
             </section>
         </header>
 
@@ -468,153 +469,173 @@ const StepDocuments = () => {
             </div>
         )}
 
-        <div className="space-y-5">
+        <div className="space-y-6">
           {templatesLoading ? (
-            <div className="bg-white rounded-3xl p-12 text-center space-y-4 shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
+            <div className="bg-white rounded-[2.5rem] p-12 text-center space-y-4 shadow-[0_10px_40px_rgba(0,0,0,0.04)] border border-slate-100">
               <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto animate-pulse">
                 <FileText size={20} className="text-slate-300" />
               </div>
-              <p className="text-sm font-medium text-slate-400">Loading checklist...</p>
+              <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest">Loading checklist...</p>
             </div>
           ) : (
             documentTemplates.map((template) => (
-              <section key={template.id} className="space-y-4 rounded-[30px] border border-slate-200/70 bg-white p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
+              <section key={template.id} className="space-y-5 rounded-[2.5rem] border border-slate-100 bg-white p-6 shadow-[0_10px_40px_rgba(0,0,0,0.04)]">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <h3 className="text-base font-semibold tracking-[-0.03em] text-slate-950">{template.name}</h3>
+                  <div className="space-y-1.5">
+                    <h3 className="text-lg font-black tracking-tight text-slate-900">{template.name}</h3>
                     <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                           {template.fields.length > 1 ? 'Multiple Sides' : 'Single Document'}
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest opacity-60">
+                           {template.fields.length > 1 ? 'Multiple Sides' : 'Single Side'}
                         </span>
                         <div className="w-1 h-1 rounded-full bg-slate-200" />
-                        <span className={`text-[10px] font-bold uppercase tracking-wider ${template.is_required ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        <span className={`text-[10px] font-black uppercase tracking-widest ${template.is_required ? 'text-emerald-600' : 'text-slate-400 opacity-60'}`}>
                           {template.is_required ? 'Mandatory' : 'Optional'}
                         </span>
                     </div>
                   </div>
-                  <div className="rounded-full bg-slate-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-slate-500 border border-slate-100">
+                  <div className="rounded-full bg-slate-900/5 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-slate-500 border border-slate-900/5">
                     {template.account_type || 'individual'}
                   </div>
                 </div>
 
-                <div className={`grid gap-3 ${template.fields.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                <div className="space-y-6">
                   {template.fields.map((field) => {
                     const document = docs[field.key];
                     const isUploading = uploading === field.key;
                     const isRequired = Boolean(field.required ?? field.isRequired);
 
                     return (
-                      <div key={field.key} className="space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <label className="block text-[11px] font-semibold text-slate-500 ml-1">{field.label}</label>
-                          <span className={`text-[10px] font-bold uppercase tracking-wider ${isRequired ? 'text-emerald-600' : 'text-slate-400'}`}>
+                      <div key={field.key} className="space-y-3">
+                        <div className="flex items-center justify-between gap-2 px-1">
+                          <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400 opacity-80">{field.label}</label>
+                          <span className={`text-[9px] font-black uppercase tracking-[0.15em] px-2 py-0.5 rounded-md ${isRequired ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-400'}`}>
                             {isRequired ? 'Required' : 'Optional'}
                           </span>
                         </div>
-                        <div
-                            className={`relative min-h-[140px] rounded-2xl border-2 transition-all overflow-hidden flex flex-col items-center justify-center gap-2 ${
-                                document?.previewUrl
-                                    ? 'border-emerald-500/20 bg-emerald-50/10'
-                                    : 'border-dashed border-slate-200 bg-[#fcfcfb] hover:border-slate-300'
-                            }`}
-                        >
-                            {isUploading ? (
-                                <div className="flex flex-col items-center gap-3">
-                                    <div className="w-6 h-6 border-2 border-slate-200 border-t-slate-900 rounded-full animate-spin" />
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Uploading</span>
-                                </div>
-                            ) : document?.previewUrl ? (
-                                <>
-                                    <img src={document.previewUrl} alt={field.label} className="absolute inset-0 h-full w-full object-cover" />
-                                    <div className="absolute inset-0 bg-black/10" />
-                                    <div className="absolute bottom-2 right-2 w-7 h-7 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-lg border-2 border-white">
-                                        <CheckCircle2 size={14} strokeWidth={3} />
+                        
+                        <div className="grid grid-cols-1 gap-3">
+                            <div
+                                className={`relative min-h-[160px] rounded-[1.8rem] border-2 transition-all overflow-hidden flex flex-col items-center justify-center gap-2 ${
+                                    document?.previewUrl
+                                        ? 'border-emerald-500/20 bg-emerald-50/10'
+                                        : 'border-dashed border-slate-100 bg-slate-50 hover:border-slate-200'
+                                }`}
+                            >
+                                {isUploading ? (
+                                    <div className="flex flex-col items-center gap-3">
+                                        <div className="w-6 h-6 border-2 border-slate-200 border-t-slate-900 rounded-full animate-spin" />
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Uploading</span>
                                     </div>
-                                    <div className="absolute top-2 left-2 bg-black/40 backdrop-blur-md rounded-lg px-2 py-1 flex items-center gap-1.5 border border-white/20">
-                                        <Camera size={10} className="text-white" />
-                                        <span className="text-[9px] font-bold text-white uppercase tracking-tighter">Retake</span>
-                                    </div>
-                                </>
-                            ) : (
-                                <>
-                                    <div className="w-10 h-10 rounded-xl bg-white text-slate-400 flex items-center justify-center shadow-sm border border-slate-100">
-                                        <UploadCloud size={18} />
-                                    </div>
-                                    <div className="text-center">
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Tap to upload</p>
-                                    </div>
-                                    <div className="absolute top-2 right-2 w-6 h-6 rounded-lg bg-slate-100/50 flex items-center justify-center">
-                                        <Camera size={10} className="text-slate-400" />
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <label className={`relative flex h-11 items-center justify-center gap-2 text-center rounded-2xl border text-[11px] font-bold uppercase tracking-wider transition-all ${
-                            isUploading
-                              ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
-                              : 'cursor-pointer border-slate-200 bg-white text-slate-700 active:scale-[0.99]'
-                          }`}>
-                            <ImagePlus size={14} />
-                            Gallery
-                            <input
-                              type="file"
-                              accept="image/*"
-                              disabled={isUploading}
-                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                              aria-label={`Upload ${field.label} from gallery`}
-                              onChange={(event) => handleFileChange(template.id, field.key, event)}
-                            />
-                          </label>
-                          <label className={`relative flex h-11 items-center justify-center gap-2 text-center rounded-2xl border text-[11px] font-bold uppercase tracking-wider transition-all ${
-                            isUploading
-                              ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
-                              : 'cursor-pointer border-slate-900 bg-slate-950 text-white active:scale-[0.99]'
-                          }`}>
-                            <Camera size={14} />
-                            Camera
-                            <input
-                              type="file"
-                              accept="image/*"
-                              capture="environment"
-                              disabled={isUploading}
-                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                              aria-label={`Capture ${field.label} from camera`}
-                              onChange={(event) => handleFileChange(template.id, field.key, event)}
-                            />
-                          </label>
+                                ) : document?.previewUrl ? (
+                                    <>
+                                        <img src={document.previewUrl} alt={field.label} className="absolute inset-0 h-full w-full object-cover" />
+                                        <div className="absolute inset-0 bg-black/10" />
+                                        <div className="absolute bottom-4 right-4 w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-xl border-2 border-white">
+                                            <CheckCircle2 size={16} strokeWidth={3} />
+                                        </div>
+                                        <div className="absolute top-4 left-4 bg-black/40 backdrop-blur-md rounded-xl px-3 py-1.5 flex items-center gap-2 border border-white/20">
+                                            <Camera size={12} className="text-white" />
+                                            <span className="text-[10px] font-black text-white uppercase tracking-widest">Retake Photo</span>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="w-12 h-12 rounded-2xl bg-white text-slate-400 flex items-center justify-center shadow-sm border border-slate-100">
+                                            <UploadCloud size={20} />
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Tap to upload</p>
+                                        </div>
+                                        <div className="absolute top-4 right-4 w-8 h-8 rounded-xl bg-slate-900/5 flex items-center justify-center">
+                                            <Camera size={14} className="text-slate-400" />
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            <div className="flex gap-2">
+                                <label className={`flex-1 relative flex h-12 items-center justify-center gap-2 text-center rounded-2xl border text-[11px] font-black uppercase tracking-widest transition-all ${
+                                    isUploading
+                                    ? 'cursor-not-allowed border-slate-50 bg-slate-50 text-slate-300'
+                                    : 'cursor-pointer border-slate-100 bg-white text-slate-600 hover:bg-slate-50 active:scale-[0.98]'
+                                }`}>
+                                    <ImagePlus size={16} />
+                                    Gallery
+                                    <input
+                                    type="file"
+                                    accept="image/*"
+                                    disabled={isUploading}
+                                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                                    aria-label={`Upload ${field.label} from gallery`}
+                                    onChange={(event) => handleFileChange(template.id, field.key, event)}
+                                    />
+                                </label>
+                                <label className={`flex-1 relative flex h-12 items-center justify-center gap-2 text-center rounded-2xl border text-[11px] font-black uppercase tracking-widest transition-all ${
+                                    isUploading
+                                    ? 'cursor-not-allowed border-slate-50 bg-slate-50 text-slate-300'
+                                    : 'cursor-pointer border-slate-900 bg-slate-900 text-white hover:bg-black shadow-lg shadow-slate-900/10 active:scale-[0.98]'
+                                }`}>
+                                    <Camera size={16} />
+                                    Camera
+                                    <input
+                                    type="file"
+                                    accept="image/*"
+                                    capture="environment"
+                                    disabled={isUploading}
+                                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                                    aria-label={`Capture ${field.label} from camera`}
+                                    onChange={(event) => handleFileChange(template.id, field.key, event)}
+                                    />
+                                </label>
+                            </div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
+
                 {(template.has_identify_number || template.has_expiry_date) ? (
-                  <div className="grid gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-4 md:grid-cols-2">
+                  <div className="space-y-4 pt-2">
                     {template.has_identify_number ? (
-                      <div className="space-y-1.5">
-                        <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600">
-                          {formatMetaLabel(template.identify_number_key) || `${template.name} number`}
-                        </label>
-                        <input
-                          type="text"
-                          value={documentMeta[template.id]?.identifyNumber || ''}
-                          onChange={(event) => handleMetaChange(template.id, 'identifyNumber', event.target.value.trim().toUpperCase())}
-                          placeholder={`Enter ${formatMetaLabel(template.identify_number_key) || 'document number'}`}
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[14px] font-semibold text-slate-900 outline-none transition-all focus:border-[#c59d66] focus:ring-4 focus:ring-[#c59d66]/10"
-                        />
+                      <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                        <div className="flex items-center gap-4">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
+                                <FileText size={20} strokeWidth={2.5} />
+                            </div>
+                            <div className="min-w-0 flex-1 space-y-0.5">
+                                <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70">
+                                    {formatMetaLabel(template.identify_number_key) || `${template.name} Number`}
+                                </label>
+                                <input
+                                    type="text"
+                                    value={documentMeta[template.id]?.identifyNumber || ''}
+                                    onChange={(event) => handleMetaChange(template.id, 'identifyNumber', event.target.value.trim().toUpperCase())}
+                                    placeholder={`Enter ${formatMetaLabel(template.identify_number_key) || 'Number'}`}
+                                    className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200"
+                                />
+                            </div>
+                        </div>
                       </div>
                     ) : null}
+
                     {template.has_expiry_date ? (
-                      <div className="space-y-1.5">
-                        <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600">
-                          {template.name} expiry date
-                        </label>
-                        <input
-                          type="date"
-                          value={documentMeta[template.id]?.expiryDate || ''}
-                          onChange={(event) => handleMetaChange(template.id, 'expiryDate', event.target.value)}
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[14px] font-semibold text-slate-900 outline-none transition-all focus:border-[#c59d66] focus:ring-4 focus:ring-[#c59d66]/10"
-                        />
+                      <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                        <div className="flex items-center gap-4">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
+                                <AlertCircle size={20} strokeWidth={2.5} />
+                            </div>
+                            <div className="min-w-0 flex-1 space-y-0.5">
+                                <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70">
+                                    Expiry Date
+                                </label>
+                                <input
+                                    type="date"
+                                    value={documentMeta[template.id]?.expiryDate || ''}
+                                    onChange={(event) => handleMetaChange(template.id, 'expiryDate', event.target.value)}
+                                    className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0"
+                                />
+                            </div>
+                        </div>
                       </div>
                     ) : null}
                   </div>
@@ -624,27 +645,37 @@ const StepDocuments = () => {
           )}
         </div>
 
-        <div className="bg-amber-50/50 p-4 rounded-3xl flex gap-3 mt-4 border border-amber-100">
-          <AlertCircle size={18} className="text-amber-600 shrink-0" />
-          <p className="text-xs font-medium text-amber-900 leading-relaxed">
+        <div className="bg-white/40 backdrop-blur-sm p-5 rounded-[2rem] flex gap-4 mt-6 border border-white/50 shadow-sm">
+          <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center shrink-0">
+            <AlertCircle size={20} className="text-amber-600" />
+          </div>
+          <p className="text-[12px] font-black text-amber-900/60 leading-relaxed uppercase tracking-tight">
             Choose Gallery or Camera for each document. Ensure all photos are well-lit and all text is clearly readable to avoid rejection.
           </p>
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200/70 bg-white/88 p-5 backdrop-blur-md">
+        <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent">
             <div className="mx-auto max-w-sm">
-                <button
+                <motion.button
+                    whileHover={{ scale: 1.02, y: -2 }}
+                    whileTap={{ scale: 0.98 }}
                     onClick={handleSubmit}
                     disabled={loading || !isComplete}
-                    className={`flex h-14 w-full items-center justify-center gap-2 rounded-[22px] text-[15px] font-semibold tracking-[0.01em] shadow-[0_18px_40px_rgba(15,23,42,0.12)] transition-all ${
+                    className={`group flex h-16 w-full items-center justify-center gap-3 rounded-[1.8rem] text-[15px] font-black tracking-tight transition-all relative overflow-hidden ${
                         isComplete
-                            ? 'bg-slate-950 text-white hover:bg-slate-900'
-                            : 'pointer-events-none bg-slate-200 text-slate-500 shadow-none'
+                            ? 'bg-slate-900 text-white shadow-[0_20px_40px_rgba(0,0,0,0.2)] active:bg-black'
+                            : 'pointer-events-none bg-slate-200 text-slate-400 shadow-none'
                     }`}
                 >
-                    {loading ? 'Submitting Vault...' : 'Review & Submit'}
-                    {!loading && <ChevronRight size={17} strokeWidth={2.8} />}
-                </button>
+                    {loading ? (
+                        <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                        <>
+                            <span className="relative z-10 uppercase tracking-widest">Review & Submit</span>
+                            <ChevronRight size={18} strokeWidth={3} className="relative z-10 group-hover:translate-x-1 transition-transform" />
+                        </>
+                    )}
+                </motion.button>
             </div>
         </div>
       </main>

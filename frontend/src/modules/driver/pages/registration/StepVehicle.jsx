@@ -7,8 +7,10 @@ import {
     Zap, 
     Package,
     ShieldCheck,
-    Info
+    Info,
+    CheckCircle2
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
     getStoredDriverRegistrationSession,
@@ -257,45 +259,46 @@ const StepVehicle = () => {
             style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
         >
             <main className="mx-auto max-w-sm space-y-6">
-                <header className="space-y-5">
+                <header className="space-y-6">
                     <div className="flex items-center justify-between">
-                        <button
+                        <motion.button
+                            whileTap={{ scale: 0.9 }}
                             onClick={() => navigate('/taxi/driver/step-referral', { state: session })}
-                            className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/70 bg-white/80 text-slate-900 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-sm transition-transform active:scale-95"
+                            className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-900 shadow-sm transition-all"
                         >
                             <ArrowLeft size={18} strokeWidth={2.5} />
-                        </button>
-                        <div className="rounded-full border border-[#dcc9ab] bg-[#f7efe2] px-3 py-1 text-[11px] font-semibold tracking-[0.18em] text-[#8a6a3d] uppercase">
+                        </motion.button>
+                        <div className="rounded-full bg-slate-900/5 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500 border border-slate-900/5">
                             Step 3 of 4
                         </div>
                     </div>
 
-                    <section className="rounded-[28px] border border-white/80 bg-white/88 p-6 shadow-[0_22px_60px_rgba(148,116,70,0.12)] backdrop-blur-sm">
-                        <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f3e4cd] text-[#8a5a22]">
-                            <Car size={18} />
+                    <section className="space-y-3">
+                        <div className="flex items-center gap-3">
+                             <div className="flex h-11 w-11 items-center justify-center rounded-[1.25rem] bg-slate-900 text-white shadow-xl shadow-slate-900/10">
+                                <Car size={22} strokeWidth={2.5} />
+                            </div>
+                            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 opacity-60">
+                                Vehicle Details
+                            </span>
                         </div>
-                        <div className="space-y-2">
-                            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9a7b50]">
-                                {isOwner ? 'Fleet management' : 'Vehicle registration'}
-                            </p>
-                            <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.04em] text-slate-950">
-                                {isOwner ? 'Company Profile' : 'Vehicle details'}
-                            </h1>
-                            <p className="max-w-[28ch] text-sm leading-6 text-slate-600">
-                                {isOwner ? 'Setup your business profile to start managing your fleet.' : 'Tell us about the vehicle you\'ll be using for your services.'}
-                            </p>
-                        </div>
+                        <h1 className="font-['Outfit'] text-[48px] font-black leading-[1] tracking-[-0.04em] text-slate-900">
+                            {isOwner ? 'Fleet' : 'Vehicle'} <span className="text-slate-400">Setup</span>
+                        </h1>
+                        <p className="text-[15px] leading-relaxed text-slate-500 font-bold opacity-80 max-w-[28ch]">
+                            {isOwner ? 'Setup your business profile to start managing your fleet.' : 'Tell us about the vehicle you\'ll be using for your services.'}
+                        </p>
                     </section>
                 </header>
 
                 <div className="space-y-5">
                     {!isOwner && (
-                        <section className="space-y-4 rounded-[30px] border border-slate-200/70 bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
+                        <section className="space-y-5 rounded-[2.5rem] border border-slate-100 bg-white p-6 shadow-[0_10px_40px_rgba(0,0,0,0.04)]">
                             <div className="space-y-1 px-1">
-                                <h2 className="text-base font-semibold tracking-[-0.03em] text-slate-950">Service category</h2>
-                                <p className="text-sm text-slate-500">Choose one or more services you want to provide.</p>
+                                <h2 className="text-lg font-black tracking-tight text-slate-900">Service Category</h2>
+                                <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest opacity-60">Selection Required</p>
                             </div>
-                            <div className="grid grid-cols-1 gap-2.5">
+                            <div className="grid grid-cols-1 gap-3">
                                 {registerTypes.map((item) => (
                                     <button
                                         key={item.id}
@@ -312,42 +315,44 @@ const StepVehicle = () => {
                                                 registerFor: getPrimaryRegisterFor(nextServiceCategories, previous.registerFor),
                                             };
                                         })}
-                                        className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${
+                                        className={`flex items-center gap-4 p-4 rounded-[1.8rem] border-2 transition-all group ${
                                             formData.serviceCategories.includes(item.id)
-                                            ? 'bg-slate-950 border-slate-950 text-white shadow-lg' 
-                                            : 'bg-[#fcfcfb] border-slate-100 text-slate-600 hover:border-slate-300'
+                                            ? 'bg-slate-900 border-slate-900 text-white shadow-xl shadow-slate-900/10' 
+                                            : 'bg-slate-50 border-slate-50 text-slate-600 hover:border-slate-200'
                                         }`}
                                     >
-                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${formData.serviceCategories.includes(item.id) ? 'bg-white/20' : 'bg-white shadow-sm text-slate-400'}`}>
+                                        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all ${
+                                            formData.serviceCategories.includes(item.id) ? 'bg-white text-slate-900' : 'bg-white shadow-sm text-slate-400'
+                                        }`}>
                                             {item.icon}
                                         </div>
                                         <div className="flex-1 text-left">
-                                            <span className="block text-[14px] font-semibold leading-none">{item.label}</span>
+                                            <span className="block text-[14px] font-black uppercase tracking-widest leading-none">{item.label}</span>
                                         </div>
-                                        {formData.serviceCategories.includes(item.id) && (
-                                            <div className="w-5 h-5 rounded-full bg-white flex items-center justify-center">
-                                                <div className="w-2.5 h-2.5 rounded-full bg-slate-950" />
-                                            </div>
+                                        {formData.serviceCategories.includes(item.id) ? (
+                                             <CheckCircle2 size={20} className="text-white" strokeWidth={3} />
+                                        ) : (
+                                            <div className="w-6 h-6 rounded-full border-2 border-slate-200 group-hover:border-slate-300 transition-colors" />
                                         )}
                                     </button>
                                 ))}
                             </div>
-                            {formData.serviceCategories.length === 0 ? (
-                                <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-700">
-                                    Select at least one service category to continue.
+                            {formData.serviceCategories.length === 0 && (
+                                <div className="rounded-2xl border border-amber-50 bg-amber-50/30 px-4 py-3 text-[10px] font-black text-amber-600 uppercase tracking-widest text-center">
+                                    Select at least one category
                                 </div>
-                            ) : null}
+                            )}
                         </section>
                     )}
 
-                    <section className="space-y-4 rounded-[30px] border border-slate-200/70 bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
-                        <div className="rounded-[24px] border border-slate-200 bg-[#fcfcfb] p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all focus-within:border-[#c59d66] focus-within:bg-white">
-                            <div className="flex items-start gap-3.5">
-                                <div className="mt-0.5 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f7efe2] text-[#8a5a22]">
-                                    <MapPin size={18} />
+                    <section className="space-y-5 rounded-[2.5rem] border border-slate-100 bg-white p-6 shadow-[0_10px_40px_rgba(0,0,0,0.04)]">
+                        <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                            <div className="flex items-center gap-4">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
+                                    <MapPin size={20} strokeWidth={2.5} />
                                 </div>
-                                <div className="flex-1 space-y-1.5 overflow-hidden">
-                                    <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600">Operating City</label>
+                                <div className="min-w-0 flex-1 space-y-0.5 overflow-hidden">
+                                    <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70">Operating City</label>
                                     <select 
                                         value={formData.locationId}
                                         onChange={(e) => {
@@ -375,9 +380,9 @@ const StepVehicle = () => {
                                             }));
                                         }}
                                         disabled={locationsLoading || locations.length === 0}
-                                        className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 appearance-none cursor-pointer disabled:opacity-50"
+                                        className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 appearance-none cursor-pointer disabled:opacity-50"
                                     >
-                                        <option value="">{locationsLoading ? 'Loading service locations...' : 'Select your city'}</option>
+                                        <option value="">{locationsLoading ? 'Loading...' : 'Select City'}</option>
                                         {locations.map(loc => (
                                             <option key={loc._id || loc.id} value={loc._id || loc.id}>
                                                 {loc.service_location_name || loc.name}
@@ -390,56 +395,56 @@ const StepVehicle = () => {
 
                         {isOwner ? (
                             <div className="space-y-3.5 animate-in fade-in slide-in-from-top-2 duration-300">
-                                <div className="rounded-[24px] border border-slate-200 bg-[#fcfcfb] p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all focus-within:border-[#c59d66] focus-within:bg-white">
-                                    <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600 mb-1.5">Company Name</label>
+                                <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                                    <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70 px-1 mb-1">Company Name</label>
                                     <input 
                                         value={formData.companyName}
                                         onChange={(e) => setFormData(p => ({ ...p, companyName: e.target.value }))}
-                                        placeholder="Enter company legal name"
-                                        className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-300"
+                                        placeholder="Legal Company Name"
+                                        className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
                                     />
                                 </div>
 
-                                <div className="rounded-[24px] border border-slate-200 bg-[#fcfcfb] p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all focus-within:border-[#c59d66] focus-within:bg-white">
-                                    <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600 mb-1.5">Company Address</label>
+                                <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                                    <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70 px-1 mb-1">Company Address</label>
                                     <input 
                                         value={formData.companyAddress}
                                         onChange={(e) => setFormData(p => ({ ...p, companyAddress: e.target.value }))}
-                                        placeholder="Select city to prefill address"
-                                        className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-300"
+                                        placeholder="Business Address"
+                                        className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
                                     />
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-3.5">
-                                    <div className="rounded-[24px] border border-slate-200 bg-[#fcfcfb] p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all focus-within:border-[#c59d66] focus-within:bg-white">
-                                        <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600 mb-1.5">City</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                                        <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70 px-1 mb-1">City</label>
                                         <input 
                                             value={formData.city}
                                             onChange={(e) => setFormData(p => ({ ...p, city: e.target.value }))}
                                             placeholder="City"
-                                            className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-300"
+                                            className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
                                         />
                                     </div>
-                                    <div className="rounded-[24px] border border-slate-200 bg-[#fcfcfb] p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all focus-within:border-[#c59d66] focus-within:bg-white">
-                                        <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600 mb-1.5">Postal Code</label>
+                                    <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                                        <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70 px-1 mb-1">Postal Code</label>
                                         <input 
                                             value={formData.postalCode}
                                             onChange={(e) => setFormData(p => ({ ...p, postalCode: normalizePostalCode(e.target.value) }))}
-                                            placeholder="452001"
+                                            placeholder="Pincode"
                                             inputMode="numeric"
                                             maxLength={6}
-                                            className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-300"
+                                            className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
                                         />
                                     </div>
                                 </div>
 
-                                <div className="rounded-[24px] border border-slate-200 bg-[#fcfcfb] p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all focus-within:border-[#c59d66] focus-within:bg-white">
-                                    <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600 mb-1.5">Tax Number (GST/VAT)</label>
+                                <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                                    <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70 px-1 mb-1">Tax Number (GST/VAT)</label>
                                     <input 
                                         value={formData.taxNumber}
                                         onChange={(e) => setFormData(p => ({ ...p, taxNumber: e.target.value.toUpperCase() }))}
-                                        placeholder="GST/VAT/TAX ID"
-                                        className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-300 uppercase"
+                                        placeholder="Tax Identification"
+                                        className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200 uppercase"
                                     />
                                 </div>
                             </div>
@@ -492,47 +497,47 @@ const StepVehicle = () => {
                                     </div>
                                 )}
 
-                                <div className="space-y-4 pt-1">
+                                <div className="space-y-5 pt-1">
                                     <div className="space-y-1 px-1">
-                                        <h2 className="text-base font-semibold tracking-[-0.03em] text-slate-950">Technical Specs</h2>
-                                        <p className="text-sm text-slate-500">Fill in the details from your RC/Permit.</p>
+                                        <h2 className="text-lg font-black tracking-tight text-slate-900">Technical Specs</h2>
+                                        <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest opacity-60">Verified from RC/Permit</p>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-3.5">
-                                        <div className="rounded-[24px] border border-slate-200 bg-[#fcfcfb] p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all focus-within:border-[#c59d66] focus-within:bg-white col-span-2">
-                                            <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600 mb-1.5">Brand / Make</label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5 col-span-2">
+                                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70 px-1 mb-1">Brand / Make</label>
                                             <input 
                                                 value={formData.make}
                                                 onChange={(e) => setFormData(p => ({ ...p, make: e.target.value }))}
-                                                placeholder="e.g. Maruti Suzuki, Hyundai"
-                                                className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-300"
+                                                placeholder="e.g. Maruti Suzuki"
+                                                className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
                                             />
                                         </div>
 
-                                        <div className="rounded-[24px] border border-slate-200 bg-[#fcfcfb] p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all focus-within:border-[#c59d66] focus-within:bg-white">
-                                            <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600 mb-1.5">Model</label>
+                                        <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70 px-1 mb-1">Model</label>
                                             <input 
                                                 value={formData.model}
                                                 onChange={(e) => setFormData(p => ({ ...p, model: e.target.value }))}
-                                                placeholder="e.g. Swift, Bolt"
-                                                className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-300"
+                                                placeholder="Swift, Bolt"
+                                                className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
                                             />
                                         </div>
 
-                                        <div className="rounded-[24px] border border-slate-200 bg-[#fcfcfb] p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all focus-within:border-[#c59d66] focus-within:bg-white">
-                                            <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600 mb-1.5">Year</label>
+                                        <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70 px-1 mb-1">Year</label>
                                             <input 
                                                 type="tel"
                                                 maxLength={4}
                                                 value={formData.year}
                                                 onChange={(e) => setFormData(p => ({ ...p, year: e.target.value.replace(/\D/g, '') }))}
                                                 placeholder={String(getCurrentVehicleYear())}
-                                                className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-300"
+                                                className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
                                             />
                                         </div>
 
-                                        <div className="rounded-[24px] border border-slate-200 bg-[#fcfcfb] p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all focus-within:border-[#c59d66] focus-within:bg-white col-span-2">
-                                            <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600 mb-1.5">Plate Number</label>
+                                        <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5 col-span-2">
+                                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70 px-1 mb-1">Plate Number</label>
                                             <input 
                                                 value={formData.number}
                                                 onChange={(e) => setFormData(p => ({ ...p, number: normalizeVehicleNumber(e.target.value) }))}
@@ -541,13 +546,13 @@ const StepVehicle = () => {
                                             />
                                         </div>
 
-                                        <div className="rounded-[24px] border border-slate-200 bg-[#fcfcfb] p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all focus-within:border-[#c59d66] focus-within:bg-white col-span-2">
-                                            <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600 mb-1.5">Exterior Color</label>
+                                        <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5 col-span-2">
+                                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70 px-1 mb-1">Exterior Color</label>
                                             <input 
                                                 value={formData.color}
                                                 onChange={(e) => setFormData(p => ({ ...p, color: e.target.value }))}
-                                                placeholder="e.g. White, Silver, Black"
-                                                className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-300"
+                                                placeholder="e.g. White, Black"
+                                                className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
                                             />
                                         </div>
                                     </div>
@@ -570,22 +575,30 @@ const StepVehicle = () => {
                     </div>
                 )}
 
-                <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200/70 bg-white/88 p-5 backdrop-blur-md">
+                <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent">
                     <div className="mx-auto max-w-sm">
-                        <button 
+                        <motion.button
+                            whileHover={{ scale: 1.02, y: -2 }}
+                            whileTap={{ scale: 0.98 }}
                             onClick={handleContinue}
                             disabled={loading}
-                            className={`flex h-14 w-full items-center justify-center gap-2 rounded-[22px] text-[15px] font-semibold tracking-[0.01em] shadow-[0_18px_40px_rgba(15,23,42,0.12)] transition-all ${
+                            className={`group flex h-16 w-full items-center justify-center gap-3 rounded-[1.8rem] text-[15px] font-black tracking-tight transition-all relative overflow-hidden ${
                                 (isOwner ? 
                                     (formData.locationId && formData.companyName && formData.companyAddress && formData.city && formData.postalCode && formData.taxNumber) : 
                                     (formData.locationId && formData.vehicleTypeId && formData.make && formData.model && formData.year && formData.number && formData.color))
-                                ? 'bg-slate-950 text-white hover:bg-slate-900' 
-                                : 'pointer-events-none bg-slate-200 text-slate-500 shadow-none'
+                                ? 'bg-slate-900 text-white shadow-[0_20px_40px_rgba(0,0,0,0.2)] active:bg-black' 
+                                : 'pointer-events-none bg-slate-200 text-slate-400 shadow-none'
                             }`}
                         >
-                            {loading ? 'Saving Details...' : 'Save & Continue'} 
-                            {!loading && <ChevronRight size={17} strokeWidth={2.8} />}
-                        </button>
+                            {loading ? (
+                                <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : (
+                                <>
+                                    <span className="relative z-10 uppercase tracking-widest">Save & Continue</span>
+                                    <ChevronRight size={18} strokeWidth={3} className="relative z-10 group-hover:translate-x-1 transition-transform" />
+                                </>
+                            )}
+                        </motion.button>
                     </div>
                 </div>
             </main>

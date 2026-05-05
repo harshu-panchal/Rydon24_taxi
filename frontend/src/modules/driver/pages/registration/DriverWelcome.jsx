@@ -39,8 +39,8 @@ const DriverWelcome = () => {
             style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
         >
             {/* Hero Section */}
-            <header className="relative h-[42vh] overflow-hidden rounded-b-[40px] shadow-2xl">
-                <div className="absolute inset-0 bg-gradient-to-t from-[#1C2833]/90 via-[#1C2833]/40 to-transparent z-10" />
+            <header className="relative h-[48vh] overflow-hidden rounded-b-[3.5rem] shadow-2xl">
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent z-10" />
                 <img 
                     src={DriverHero} 
                     alt={`Drive with ${appName}`} 
@@ -48,29 +48,31 @@ const DriverWelcome = () => {
                 />
                 
                 {/* Branding Top Overlay */}
-                <div className="absolute top-10 left-6 z-20">
+                <div className="absolute top-10 left-8 z-20">
                      {appLogo ? (
-                         <img src={appLogo} alt={appName} className="h-8 drop-shadow-sm" />
+                         <img src={appLogo} alt={appName} className="h-10 drop-shadow-sm" />
                      ) : (
-                         <span className="text-xl font-bold text-white tracking-tight">{appName}</span>
+                         <div className="rounded-2xl bg-white px-4 py-2 text-sm font-black tracking-tighter text-slate-900 shadow-xl">
+                            {appName}
+                         </div>
                      )}
                 </div>
 
                 {/* Overlay Greeting */}
-                <div className="absolute bottom-10 left-6 right-6 text-white z-20">
+                <div className="absolute bottom-12 left-8 right-8 text-white z-20">
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.6, ease: "easeOut" }}
-                        className="space-y-2"
+                        className="space-y-4"
                     >
-                        <div className="inline-flex items-center gap-1.5 rounded-full bg-white/10 backdrop-blur-md px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-300">
-                             <Sparkles size={12} /> Partner Program
+                        <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-md px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-amber-400 border border-white/10">
+                             <Sparkles size={12} strokeWidth={3} /> Partner Program
                         </div>
-                        <h1 className="text-[34px] font-semibold leading-[1.05] tracking-[-0.04em]">
+                        <h1 className="font-['Outfit'] text-[48px] font-black leading-[0.95] tracking-[-0.05em]">
                             Drive & <span className="text-amber-400">Earn Daily</span>
                         </h1>
-                        <p className="max-w-[28ch] text-[15px] font-medium text-white/70 leading-relaxed">
+                        <p className="max-w-[24ch] text-[15px] font-bold text-white/70 leading-relaxed opacity-90">
                             Join the professional network of {appName} partners and take control of your time.
                         </p>
                     </motion.div>
@@ -78,42 +80,42 @@ const DriverWelcome = () => {
             </header>
 
             {/* Content Section */}
-            <main className="px-5 pt-10 pb-32 space-y-10">
-                <section className="space-y-6">
+            <main className="px-6 pt-12 pb-36 space-y-12">
+                <section className="space-y-8">
                     <div className="flex items-center justify-between px-1">
                         <div className="space-y-1">
-                            <h3 className="text-base font-semibold tracking-[-0.03em] text-slate-900">
+                            <h3 className="text-lg font-black tracking-tight text-slate-900">
                                 Partner Benefits
                             </h3>
-                            <p className="text-xs font-medium text-slate-500">Why thousands choose {appName}</p>
+                            <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest opacity-60">Why thousands choose {appName}</p>
                         </div>
                         <div className="flex -space-x-2">
                             {partnerAvatars.map((partner) => (
-                                <div key={partner.name} className="w-8 h-8 rounded-full border-2 border-white bg-slate-100 overflow-hidden shadow-sm">
+                                <div key={partner.name} className="w-9 h-9 rounded-full border-2 border-white bg-slate-100 overflow-hidden shadow-sm">
                                      <img src={partner.image} alt={partner.name} className="w-full h-full object-cover" />
                                 </div>
                             ))}
-                            <div className="w-8 h-8 rounded-full border-2 border-white bg-slate-950 text-[9px] flex items-center justify-center text-white font-bold shadow-sm">
+                            <div className="w-9 h-9 rounded-full border-2 border-white bg-slate-900 text-[10px] flex items-center justify-center text-white font-black shadow-lg">
                                 +15k
                             </div>
                         </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 gap-4">
+                    <div className="grid grid-cols-1 gap-5">
                         {perks.map((perk, index) => (
                             <motion.div
                                 key={index}
                                 initial={{ opacity: 0, y: 15 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: 0.1 * index }}
-                                className="flex items-start gap-4 bg-white p-4 rounded-3xl border border-slate-100 shadow-[0_10px_30px_rgba(15,23,42,0.04)] transition-all hover:shadow-xl group"
+                                className="flex items-start gap-5 bg-white p-5 rounded-[2rem] border border-slate-100 shadow-[0_10px_40px_rgba(0,0,0,0.04)] transition-all hover:scale-[1.02] active:scale-[0.98] group"
                             >
-                                <div className="mt-1 w-11 h-11 rounded-2xl bg-[#f7efe2] text-[#8a5a22] flex items-center justify-center shrink-0 group-hover:bg-[#8a5a22] group-hover:text-white transition-colors duration-300">
+                                <div className="mt-1 w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-lg shadow-slate-900/10 group-hover:scale-110 transition-transform duration-500">
                                     {perk.icon}
                                 </div>
                                 <div className="space-y-1">
-                                    <h4 className="text-[15px] font-semibold text-slate-900 tracking-tight">{perk.title}</h4>
-                                    <p className="text-[13px] font-medium text-slate-500 leading-relaxed">{perk.sub}</p>
+                                    <h4 className="text-[17px] font-black text-slate-900 tracking-tight">{perk.title}</h4>
+                                    <p className="text-[13px] font-bold text-slate-500 leading-relaxed opacity-80">{perk.sub}</p>
                                 </div>
                             </motion.div>
                         ))}
@@ -142,14 +144,16 @@ const DriverWelcome = () => {
             </main>
 
             {/* Sticky Action Footer */}
-            <div className="fixed bottom-0 left-0 right-0 p-5 bg-white/90 backdrop-blur-xl border-t border-slate-200/50 z-50">
+            <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent z-50">
                 <div className="mx-auto max-w-sm">
-                    <button 
+                    <motion.button 
+                        whileHover={{ scale: 1.02, y: -2 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={() => navigate('/taxi/driver/lang-select')}
-                        className="w-full bg-slate-950 h-14 rounded-[22px] flex items-center justify-center gap-2 text-[15px] font-semibold text-white shadow-[0_18px_40px_rgba(15,23,42,0.2)] active:scale-95 transition-all"
+                        className="group w-full bg-slate-900 h-16 rounded-[1.8rem] flex items-center justify-center gap-3 text-[15px] font-black uppercase tracking-widest text-white shadow-[0_20px_40px_rgba(0,0,0,0.2)] active:bg-black transition-all"
                     >
-                        Apply to Drive <ChevronRight size={18} strokeWidth={2.8} />
-                    </button>
+                        Apply to Drive <ChevronRight size={18} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />
+                    </motion.button>
                 </div>
             </div>
         </div>
