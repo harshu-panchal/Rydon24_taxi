@@ -6,6 +6,7 @@ import {
   Search,
   ChevronRight
 } from "lucide-react";
+import { motion } from "framer-motion";
 import { useSettings } from "../../../../shared/context/SettingsContext";
 import {
   clearDriverRegistrationSession,
@@ -263,7 +264,7 @@ const getStatusColor = (status) => {
         className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-10 pt-12 select-none overflow-x-hidden flex flex-col items-center"
         style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
     >
-      <div className="mb-10 w-full flex flex-col items-center gap-6">
+      <header className="mb-10 w-full flex flex-col items-center">
         {appLogo ? (
           <img
             src={appLogo}
@@ -271,11 +272,11 @@ const getStatusColor = (status) => {
             className="h-10 object-contain drop-shadow-sm"
           />
         ) : (
-          <div className="rounded-2xl bg-slate-900 px-5 py-2.5 text-lg font-black tracking-tighter text-white shadow-xl shadow-slate-900/10">
+          <div className="rounded-2xl bg-slate-950 px-5 py-2.5 text-lg font-black tracking-tighter text-white shadow-xl shadow-slate-950/20 border border-white/10">
             {appName}
           </div>
         )}
-      </div>
+      </header>
 
       <main className="w-full max-w-sm space-y-8">
         <section className="flex flex-col items-center text-center space-y-6">
@@ -293,7 +294,13 @@ const getStatusColor = (status) => {
                     {pendingReverificationDocs.length > 0 ? "Submission received" : isVehicleReapproval ? "Update in review" : "Live Audit Status"}
                 </p>
                 <h1 className="font-['Outfit'] text-[42px] font-black leading-[1] tracking-[-0.04em] text-slate-900">
-                    {rejectedDocs.length > 0 ? "Action <span className='text-slate-400'>Required</span>" : pendingReverificationDocs.length > 0 ? "Verification <span className='text-slate-400'>Pending</span>" : "Review <span className='text-slate-400'>Started</span>"}
+                    {rejectedDocs.length > 0 ? (
+                        <>Action <span className="text-slate-400">Required</span></>
+                    ) : pendingReverificationDocs.length > 0 ? (
+                        <>Verification <span className="text-slate-400">Pending</span></>
+                    ) : (
+                        <>Review <span className="text-slate-400">Started</span></>
+                    )}
                 </h1>
                 <p className="mx-auto max-w-[28ch] text-[15px] font-bold leading-relaxed text-slate-500 opacity-80">
                     {rejectedDocs.length > 0 
@@ -306,20 +313,27 @@ const getStatusColor = (status) => {
         </section>
 
         {driver && (
-            <section className="bg-white rounded-[2.5rem] p-6 border border-slate-100 shadow-[0_10px_40px_rgba(0,0,0,0.04)] space-y-4">
+            <motion.section 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                whileHover={{ scale: 1.01 }}
+                className="bg-white rounded-[2.5rem] p-6 border border-slate-100 shadow-[0_10px_40px_rgba(0,0,0,0.04)] space-y-4"
+            >
                 <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400">
+                    <div className="w-12 h-12 bg-slate-50 rounded-[1rem] flex items-center justify-center text-slate-400">
                         <Mail size={24} />
                     </div>
-                    <div className="flex-1">
-                        <h4 className="text-lg font-black tracking-tight text-slate-900">{driver.name || 'Partner'}</h4>
-                        <p className="text-[13px] font-black text-slate-400 uppercase tracking-widest opacity-60">+91 {driver.phone}</p>
+                    <div className="min-w-0 flex-1">
+                        <h4 className="text-base font-black tracking-tight text-slate-900 truncate">{driver.name || 'Partner'}</h4>
+                        <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest opacity-60 truncate">
+                            +91 {driver.phone}
+                        </p>
                     </div>
-                    <div className="px-4 py-1.5 bg-slate-900 text-white rounded-full text-[10px] font-black uppercase tracking-[0.15em] shadow-lg shadow-slate-900/20">
+                    <div className="flex-shrink-0 px-3 py-1.5 bg-slate-950 text-white rounded-full text-[9px] font-black uppercase tracking-[0.15em] shadow-lg shadow-slate-950/20 border border-white/10">
                         {driver.status || 'Pending'}
                     </div>
                 </div>
-            </section>
+            </motion.section>
         )}
 
         <section className="space-y-4">
@@ -327,9 +341,9 @@ const getStatusColor = (status) => {
             <div className="space-y-4">
                 {docDetails.length > 0 ? docDetails.map((doc, idx) => (
                     <div key={idx} className="bg-white rounded-[1.8rem] border border-slate-100 p-5 shadow-[0_8px_30px_rgba(0,0,0,0.03)] space-y-4">
-                        <div className="flex items-center justify-between">
-                            <span className="text-[15px] font-black tracking-tight text-slate-800">{doc.label}</span>
-                            <span className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${getStatusColor(doc.status)}`}>
+                        <div className="flex items-center justify-between gap-3">
+                            <span className="text-[15px] font-black tracking-tight text-slate-800 truncate">{doc.label}</span>
+                            <span className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${getStatusColor(doc.status)}`}>
                                 {doc.status}
                             </span>
                         </div>
