@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import AuthLayout from '../../components/AuthLayout';
-import { User, Mail, Camera, Smartphone, Lock, ImagePlus, LifeBuoy } from 'lucide-react';
+import { User, Mail, Camera, Smartphone, ImagePlus, LifeBuoy } from 'lucide-react';
 import { userAuthService } from '../../services/authService';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 
@@ -32,7 +32,6 @@ const Signup = () => {
     phone: initialPhone,
     name: '',
     email: '',
-    password: '',
     gender: 'prefer-not-to-say',
     profileImage: '',
     referralCode: String(location.state?.referralCode || referralCodeFromQuery || preservedReferralCode || '').trim().toUpperCase(),
@@ -45,7 +44,6 @@ const Signup = () => {
   const navigate = useNavigate();
   const appName = settings.general?.app_name || 'App';
   const isValidPhone = /^\d{10}$/.test(formData.phone);
-  const isValidPassword = formData.password.length >= 5;
   const hasVerifiedSignupContext = Boolean(location.state?.otpVerified) || Boolean(preservedPhone);
   const [step, setStep] = useState(() => (hasVerifiedSignupContext ? 'profile' : 'phone'));
 
@@ -147,7 +145,6 @@ const Signup = () => {
         name: formData.name,
         phone: formData.phone,
         email: formData.email,
-        password: formData.password,
         gender: formData.gender,
         profileImage: overrides.profileImage ?? formData.profileImage,
         referralCode: formData.referralCode,
@@ -397,22 +394,6 @@ const Signup = () => {
             <p className="ml-1 text-xs font-medium text-slate-500">If someone shared a referral link, the code should already be filled in.</p>
           </div>
 
-          <div className="space-y-2">
-            <label className="ml-1 text-xs font-bold uppercase tracking-widest text-slate-600">Password *</label>
-            <div className={fieldShellClassName}>
-              <Lock size={18} className="text-slate-500" />
-              <input
-                type="password"
-                placeholder="Create password"
-                className={fieldInputClassName}
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                required
-              />
-            </div>
-            <p className="ml-1 text-xs font-medium text-slate-500">Use at least 5 characters.</p>
-          </div>
-
           <div className="space-y-3">
              <label className="ml-1 text-xs font-bold uppercase tracking-widest text-slate-600">Gender</label>
              <div className="flex flex-wrap gap-2">
@@ -442,9 +423,9 @@ const Signup = () => {
           <motion.button 
             whileTap={{ scale: 0.98 }}
             type="submit"
-            disabled={!formData.name || !isValidPhone || !isValidPassword || loading || photoUploading}
+            disabled={!formData.name || !isValidPhone || loading || photoUploading}
             className={`w-full py-4 rounded-xl text-lg font-bold shadow-xl transition-all flex items-center justify-center gap-3 mt-4 ${
-              formData.name && isValidPhone && isValidPassword && !loading && !photoUploading
+              formData.name && isValidPhone && !loading && !photoUploading
               ? 'bg-black text-white shadow-black/10' 
               : 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
             }`}

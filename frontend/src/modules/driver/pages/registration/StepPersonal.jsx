@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { User, Mail, Phone, Lock, ChevronRight } from 'lucide-react';
+import { User, Mail, Phone, ChevronRight } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
     getStoredDriverRegistrationSession,
@@ -31,7 +31,6 @@ const StepPersonal = () => {
         fullName: session.fullName || '',
         email: session.email || '',
         gender: session.gender || '',
-        password: ''
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -47,7 +46,7 @@ const StepPersonal = () => {
         const fullName = formData.fullName.trim();
         const email = formData.email.trim().toLowerCase();
 
-        if (!fullName || !email || !formData.gender || (!isOwner && !formData.password)) {
+        if (!fullName || !email || !formData.gender) {
             setError('Please fill all required details');
             return;
         }
@@ -62,11 +61,6 @@ const StepPersonal = () => {
             return;
         }
 
-        if (!isOwner && formData.password.length < 6) {
-            setError('Password must be at least 6 characters');
-            return;
-        }
-
             setLoading(true);
             setError('');
 
@@ -75,9 +69,7 @@ const StepPersonal = () => {
                     ...formData,
                     fullName,
                     email,
-                    password: isOwner ? '' : formData.password,
                 };
-                const { password: _password, ...safeFormData } = normalizedFormData;
                 const response = await saveDriverPersonalDetails({
                     registrationId,
                     phone,
@@ -89,7 +81,7 @@ const StepPersonal = () => {
                     registrationId,
                     phone,
                     role,
-                    ...safeFormData,
+                    ...normalizedFormData,
                     personalSession: response?.data?.session || null,
                 });
 
@@ -213,26 +205,6 @@ const StepPersonal = () => {
                             </div>
                         </div>
 
-                        {!isOwner && (
-                            <div className="rounded-[24px] border border-slate-200 bg-[#fcfcfb] p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all focus-within:border-[#c59d66] focus-within:bg-white focus-within:shadow-[0_16px_40px_rgba(197,157,102,0.14)]">
-                                <div className="flex items-start gap-3.5">
-                                    <div className="mt-0.5 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f7efe2] text-[#8a5a22]">
-                                        <Lock size={18} />
-                                    </div>
-                                    <div className="flex-1 space-y-1.5">
-                                        <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600">Password</label>
-                                        <input
-                                            type="password"
-                                            value={formData.password}
-                                            onChange={(e) => setFormData(p => ({ ...p, password: e.target.value.replace(/\s/g, '') }))}
-                                            placeholder="Minimum 6 characters"
-                                            className="w-full border-none bg-transparent p-0 text-[16px] font-semibold text-slate-950 outline-none focus:outline-none focus:ring-0 placeholder:text-slate-400"
-                                        />
-                                        <p className="text-xs text-slate-500">Use something secure but easy for you to remember. Spaces are not allowed.</p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </section>
 
@@ -248,7 +220,7 @@ const StepPersonal = () => {
                             onClick={handleContinue}
                             disabled={loading}
                             className={`flex h-14 w-full items-center justify-center gap-2 rounded-[22px] text-[15px] font-semibold tracking-[0.01em] shadow-[0_18px_40px_rgba(15,23,42,0.12)] transition-all ${
-                                formData.fullName && formData.email && formData.gender && (isOwner || formData.password)
+                                formData.fullName && formData.email && formData.gender
                                     ? 'bg-slate-950 text-white hover:bg-slate-900'
                                     : 'pointer-events-none bg-slate-200 text-slate-500 shadow-none'
                             }`}

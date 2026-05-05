@@ -6,6 +6,27 @@ import { adminService } from '../../services/adminService';
 const inputClass =
   'w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors';
 const labelClass = 'block text-xs font-semibold text-gray-500 mb-1.5';
+const selectPlaceholderClass = 'text-gray-400';
+
+const normalizeBooleanLike = (value, fallback = false) => {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+
+  return Boolean(value);
+};
 
 const initialForm = {
   name: '',
@@ -18,6 +39,27 @@ const initialForm = {
   is_required: false,
   active: true,
 };
+
+const accountTypeOptions = [
+  { value: 'individual', label: 'Individual' },
+  { value: 'fleet_drivers', label: 'Fleet Drivers' },
+  { value: 'both', label: 'Both' },
+];
+
+const yesNoOptions = [
+  { value: '0', label: 'No' },
+  { value: '1', label: 'Yes' },
+];
+
+const imageTypeOptions = [
+  { value: 'front_back', label: 'Front & Back' },
+  { value: 'image', label: 'Single Image' },
+  { value: 'front', label: 'Front Only' },
+  { value: 'back', label: 'Back Only' },
+];
+
+const getOptionLabel = (options, value, fallback = 'Not selected') =>
+  options.find((option) => option.value === value)?.label || fallback;
 
 const toPayload = (formData) => ({
   name: String(formData.name || '').trim(),
@@ -41,9 +83,9 @@ const fromResponse = (payload = {}) => ({
   has_identify_number:
     payload.has_identify_number === true ? '1' : payload.has_identify_number === false ? '0' : '',
   identify_number_key: payload.identify_number_key || '',
-  is_editable: Boolean(payload.is_editable),
-  is_required: Boolean(payload.is_required),
-  active: payload.active ?? true,
+  is_editable: normalizeBooleanLike(payload.is_editable, false),
+  is_required: normalizeBooleanLike(payload.is_required, false),
+  active: normalizeBooleanLike(payload.active, true),
 });
 
 const DriverDocumentForm = () => {
@@ -169,13 +211,15 @@ const DriverDocumentForm = () => {
             <select
               value={formData.account_type}
               onChange={(event) => handleChange('account_type', event.target.value)}
-              className={inputClass}
+              className={`${inputClass} ${!formData.account_type ? selectPlaceholderClass : ''}`}
               required
             >
-              <option value="">Select</option>
-              <option value="individual">Individual</option>
-              <option value="fleet_drivers">Fleet Drivers</option>
-              <option value="both">Both</option>
+              <option value="" disabled>Select account type</option>
+              {accountTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -184,12 +228,15 @@ const DriverDocumentForm = () => {
             <select
               value={formData.has_expiry_date}
               onChange={(event) => handleChange('has_expiry_date', event.target.value)}
-              className={inputClass}
+              className={`${inputClass} ${formData.has_expiry_date === '' ? selectPlaceholderClass : ''}`}
               required
             >
-              <option value="">Select</option>
-              <option value="0">No</option>
-              <option value="1">Yes</option>
+              <option value="" disabled>Select expiry requirement</option>
+              {yesNoOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -198,14 +245,15 @@ const DriverDocumentForm = () => {
             <select
               value={formData.image_type}
               onChange={(event) => handleChange('image_type', event.target.value)}
-              className={inputClass}
+              className={`${inputClass} ${!formData.image_type ? selectPlaceholderClass : ''}`}
               required
             >
-              <option value="">Select</option>
-              <option value="front_back">Front & Back</option>
-              <option value="image">Single Image</option>
-              <option value="front">Front Only</option>
-              <option value="back">Back Only</option>
+              <option value="" disabled>Select image type</option>
+              {imageTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -214,12 +262,15 @@ const DriverDocumentForm = () => {
             <select
               value={formData.has_identify_number}
               onChange={(event) => handleChange('has_identify_number', event.target.value)}
-              className={inputClass}
+              className={`${inputClass} ${formData.has_identify_number === '' ? selectPlaceholderClass : ''}`}
               required
             >
-              <option value="">Select</option>
-              <option value="0">No</option>
-              <option value="1">Yes</option>
+              <option value="" disabled>Select identity number requirement</option>
+              {yesNoOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -238,8 +289,37 @@ const DriverDocumentForm = () => {
             <div />
           )}
 
-          <div className="md:col-span-2 flex items-end">
-            <div className="flex flex-wrap items-center gap-8 pb-2">
+          <div className="md:col-span-2 space-y-4 rounded-xl border border-gray-200 bg-gray-50/70 p-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="inline-flex rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-700 border border-gray-200">
+                Account: {getOptionLabel(accountTypeOptions, formData.account_type)}
+              </span>
+              <span className="inline-flex rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-700 border border-gray-200">
+                Images: {getOptionLabel(imageTypeOptions, formData.image_type)}
+              </span>
+              <span className="inline-flex rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-700 border border-gray-200">
+                Expiry: {getOptionLabel(yesNoOptions, formData.has_expiry_date)}
+              </span>
+              <span className="inline-flex rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-700 border border-gray-200">
+                ID Number: {getOptionLabel(yesNoOptions, formData.has_identify_number)}
+              </span>
+              <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                formData.is_required
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-gray-200 text-gray-600'
+              }`}>
+                {formData.is_required ? 'Required In Driver Signup' : 'Optional In Driver Signup'}
+              </span>
+              <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                formData.active
+                  ? 'bg-indigo-100 text-indigo-700'
+                  : 'bg-gray-200 text-gray-600'
+              }`}>
+                {formData.active ? 'Active' : 'Inactive'}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-end gap-8 pb-2">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
                   type="checkbox"
@@ -255,9 +335,22 @@ const DriverDocumentForm = () => {
                   checked={formData.is_required}
                   onChange={(event) => handleChange('is_required', event.target.checked)}
                 />
-                <span className="text-sm text-gray-700">Is Required?</span>
+                <span className="text-sm font-semibold text-gray-800">Is Required?</span>
+              </label>
+
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.active}
+                  onChange={(event) => handleChange('active', event.target.checked)}
+                />
+                <span className="text-sm text-gray-700">Active?</span>
               </label>
             </div>
+
+            <p className="text-xs text-gray-500">
+              When <strong>Is Required?</strong> is checked, this document is marked mandatory in the driver signup flow and must be completed before registration can finish.
+            </p>
           </div>
         </div>
 

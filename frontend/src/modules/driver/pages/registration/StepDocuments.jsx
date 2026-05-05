@@ -45,8 +45,41 @@ const normalizeDocument = (doc) => {
     ...doc,
     previewUrl: getDocumentPreviewUrl(doc),
     uploaded: doc.uploaded ?? Boolean(getDocumentPreviewUrl(doc)),
+    identifyNumber: String(doc.identifyNumber || doc.identify_number || doc.documentNumber || doc.document_number || '').trim(),
+    expiryDate: String(doc.expiryDate || doc.expiry_date || doc.expiry || doc.expiresAt || '').trim(),
   };
 };
+
+const getDocumentIdentifyValue = (doc) =>
+  String(doc?.identifyNumber || doc?.identify_number || doc?.documentNumber || doc?.document_number || '').trim();
+
+const getDocumentExpiryValue = (doc) =>
+  String(doc?.expiryDate || doc?.expiry_date || doc?.expiry || doc?.expiresAt || '').trim();
+
+const buildTemplateMetaState = (templates = [], documents = {}) =>
+  Object.fromEntries(
+    templates.map((template) => {
+      const templateFields = Array.isArray(template.fields) ? template.fields : [];
+      const firstDocument = templateFields
+        .map((field) => normalizeDocument(documents?.[field.key]))
+        .find(Boolean);
+
+      return [
+        template.id,
+        {
+          identifyNumber: getDocumentIdentifyValue(firstDocument),
+          expiryDate: getDocumentExpiryValue(firstDocument),
+        },
+      ];
+    }),
+  );
+
+const formatMetaLabel = (value) =>
+  String(value || '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 
 const fileToDataUrl = (file) =>
   new Promise((resolve, reject) => {
@@ -119,6 +152,7 @@ const StepDocuments = () => {
       Object.entries(session.documents || {}).map(([key, value]) => [key, normalizeDocument(value)]),
     ),
   );
+  const [documentMeta, setDocumentMeta] = useState({});
   const [uploading, setUploading] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -156,8 +190,78 @@ const StepDocuments = () => {
     () => uploadFields.filter((item) => Boolean(item.isRequired)),
     [uploadFields],
   );
+  const templateFieldMap = useMemo(
+    () =>
+      Object.fromEntries(
+        documentTemplates.map((template) => [template.id, Array.isArray(template.fields) ? template.fields : []]),
+      ),
+    [documentTemplates],
+  );
 
-  const handleFileChange = async (key, event) => {
+  useEffect(() => {
+    setDocumentMeta((current) => ({
+      ...buildTemplateMetaState(documentTemplates, docs),
+      ...current,
+    }));
+  }, [documentTemplates, docs]);
+
+  const applyTemplateMetaToDocuments = (templateId, templateDocuments, metaOverride = null) => {
+    const meta = metaOverride || documentMeta[templateId] || { identifyNumber: '', expiryDate: '' };
+    const identifyNumber = String(meta.identifyNumber || '').trim();
+    const expiryDate = String(meta.expiryDate || '').trim();
+
+    return Object.fromEntries(
+      Object.entries(templateDocuments).map(([docKey, docValue]) => [
+        docKey,
+        docValue
+          ? {
+              ...docValue,
+              identifyNumber,
+              identify_number: identifyNumber,
+              documentNumber: identifyNumber,
+              document_number: identifyNumber,
+              expiryDate,
+              expiry_date: expiryDate,
+            }
+          : docValue,
+      ]),
+    );
+  };
+
+  const handleMetaChange = (templateId, fieldName, nextValue) => {
+    const nextMeta = {
+      ...(documentMeta[templateId] || {}),
+      [fieldName]: nextValue,
+    };
+
+    setDocumentMeta((current) => ({
+      ...current,
+      [templateId]: nextMeta,
+    }));
+
+    const templateFields = templateFieldMap[templateId] || [];
+    if (templateFields.length === 0) {
+      return;
+    }
+
+    setDocs((current) => {
+      const nextDocuments = { ...current };
+      for (const field of templateFields) {
+        if (!nextDocuments[field.key]) {
+          continue;
+        }
+
+        nextDocuments[field.key] = applyTemplateMetaToDocuments(
+          templateId,
+          { [field.key]: nextDocuments[field.key] },
+          nextMeta,
+        )[field.key];
+      }
+      return nextDocuments;
+    });
+  };
+
+  const handleFileChange = async (templateId, key, event) => {
     const file = event.target.files?.[0];
     event.target.value = '';
 
@@ -196,6 +300,8 @@ const StepDocuments = () => {
             dataUrl,
             fileName,
             mimeType,
+            identifyNumber: documentMeta[templateId]?.identifyNumber || '',
+            expiryDate: documentMeta[templateId]?.expiryDate || '',
           },
         },
       });
@@ -209,10 +315,11 @@ const StepDocuments = () => {
         mimeType,
         uploaded: true,
       };
+      const nextDocWithMeta = applyTemplateMetaToDocuments(templateId, { [key]: nextDoc })[key];
 
       setDocs((prev) => ({
         ...prev,
-        [key]: nextDoc,
+        [key]: nextDocWithMeta,
       }));
 
       const storedSession = getStoredDriverRegistrationSession();
@@ -221,7 +328,7 @@ const StepDocuments = () => {
         ...session,
         documents: {
           ...(storedSession.documents || {}),
-          [key]: nextDoc,
+          [key]: nextDocWithMeta,
         },
       });
     } catch (uploadError) {
@@ -237,6 +344,16 @@ const StepDocuments = () => {
 
   const isComplete =
     requiredUploadFields.every((item) => Boolean(docs[item.key]?.uploaded || docs[item.key]?.secureUrl)) &&
+    documentTemplates.every((template) => {
+      if (!template.is_required) {
+        return true;
+      }
+
+      const meta = documentMeta[template.id] || {};
+      const hasIdentifyNumber = !template.has_identify_number || Boolean(String(meta.identifyNumber || '').trim());
+      const hasExpiryDate = !template.has_expiry_date || Boolean(String(meta.expiryDate || '').trim());
+      return hasIdentifyNumber && hasExpiryDate;
+    }) &&
     !uploading &&
     !templatesLoading;
 
@@ -253,11 +370,30 @@ const StepDocuments = () => {
       const submittedDocuments = Object.fromEntries(
         Object.entries(docs).filter(([, value]) => Boolean(value?.uploaded || value?.secureUrl)),
       );
+      const submittedDocumentsWithMeta = { ...submittedDocuments };
+
+      for (const template of documentTemplates) {
+        const templateFields = Array.isArray(template.fields) ? template.fields : [];
+        const templateDocuments = Object.fromEntries(
+          templateFields
+            .filter((field) => submittedDocumentsWithMeta[field.key])
+            .map((field) => [field.key, submittedDocumentsWithMeta[field.key]]),
+        );
+
+        if (Object.keys(templateDocuments).length === 0) {
+          continue;
+        }
+
+        Object.assign(
+          submittedDocumentsWithMeta,
+          applyTemplateMetaToDocuments(template.id, templateDocuments),
+        );
+      }
 
       const completeResponse = await completeDriverOnboarding({
         registrationId: session.registrationId,
         phone: session.phone,
-        documents: submittedDocuments,
+        documents: submittedDocumentsWithMeta,
       });
       const payload = unwrap(completeResponse);
 
@@ -427,7 +563,7 @@ const StepDocuments = () => {
                               disabled={isUploading}
                               className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                               aria-label={`Upload ${field.label} from gallery`}
-                              onChange={(event) => handleFileChange(field.key, event)}
+                              onChange={(event) => handleFileChange(template.id, field.key, event)}
                             />
                           </label>
                           <label className={`relative flex h-11 items-center justify-center gap-2 text-center rounded-2xl border text-[11px] font-bold uppercase tracking-wider transition-all ${
@@ -444,7 +580,7 @@ const StepDocuments = () => {
                               disabled={isUploading}
                               className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                               aria-label={`Capture ${field.label} from camera`}
-                              onChange={(event) => handleFileChange(field.key, event)}
+                              onChange={(event) => handleFileChange(template.id, field.key, event)}
                             />
                           </label>
                         </div>
@@ -452,6 +588,37 @@ const StepDocuments = () => {
                     );
                   })}
                 </div>
+                {(template.has_identify_number || template.has_expiry_date) ? (
+                  <div className="grid gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-4 md:grid-cols-2">
+                    {template.has_identify_number ? (
+                      <div className="space-y-1.5">
+                        <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600">
+                          {formatMetaLabel(template.identify_number_key) || `${template.name} number`}
+                        </label>
+                        <input
+                          type="text"
+                          value={documentMeta[template.id]?.identifyNumber || ''}
+                          onChange={(event) => handleMetaChange(template.id, 'identifyNumber', event.target.value.trim().toUpperCase())}
+                          placeholder={`Enter ${formatMetaLabel(template.identify_number_key) || 'document number'}`}
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[14px] font-semibold text-slate-900 outline-none transition-all focus:border-[#c59d66] focus:ring-4 focus:ring-[#c59d66]/10"
+                        />
+                      </div>
+                    ) : null}
+                    {template.has_expiry_date ? (
+                      <div className="space-y-1.5">
+                        <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600">
+                          {template.name} expiry date
+                        </label>
+                        <input
+                          type="date"
+                          value={documentMeta[template.id]?.expiryDate || ''}
+                          onChange={(event) => handleMetaChange(template.id, 'expiryDate', event.target.value)}
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[14px] font-semibold text-slate-900 outline-none transition-all focus:border-[#c59d66] focus:ring-4 focus:ring-[#c59d66]/10"
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </section>
             ))
           )}

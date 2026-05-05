@@ -8,7 +8,12 @@ import { DriverRegistrationSession } from '../models/DriverRegistrationSession.j
 import { Owner } from '../../admin/models/Owner.js';
 import { ServiceLocation } from '../../admin/models/ServiceLocation.js';
 import { Vehicle } from '../../admin/models/Vehicle.js';
-import { listDriverDocumentUploadFields, listOwnerDocumentUploadFields } from '../../admin/services/adminService.js';
+import {
+  listDriverDocumentUploadFields,
+  listDriverNeededDocuments,
+  listOwnerDocumentUploadFields,
+  listOwnerNeededDocuments,
+} from '../../admin/services/adminService.js';
 import { hashPassword, signAccessToken } from './authService.js';
 import { findZoneByPickup } from './locationService.js';
 import { sendOtpSms } from '../../services/smsService.js';
@@ -193,13 +198,38 @@ const normalizeStoredDocument = (value) => {
       secureUrl: value,
       previewUrl: value,
       uploaded: true,
+      identifyNumber: '',
+      identify_number: '',
+      expiryDate: '',
+      expiry_date: '',
     };
   }
+
+  const identifyNumber = String(
+    value.identifyNumber ||
+    value.identify_number ||
+    value.documentNumber ||
+    value.document_number ||
+    '',
+  ).trim();
+  const expiryDate = String(
+    value.expiryDate ||
+    value.expiry_date ||
+    value.expiry ||
+    value.expiresAt ||
+    '',
+  ).trim();
 
   return {
     ...value,
     previewUrl: value.previewUrl || value.secureUrl || '',
     uploaded: value.uploaded ?? Boolean(value.secureUrl || value.previewUrl),
+    identifyNumber,
+    identify_number: identifyNumber,
+    documentNumber: identifyNumber,
+    document_number: identifyNumber,
+    expiryDate,
+    expiry_date: expiryDate,
   };
 };
 
@@ -268,6 +298,18 @@ const uploadRegistrationDocument = async (documentKey, value) => {
   const originalFilename = typeof value === 'object'
     ? value.fileName || value.originalFilename || documentKey
     : documentKey;
+  const identifyNumber = typeof value === 'object'
+    ? String(
+      value.identifyNumber ||
+      value.identify_number ||
+      value.documentNumber ||
+      value.document_number ||
+      '',
+    ).trim()
+    : '';
+  const expiryDate = typeof value === 'object'
+    ? String(value.expiryDate || value.expiry_date || value.expiry || value.expiresAt || '').trim()
+    : '';
 
   if (!dataUrl) {
     throw new ApiError(400, `${documentKey} must contain an image data URL`);
@@ -297,6 +339,12 @@ const uploadRegistrationDocument = async (documentKey, value) => {
     bytes: uploaded.bytes,
     width: uploaded.width,
     height: uploaded.height,
+    identifyNumber,
+    identify_number: identifyNumber,
+    documentNumber: identifyNumber,
+    document_number: identifyNumber,
+    expiryDate,
+    expiry_date: expiryDate,
     cloudinary: uploaded,
   };
 };
@@ -403,8 +451,8 @@ export const saveDriverPersonalDetails = async ({ registrationId, phone, fullNam
     throw new ApiError(400, 'Verify OTP before continuing');
   }
 
-  if (!fullName || !email || !gender || (!isOwner && !password)) {
-    throw new ApiError(400, isOwner ? 'fullName, email and gender are required' : 'fullName, email, gender and password are required');
+  if (!fullName || !email || !gender) {
+    throw new ApiError(400, 'fullName, email and gender are required');
   }
 
   const normalizedName = String(fullName).trim();
@@ -418,15 +466,15 @@ export const saveDriverPersonalDetails = async ({ registrationId, phone, fullNam
     throw new ApiError(400, 'A valid email address is required');
   }
 
-  if (!isOwner && String(password).length < 6) {
-    throw new ApiError(400, 'Password must be at least 6 characters');
-  }
-
   session.personal = {
     fullName: normalizedName,
     email: normalizedEmail,
     gender: String(gender).trim(),
-    passwordHash: await hashPassword(isOwner ? crypto.randomBytes(24).toString('hex') : password),
+    passwordHash: await hashPassword(
+      !isOwner && String(password || '').trim()
+        ? String(password)
+        : crypto.randomBytes(24).toString('hex'),
+    ),
   };
   session.status = 'personal_saved';
   await session.save();
@@ -632,13 +680,49 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
     String(session.role || '').toLowerCase() === 'owner'
       ? await listOwnerDocumentUploadFields({ activeOnly: true })
       : await listDriverDocumentUploadFields({ activeOnly: true });
+  const configuredTemplates =
+    String(session.role || '').toLowerCase() === 'owner'
+      ? (await listOwnerNeededDocuments()).filter((item) => item.active !== false)
+      : await listDriverNeededDocuments({ activeOnly: true, includeFields: true });
   const requiredDocuments = configuredUploadFields
     .filter((field) => Boolean(field.required) && matchesDocumentRole(field.account_type, session.role))
     .map((field) => field.key);
   const missingDocuments = requiredDocuments.filter((key) => !normalizedDocuments?.[key]);
+  const missingDocumentDetails = [];
+
+  for (const template of configuredTemplates) {
+    if (!matchesDocumentRole(template.account_type, session.role) || !template.is_required) {
+      continue;
+    }
+
+    const templateFields = Array.isArray(template.fields) ? template.fields : [];
+    const templateDocuments = templateFields
+      .map((field) => normalizedDocuments?.[field.key])
+      .filter(Boolean);
+
+    if (templateDocuments.length === 0) {
+      continue;
+    }
+
+    const templateName = String(template.name || 'Document').trim();
+    const identifyNumber = templateDocuments.find((item) => String(item?.identifyNumber || '').trim())?.identifyNumber || '';
+    const expiryDate = templateDocuments.find((item) => String(item?.expiryDate || '').trim())?.expiryDate || '';
+
+    if (template.has_identify_number && !identifyNumber) {
+      missingDocumentDetails.push(`${templateName} ID number`);
+    }
+
+    if (template.has_expiry_date && !expiryDate) {
+      missingDocumentDetails.push(`${templateName} expiry date`);
+    }
+  }
 
   if (missingDocuments.length > 0) {
     throw new ApiError(400, `Missing required documents: ${missingDocuments.join(', ')}`);
+  }
+
+  if (missingDocumentDetails.length > 0) {
+    throw new ApiError(400, `Missing required document details: ${missingDocumentDetails.join(', ')}`);
   }
 
   let resolvedServiceLocation = session.vehicle.serviceLocation || null;

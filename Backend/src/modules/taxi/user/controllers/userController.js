@@ -1026,7 +1026,6 @@ const processSignupReferralRewards = async ({ user, referrer }) => {
 };
 
 export const registerUser = async (req, res) => {
-  const password = String(req.body.password || '');
   const name = toCleanString(req.body.name);
   const phone = normalizePhone(req.body.phone);
   const email = normalizeEmail(req.body.email);
@@ -1038,10 +1037,6 @@ export const registerUser = async (req, res) => {
   validateName(name);
   validatePhone(phone);
   validateEmail(email);
-
-  if (!password || password.length < 5) {
-    throw new ApiError(400, 'password must be at least 5 characters');
-  }
 
   const existingUser = await User.findOne({ phone });
 
@@ -1063,7 +1058,7 @@ export const registerUser = async (req, res) => {
     gender,
     profileImage,
     referredBy: referrer?._id || null,
-    password: await hashPassword(password),
+    password: await hashPassword(String(req.body.password || '').trim() || crypto.randomBytes(24).toString('hex')),
   });
 
   if (!String(user.referralCode || '').trim()) {
@@ -1144,16 +1139,11 @@ export const signupUser = async (req, res) => {
   const countryCode = toCleanString(req.body.countryCode) || '+91';
   const gender = normalizeGender(req.body.gender);
   const profileImage = toCleanString(req.body.profileImage);
-  const password = String(req.body.password || '');
   const referralCode = normalizeReferralCode(req.body.referralCode);
 
   validateName(name);
   validatePhone(phone);
   validateEmail(email);
-
-  if (!password || password.length < 5) {
-    throw new ApiError(400, 'password must be at least 5 characters');
-  }
 
   const signupSession = await requireVerifiedUserSignupSession(phone);
 
@@ -1176,7 +1166,7 @@ export const signupUser = async (req, res) => {
     countryCode,
     gender,
     profileImage,
-    password: await hashPassword(password),
+    password: await hashPassword(String(req.body.password || '').trim() || crypto.randomBytes(24).toString('hex')),
     isVerified: true,
     referredBy: referrer?._id || null,
   });
