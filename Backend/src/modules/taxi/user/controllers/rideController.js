@@ -1108,7 +1108,7 @@ export const updateRideBidCeiling = async (req, res) => {
     incrementSteps: req.body.incrementSteps,
   });
 
-  await notifyRideBiddingUpdated(ride);
+  await notifyRideBiddingUpdated(ride.rideId || req.params.rideId);
 
   res.json({
     success: true,
