@@ -2094,46 +2094,73 @@ const DriverHome = () => {
             </AnimatePresence>
 
             {/* --- TOP FLOATING UI --- */}
-            <div className="fixed top-0 left-0 right-0 z-40 mx-auto flex max-w-md items-start justify-between p-5 pt-12 pointer-events-none">
-                {/* Earnings Pill */}
-                <div 
-                    onClick={() => navigate('/taxi/driver/wallet')}
-                    className="absolute left-1/2 -translate-x-1/2 bg-black text-white px-6 py-2.5 rounded-full shadow-2xl flex items-center gap-2 active:scale-95 transition-all pointer-events-auto cursor-pointer"
-                >
-                    <span className="text-emerald-400 font-bold text-lg">₹</span>
-                    <span className="text-xl font-black tracking-tight">
-                        {Number(walletSummary.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                </div>
-
-                <div className="pointer-events-auto flex items-center gap-3">
+            {/* --- TOP FLOATING UI --- */}
+            <div className="fixed top-0 left-0 right-0 z-40 mx-auto max-w-md grid grid-cols-3 items-center p-4 pt-12 pointer-events-none">
+                {/* Left Side: Actions */}
+                <div className="pointer-events-auto flex items-center gap-2">
                     <button
                         onClick={() => {
                             loadScheduledRides();
                             setIsScheduleSheetOpen(true);
                         }}
-                        className="relative flex h-12 w-12 items-center justify-center rounded-full border border-slate-100 bg-white text-slate-900 shadow-lg transition-all active:scale-90"
+                        className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-100 bg-white text-slate-900 shadow-md transition-all active:scale-90"
                     >
-                        <CalendarClock size={22} />
+                        <CalendarClock size={18} />
                         {scheduledRideCount > 0 ? (
-                            <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-white bg-blue-600 px-1 text-[10px] font-black text-white shadow-sm">
+                            <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full border-2 border-white bg-blue-600 px-1 text-[8px] font-black text-white shadow-sm">
                                 {scheduledRideCount > 99 ? '99+' : scheduledRideCount}
                             </span>
                         ) : null}
                     </button>
 
-                    {/* Notification Button */}
                     <button 
                         onClick={() => navigate('/taxi/driver/notifications')}
-                        className="relative flex h-12 w-12 items-center justify-center rounded-full border border-slate-100 bg-white text-slate-900 shadow-lg transition-all active:scale-90"
+                        className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-100 bg-white text-slate-900 shadow-md transition-all active:scale-90"
                     >
-                        <Bell size={22} />
+                        <Bell size={18} />
                         {notificationCount > 0 ? (
-                            <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-white bg-rose-500 px-1 text-[10px] font-black text-white shadow-sm">
+                            <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full border-2 border-white bg-rose-500 px-1 text-[8px] font-black text-white shadow-sm">
                                 {notificationCount > 99 ? '99+' : notificationCount}
                             </span>
                         ) : null}
                     </button>
+                </div>
+
+                {/* Center: Duty Toggle */}
+                <div className="flex justify-center pointer-events-auto">
+                    <button
+                        disabled={isTogglingDuty}
+                        onClick={handleDutyToggle}
+                        className={`relative flex h-10 w-28 items-center rounded-full p-1 transition-all duration-500 shadow-lg ${
+                            isOnline ? 'bg-emerald-500 shadow-emerald-500/20' : 'bg-slate-200'
+                        }`}
+                    >
+                        <motion.div
+                            animate={{ x: isOnline ? 72 : 0 }}
+                            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                            className="absolute left-1 h-8 w-8 rounded-full bg-white shadow-sm flex items-center justify-center"
+                        >
+                            <Power size={14} className={isOnline ? 'text-emerald-500' : 'text-slate-400'} strokeWidth={3} />
+                        </motion.div>
+                        <div className="flex w-full items-center justify-center text-[9px] font-black uppercase tracking-widest pl-2">
+                            <span className={`transition-opacity duration-300 ${isOnline ? 'text-white mr-6' : 'text-slate-400 ml-6'}`}>
+                                {isOnline ? 'Online' : 'Offline'}
+                            </span>
+                        </div>
+                    </button>
+                </div>
+
+                {/* Right Side: Wallet */}
+                <div className="flex justify-end pointer-events-auto">
+                    <div 
+                        onClick={() => navigate('/taxi/driver/wallet')}
+                        className="flex items-center gap-1.5 rounded-full bg-black px-3 py-1.5 text-white shadow-xl shadow-black/10 active:scale-95 transition-all cursor-pointer border border-white/10"
+                    >
+                        <IndianRupee size={12} className="text-emerald-400" strokeWidth={3} />
+                        <span className="text-[13px] font-black tracking-tight">
+                            {Number(walletSummary.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </span>
+                    </div>
                 </div>
             </div>
 
@@ -2192,105 +2219,58 @@ const DriverHome = () => {
                         </motion.div>
                     ) : null}
                 </AnimatePresence>
-                
-                <div className="flex items-end justify-center w-full">
-                    {/* MAIN "GO" BUTTON */}
-                    <motion.div 
-                        layout
-                        className="relative"
-                    >
-                        <AnimatePresence>
-                            {isOnline && (
-                                <>
-                                    <motion.div 
-                                        initial={{ opacity: 0, scale: 0.8 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        exit={{ opacity: 0, scale: 0.8 }}
-                                        className="absolute -inset-4 bg-emerald-500/20 blur-3xl rounded-full pointer-events-none"
-                                    />
-                                    {/* ROTATING RADAR RING */}
-                                    <motion.div 
-                                        animate={{ rotate: 360 }}
-                                        transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
-                                        className="absolute -inset-2 border-2 border-dashed border-white/30 rounded-full z-0 pointer-events-none"
-                                    />
-                                </>
-                            )}
-                        </AnimatePresence>
-                        
-                        <motion.button 
-                            type="button"
-                            whileTap={{ scale: 0.9 }}
-                            disabled={isTogglingDuty}
-                            onClick={handleDutyToggle}
-                            onPointerUp={(event) => {
-                                if (!isTogglingDuty) {
-                                    event.preventDefault();
-                                    handleDutyToggle();
-                                }
-                            }}
-                            onTouchEnd={(event) => {
-                                if (!isTogglingDuty) {
-                                    event.preventDefault();
-                                    handleDutyToggle();
-                                }
-                            }}
-                            onMouseUp={() => {
-                                if (!isTogglingDuty) {
-                                    handleDutyToggle();
-                                }
-                            }}
-                            onKeyUp={(event) => {
-                                if ((event.key === 'Enter' || event.key === ' ') && !isTogglingDuty) {
-                                    handleDutyToggle();
-                                }
-                            }}
-                            className={`
-                                relative w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transition-all duration-500 z-10
-                                ${isOnline 
-                                    ? 'bg-rose-500 hover:bg-rose-600 ring-8 ring-rose-500/10 shadow-rose-200' 
-                                    : 'bg-blue-600 hover:bg-blue-700 ring-8 ring-blue-600/10 shadow-blue-200'}
-                                overflow-hidden
-                                cursor-pointer pointer-events-auto
-                                ${isTogglingDuty ? 'opacity-90' : ''}
-                            `}
-                            style={{ touchAction: 'manipulation' }}
-                        >
-                            <AnimatePresence mode="wait">
-                                {isOnline ? (
-                                    <motion.span 
-                                        key="off-text"
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, y: -10 }}
-                                        className={`text-white font-black text-2xl tracking-tighter ${isTogglingDuty ? 'animate-pulse' : ''}`}
-                                    >
-                                        OFF
-                                    </motion.span>
-                                ) : (
-                                    <motion.span 
-                                        key="go-text"
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, y: -10 }}
-                                        className={`text-white font-black text-2xl tracking-tighter ${isTogglingDuty ? 'animate-pulse' : ''}`}
-                                    >
-                                        GO
-                                    </motion.span>
-                                )}
-                            </AnimatePresence>
 
-                            {/* Ripples when online */}
-                            {isOnline && (
-                                <motion.div 
-                                    animate={{ scale: [1, 2], opacity: [0.5, 0] }}
-                                    transition={{ repeat: Infinity, duration: 2 }}
-                                    className="absolute inset-0 rounded-full border-2 border-white/50"
-                                />
-                            )}
-                        </motion.button>
-                    </motion.div>
-                </div>
+                {/* Today's Stats Summary - Visible only when offline */}
+                <AnimatePresence>
+                    {!isOnline && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 40 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 40 }}
+                            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                            className="w-full bg-white rounded-[28px] p-5 shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-slate-100"
+                        >
+                            <div className="flex items-center justify-between mb-4 px-1">
+                                <h4 className="text-[13px] font-black uppercase tracking-widest text-slate-400">Today&apos;s Summary</h4>
+                                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            </div>
+                            
+                            <div className="grid grid-cols-4 gap-2">
+                                <div className="flex flex-col items-center">
+                                    <div className="h-10 w-10 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 mb-2">
+                                        <IndianRupee size={18} strokeWidth={2.5} />
+                                    </div>
+                                    <span className="text-[14px] font-black text-slate-900">₹0</span>
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Earnings</span>
+                                </div>
+
+                                <div className="flex flex-col items-center">
+                                    <div className="h-10 w-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 mb-2">
+                                        <Clock size={18} strokeWidth={2.5} />
+                                    </div>
+                                    <span className="text-[14px] font-black text-slate-900">0h 0m</span>
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Active</span>
+                                </div>
+
+                                <div className="flex flex-col items-center">
+                                    <div className="h-10 w-10 rounded-2xl bg-orange-50 flex items-center justify-center text-orange-600 mb-2">
+                                        <Navigation size={18} strokeWidth={2.5} />
+                                    </div>
+                                    <span className="text-[14px] font-black text-slate-900">0 km</span>
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Distance</span>
+                                   </div>
+
+                                <div className="flex flex-col items-center">
+                                    <div className="h-10 w-10 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600 mb-2">
+                                        <BarChart2 size={18} strokeWidth={2.5} />
+                                    </div>
+                                    <span className="text-[14px] font-black text-slate-900">0</span>
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Rides</span>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
 
             {/* Status Based Background Overlay */}

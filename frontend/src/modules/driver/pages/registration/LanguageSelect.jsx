@@ -32,7 +32,7 @@ const LanguageSelect = () => {
 
     return (
         <div 
-            className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] select-none overflow-x-hidden flex flex-col p-6 pt-12 pb-28"
+            className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] select-none overflow-x-hidden flex flex-col p-6 pt-12 pb-44"
             style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
         >
             {/* Branding */}
@@ -98,7 +98,7 @@ const LanguageSelect = () => {
             </main>
 
             {/* Footer Action */}
-            <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent">
+            <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-white via-white/95 to-transparent z-20">
                 <motion.button
                     whileHover={{ scale: 1.02, y: -2 }}
                     whileTap={{ scale: 0.98 }}
