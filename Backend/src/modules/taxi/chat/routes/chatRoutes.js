@@ -11,7 +11,7 @@ import {
 
 export const chatRouter = Router();
 
-chatRouter.use(authenticate(['admin', 'user', 'driver']));
+chatRouter.use(authenticate(['admin', 'user', 'driver'], { allowPending: true }));
 
 chatRouter.get('/conversations', asyncHandler(getSupportConversationList));
 chatRouter.get('/messages/:conversationKey', asyncHandler(getSupportConversationMessages));

@@ -375,7 +375,12 @@ const getStatusColor = (status) => {
                 </div>
             ) : null}
             <button 
-                onClick={() => navigate(`${routePrefix}/support`)}
+                onClick={() => navigate(`${routePrefix}/support/chat`, {
+                    state: {
+                        backPath: `${routePrefix}/registration-status`,
+                        backState: location.state || null,
+                    },
+                })}
                 className="w-full h-14 bg-white border border-slate-200 text-slate-600 rounded-2xl flex items-center justify-center gap-2 text-[15px] font-bold active:scale-95 transition-all"
             >
                 Contact Support
