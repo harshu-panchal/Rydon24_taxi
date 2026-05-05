@@ -340,6 +340,80 @@ const parseFareAmount = (value) => {
     return Number.isFinite(numeric) ? numeric : 0;
 };
 
+const formatCurrencyAmount = (value) => {
+    const numeric = Number(value || 0);
+    if (!Number.isFinite(numeric)) {
+        return 'Rs 0';
+    }
+
+    const hasDecimals = Math.abs(numeric % 1) > 0.001;
+    return `Rs ${hasDecimals ? numeric.toFixed(2) : Math.round(numeric)}`;
+};
+
+const formatDateTimeLabel = (value, fallback = '--') => {
+    if (!value) {
+        return fallback;
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+        return fallback;
+    }
+
+    return parsed.toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+    });
+};
+
+const formatDurationLabel = (start, end = Date.now()) => {
+    if (!start) {
+        return '--';
+    }
+
+    const startTime = new Date(start).getTime();
+    const endTime = typeof end === 'string' || end instanceof Date ? new Date(end).getTime() : Number(end);
+
+    if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) {
+        return '--';
+    }
+
+    const totalMinutes = Math.max(1, Math.round((endTime - startTime) / 60000));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+    }
+
+    return `${minutes} min`;
+};
+
+const computeCommissionSummary = ({ fare = 0, pricingSnapshot = null, explicitCommissionAmount, explicitDriverEarnings }) => {
+    const normalizedFare = Math.max(0, Number(fare || 0));
+    const commissionType = Number(pricingSnapshot?.admin_commission_type_from_driver ?? 1);
+    const commissionValue = Math.max(0, Number(pricingSnapshot?.admin_commission_from_driver ?? 0));
+    const derivedCommissionAmount = explicitCommissionAmount !== undefined && explicitCommissionAmount !== null
+        ? Math.max(0, Number(explicitCommissionAmount || 0))
+        : commissionType === 1
+            ? Math.round(((normalizedFare * commissionValue) / 100) * 100) / 100
+            : Math.min(normalizedFare, commissionValue);
+    const driverEarnings = explicitDriverEarnings !== undefined && explicitDriverEarnings !== null
+        ? Math.max(0, Number(explicitDriverEarnings || 0))
+        : Math.max(normalizedFare - derivedCommissionAmount, 0);
+
+    return {
+        commissionAmount: derivedCommissionAmount,
+        driverEarnings,
+        commissionType,
+        commissionValue,
+        commissionLabel: commissionType === 1 ? `${commissionValue}%` : formatCurrencyAmount(commissionValue),
+    };
+};
+
 const getSimulationPath = ({ routePath = [], from, to }) => {
     const path = routePath.length > 1 ? routePath : [from, to].filter(Boolean);
     return path
@@ -885,6 +959,22 @@ const ActiveTrip = () => {
     const isWaitingForOtp = phase === 'otp_verification' && Boolean(waitingStartedAt);
     const pickupContact = isParcel ? tripData.sender : tripData.user;
     const destinationContact = isParcel ? tripData.receiver : tripData.user;
+    const tripStartedAt = liveRaw?.startedAt || liveRequest?.raw?.startedAt || effectiveState?.startedAt || '';
+    const tripArrivedAt = localArrivedAt || liveRaw?.arrivedAt || liveRequest?.raw?.arrivedAt || effectiveState?.arrivedAt || '';
+    const tripDurationLabel = formatDurationLabel(tripStartedAt, tripArrivedAt || Date.now());
+    const tripSummaryTitle = isParcel ? 'Delivery Summary' : 'Ride Summary';
+    const tripSummarySubtitle = isParcel ? 'Review the delivery details before you close the order.' : 'Review the trip details before you close the ride.';
+    const destinationRoleLabel = isParcel ? 'Receiver' : 'Rider';
+    const paymentModeLabel = selectedPaymentMode
+        ? (selectedPaymentMode === 'cash' ? 'Cash' : 'Online')
+        : (effectiveState?.paymentMethod || liveRequest?.payment || tripData.payment || 'Pending');
+    const commissionSummary = computeCommissionSummary({
+        fare: fareAmount,
+        pricingSnapshot: waitingPricing,
+        explicitCommissionAmount: liveRaw?.commissionAmount ?? effectiveState?.commissionAmount,
+        explicitDriverEarnings: liveRaw?.driverEarnings ?? effectiveState?.driverEarnings,
+    });
+    const paymentCollectionLabel = isParcel ? 'receiver' : 'rider';
     const routeStrokeColor = '#000000';
     const routeAccentSoft = hexToRgba(routeStrokeColor, 0.08);
     const routeAccentMuted = hexToRgba(routeStrokeColor, 0.18);
@@ -1919,11 +2009,113 @@ const ActiveTrip = () => {
                                     {driverPaymentStatus === 'success' ? <Check size={32} strokeWidth={4} /> : <QrCode size={32} strokeWidth={2} />}
                                 </div>
                                 <h2 className="text-2xl font-semibold text-slate-900 uppercase">
-                                    {driverPaymentStatus === 'success' ? 'Payment Success!' : 'Collect Amount'}
+                                    {driverPaymentStatus === 'success' ? 'Payment Success!' : tripSummaryTitle}
                                 </h2>
                                 <p className="text-[12px] font-bold text-slate-400 mt-1 uppercase tracking-wide">
-                                    Fare: <span className="text-slate-900 font-semibold text-lg ml-1">{displayFare}</span>
+                                    {driverPaymentStatus === 'success' ? 'Ready to close this trip' : tripSummarySubtitle}
                                 </p>
+                            </div>
+                            <div className="mb-6 overflow-hidden rounded-[28px] border border-slate-100 bg-[linear-gradient(180deg,#f8fafc_0%,#ffffff_100%)] shadow-[0_18px_45px_rgba(15,23,42,0.07)]">
+                                <div className="border-b border-slate-100 px-5 py-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-[10px] font-black uppercase tracking-[0.24em]" style={{ color: routeStrokeColor }}>
+                                                {tripSummaryTitle}
+                                            </p>
+                                            <p className="mt-2 text-[24px] font-black tracking-tight text-slate-900">{displayFare}</p>
+                                            <p className="text-[11px] font-semibold text-slate-500">
+                                                {isParcel ? 'Parcel delivered and awaiting payment confirmation.' : 'Passenger reached destination and ready to complete.'}
+                                            </p>
+                                        </div>
+                                        <div className="rounded-2xl px-3 py-2 text-right" style={{ backgroundColor: routeAccentSoft }}>
+                                            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Payment</p>
+                                            <p className="mt-1 text-[13px] font-black text-slate-900">{paymentModeLabel}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 px-5 py-4">
+                                    <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3">
+                                        <div className="flex items-center gap-2 text-slate-500">
+                                            <Clock3 size={14} strokeWidth={2.5} />
+                                            <p className="text-[9px] font-black uppercase tracking-[0.2em]">Trip Started</p>
+                                        </div>
+                                        <p className="mt-2 text-[13px] font-bold leading-5 text-slate-900">{formatDateTimeLabel(tripStartedAt)}</p>
+                                    </div>
+                                    <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3">
+                                        <div className="flex items-center gap-2 text-slate-500">
+                                            <CheckCircle2 size={14} strokeWidth={2.5} />
+                                            <p className="text-[9px] font-black uppercase tracking-[0.2em]">Reached At</p>
+                                        </div>
+                                        <p className="mt-2 text-[13px] font-bold leading-5 text-slate-900">{formatDateTimeLabel(tripArrivedAt)}</p>
+                                    </div>
+                                    <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3">
+                                        <div className="flex items-center gap-2 text-slate-500">
+                                            <ArrowUpRight size={14} strokeWidth={2.5} />
+                                            <p className="text-[9px] font-black uppercase tracking-[0.2em]">Trip Duration</p>
+                                        </div>
+                                        <p className="mt-2 text-[13px] font-bold leading-5 text-slate-900">{tripDurationLabel}</p>
+                                    </div>
+                                    <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3">
+                                        <div className="flex items-center gap-2 text-slate-500">
+                                            <Banknote size={14} strokeWidth={2.5} />
+                                            <p className="text-[9px] font-black uppercase tracking-[0.2em]">Your Earnings</p>
+                                        </div>
+                                        <p className="mt-2 text-[13px] font-bold leading-5 text-slate-900">{formatCurrencyAmount(commissionSummary.driverEarnings)}</p>
+                                    </div>
+                                </div>
+                                <div className="border-t border-slate-100 px-5 py-4">
+                                    <div className="rounded-3xl border border-slate-100 bg-white p-4 shadow-[0_8px_22px_rgba(15,23,42,0.04)]">
+                                        <div className="flex items-start gap-3">
+                                            <div className="mt-1 flex flex-col items-center">
+                                                <span className="h-3 w-3 rounded-full bg-emerald-500" />
+                                                <span className="my-1 h-10 w-px border-l border-dashed border-slate-200" />
+                                                <span className="h-3 w-3 rounded-full bg-rose-500" />
+                                            </div>
+                                            <div className="min-w-0 flex-1 space-y-4">
+                                                <div>
+                                                    <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Pickup</p>
+                                                    <p className="mt-1 text-[13px] font-bold leading-5 text-slate-900 break-words">{tripData.pickup}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Destination</p>
+                                                    <p className="mt-1 text-[13px] font-bold leading-5 text-slate-900 break-words">{tripData.drop}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-4 rounded-3xl border border-slate-100 bg-white p-4 shadow-[0_8px_22px_rgba(15,23,42,0.04)]">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white">
+                                                    {isParcel ? <Package size={18} strokeWidth={2.5} /> : <User size={18} strokeWidth={2.5} />}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">{destinationRoleLabel}</p>
+                                                    <p className="mt-1 text-[14px] font-black text-slate-900 truncate">{destinationContact?.name || '--'}</p>
+                                                    <p className="text-[11px] font-semibold text-slate-500">{destinationContact?.phone || 'Phone not available'}</p>
+                                                </div>
+                                            </div>
+                                            <button onClick={() => callContact(destinationContact?.phone)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-100 bg-slate-50 text-slate-700" aria-label="Call destination contact">
+                                                <Phone size={16} strokeWidth={2.5} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-3 border-t border-slate-100 px-5 py-4">
+                                    <div className="rounded-2xl bg-white px-4 py-3 text-center shadow-[0_8px_20px_rgba(15,23,42,0.04)]">
+                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Trip Fare</p>
+                                        <p className="mt-2 text-[14px] font-black text-slate-900">{formatCurrencyAmount(fareAmount)}</p>
+                                    </div>
+                                    <div className="rounded-2xl bg-white px-4 py-3 text-center shadow-[0_8px_20px_rgba(15,23,42,0.04)]">
+                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Admin Cut</p>
+                                        <p className="mt-2 text-[14px] font-black text-slate-900">{formatCurrencyAmount(commissionSummary.commissionAmount)}</p>
+                                        <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">{commissionSummary.commissionLabel}</p>
+                                    </div>
+                                    <div className="rounded-2xl px-4 py-3 text-center text-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]" style={{ backgroundColor: routeStrokeColor }}>
+                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/65">Driver Gets</p>
+                                        <p className="mt-2 text-[14px] font-black text-white">{formatCurrencyAmount(commissionSummary.driverEarnings)}</p>
+                                    </div>
+                                </div>
                             </div>
                             {driverPaymentStatus === 'pending' && (
                                 <div className="grid grid-cols-2 gap-3 mb-6">
@@ -1957,9 +2149,9 @@ const ActiveTrip = () => {
                                         <Banknote size={24} strokeWidth={2.5} />
                                     </div>
                                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Cash Selected</p>
-                                    <p className="mt-2 text-[16px] font-black text-slate-900">Collect {displayFare} from the rider</p>
+                                    <p className="mt-2 text-[16px] font-black text-slate-900">Collect {displayFare} from the {paymentCollectionLabel}</p>
                                     <p className="mt-1 text-[11px] font-bold text-slate-500">
-                                        Once you have the cash in hand, tap below to finish the ride.
+                                        Once you have the cash in hand, tap below to close this {isParcel ? 'delivery' : 'ride'}.
                                     </p>
                                     <button
                                         onClick={async () => {

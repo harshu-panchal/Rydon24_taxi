@@ -107,6 +107,28 @@ const calculateDistanceKm = (fromCoords, toCoords) => {
   return earthRadiusKm * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 };
 
+const getNearbyPopularLocations = (anchorCoords, excludedLocations = [], limit = 4) => {
+  if (!Array.isArray(anchorCoords) || anchorCoords.length < 2) {
+    return POPULAR_LOCATIONS.slice(0, limit);
+  }
+
+  const excluded = new Set(
+    excludedLocations
+      .map((item) => String(item || '').trim().toLowerCase())
+      .filter(Boolean),
+  );
+
+  return Object.entries(LOCATION_COORDS)
+    .filter(([name]) => !excluded.has(name.toLowerCase()))
+    .map(([name, coords]) => ({
+      name,
+      distanceKm: calculateDistanceKm(anchorCoords, coords),
+    }))
+    .sort((first, second) => first.distanceKm - second.distanceKm)
+    .slice(0, limit)
+    .map((item) => item.name);
+};
+
 const normalizeDeliveryPricing = (vehicle = {}) => {
   const basePrice = Number(vehicle?.delivery_distance_pricing?.base_price ?? 0);
   const freeDistance = Number(vehicle?.delivery_distance_pricing?.free_distance ?? 0);
@@ -557,9 +579,15 @@ const SenderReceiverDetails = () => {
   const [isLocatingPickup, setIsLocatingPickup] = useState(false);
   const [errors, setErrors] = useState({});
   const [recoveredSelectedVehicles, setRecoveredSelectedVehicles] = useState([]);
+  const [googleDropSuggestions, setGoogleDropSuggestions] = useState([]);
+  const [isFetchingDropSuggestions, setIsFetchingDropSuggestions] = useState(false);
   const autoPickupRequestedRef = useRef(false);
   const dropInputRef = useRef(null);
   const dropGeocodeTimerRef = useRef(null);
+  const dropSuggestionTimerRef = useRef(null);
+  const dropSuggestionCacheRef = useRef(new Map());
+  const autocompleteServiceRef = useRef(null);
+  const autocompleteSessionTokenRef = useRef(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -662,6 +690,10 @@ const SenderReceiverDetails = () => {
   const dropSuggestions = useMemo(
     () => POPULAR_LOCATIONS.filter((item) => item.toLowerCase().includes(String(drop || '').toLowerCase())).slice(0, 4),
     [drop],
+  );
+  const nearbyDropSuggestions = useMemo(
+    () => getNearbyPopularLocations(pickupCoords, [pickup, drop], 4),
+    [drop, pickup, pickupCoords],
   );
   const selectedVehicles = useMemo(() => {
     if (Array.isArray(recoveredSelectedVehicles) && recoveredSelectedVehicles.length) {
@@ -800,6 +832,27 @@ const SenderReceiverDetails = () => {
       });
     }));
 
+  const resolveCoordsFromPlaceId = useEffectEvent((placeId) =>
+    new Promise((resolve) => {
+      const trimmedPlaceId = String(placeId || '').trim();
+
+      if (!trimmedPlaceId || !isGoogleMapsLoaded || !window.google?.maps?.Geocoder) {
+        resolve(null);
+        return;
+      }
+
+      const geocoder = new window.google.maps.Geocoder();
+      geocoder.geocode({ placeId: trimmedPlaceId }, (results, status) => {
+        if (status !== 'OK' || !results?.[0]?.geometry?.location) {
+          resolve(null);
+          return;
+        }
+
+        const locationPoint = results[0].geometry.location;
+        resolve(latLngToCoordPair({ lat: locationPoint.lat(), lng: locationPoint.lng() }));
+      });
+    }));
+
   const requestCurrentPickupLocation = useEffectEvent(() => {
     if (!navigator.geolocation) {
       setErrors((prev) => ({ ...prev, pickup: 'Current location is not available' }));
@@ -859,9 +912,12 @@ const SenderReceiverDetails = () => {
     const trimmedDrop = String(drop || '').trim();
 
     clearTimeout(dropGeocodeTimerRef.current);
+    clearTimeout(dropSuggestionTimerRef.current);
 
     if (!trimmedDrop) {
       setDropCoords(null);
+      setGoogleDropSuggestions([]);
+      setIsFetchingDropSuggestions(false);
       return () => clearTimeout(dropGeocodeTimerRef.current);
     }
 
@@ -870,35 +926,88 @@ const SenderReceiverDetails = () => {
       setDropCoords((current) =>
         Array.isArray(current) && current[0] === presetCoords[0] && current[1] === presetCoords[1] ? current : presetCoords,
       );
+      setGoogleDropSuggestions([]);
+      setIsFetchingDropSuggestions(false);
       return () => clearTimeout(dropGeocodeTimerRef.current);
     }
 
     if (!isGoogleMapsLoaded || isCoordinateLabel(trimmedDrop)) {
+      setGoogleDropSuggestions([]);
+      setIsFetchingDropSuggestions(false);
+      return () => clearTimeout(dropGeocodeTimerRef.current);
+    }
+
+    if (trimmedDrop.length < 3 || !window.google?.maps?.places?.AutocompleteService) {
+      setGoogleDropSuggestions([]);
+      setIsFetchingDropSuggestions(false);
+      return () => clearTimeout(dropGeocodeTimerRef.current);
+    }
+
+    const cacheKey = `${trimmedDrop.toLowerCase()}|${Array.isArray(pickupCoords) ? pickupCoords.join(',') : ''}`;
+    const cachedSuggestions = dropSuggestionCacheRef.current.get(cacheKey);
+    if (cachedSuggestions) {
+      setGoogleDropSuggestions(cachedSuggestions);
+      setIsFetchingDropSuggestions(false);
       return () => clearTimeout(dropGeocodeTimerRef.current);
     }
 
     let active = true;
-    dropGeocodeTimerRef.current = setTimeout(() => {
-      resolveCoordsFromAddress(trimmedDrop).then((resolvedCoords) => {
-        if (!active || !resolvedCoords) {
+    dropSuggestionTimerRef.current = setTimeout(() => {
+      if (!autocompleteServiceRef.current) {
+        autocompleteServiceRef.current = new window.google.maps.places.AutocompleteService();
+      }
+      if (!autocompleteSessionTokenRef.current && window.google?.maps?.places?.AutocompleteSessionToken) {
+        autocompleteSessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken();
+      }
+
+      setIsFetchingDropSuggestions(true);
+      const request = {
+        input: trimmedDrop,
+        componentRestrictions: { country: 'in' },
+        types: ['geocode'],
+        sessionToken: autocompleteSessionTokenRef.current || undefined,
+      };
+
+      if (Array.isArray(pickupCoords) && window.google?.maps?.Circle) {
+        request.locationBias = new window.google.maps.Circle({
+          center: coordPairToLatLng(pickupCoords),
+          radius: 12000,
+        });
+      }
+
+      autocompleteServiceRef.current.getPlacePredictions(request, (predictions = [], status) => {
+        if (!active) {
           return;
         }
 
-        setDropCoords((current) =>
-          Array.isArray(current) && current[0] === resolvedCoords[0] && current[1] === resolvedCoords[1]
-            ? current
-            : resolvedCoords,
-        );
+        const normalizedSuggestions =
+          status === 'OK'
+            ? predictions.slice(0, 4).map((prediction) => ({
+                id: prediction.place_id || prediction.description,
+                label: prediction.structured_formatting?.main_text || prediction.description,
+                secondaryText: prediction.structured_formatting?.secondary_text || '',
+                description: prediction.description || '',
+                placeId: prediction.place_id || '',
+                source: 'google',
+              }))
+            : [];
+
+        dropSuggestionCacheRef.current.set(cacheKey, normalizedSuggestions);
+        setGoogleDropSuggestions(normalizedSuggestions);
+        setIsFetchingDropSuggestions(false);
       });
-    }, 450);
+    }, 350);
 
     return () => {
       active = false;
       clearTimeout(dropGeocodeTimerRef.current);
+      clearTimeout(dropSuggestionTimerRef.current);
     };
-  }, [drop, isGoogleMapsLoaded, resolveCoordsFromAddress]);
+  }, [drop, isGoogleMapsLoaded, pickupCoords]);
 
-  const applySuggestion = (type, value) => {
+  const applySuggestion = async (type, suggestion) => {
+    const value = typeof suggestion === 'string' ? suggestion : suggestion?.label || suggestion?.description || '';
+
     if (type === 'pickup') {
       setPickup(value);
       setPickupCoords(getCoords(value));
@@ -907,11 +1016,20 @@ const SenderReceiverDetails = () => {
     }
 
     setDrop(value);
-    setDropCoords(getCoords(value));
+    if (typeof suggestion === 'string') {
+      setDropCoords(getCoords(value));
+    } else if (suggestion?.placeId) {
+      const resolvedCoords = await resolveCoordsFromPlaceId(suggestion.placeId);
+      setDropCoords(resolvedCoords);
+      if (autocompleteSessionTokenRef.current && window.google?.maps?.places?.AutocompleteSessionToken) {
+        autocompleteSessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken();
+      }
+    }
+    setGoogleDropSuggestions([]);
     clearError('drop');
   };
 
-  const handleProceed = ({ fromContactSheet = false } = {}) => {
+  const handleProceed = async ({ fromContactSheet = false } = {}) => {
     const { isValid, nextErrors } = validate();
 
     if (!isValid) {
@@ -926,14 +1044,31 @@ const SenderReceiverDetails = () => {
       return;
     }
 
+    let resolvedPickupCoords = pickupCoords;
+    let resolvedDropCoords = dropCoords;
+
+    if (!resolvedPickupCoords && pickup.trim()) {
+      resolvedPickupCoords = LOCATION_COORDS[pickup.trim()] || (await resolveCoordsFromAddress(pickup));
+      if (resolvedPickupCoords) {
+        setPickupCoords(resolvedPickupCoords);
+      }
+    }
+
+    if (!resolvedDropCoords && drop.trim()) {
+      resolvedDropCoords = LOCATION_COORDS[drop.trim()] || (await resolveCoordsFromAddress(drop));
+      if (resolvedDropCoords) {
+        setDropCoords(resolvedDropCoords);
+      }
+    }
+
     setIsContactSheetOpen(false);
     navigate(`${routePrefix}/parcel/searching`, {
       state: {
         ...parcelState,
         pickup,
         drop,
-        pickupCoords,
-        dropCoords,
+        pickupCoords: resolvedPickupCoords,
+        dropCoords: resolvedDropCoords,
         senderName,
         senderMobile,
         receiverName,
@@ -1109,24 +1244,75 @@ const SenderReceiverDetails = () => {
            Select on map
         </button>
 
-        {/* Quick Suggestions for Drop */}
-        {dropSuggestions.length > 0 && !drop && (
-          <div className="mt-8 space-y-3 px-2">
-            <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Suggestions</p>
-            <div className="grid grid-cols-2 gap-2">
-              {dropSuggestions.map((item) => (
-                <button
-                  key={item}
-                  onClick={() => applySuggestion('drop', item)}
-                  className="flex items-center gap-2 rounded-xl border border-slate-100 bg-white p-3 text-left shadow-sm hover:border-blue-200"
-                >
-                  <Navigation size={12} className="text-blue-500 shrink-0" />
-                  <span className="text-[12px] font-bold text-slate-700 truncate">{item}</span>
-                </button>
-              ))}
+        <div className="mt-8 space-y-5 px-2">
+          {googleDropSuggestions.length > 0 ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Search Results</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">Low API usage mode</p>
+              </div>
+              <div className="space-y-2">
+                {googleDropSuggestions.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => applySuggestion('drop', item)}
+                    className="flex w-full items-start gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left shadow-sm hover:border-blue-200"
+                  >
+                    <Navigation size={14} className="mt-0.5 shrink-0 text-blue-500" />
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-black text-slate-800">{item.label}</p>
+                      {item.secondaryText ? (
+                        <p className="mt-1 truncate text-[11px] font-semibold text-slate-400">{item.secondaryText}</p>
+                      ) : null}
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          ) : null}
+
+          {!drop && nearbyDropSuggestions.length > 0 ? (
+            <div className="space-y-3">
+              <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Near Current Pickup</p>
+              <div className="grid grid-cols-2 gap-2">
+                {nearbyDropSuggestions.map((item) => (
+                  <button
+                    key={item}
+                    onClick={() => applySuggestion('drop', item)}
+                    className="flex items-center gap-2 rounded-xl border border-slate-100 bg-white p-3 text-left shadow-sm hover:border-blue-200"
+                  >
+                    <MapPin size={12} className="shrink-0 text-emerald-500" />
+                    <span className="truncate text-[12px] font-bold text-slate-700">{item}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {!drop && dropSuggestions.length > 0 ? (
+            <div className="space-y-3">
+              <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Popular Suggestions</p>
+              <div className="grid grid-cols-2 gap-2">
+                {dropSuggestions.map((item) => (
+                  <button
+                    key={item}
+                    onClick={() => applySuggestion('drop', item)}
+                    className="flex items-center gap-2 rounded-xl border border-slate-100 bg-white p-3 text-left shadow-sm hover:border-blue-200"
+                  >
+                    <Navigation size={12} className="text-blue-500 shrink-0" />
+                    <span className="text-[12px] font-bold text-slate-700 truncate">{item}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {Boolean(drop) && isFetchingDropSuggestions ? (
+            <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400 shadow-sm">
+              Finding nearby drop suggestions...
+            </div>
+          ) : null}
+        </div>
 
         <motion.section 
           initial={{ opacity: 0 }} 
