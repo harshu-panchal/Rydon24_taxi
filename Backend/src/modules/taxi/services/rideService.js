@@ -14,6 +14,7 @@ import { User } from '../user/models/User.js';
 import { UserWallet } from '../user/models/UserWallet.js';
 import { applyPromoToRideInTransaction } from './promoService.js';
 import { getTipSettings } from './appSettingsService.js';
+import { getBidRideSettings } from './transportSettingsService.js';
 
 const clearUserActiveRideIfPresent = async (user) => {
   if (!user?.currentRideId) {
@@ -411,6 +412,11 @@ const normalizeBidStepAmount = (value) => {
   return Number.isFinite(amount) && amount > 0 ? Math.round(amount) : DEFAULT_BID_STEP_AMOUNT;
 };
 
+const toPositiveNumber = (value, fallback) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : fallback;
+};
+
 const normalizeBidFareCeiling = ({ baseFare, requestedFare, bidStepAmount }) => {
   const safeBaseFare = Math.max(0, Math.round(Number(baseFare || 0)));
   const safeStep = normalizeBidStepAmount(bidStepAmount);
@@ -670,20 +676,32 @@ export const createRideRecord = async ({
     ? normalizedPaymentMethod
     : (allowedPaymentMethods[0] || 'cash');
   const supportsBidding = ['bidding', 'both'].includes(String(primaryVehicle?.dispatch_type || '').trim().toLowerCase());
-  const effectiveBookingMode =
-    supportsBidding && String(bookingMode || '').trim().toLowerCase() === 'normal'
-      ? 'normal'
-      : supportsBidding
-        ? 'bidding'
-        : 'normal';
+  const requestedBookingMode = String(bookingMode || '').trim().toLowerCase();
+  const normalizedServiceType = normalizeServiceType(serviceType);
+  const bidRideSettings = await getBidRideSettings();
+  const fareIncreaseWaitMinutes = toPositiveNumber(
+    bidRideSettings.user_fare_increase_wait_minutes,
+    2,
+  );
+  const isOutstationBiddingFlow = normalizedServiceType === 'intercity';
+  const pricingNegotiationMode =
+    supportsBidding && requestedBookingMode === 'bidding'
+      ? isOutstationBiddingFlow
+        ? 'driver_bid'
+        : 'user_increment_only'
+      : 'none';
+  const effectiveBookingMode = pricingNegotiationMode === 'driver_bid' ? 'bidding' : 'normal';
   const effectiveBidStepAmount = normalizeBidStepAmount(bidStepAmount);
-  const effectiveUserMaxBidFare = effectiveBookingMode === 'bidding'
+  const effectiveUserMaxBidFare = pricingNegotiationMode !== 'none'
     ? normalizeBidFareCeiling({
         baseFare: safeFare,
         requestedFare: userMaxBidFare,
         bidStepAmount: effectiveBidStepAmount,
       })
     : safeFare;
+  const nextFareIncreaseAt = pricingNegotiationMode === 'user_increment_only'
+    ? new Date(Date.now() + fareIncreaseWaitMinutes * 60 * 1000)
+    : null;
   const pricingSnapshot = {
     setPriceId: pricingRule?._id || null,
     admin_commission_type_from_driver: Number(pricingRule?.admin_commission_type_from_driver ?? 1),
@@ -709,7 +727,7 @@ export const createRideRecord = async ({
       dispatchVehicleTypeIds,
       vehicleIconType: vehicleIconType || '',
       vehicleIconUrl: resolvedVehicleIconUrl,
-      serviceType: normalizeServiceType(serviceType),
+      serviceType: normalizedServiceType,
       pickupLocation: toPoint(pickupCoords, 'pickup'),
       pickupAddress: normalizeAddress(pickupAddress),
       dropLocation: toPoint(dropCoords, 'drop'),
@@ -717,9 +735,12 @@ export const createRideRecord = async ({
       fare: safeFare,
       baseFare: safeFare,
       bookingMode: effectiveBookingMode,
-      biddingStatus: effectiveBookingMode === 'bidding' ? 'open' : 'none',
+      pricingNegotiationMode,
+      biddingStatus: pricingNegotiationMode === 'driver_bid' ? 'open' : 'none',
       bidStepAmount: effectiveBidStepAmount,
       userMaxBidFare: effectiveUserMaxBidFare,
+      fareIncreaseWaitMinutes: pricingNegotiationMode === 'user_increment_only' ? fareIncreaseWaitMinutes : 0,
+      nextFareIncreaseAt,
       estimatedDistanceMeters: safeEstimatedDistanceMeters,
       estimatedDurationMinutes: safeEstimatedDurationMinutes,
       paymentMethod: effectivePaymentMethod,
@@ -757,7 +778,7 @@ export const createRideRecord = async ({
             dispatchVehicleTypeIds,
             vehicleIconType: vehicleIconType || '',
             vehicleIconUrl: resolvedVehicleIconUrl,
-            serviceType: normalizeServiceType(serviceType),
+            serviceType: normalizedServiceType,
             pickupLocation: toPoint(pickupCoords, 'pickup'),
             pickupAddress: normalizeAddress(pickupAddress),
             dropLocation: toPoint(dropCoords, 'drop'),
@@ -765,9 +786,12 @@ export const createRideRecord = async ({
             fare: safeFare,
             baseFare: safeFare,
             bookingMode: effectiveBookingMode,
-            biddingStatus: effectiveBookingMode === 'bidding' ? 'open' : 'none',
+            pricingNegotiationMode,
+            biddingStatus: pricingNegotiationMode === 'driver_bid' ? 'open' : 'none',
             bidStepAmount: effectiveBidStepAmount,
             userMaxBidFare: effectiveUserMaxBidFare,
+            fareIncreaseWaitMinutes: pricingNegotiationMode === 'user_increment_only' ? fareIncreaseWaitMinutes : 0,
+            nextFareIncreaseAt,
             estimatedDistanceMeters: safeEstimatedDistanceMeters,
             estimatedDurationMinutes: safeEstimatedDurationMinutes,
             paymentMethod: effectivePaymentMethod,
@@ -856,9 +880,12 @@ export const serializeRideRealtime = (ride) => ({
   fare: ride.fare,
   baseFare: Number(ride.baseFare || ride.fare || 0),
   bookingMode: ride.bookingMode || 'normal',
+  pricingNegotiationMode: ride.pricingNegotiationMode || 'none',
   biddingStatus: ride.biddingStatus || 'none',
   bidStepAmount: Number(ride.bidStepAmount || DEFAULT_BID_STEP_AMOUNT),
   userMaxBidFare: Number(ride.userMaxBidFare || ride.fare || 0),
+  fareIncreaseWaitMinutes: Number(ride.fareIncreaseWaitMinutes || 0),
+  nextFareIncreaseAt: ride.nextFareIncreaseAt || null,
   acceptedBidId: ride.acceptedBidId ? String(ride.acceptedBidId) : null,
   estimatedDistanceMeters: ride.estimatedDistanceMeters || 0,
   estimatedDurationMinutes: ride.estimatedDurationMinutes || 0,
@@ -1361,7 +1388,7 @@ export const updateRideDriverLocation = async ({ rideId, driverId, coordinates, 
 
 export const listRideBidsForUser = async ({ rideId, userId }) => {
   const ride = await Ride.findOne({ _id: rideId, userId }).select(
-    '_id userId status liveStatus fare baseFare bookingMode biddingStatus bidStepAmount userMaxBidFare acceptedBidId',
+    '_id userId status liveStatus fare baseFare bookingMode pricingNegotiationMode biddingStatus bidStepAmount userMaxBidFare fareIncreaseWaitMinutes nextFareIncreaseAt acceptedBidId',
   );
 
   if (!ride) {
@@ -1380,7 +1407,7 @@ export const listRideBidsForUser = async ({ rideId, userId }) => {
 
 export const submitRideBid = async ({ rideId, driverId, bidFare }) => {
   const ride = await Ride.findById(rideId).select(
-    '_id userId driverId vehicleTypeId dispatchVehicleTypeIds status liveStatus fare baseFare bookingMode biddingStatus bidStepAmount userMaxBidFare',
+    '_id userId driverId vehicleTypeId dispatchVehicleTypeIds status liveStatus fare baseFare bookingMode pricingNegotiationMode biddingStatus bidStepAmount userMaxBidFare',
   );
 
   if (!ride) {
@@ -1391,7 +1418,7 @@ export const submitRideBid = async ({ rideId, driverId, bidFare }) => {
     throw new ApiError(409, 'Ride is no longer open for bidding');
   }
 
-  if (ride.bookingMode !== 'bidding' || ride.biddingStatus !== 'open') {
+  if (ride.pricingNegotiationMode !== 'driver_bid' || ride.bookingMode !== 'bidding' || ride.biddingStatus !== 'open') {
     throw new ApiError(409, 'Ride is not open for bidding');
   }
 
@@ -1458,28 +1485,70 @@ export const increaseRideBidCeiling = async ({ rideId, userId, incrementSteps = 
     throw new ApiError(404, 'Active ride not found');
   }
 
-  if (ride.bookingMode !== 'bidding' || ride.biddingStatus !== 'open') {
-    throw new ApiError(409, 'Ride is not open for bid increases');
-  }
-
   const safeSteps = Math.max(1, Math.round(Number(incrementSteps || 1)));
   const safeStepAmount = normalizeBidStepAmount(ride.bidStepAmount);
-  const nextUserMaxBidFare = Math.max(
-    Number(ride.baseFare || ride.fare || 0),
-    Number(ride.userMaxBidFare || ride.fare || 0) + (safeSteps * safeStepAmount),
-  );
+  if (ride.pricingNegotiationMode === 'driver_bid') {
+    if (ride.bookingMode !== 'bidding' || ride.biddingStatus !== 'open') {
+      throw new ApiError(409, 'Ride is not open for bid increases');
+    }
+
+    const nextUserMaxBidFare = Math.max(
+      Number(ride.baseFare || ride.fare || 0),
+      Number(ride.userMaxBidFare || ride.fare || 0) + (safeSteps * safeStepAmount),
+    );
+    const updatedRide = await Ride.findOneAndUpdate(
+      {
+        _id: rideId,
+        userId,
+        status: RIDE_STATUS.SEARCHING,
+        liveStatus: RIDE_LIVE_STATUS.SEARCHING,
+        bookingMode: 'bidding',
+        biddingStatus: 'open',
+        pricingNegotiationMode: 'driver_bid',
+      },
+      {
+        $set: {
+          userMaxBidFare: nextUserMaxBidFare,
+        },
+      },
+      {
+        new: true,
+        runValidators: true,
+      },
+    );
+
+    if (!updatedRide) {
+      throw new ApiError(409, 'Ride is not open for bid increases');
+    }
+
+    return serializeRideRealtime(updatedRide);
+  }
+
+  if (ride.pricingNegotiationMode !== 'user_increment_only') {
+    throw new ApiError(409, 'Ride is not open for fare increases');
+  }
+
+  const nextFareIncreaseAt = ride.nextFareIncreaseAt ? new Date(ride.nextFareIncreaseAt) : null;
+  if (nextFareIncreaseAt && nextFareIncreaseAt.getTime() > Date.now()) {
+    throw new ApiError(409, 'Fare can be increased after the waiting time completes');
+  }
+
+  const currentFare = Math.max(0, Number(ride.fare || ride.baseFare || 0));
+  const nextFare = currentFare + (safeSteps * safeStepAmount);
+  const waitMinutes = Math.max(0, Math.round(Number(ride.fareIncreaseWaitMinutes || 0)));
   const updatedRide = await Ride.findOneAndUpdate(
     {
       _id: rideId,
       userId,
       status: RIDE_STATUS.SEARCHING,
       liveStatus: RIDE_LIVE_STATUS.SEARCHING,
-      bookingMode: 'bidding',
-      biddingStatus: 'open',
+      pricingNegotiationMode: 'user_increment_only',
     },
     {
       $set: {
-        userMaxBidFare: nextUserMaxBidFare,
+        fare: nextFare,
+        userMaxBidFare: nextFare,
+        nextFareIncreaseAt: waitMinutes > 0 ? new Date(Date.now() + waitMinutes * 60 * 1000) : null,
       },
     },
     {
@@ -1489,7 +1558,7 @@ export const increaseRideBidCeiling = async ({ rideId, userId, incrementSteps = 
   );
 
   if (!updatedRide) {
-    throw new ApiError(409, 'Ride is not open for bid increases');
+    throw new ApiError(409, 'Ride is not open for fare increases');
   }
 
   return serializeRideRealtime(updatedRide);

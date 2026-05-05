@@ -234,6 +234,14 @@ const BidRideSettings = () => {
                        type="number" 
                        helpLink
                     />
+                    <InputField 
+                       label="Wait Time Before User Can Increase Fare (Minutes)" 
+                       name="user_fare_increase_wait_minutes" 
+                       value={settings.user_fare_increase_wait_minutes} 
+                       onChange={handleChange} 
+                       type="number" 
+                       helpLink
+                    />
                  </div>
               </div>
               <div className="mt-12 flex justify-end">

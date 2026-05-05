@@ -964,11 +964,17 @@ const SelectVehicle = () => {
   const selectedAvailability = selectedVehicle ? (availabilityByVehicleId[selectedVehicle.id] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
   const previewAvailability = previewVehicle ? (availabilityByVehicleId[previewVehicle.id] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
   const canProceed = Boolean(selectedVehicle) && !isFarePending && (rideMode === 'schedule' || Boolean(selectedAvailability.totalDrivers));
+  const shouldUseDriverBidding = Boolean(
+    routeState.intercity ||
+    routeState.serviceType === 'intercity' ||
+    routeState.transport_type === 'intercity' ||
+    routeState.transportType === 'intercity',
+  );
   const selectedBidStepAmount = Number(selectedVehicle?.bidStepAmount || 10);
   const selectedBidSteps = Number(selectedVehicle?.maxBidSteps || 5);
   const selectedBidIncrement = (selectedVehicle?.supportsBidding ? bidStepCount : 0) * selectedBidStepAmount;
   const selectedBidCeiling = Number(selectedVehicle?.price || 0) + selectedBidIncrement;
-  const selectedFareDisplay = selectedVehicle?.supportsBidding
+  const selectedFareDisplay = selectedVehicle?.supportsBidding && shouldUseDriverBidding
     ? formatVehicleFare(selectedVehicle, bidStepCount)
     : formatCurrency(selectedVehicle?.price);
   const allowedPaymentMethods = useMemo(
@@ -1101,9 +1107,14 @@ const SelectVehicle = () => {
         fare: selectedVehicle.price,
         baseFare: selectedVehicle.price,
         bookingMode: selectedVehicle.supportsBidding ? 'bidding' : 'normal',
+        pricingNegotiationMode: selectedVehicle.supportsBidding
+          ? shouldUseDriverBidding
+            ? 'driver_bid'
+            : 'user_increment_only'
+          : 'none',
         bidStepAmount: selectedBidStepAmount,
-        userMaxBidFare: selectedVehicle.supportsBidding ? selectedBidCeiling : selectedVehicle.price,
-        bidIncrement: selectedVehicle.supportsBidding ? selectedBidIncrement : 0,
+        userMaxBidFare: selectedVehicle.supportsBidding && shouldUseDriverBidding ? selectedBidCeiling : selectedVehicle.price,
+        bidIncrement: selectedVehicle.supportsBidding && shouldUseDriverBidding ? selectedBidIncrement : 0,
         estimatedDistanceMeters: tripMetrics.distanceMeters,
         estimatedDurationMinutes: tripMetrics.durationMinutes,
         rideMode,
@@ -1145,7 +1156,7 @@ const SelectVehicle = () => {
 
     setScheduleError('');
 
-    if (selectedVehicle.supportsBidding) {
+    if (selectedVehicle.supportsBidding && shouldUseDriverBidding) {
       setShowBidModal(true);
       return;
     }
@@ -1360,7 +1371,7 @@ const SelectVehicle = () => {
                     </span>
                     {!isUnavailable && (
                       <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter opacity-70">
-                        {isFarePending ? 'calc.' : v.supportsBidding ? 'bid range' : 'est.'}
+                        {isFarePending ? 'calc.' : (v.supportsBidding && shouldUseDriverBidding) ? 'bid range' : 'est.'}
                       </span>
                     )}
                   </div>
@@ -1434,7 +1445,7 @@ const SelectVehicle = () => {
               {selectedVehicle
                 ? isFarePending
                   ? 'Calculating fare...'
-                  : selectedVehicle.supportsBidding
+                  : selectedVehicle.supportsBidding && shouldUseDriverBidding
                   ? (
                     <>
                       <span>{`Request Bid for ${selectedVehicle.name}`}</span>
@@ -1447,13 +1458,13 @@ const SelectVehicle = () => {
                     <>
                       <span>{`Schedule ${selectedVehicle.name}`}</span>
                       <div className="w-1.5 h-1.5 rounded-full bg-slate-900/20" />
-                      <span>{formatCurrency(selectedVehicle.supportsBidding ? selectedBidCeiling : selectedVehicle.price)}</span>
+                      <span>{formatCurrency(selectedVehicle.supportsBidding && shouldUseDriverBidding ? selectedBidCeiling : selectedVehicle.price)}</span>
                     </>
                   )
                   : selectedAvailability.totalDrivers
                   ? (
                     <>
-                      <span>{`Book ${selectedVehicle.name}`}</span>
+                      <span>{selectedVehicle.supportsBidding ? `Book ${selectedVehicle.name}` : `Book ${selectedVehicle.name}`}</span>
                       <div className="w-1.5 h-1.5 rounded-full bg-slate-900/20" />
                       <span>{formatCurrency(selectedVehicle.price)}</span>
                     </>
@@ -1487,6 +1498,10 @@ const SelectVehicle = () => {
                 Scheduled for {formatScheduledDisplay(scheduledAt)}. Drivers will be notified automatically.
               </p>
             )
+          ) : selectedVehicle?.supportsBidding && !shouldUseDriverBidding ? (
+            <p className="text-[11px] font-medium text-slate-500">
+              If nobody accepts, you can increase the fare later from the searching screen.
+            </p>
           ) : null}
         </div>
       </div>
@@ -1571,7 +1586,7 @@ const SelectVehicle = () => {
           </React.Fragment>
         )}
 
-        {showBidModal && selectedVehicle?.supportsBidding && (
+        {showBidModal && selectedVehicle?.supportsBidding && shouldUseDriverBidding && (
           <React.Fragment key="bid-modal">
             <motion.div
               initial={{ opacity: 0 }}

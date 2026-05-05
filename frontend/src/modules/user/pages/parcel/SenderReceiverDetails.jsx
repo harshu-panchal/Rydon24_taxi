@@ -20,9 +20,16 @@ import {
 import { GoogleMap } from '@react-google-maps/api';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../../admin/utils/googleMaps';
 import { userAuthService } from '../../services/authService';
+import api from '../../../../shared/api/axiosInstance';
 
 const Motion = motion;
 const PHONE_REGEX = /^[6-9]\d{9}$/;
+const PARCEL_BOOKING_DRAFT_KEY = 'parcelBookingDraft';
+const DELIVERY_CATEGORY_SEARCH_TOKENS = {
+  trucks: ['truck', 'lcv', 'hcv', 'mcv', 'loader'],
+  '2wheeler': ['bike', 'scooter', 'cycle', '2-wheeler'],
+  movers: ['mover', 'packers'],
+};
 const LOCATION_COORDS = {
   'Pipaliyahana, Indore': [75.9048, 22.7039],
   'Vijay Nagar': [75.8937, 22.7533],
@@ -49,6 +56,16 @@ const readStoredUserInfo = () => {
 
   try {
     return JSON.parse(window.localStorage.getItem('userInfo') || '{}');
+  } catch {
+    return {};
+  }
+};
+
+const readParcelBookingDraft = () => {
+  if (typeof window === 'undefined') return {};
+
+  try {
+    return JSON.parse(window.sessionStorage.getItem(PARCEL_BOOKING_DRAFT_KEY) || '{}');
   } catch {
     return {};
   }
@@ -90,12 +107,24 @@ const calculateDistanceKm = (fromCoords, toCoords) => {
   return earthRadiusKm * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 };
 
-const normalizeDeliveryPricing = (vehicle = {}) => ({
-  enabled: Boolean(vehicle?.delivery_distance_pricing?.enabled),
-  basePrice: Number(vehicle?.delivery_distance_pricing?.base_price ?? 0),
-  freeDistance: Number(vehicle?.delivery_distance_pricing?.free_distance ?? 0),
-  distancePrice: Number(vehicle?.delivery_distance_pricing?.distance_price ?? 0),
-});
+const normalizeDeliveryPricing = (vehicle = {}) => {
+  const basePrice = Number(vehicle?.delivery_distance_pricing?.base_price ?? 0);
+  const freeDistance = Number(vehicle?.delivery_distance_pricing?.free_distance ?? 0);
+  const distancePrice = Number(vehicle?.delivery_distance_pricing?.distance_price ?? 0);
+  const timePrice = Number(vehicle?.delivery_distance_pricing?.time_price ?? 0);
+
+  return {
+    enabled: Boolean(
+      vehicle?.delivery_distance_pricing?.enabled ||
+      basePrice > 0 ||
+      distancePrice > 0 ||
+      timePrice > 0
+    ),
+    basePrice,
+    freeDistance,
+    distancePrice,
+  };
+};
 
 const calculateVehicleFare = (vehicle, distanceKm) => {
   const pricing = normalizeDeliveryPricing(vehicle);
@@ -116,6 +145,22 @@ const formatCoordLabel = (coords) => {
 const formatLatLngLabel = (position) => `${position.lat.toFixed(5)}, ${position.lng.toFixed(5)}`;
 const COORDINATE_LABEL_REGEX = /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/;
 const isCoordinateLabel = (value = '') => COORDINATE_LABEL_REGEX.test(String(value || '').trim());
+const getVehicleId = (vehicle) => String(vehicle?._id || vehicle?.id || '').trim();
+const isDeliveryVehicle = (vehicle) => vehicle?.active && ['delivery', 'both'].includes(String(vehicle?.transport_type || '').trim().toLowerCase());
+const matchesDeliveryCategory = (vehicle, categoryId) => {
+  const normalizedCategoryId = String(categoryId || '').trim().toLowerCase();
+  if (!normalizedCategoryId) return false;
+
+  const configuredCategory = String(vehicle?.delivery_category || '').trim().toLowerCase();
+  if (configuredCategory) {
+    return configuredCategory === normalizedCategoryId;
+  }
+
+  const searchTokens = DELIVERY_CATEGORY_SEARCH_TOKENS[normalizedCategoryId] || [];
+  const vehicleName = String(vehicle?.name || '').toLowerCase();
+  const iconType = String(vehicle?.icon_types || '').toLowerCase();
+  return searchTokens.some((token) => vehicleName.includes(token) || iconType.includes(token));
+};
 
 const PhoneInput = ({ label, value, onChange, error, name, onClearError, disabled = false }) => (
   <div className="space-y-2">
@@ -481,7 +526,11 @@ const SenderReceiverDetails = () => {
     [location.pathname],
   );
   const { isLoaded: isGoogleMapsLoaded } = useAppGoogleMapsLoader();
-  const parcelState = location.state || {};
+  const storedParcelDraft = useMemo(() => readParcelBookingDraft(), []);
+  const parcelState = useMemo(
+    () => ({ ...storedParcelDraft, ...(location.state || {}) }),
+    [location.state, storedParcelDraft],
+  );
   const storedUser = useMemo(() => readStoredUserInfo(), []);
   const [senderName, setSenderName] = useState(() => parcelState.senderName || storedUser?.name || '');
   const [senderMobile, setSenderMobile] = useState(() => parcelState.senderMobile || storedUser?.phone || '');
@@ -502,13 +551,20 @@ const SenderReceiverDetails = () => {
   const [pickup, setPickup] = useState(() => parcelState.pickup || '');
   const [drop, setDrop] = useState(() => parcelState.drop || '');
   const [pickupCoords, setPickupCoords] = useState(() => parcelState.pickupCoords || getCoords(parcelState.pickup || '', [75.8577, 22.7196]));
-  const [dropCoords, setDropCoords] = useState(() => parcelState.dropCoords || getCoords(parcelState.drop || '', [75.8577, 22.7196]));
+  const [dropCoords, setDropCoords] = useState(() => parcelState.dropCoords || (parcelState.drop ? getCoords(parcelState.drop || '') : null));
   const [activeMapPicker, setActiveMapPicker] = useState(null);
   const [isContactSheetOpen, setIsContactSheetOpen] = useState(false);
   const [isLocatingPickup, setIsLocatingPickup] = useState(false);
   const [errors, setErrors] = useState({});
+  const [recoveredSelectedVehicles, setRecoveredSelectedVehicles] = useState([]);
   const autoPickupRequestedRef = useRef(false);
   const dropInputRef = useRef(null);
+  const dropGeocodeTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.sessionStorage.setItem(PARCEL_BOOKING_DRAFT_KEY, JSON.stringify(parcelState));
+  }, [parcelState]);
 
   useEffect(() => {
     if (dropInputRef.current) {
@@ -547,6 +603,58 @@ const SenderReceiverDetails = () => {
     };
   }, [storedUser]);
 
+  useEffect(() => {
+    const routeSelectedVehicles = Array.isArray(parcelState.selectedVehicles)
+      ? parcelState.selectedVehicles.filter(Boolean)
+      : parcelState.selectedVehicle
+        ? [parcelState.selectedVehicle].filter(Boolean)
+        : [];
+
+    if (routeSelectedVehicles.length > 0) {
+      setRecoveredSelectedVehicles(routeSelectedVehicles);
+      return undefined;
+    }
+
+    const selectedVehicleIds = Array.isArray(parcelState.selectedVehicleIds)
+      ? parcelState.selectedVehicleIds.map((id) => String(id || '').trim()).filter(Boolean)
+      : [];
+    const selectedVehicleId = String(parcelState.selectedVehicleId || '').trim();
+    const selectedIdSet = new Set([...selectedVehicleIds, selectedVehicleId].filter(Boolean));
+    const deliveryCategory = String(parcelState.deliveryCategory || parcelState.category || '').trim().toLowerCase();
+
+    if (!selectedIdSet.size && !deliveryCategory) {
+      setRecoveredSelectedVehicles([]);
+      return undefined;
+    }
+
+    let active = true;
+
+    const recoverSelectedVehicles = async () => {
+      try {
+        const response = await api.get('/users/vehicle-types');
+        const items = response?.data?.results || response?.results || response?.data?.data?.results || [];
+        const deliveryVehicles = Array.isArray(items) ? items.filter(isDeliveryVehicle) : [];
+
+        let matchedVehicles = deliveryVehicles.filter((vehicle) => selectedIdSet.has(getVehicleId(vehicle)));
+        if (matchedVehicles.length === 0 && deliveryCategory) {
+          matchedVehicles = deliveryVehicles.filter((vehicle) => matchesDeliveryCategory(vehicle, deliveryCategory));
+        }
+
+        if (!active) return;
+        setRecoveredSelectedVehicles(matchedVehicles);
+      } catch {
+        if (!active) return;
+        setRecoveredSelectedVehicles([]);
+      }
+    };
+
+    recoverSelectedVehicles();
+
+    return () => {
+      active = false;
+    };
+  }, [parcelState.category, parcelState.deliveryCategory, parcelState.selectedVehicle, parcelState.selectedVehicleId, parcelState.selectedVehicleIds, parcelState.selectedVehicles]);
+
   const pickupSuggestions = useMemo(
     () => POPULAR_LOCATIONS.filter((item) => item.toLowerCase().includes(String(pickup || '').toLowerCase())).slice(0, 4),
     [pickup],
@@ -556,37 +664,37 @@ const SenderReceiverDetails = () => {
     [drop],
   );
   const selectedVehicles = useMemo(() => {
-    if (Array.isArray(parcelState.selectedVehicles) && parcelState.selectedVehicles.length) {
-      return parcelState.selectedVehicles;
-    }
-    if (parcelState.selectedVehicle) {
-      return [parcelState.selectedVehicle];
+    if (Array.isArray(recoveredSelectedVehicles) && recoveredSelectedVehicles.length) {
+      return recoveredSelectedVehicles;
     }
     return [];
-  }, [parcelState.selectedVehicle, parcelState.selectedVehicles]);
+  }, [recoveredSelectedVehicles]);
   const estimatedDistanceKm = useMemo(
     () => calculateDistanceKm(pickupCoords, dropCoords),
     [dropCoords, pickupCoords],
   );
   const estimatedFare = useMemo(() => {
+    if (!drop.trim()) {
+      return null;
+    }
+
     const dynamicFares = selectedVehicles
       .map((vehicle) => calculateVehicleFare(vehicle, estimatedDistanceKm))
       .filter((value) => Number.isFinite(value));
 
     if (dynamicFares.length > 0) {
+      const minFare = Math.min(...dynamicFares);
+      const maxFare = Math.max(...dynamicFares);
       return {
-        min: Math.min(...dynamicFares),
-        max: Math.max(...dynamicFares),
+        min: minFare,
+        max: maxFare,
+        approx: Math.round((minFare + maxFare) / 2),
         dynamic: true,
       };
     }
 
-    return {
-      min: Number(parcelState.estimatedFare?.min || 45),
-      max: Number(parcelState.estimatedFare?.max || parcelState.estimatedFare?.min || 80),
-      dynamic: false,
-    };
-  }, [estimatedDistanceKm, parcelState.estimatedFare?.max, parcelState.estimatedFare?.min, selectedVehicles]);
+    return null;
+  }, [drop, estimatedDistanceKm, selectedVehicles]);
 
   const validate = () => {
     const nextErrors = {};
@@ -669,6 +777,29 @@ const SenderReceiverDetails = () => {
       });
     }));
 
+  const resolveCoordsFromAddress = useEffectEvent((address) =>
+    new Promise((resolve) => {
+      const trimmedAddress = String(address || '').trim();
+
+      if (!trimmedAddress || !isGoogleMapsLoaded || !window.google?.maps?.Geocoder) {
+        resolve(null);
+        return;
+      }
+
+      const geocoder = new window.google.maps.Geocoder();
+      const addressQuery = /indore/i.test(trimmedAddress) ? trimmedAddress : `${trimmedAddress}, Indore`;
+
+      geocoder.geocode({ address: addressQuery }, (results, status) => {
+        if (status !== 'OK' || !results?.[0]?.geometry?.location) {
+          resolve(null);
+          return;
+        }
+
+        const locationPoint = results[0].geometry.location;
+        resolve(latLngToCoordPair({ lat: locationPoint.lat(), lng: locationPoint.lng() }));
+      });
+    }));
+
   const requestCurrentPickupLocation = useEffectEvent(() => {
     if (!navigator.geolocation) {
       setErrors((prev) => ({ ...prev, pickup: 'Current location is not available' }));
@@ -724,6 +855,49 @@ const SenderReceiverDetails = () => {
     };
   }, [isGoogleMapsLoaded, pickup, pickupCoords]);
 
+  useEffect(() => {
+    const trimmedDrop = String(drop || '').trim();
+
+    clearTimeout(dropGeocodeTimerRef.current);
+
+    if (!trimmedDrop) {
+      setDropCoords(null);
+      return () => clearTimeout(dropGeocodeTimerRef.current);
+    }
+
+    const presetCoords = LOCATION_COORDS[trimmedDrop];
+    if (presetCoords) {
+      setDropCoords((current) =>
+        Array.isArray(current) && current[0] === presetCoords[0] && current[1] === presetCoords[1] ? current : presetCoords,
+      );
+      return () => clearTimeout(dropGeocodeTimerRef.current);
+    }
+
+    if (!isGoogleMapsLoaded || isCoordinateLabel(trimmedDrop)) {
+      return () => clearTimeout(dropGeocodeTimerRef.current);
+    }
+
+    let active = true;
+    dropGeocodeTimerRef.current = setTimeout(() => {
+      resolveCoordsFromAddress(trimmedDrop).then((resolvedCoords) => {
+        if (!active || !resolvedCoords) {
+          return;
+        }
+
+        setDropCoords((current) =>
+          Array.isArray(current) && current[0] === resolvedCoords[0] && current[1] === resolvedCoords[1]
+            ? current
+            : resolvedCoords,
+        );
+      });
+    }, 450);
+
+    return () => {
+      active = false;
+      clearTimeout(dropGeocodeTimerRef.current);
+    };
+  }, [drop, isGoogleMapsLoaded, resolveCoordsFromAddress]);
+
   const applySuggestion = (type, value) => {
     if (type === 'pickup') {
       setPickup(value);
@@ -765,7 +939,7 @@ const SenderReceiverDetails = () => {
         receiverName,
         receiverMobile,
         paymentMethod: 'Cash',
-        fare: estimatedFare.min || 45,
+        fare: estimatedFare?.approx ?? estimatedFare?.min ?? null,
         estimatedFare,
         estimatedDistanceKm,
         deliveryScope: parcelState.deliveryScope || 'city',
@@ -964,11 +1138,13 @@ const SenderReceiverDetails = () => {
           <div className="relative z-10 flex items-center justify-between gap-3">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">Approx. Delivery Fare</p>
-              <p className="mt-1 text-2xl font-black">Rs {estimatedFare.min} - {estimatedFare.max}</p>
+              <p className="mt-1 text-2xl font-black">
+                {estimatedFare ? `Rs ${estimatedFare.approx ?? estimatedFare.min}` : '--'}
+              </p>
               <p className="mt-1 text-[11px] font-bold text-white/55">
-                {estimatedFare.dynamic
+                {estimatedFare
                   ? `Based on admin pricing for about ${estimatedDistanceKm.toFixed(1)} km`
-                  : 'Using current parcel fare fallback'}
+                  : 'Enter a drop address to see the live fare'}
               </p>
             </div>
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-md">

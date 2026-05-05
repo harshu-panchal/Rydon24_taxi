@@ -15,6 +15,7 @@ import bikeImg from '@/assets/images/delivery/bike.png';
 import moversImg from '@/assets/images/delivery/movers.png';
 
 const Motion = motion;
+const PARCEL_BOOKING_DRAFT_KEY = 'parcelBookingDraft';
 
 const DELIVERY_CATEGORY_OPTIONS = [
   {
@@ -80,17 +81,23 @@ const ParcelType = () => {
       : [selectedVehicle?._id || selectedVehicle?.id].filter(Boolean);
     const selectedVehicles = filteredVehicles.length ? filteredVehicles : selectedVehicle ? [selectedVehicle] : [];
 
+    const nextState = {
+      parcelType: 'General Parcel',
+      selectedVehicle: selectedVehicle,
+      selectedVehicles,
+      selectedVehicleId: selectedVehicle?._id || selectedVehicle?.id,
+      selectedVehicleIds,
+      category: category.id,
+      deliveryCategory: category.id,
+      pickup: pickupAddress,
+    };
+
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem(PARCEL_BOOKING_DRAFT_KEY, JSON.stringify(nextState));
+    }
+
     navigate('/taxi/user/parcel/details', {
-      state: {
-        parcelType: 'General Parcel',
-        selectedVehicle: selectedVehicle,
-        selectedVehicles,
-        selectedVehicleId: selectedVehicle?._id || selectedVehicle?.id,
-        selectedVehicleIds,
-        category: category.id,
-        deliveryCategory: category.id,
-        pickup: pickupAddress
-      },
+      state: nextState,
     });
   };
 

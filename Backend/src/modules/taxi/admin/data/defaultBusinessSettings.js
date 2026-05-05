@@ -92,5 +92,6 @@ export const createDefaultBusinessSettings = () => ({
     user_bidding_low_percentage: '10',
     user_bidding_high_percentage: '20',
     user_bidding_amount_increase_or_decrease: '10',
+    user_fare_increase_wait_minutes: '2',
   },
 });

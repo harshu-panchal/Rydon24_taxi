@@ -27,6 +27,7 @@ import {
   emitToDriver,
   notifyRideAccepted,
   notifyRideBiddingUpdated,
+  restartRideDispatchWithLatestFare,
   startDispatchFlow,
 } from '../../services/dispatchService.js';
 import { getTipSettings } from '../../services/appSettingsService.js';
@@ -1109,6 +1110,9 @@ export const updateRideBidCeiling = async (req, res) => {
   });
 
   await notifyRideBiddingUpdated(ride.rideId || req.params.rideId);
+  if (ride.pricingNegotiationMode === 'user_increment_only') {
+    await restartRideDispatchWithLatestFare(ride.rideId || req.params.rideId);
+  }
 
   res.json({
     success: true,

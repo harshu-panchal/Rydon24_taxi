@@ -4868,7 +4868,7 @@ export const listPublicVehicleCatalog = async () => {
   }
 
   const items = await Vehicle.find()
-    .select('name short_description description transport_type dispatch_type icon_types delivery_category capacity image icon map_icon status active')
+    .select('name short_description description transport_type dispatch_type icon_types delivery_category delivery_distance_pricing capacity image icon map_icon status active')
     .sort({ createdAt: -1 })
     .lean();
 

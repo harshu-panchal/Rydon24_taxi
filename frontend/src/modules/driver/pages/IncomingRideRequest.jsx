@@ -154,7 +154,8 @@ const IncomingRideRequest = ({
     .filter(Boolean)
     .join(' ')
     .trim() || data.raw?.user?.phone || '';
-  const isBidding = Boolean(data.raw?.bidding?.enabled) || String(data.raw?.bookingMode || '').toLowerCase() === 'bidding';
+  const pricingNegotiationMode = String(data.raw?.pricingNegotiationMode || 'none').toLowerCase();
+  const isBidding = pricingNegotiationMode === 'driver_bid' && (Boolean(data.raw?.bidding?.enabled) || String(data.raw?.bookingMode || '').toLowerCase() === 'bidding');
   const bidBaseFare = Number(data.raw?.bidding?.baseFare || data.raw?.baseFare || data.raw?.fare || 0);
   const bidMaxFare = Number(data.raw?.bidding?.userMaxBidFare || data.raw?.userMaxBidFare || bidBaseFare);
   const bidStepAmount = Number(data.raw?.bidding?.bidStepAmount || 10);

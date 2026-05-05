@@ -2,6 +2,7 @@ import { createDefaultBusinessSettings } from '../admin/data/defaultBusinessSett
 import { AdminBusinessSetting } from '../admin/models/AdminBusinessSetting.js';
 
 const defaultTransportRideSettings = createDefaultBusinessSettings().transport_ride || {};
+const defaultBidRideSettings = createDefaultBusinessSettings().bid_ride || {};
 
 const toPositiveNumber = (value, fallback) => {
   const numericValue = Number(value);
@@ -16,6 +17,17 @@ export const getTransportRideSettings = async () => {
   return {
     ...defaultTransportRideSettings,
     ...(businessSettings?.transport_ride || {}),
+  };
+};
+
+export const getBidRideSettings = async () => {
+  const businessSettings = await AdminBusinessSetting.findOne({ scope: 'default' })
+    .select('bid_ride')
+    .lean();
+
+  return {
+    ...defaultBidRideSettings,
+    ...(businessSettings?.bid_ride || {}),
   };
 };
 
