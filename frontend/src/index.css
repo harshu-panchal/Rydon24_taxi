@@ -73,6 +73,7 @@ body {
     
     background-color: var(--driver-bg-soft);
     color: #0F172A;
+    font-family: 'Inter', sans-serif;
 }
 
 /* Localize Tailwind's color mapping for the driver module */
