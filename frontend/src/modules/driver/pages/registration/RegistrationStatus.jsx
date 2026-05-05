@@ -260,7 +260,7 @@ const getStatusColor = (status) => {
 
   return (
     <div 
-        className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-36 pt-12 select-none overflow-x-hidden flex flex-col items-center"
+        className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-10 pt-12 select-none overflow-x-hidden flex flex-col items-center"
         style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
     >
       <div className="mb-10 w-full flex flex-col items-center gap-6">
@@ -371,15 +371,20 @@ const getStatusColor = (status) => {
             </div>
         </section>
 
-        <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent flex flex-col gap-4">
+        <div className="sticky bottom-0 z-10 -mx-1 mt-2 rounded-[28px] border border-slate-100 bg-white/95 p-4 shadow-[0_-12px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl flex flex-col gap-3">
             {rejectedDocs.length > 0 ? (
                 <div className="rounded-2xl bg-rose-50 border border-rose-100 px-5 py-4 text-[12px] font-bold leading-relaxed text-rose-600 shadow-sm">
                     Select a rejected document above to re-upload the correct file.
                 </div>
             ) : null}
             <button 
-                onClick={() => navigate(`${routePrefix}/support`)}
-                className="w-full h-16 bg-white border border-slate-200 text-slate-900 rounded-[1.8rem] flex items-center justify-center gap-3 text-[15px] font-black uppercase tracking-widest active:scale-95 transition-all shadow-sm"
+                onClick={() => navigate(`${routePrefix}/support/chat`, {
+                    state: {
+                        backPath: `${routePrefix}/registration-status`,
+                        backState: location.state || null,
+                    },
+                })}
+                className="w-full h-14 bg-white border border-slate-200 text-slate-600 rounded-2xl flex items-center justify-center gap-2 text-[15px] font-bold active:scale-95 transition-all"
             >
                 Contact Support
             </button>

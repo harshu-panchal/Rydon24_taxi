@@ -20,9 +20,9 @@ import {
     getDriverVehicleTypes,
 } from '../../services/registrationService';
 
-const VEHICLE_NUMBER_REGEX = /^[A-Z]{2}\d{2}[A-Z]{1,2}\d{4}$/;
+const VEHICLE_NUMBER_REGEX = /^[A-Z]{2}\d{1,2}[A-Z]{1,3}\d{4}$/;
 const getCurrentVehicleYear = () => new Date().getFullYear();
-const normalizeVehicleNumber = (value = '') => String(value).replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 10);
+const normalizeVehicleNumber = (value = '') => String(value).replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 11);
 const normalizePostalCode = (value = '') => String(value).replace(/\D/g, '').slice(0, 6);
 const normalizeServiceCategories = (value, registerFor = 'taxi') => {
     const rawValues = Array.isArray(value)
@@ -188,7 +188,7 @@ const StepVehicle = () => {
                 }
 
                 if (!VEHICLE_NUMBER_REGEX.test(normalizedNumber)) {
-                    setError('Vehicle number must be in this format: PP09KK1234');
+                    setError('Vehicle number must be in a valid Indian format, for example DL1RT1234 or MH12AB1234');
                     return;
                 }
 
@@ -541,8 +541,8 @@ const StepVehicle = () => {
                                             <input 
                                                 value={formData.number}
                                                 onChange={(e) => setFormData(p => ({ ...p, number: normalizeVehicleNumber(e.target.value) }))}
-                                                placeholder="MH12AB1234"
-                                                className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200 uppercase tracking-widest"
+                                                placeholder="DL1RT1234"
+                                                className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-300 uppercase tracking-widest"
                                             />
                                         </div>
 

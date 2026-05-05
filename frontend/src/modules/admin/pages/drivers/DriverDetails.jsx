@@ -108,6 +108,12 @@ const formatDateTime = (value) => {
   });
 };
 
+const humanizeDocumentKey = (value = '') =>
+  String(value || '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+
 const getDocumentFileNames = (doc = {}, imageUrls = []) => {
   const rawNames = [];
 
@@ -120,8 +126,6 @@ const getDocumentFileNames = (doc = {}, imageUrls = []) => {
     doc?.filename,
     doc?.originalFilename,
     doc?.originalName,
-    doc?.name,
-    doc?.label,
   );
 
   imageUrls.forEach((url, index) => {
@@ -143,7 +147,17 @@ const getDocumentFileNames = (doc = {}, imageUrls = []) => {
     }
   });
 
-  return [...new Set(rawNames.filter(Boolean).map((value) => String(value).trim()))];
+  const normalizedNames = [...new Set(rawNames.filter(Boolean).map((value) => String(value).trim()))];
+
+  if (normalizedNames.length > 0) {
+    return normalizedNames;
+  }
+
+  return [doc?.fileName, doc?.filename, doc?.originalFilename, doc?.originalName, doc?.name, doc?.label]
+    .filter(Boolean)
+    .map((value) => String(value).trim())
+    .filter(Boolean)
+    .slice(0, 1);
 };
 
 const normalizeDocumentEntry = (doc = {}, fallbackKey = '') => {
@@ -165,7 +179,12 @@ const normalizeDocumentEntry = (doc = {}, fallbackKey = '') => {
 
   return {
     sourceKey: doc?.key || doc?.documentKey || doc?.type || fallbackKey || doc?.name || '',
-    name: doc?.name || doc?.label || doc?.fileName || fallbackKey || 'Document',
+    name:
+      doc?.name ||
+      doc?.label ||
+      humanizeDocumentKey(doc?.key || doc?.documentKey || doc?.type || fallbackKey) ||
+      doc?.fileName ||
+      'Document',
     fileNames,
     identify_number: doc?.identify_number ?? doc?.identifyNumber ?? doc?.number ?? doc?.id_number ?? '',
     expiry_date: doc?.expiry_date ?? doc?.expiryDate ?? doc?.expiry ?? '',
@@ -728,7 +747,6 @@ const DriverDetails = () => {
                         <tr key={`${doc.name}-${idx}`}>
                           <td className="px-6 py-3">
                             <div className="font-semibold text-gray-900">{doc.name}</div>
-                            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{doc.sourceKey}</div>
                           </td>
                           <td className="px-4 py-3">{doc.identify_number}</td>
                           <td className="px-4 py-3">{doc.expiry_date}</td>
@@ -752,6 +770,11 @@ const DriverDetails = () => {
                             <div className="text-xs text-gray-600 line-clamp-2" title={doc.comment}>
                               {doc.comment || '-'}
                             </div>
+                            {['rejected', 'declined'].includes(String(doc.status || '').toLowerCase()) && doc.comment ? (
+                              <div className="mt-1 text-[11px] font-semibold text-rose-600">
+                                Rejection reason: {doc.comment}
+                              </div>
+                            ) : null}
                             {(doc.uploadedAt || doc.reviewedAt) ? (
                               <div className="mt-1 space-y-0.5 text-[10px] text-gray-400">
                                 {doc.uploadedAt ? <div>Uploaded: {formatDateTime(doc.uploadedAt)}</div> : null}
@@ -762,16 +785,8 @@ const DriverDetails = () => {
                           <td className="px-4 py-3">
                             {doc.images?.length ? (
                               <div className="space-y-2">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  {(doc.fileNames?.length ? doc.fileNames : ['Uploaded file']).map((fileName, i) => (
-                                    <span
-                                      key={`file-${i}`}
-                                      className="inline-flex max-w-[180px] truncate rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600"
-                                      title={fileName}
-                                    >
-                                      {fileName}
-                                    </span>
-                                  ))}
+                                <div className="text-sm font-bold text-gray-900">
+                                  {doc.name || 'Uploaded document'}
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">
                                   {doc.images.map((url, i) => (

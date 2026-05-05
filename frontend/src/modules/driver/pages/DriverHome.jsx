@@ -722,13 +722,6 @@ const DriverHome = () => {
     }, [scheduledRides.length]);
 
     useEffect(() => {
-        // Automatically show modal if driver is blocked and tries to open the app
-        if ((walletAlertState.isBlocked || walletAlertState.isWarning) && !isOnline && !isHydratingDriver) {
-            setShowLowBalanceModal(true);
-        }
-    }, [walletAlertState, isOnline, isHydratingDriver]);
-
-    useEffect(() => {
         if (isOwnerManagedDriver) {
             setShowLowBalanceModal(false);
         }
@@ -1193,6 +1186,36 @@ const DriverHome = () => {
             return;
         }
 
+        if (vehicleReapprovalPending) {
+            setStatusMessage('Vehicle update is pending admin approval. Please wait before going online.');
+            return;
+        }
+
+        if (walletAlertState.isBlocked) {
+            setShowLowBalanceModal(true);
+            setStatusMessage(
+                walletAlertState.belowMinimumBalance
+                    ? 'Minimum wallet balance is not maintained. Please top up to go online.'
+                    : 'Cash limit exceeded. Please top up your wallet to go online.',
+            );
+            return;
+        }
+
+        if (expiredDocumentNames.length > 0) {
+            setStatusMessage(`Please reupload expired documents: ${expiredDocumentNames.join(', ')}.`);
+            return;
+        }
+
+        if (rejectedDocumentNotes.length > 0) {
+            const firstRejected = rejectedDocumentNotes[0];
+            setStatusMessage(
+                firstRejected?.reason
+                    ? `${firstRejected.label} was rejected: ${firstRejected.reason}`
+                    : `Please reupload rejected documents: ${rejectedDocumentNotes.map((item) => item.label).join(', ')}.`,
+            );
+            return;
+        }
+
         if (hasSelfieForToday(onlineSelfie)) {
             goOnline();
             return;
@@ -1202,7 +1225,17 @@ const DriverHome = () => {
         setShowSelfieCameraCapture(false);
         stopSelfieCameraStream();
         setShowOnlineSelfiePrompt(true);
-    }, [goOnline, isOnline, isTogglingDuty, onlineSelfie, stopSelfieCameraStream]);
+    }, [
+        expiredDocumentNames,
+        goOnline,
+        isOnline,
+        isTogglingDuty,
+        onlineSelfie,
+        rejectedDocumentNotes,
+        stopSelfieCameraStream,
+        vehicleReapprovalPending,
+        walletAlertState,
+    ]);
 
     const uploadSelfieDataUrl = useCallback(async (sourceDataUrl) => {
         setSelfieUploading(true);

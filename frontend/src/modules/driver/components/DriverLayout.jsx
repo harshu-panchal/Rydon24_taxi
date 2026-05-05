@@ -95,7 +95,18 @@ const getPendingDriverRoute = (pathname = '') => `${getPortalPrefix(pathname)}/r
 const isBusConsoleRoute = (pathname = '') => pathname.startsWith('/taxi/driver/bus-home');
 const isServiceCenterRoute = (pathname = '') => pathname.startsWith('/taxi/driver/service-center');
 const isPendingAllowedRoute = (pathname = '') =>
-    pathname === '/taxi/driver/documents' || pathname === '/taxi/owner/documents';
+    [
+        '/taxi/driver/documents',
+        '/taxi/owner/documents',
+        '/taxi/driver/support',
+        '/taxi/owner/support',
+        '/taxi/driver/help-support',
+        '/taxi/owner/help-support',
+        '/taxi/driver/support/chat',
+        '/taxi/owner/support/chat',
+        '/taxi/driver/support/tickets',
+        '/taxi/owner/support/tickets',
+    ].includes(pathname);
 
 const DriverLayout = () => {
     const location = useLocation();
