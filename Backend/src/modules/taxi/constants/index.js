@@ -11,6 +11,7 @@ export const RIDE_LIVE_STATUS = Object.freeze({
   ACCEPTED: 'accepted',
   ARRIVING: 'arriving',
   STARTED: 'started',
+  ARRIVED: 'arrived',
   COMPLETED: 'completed',
   CANCELLED: 'cancelled',
 });

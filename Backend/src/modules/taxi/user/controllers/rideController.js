@@ -421,8 +421,8 @@ export const updateRideStatus = async (req, res) => {
 
   const nextStatus = String(req.body.status || '').trim().toLowerCase();
 
-  if (![RIDE_LIVE_STATUS.ACCEPTED, RIDE_LIVE_STATUS.ARRIVING, RIDE_LIVE_STATUS.STARTED, RIDE_LIVE_STATUS.COMPLETED].includes(nextStatus)) {
-    throw new ApiError(400, 'status must be accepted, arriving, started, or completed');
+  if (![RIDE_LIVE_STATUS.ACCEPTED, RIDE_LIVE_STATUS.ARRIVING, RIDE_LIVE_STATUS.STARTED, RIDE_LIVE_STATUS.ARRIVED, RIDE_LIVE_STATUS.COMPLETED].includes(nextStatus)) {
+    throw new ApiError(400, 'status must be accepted, arriving, started, arrived, or completed');
   }
 
   const ride = await updateRideLifecycle({

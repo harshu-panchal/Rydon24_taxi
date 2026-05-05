@@ -250,6 +250,7 @@ const resolvePhaseFromJob = (job = {}) => {
 
     if (liveStatus === 'arriving') return 'otp_verification';
     if (liveStatus === 'started' || liveStatus === 'ongoing') return 'in_trip';
+    if (liveStatus === 'arrived') return 'payment_confirm';
     if (liveStatus === 'completed') return 'review';
 
     return 'to_pickup';
@@ -789,13 +790,19 @@ const ActiveTrip = () => {
         const derivedLiveStatus =
             phase === 'otp_verification'
                 ? 'arriving'
-                : phase === 'in_trip' || phase === 'payment_confirm' || phase === 'review'
+                : phase === 'in_trip'
                     ? 'started'
-                    : rawJob?.liveStatus || rawJob?.status || 'accepted';
+                    : phase === 'payment_confirm'
+                        ? 'arrived'
+                        : phase === 'review'
+                            ? 'completed'
+                            : rawJob?.liveStatus || rawJob?.status || 'accepted';
         const derivedStatus =
-            phase === 'in_trip' || phase === 'payment_confirm' || phase === 'review'
+            phase === 'in_trip' || phase === 'payment_confirm'
                 ? 'ongoing'
-                : rawJob?.status || derivedLiveStatus;
+                : phase === 'review'
+                    ? 'completed'
+                    : rawJob?.status || derivedLiveStatus;
         const nextPersistedState = buildPersistedTripState(rawJob, {
             phase,
             liveStatus: derivedLiveStatus,
@@ -1884,6 +1891,7 @@ const ActiveTrip = () => {
                             <motion.button
                                 whileTap={{ scale: 0.96 }}
                                 onClick={() => {
+                                    publishRideStatus('arrived');
                                     setSelectedPaymentMode('');
                                     setPaymentQr(null);
                                     setPaymentQrError('');

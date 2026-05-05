@@ -368,12 +368,12 @@ const RideTracking = () => {
   );
   const hasLiveDriverLocation = Boolean(rideRealtime?.driverLocation?.coordinates?.length);
   const tripStatus = String(rideRealtime?.status || state.liveStatus || state.status || 'accepted').toLowerCase();
-  const otp = tripStatus === 'started' || tripStatus === 'ongoing'
+  const otp = ['started', 'ongoing', 'arrived', 'completed'].includes(tripStatus)
     ? ''
     : String(rideRealtime?.otp || state.otp || state.ride_otp || '');
   const serviceType = String(state.serviceType || state.type || 'ride').toLowerCase();
   const activeDestination = useMemo(
-    () => (tripStatus === 'started' ? dropPosition : pickupPosition),
+    () => (['started', 'ongoing', 'arrived', 'completed'].includes(tripStatus) ? dropPosition : pickupPosition),
     [dropPosition, pickupPosition, tripStatus],
   );
   const driver = useMemo(
@@ -402,7 +402,7 @@ const RideTracking = () => {
     : 0;
   const freeWaitingRemainingSeconds = Math.max(0, freeWaitingBeforeMinutes * 60 - waitingElapsedSeconds);
   const waitingChargeableMinutes = Math.max(0, Math.ceil(waitingElapsedSeconds / 60) - freeWaitingBeforeMinutes);
-  const isWaitingForOtp = Boolean(waitingStartedAt) && !['started', 'ongoing', 'completed', 'cancelled', 'delivered'].includes(tripStatus);
+  const isWaitingForOtp = Boolean(waitingStartedAt) && !['started', 'ongoing', 'arrived', 'completed', 'cancelled', 'delivered'].includes(tripStatus);
   const vehicleIcon = getTrackingVehicleIcon(trackingSnapshot, driver);
   const displayDriverHeading = useMemo(() => {
     if (Number.isFinite(Number(rideRealtime?.driverLocation?.heading))) {
@@ -425,11 +425,14 @@ const RideTracking = () => {
   const driverImage = driverImageBroken ? '' : (nextDriverImage || driverImageFallback);
   const vehicleImage = vehicleImageBroken ? '' : (nextVehicleImage || vehicleImageFallback);
   const hasVehiclePhoto = isLikelyVehiclePhoto(vehicleImage) && !vehicleImageBroken;
+  const arrivalDriverName = driver.name || (serviceType === 'parcel' ? 'Agent' : 'Driver');
   const driverSubtitle = isWaitingForOtp
-    ? (serviceType === 'parcel' ? 'Agent has arrived' : 'Captain has arrived')
+    ? `${arrivalDriverName} has arrived`
     : isScheduledUpcoming && !hasLiveDriverLocation
     ? 'Driver assigned. Live tracking starts closer to pickup time'
-    : tripStatus === 'started'
+    : tripStatus === 'arrived'
+    ? (serviceType === 'parcel' ? 'Parcel reached destination' : 'Driver reached destination')
+    : tripStatus === 'started' || tripStatus === 'ongoing'
     ? (serviceType === 'parcel' ? 'Parcel picked up' : 'Trip started')
     : serviceType === 'parcel'
       ? 'Delivery agent is on the way'
@@ -499,7 +502,7 @@ const RideTracking = () => {
       return;
     }
 
-    if (['started', 'ongoing', 'completed', 'cancelled', 'delivered'].includes(tripStatus)) {
+    if (['started', 'ongoing', 'arrived', 'completed', 'cancelled', 'delivered'].includes(tripStatus)) {
       setArrivalClockFallbackAt('');
     }
   }, [rideRealtime?.arrivedAt, state.arrivedAt, tripStatus]);
@@ -1168,10 +1171,10 @@ const RideTracking = () => {
             ) : null}
             <MarkerF
               position={activeDestination}
-              title={tripStatus === 'started' ? 'Drop' : 'Pickup'}
+              title={['started', 'ongoing', 'arrived', 'completed'].includes(tripStatus) ? 'Drop' : 'Pickup'}
               icon={{
                 path: window.google.maps.SymbolPath.CIRCLE,
-                fillColor: tripStatus === 'started' ? '#ef4444' : '#10b981',
+                fillColor: ['started', 'ongoing', 'arrived', 'completed'].includes(tripStatus) ? '#ef4444' : '#10b981',
                 fillOpacity: 1,
                 strokeColor: '#ffffff',
                 strokeWeight: 2,
@@ -1277,7 +1280,7 @@ const RideTracking = () => {
                   {driver.name || 'James Bond'}
                 </h3>
                 <p className="text-[13px] font-black text-[#f97316] mt-1 tracking-tight">
-                  {tripStatus === 'started' ? 'Trip started' : driverSubtitle}
+                  {tripStatus === 'arrived' ? 'Reached destination' : tripStatus === 'started' || tripStatus === 'ongoing' ? 'Trip started' : driverSubtitle}
                 </p>
                 <p className="truncate text-[11px] font-bold text-slate-400 mt-0.5 uppercase tracking-[0.14em]">
                   {driver.plate || 'MH12AB1234'} &middot; {vehicleLabel}

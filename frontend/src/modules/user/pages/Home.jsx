@@ -394,8 +394,10 @@ const Home = () => {
           : 'Rental booking active'
       : rideStage === 'started'
         ? serviceType === 'parcel' ? 'Parcel in transit' : 'Ride in progress'
+        : rideStage === 'arrived'
+        ? serviceType === 'parcel' ? 'Parcel reached destination' : `${driverName} reached destination`
         : rideStage === 'arriving'
-        ? serviceType === 'parcel' ? 'Driver reached sender' : 'Driver arrived'
+        ? serviceType === 'parcel' ? `${driverName} reached sender` : `${driverName} has arrived`
         : serviceType === 'parcel'
           ? 'Parcel booked'
           : 'Ride booked';
