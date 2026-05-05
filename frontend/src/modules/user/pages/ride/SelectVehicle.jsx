@@ -1464,7 +1464,7 @@ const SelectVehicle = () => {
                   : selectedAvailability.totalDrivers
                   ? (
                     <>
-                      <span>{selectedVehicle.supportsBidding ? `Book ${selectedVehicle.name}` : `Book ${selectedVehicle.name}`}</span>
+                      <span>{`Book ${selectedVehicle.name}`}</span>
                       <div className="w-1.5 h-1.5 rounded-full bg-slate-900/20" />
                       <span>{formatCurrency(selectedVehicle.price)}</span>
                     </>

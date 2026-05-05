@@ -156,6 +156,8 @@ const IncomingRideRequest = ({
     .trim() || data.raw?.user?.phone || '';
   const pricingNegotiationMode = String(data.raw?.pricingNegotiationMode || 'none').toLowerCase();
   const isBidding = pricingNegotiationMode === 'driver_bid' && (Boolean(data.raw?.bidding?.enabled) || String(data.raw?.bookingMode || '').toLowerCase() === 'bidding');
+  const isUserIncrementOnly = pricingNegotiationMode === 'user_increment_only';
+  const fareWasIncreased = isUserIncrementOnly && Number(data.raw?.fare || 0) > Number(data.raw?.baseFare || data.raw?.fare || 0);
   const bidBaseFare = Number(data.raw?.bidding?.baseFare || data.raw?.baseFare || data.raw?.fare || 0);
   const bidMaxFare = Number(data.raw?.bidding?.userMaxBidFare || data.raw?.userMaxBidFare || bidBaseFare);
   const bidStepAmount = Number(data.raw?.bidding?.bidStepAmount || 10);
@@ -208,6 +210,11 @@ const IncomingRideRequest = ({
                       Wave {attemptCount} of {maxAttempts} • Radius {searchRadiusLabel}
                     </p>
                   )}
+                  {fareWasIncreased ? (
+                    <p className="mt-1 inline-flex rounded-full bg-emerald-400/15 px-2 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-emerald-300">
+                      Fare increased
+                    </p>
+                  ) : null}
                 </div>
               </div>
 
