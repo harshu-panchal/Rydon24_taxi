@@ -159,6 +159,9 @@ export const adminService = {
   getTodayEarnings: () => api.get('/admin/dashboard/today-earnings'),
   getOverallEarnings: () => api.get('/admin/dashboard/overall-earnings'),
   getCancelChart: () => api.get('/admin/dashboard/cancel-chart'),
+  getSafetyAlerts: ({ page = 1, limit = 25, status = 'active' } = {}) =>
+    api.get(`/admin/safety/alerts?page=${page}&limit=${limit}&status=${encodeURIComponent(status)}`),
+  resolveSafetyAlert: (id, note = '') => api.patch(`/admin/safety/alerts/${id}/resolve`, { note }),
   getOngoingRides: ({ page = 1, limit = 10, tab = 'all', search = '' } = {}) =>
     api.get(`/admin/ongoing-rides?page=${page}&limit=${limit}&tab=${encodeURIComponent(tab)}&search=${encodeURIComponent(search)}`),
   getRideRequests: ({ page = 1, limit = 10, tab = 'all', search = '' } = {}) =>

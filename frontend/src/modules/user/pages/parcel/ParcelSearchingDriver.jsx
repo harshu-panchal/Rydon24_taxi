@@ -64,6 +64,42 @@ const withUserAuthorization = (token) => (
     : {}
 );
 
+const readCoordinatePair = (...sources) => {
+  for (const source of sources) {
+    if (Array.isArray(source) && source.length >= 2) {
+      const [lng, lat] = source;
+      if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+        return [Number(lng), Number(lat)];
+      }
+    }
+
+    const nestedCoords = source?.coordinates;
+    if (Array.isArray(nestedCoords) && nestedCoords.length >= 2) {
+      const [lng, lat] = nestedCoords;
+      if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+        return [Number(lng), Number(lat)];
+      }
+    }
+
+    const lat = Number(source?.lat ?? source?.latitude);
+    const lng = Number(source?.lng ?? source?.longitude ?? source?.lon);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return [lng, lat];
+    }
+  }
+
+  return null;
+};
+
+const toLatLng = (coords, fallback = { lat: 22.7196, lng: 75.8577 }) => {
+  const pair = readCoordinatePair(coords);
+  if (!pair) {
+    return fallback;
+  }
+
+  return { lng: pair[0], lat: pair[1] };
+};
+
 const getVehicleIcon = (type = 'car') => {
   const val = String(type).toLowerCase();
   if (val.includes('bike') || val.includes('2wheel')) return BikeIcon;
@@ -299,23 +335,23 @@ const ParcelSearchingDriver = () => {
     '',
   ).trim();
   const { isLoaded } = useAppGoogleMapsLoader();
+  const resolvedPickupCoords = useMemo(
+    () => readCoordinatePair(routeState.pickupCoords, routeState.pickupLocation, routeState.pickup),
+    [routeState.pickup, routeState.pickupCoords, routeState.pickupLocation],
+  );
+  const resolvedDropCoords = useMemo(
+    () => readCoordinatePair(routeState.dropCoords, routeState.dropLocation, routeState.drop),
+    [routeState.drop, routeState.dropCoords, routeState.dropLocation],
+  );
 
   const pickupPos = useMemo(
-    () => (
-      routeState.pickupCoords
-        ? { lng: routeState.pickupCoords[0], lat: routeState.pickupCoords[1] }
-        : { lat: 22.7196, lng: 75.8577 }
-    ),
-    [routeState.pickupCoords],
+    () => toLatLng(resolvedPickupCoords),
+    [resolvedPickupCoords],
   );
 
   const dropPos = useMemo(
-    () => (
-      routeState.dropCoords
-        ? { lng: routeState.dropCoords[0], lat: routeState.dropCoords[1] }
-        : null
-    ),
-    [routeState.dropCoords],
+    () => (resolvedDropCoords ? toLatLng(resolvedDropCoords, null) : null),
+    [resolvedDropCoords],
   );
 
   const availableVehicleIcon = useMemo(
@@ -414,14 +450,22 @@ const ParcelSearchingDriver = () => {
       activeRideIdRef.current = String(rideId || activeRideIdRef.current || '');
       trackingStartedRef.current = true;
 
-      const nextRide = {
+        const nextRide = {
         ...routeState,
         type: 'parcel',
         serviceType: 'parcel',
         pickup: rideSnapshot?.pickupAddress || routeState.pickup,
         drop: rideSnapshot?.dropAddress || routeState.drop,
-        pickupCoords: rideSnapshot?.pickupLocation?.coordinates || routeState.pickupCoords,
-        dropCoords: rideSnapshot?.dropLocation?.coordinates || routeState.dropCoords,
+        pickupCoords: readCoordinatePair(
+          rideSnapshot?.pickup?.coordinates,
+          rideSnapshot?.pickupLocation?.coordinates,
+          routeState.pickupCoords,
+        ) || resolvedPickupCoords,
+        dropCoords: readCoordinatePair(
+          rideSnapshot?.drop?.coordinates,
+          rideSnapshot?.dropLocation?.coordinates,
+          routeState.dropCoords,
+        ) || resolvedDropCoords,
         rideId: activeRideIdRef.current,
         otp,
         driver: nextDriver,
@@ -577,8 +621,8 @@ const ParcelSearchingDriver = () => {
 
         const socket = socketService.connect({ role: 'user', token: userToken });
         const response = await api.post('/deliveries', {
-          pickup: routeState.pickupCoords || [75.9048, 22.7039],
-          drop: routeState.dropCoords || [75.8937, 22.7533],
+          pickup: resolvedPickupCoords || [75.9048, 22.7039],
+          drop: resolvedDropCoords || [75.8937, 22.7533],
           pickupAddress: routeState.pickup || '',
           dropAddress: routeState.drop || '',
           fare: routeState.fare ?? routeState.estimatedFare?.min ?? null,
@@ -659,7 +703,7 @@ const ParcelSearchingDriver = () => {
         cleanupSearchRef.current?.();
       }, 0);
     };
-  }, [navigate, otp, preferredVehicleType, routePrefix, routeState, searchNonce, userHomeRoute]);
+  }, [navigate, otp, preferredVehicleType, resolvedDropCoords, resolvedPickupCoords, routePrefix, routeState, searchNonce, userHomeRoute]);
 
   const handleCancel = async () => {
     clearInterval(activeRidePollRef.current);

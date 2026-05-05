@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Plus, Trash2, Phone, User, AlertTriangle, ShieldAlert, X, CheckCircle2 } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { triggerUserSosAlert } from '../../../../shared/services/safetyAlertService';
 
 const MAX_CONTACTS = 5;
 const PHONE_REGEX = /^[6-9]\d{9}$/;
@@ -28,6 +30,7 @@ const SOSContacts = () => {
   const [sosActive, setSosActive]       = useState(false);
   const [countdown, setCountdown]       = useState(3);
   const [saving, setSaving]             = useState(false);
+  const [isTriggeringSos, setIsTriggeringSos] = useState(false);
 
   const validate = () => {
     const e = {};
@@ -55,15 +58,28 @@ const SOSContacts = () => {
   };
 
   const triggerSOS = () => {
+    if (isTriggeringSos) return;
+
     setSosActive(true);
     setCountdown(3);
+    setIsTriggeringSos(true);
     const interval = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
           clearInterval(interval);
           setSosActive(false);
           setCountdown(3);
-          // In production: alert all SOS contacts
+          triggerUserSosAlert()
+            .then(() => {
+              toast.success('SOS sent to safety center');
+            })
+            .catch((error) => {
+              console.error('Failed to trigger user SOS:', error);
+              toast.error(error?.message || 'Unable to send SOS right now');
+            })
+            .finally(() => {
+              setIsTriggeringSos(false);
+            });
         }
         return prev - 1;
       });

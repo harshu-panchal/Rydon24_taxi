@@ -49,6 +49,7 @@ import {
   getMyPoolingBookings
 } from '../controllers/poolingController.js';
 import { getAppModules, getGoodsTypes, getPublicRentalVehicleCatalog, getPublicVehicleTypeCatalog } from '../../admin/controllers/adminController.js';
+import { triggerUserSosAlert } from '../../safety/controllers/safetyController.js';
 
 export const userRouter = Router();
 
@@ -75,6 +76,7 @@ userRouter.post('/me/delete-request', authenticateOrResolveUser(['user']), async
 userRouter.get('/notifications', authenticateOrResolveUser(['user']), asyncHandler(getUserNotifications));
 userRouter.delete('/notifications/:id', authenticateOrResolveUser(['user']), asyncHandler(deleteUserNotification));
 userRouter.delete('/notifications', authenticateOrResolveUser(['user']), asyncHandler(clearAllUserNotifications));
+userRouter.post('/sos', authenticateOrResolveUser(['user']), asyncHandler(triggerUserSosAlert));
 userRouter.get('/wallet', authenticateOrResolveUser(['user']), asyncHandler(getUserWallet));
 userRouter.post('/wallet/topup', authenticateOrResolveUser(['user']), asyncHandler(topupUserWallet));
 userRouter.post('/wallet/transfer', authenticateOrResolveUser(['user']), asyncHandler(transferUserWallet));

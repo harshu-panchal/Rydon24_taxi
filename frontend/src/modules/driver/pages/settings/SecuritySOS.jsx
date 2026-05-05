@@ -19,6 +19,7 @@ import {
   getDriverEmergencyContacts,
 } from '../../services/registrationService';
 import { useSettings } from '../../../../shared/context/SettingsContext';
+import { triggerDriverSosAlert } from '../../../../shared/services/safetyAlertService';
 
 const MAX_CONTACTS = 5;
 const PHONE_REGEX = /^\d{10}$/;
@@ -217,9 +218,16 @@ const SecuritySOS = () => {
 
   const triggerSOS = () => {
     setShowToast(true);
-    window.setTimeout(() => {
-      window.open('tel:112', '_self');
-    }, 250);
+    triggerDriverSosAlert()
+      .catch((requestError) => {
+        console.error('Failed to trigger driver SOS:', requestError);
+        setError(requestError?.message || 'Unable to alert safety center');
+      })
+      .finally(() => {
+        window.setTimeout(() => {
+          window.open('tel:112', '_self');
+        }, 250);
+      });
   };
 
   return (

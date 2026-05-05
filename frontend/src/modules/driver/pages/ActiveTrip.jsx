@@ -56,6 +56,33 @@ const toLatLng = (coordinates, fallback = DEFAULT_CENTER) => {
     return fallback;
 };
 
+const readCoordinatePair = (...sources) => {
+    for (const source of sources) {
+        if (Array.isArray(source) && source.length >= 2) {
+            const [lng, lat] = source;
+            if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+                return [Number(lng), Number(lat)];
+            }
+        }
+
+        const nestedCoords = source?.coordinates;
+        if (Array.isArray(nestedCoords) && nestedCoords.length >= 2) {
+            const [lng, lat] = nestedCoords;
+            if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+                return [Number(lng), Number(lat)];
+            }
+        }
+
+        const lat = Number(source?.lat ?? source?.latitude);
+        const lng = Number(source?.lng ?? source?.longitude ?? source?.lon);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            return [lng, lat];
+        }
+    }
+
+    return null;
+};
+
 const createOffsetPosition = (position, latOffset = -0.0045, lngOffset = -0.0035) => ({
     lat: Number(position?.lat ?? DEFAULT_CENTER.lat) + latOffset,
     lng: Number(position?.lng ?? DEFAULT_CENTER.lng) + lngOffset,
@@ -81,7 +108,16 @@ const getAreaName = (address, fallback) => {
         .join(', ') || fallback;
 };
 
-const formatAddressFromPoint = (_point, fallback) => fallback;
+const formatAddressFromPoint = (point, fallback) => {
+    const coordinates = readCoordinatePair(point);
+
+    if (!coordinates) {
+        return fallback;
+    }
+
+    const [lng, lat] = coordinates;
+    return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+};
 
 const normalizeTripType = (job = {}) => {
     const value = String(job.type || job.serviceType || 'ride').toLowerCase();
@@ -638,20 +674,61 @@ const ActiveTrip = () => {
     const liveRequest = effectiveState?.request || {};
     const liveRaw = liveRequest.raw || {};
     const rideId = getJobRideId(liveRequest) || getJobRideId(effectiveState);
+    const [resolvedPickupCoords, setResolvedPickupCoords] = useState(null);
+    const [resolvedDropCoords, setResolvedDropCoords] = useState(null);
     const vehicleIconUrl = liveRaw.vehicleIconUrl || liveRequest.vehicleIconUrl || effectiveState.vehicleIconUrl || carIcon;
 
-    const pickupCoords = liveRaw.pickupLocation?.coordinates || effectiveState?.pickupCoords || DEFAULT_DRIVER_COORDS;
+    const pickupAddressLabel = String(
+        liveRaw?.pickupAddress ||
+        liveRequest?.pickup ||
+        effectiveState?.request?.pickup ||
+        effectiveState?.pickupAddress ||
+        '',
+    ).trim();
+    const dropAddressLabel = String(
+        liveRaw?.dropAddress ||
+        liveRequest?.drop ||
+        effectiveState?.request?.drop ||
+        effectiveState?.dropAddress ||
+        '',
+    ).trim();
+
+    const pickupCoords = readCoordinatePair(
+        liveRaw?.pickup,
+        liveRaw?.pickupLocation,
+        liveRequest?.pickup,
+        liveRequest?.pickupLocation,
+        liveRequest?.raw?.pickup,
+        liveRequest?.raw?.pickupLocation,
+        effectiveState?.pickup,
+        effectiveState?.pickupLocation,
+        effectiveState?.request?.raw?.pickup,
+        effectiveState?.request?.raw?.pickupLocation,
+        effectiveState?.pickupCoords,
+    ) || resolvedPickupCoords || DEFAULT_DRIVER_COORDS;
     const dropCoords = useMemo(
-        () => liveRaw.dropLocation?.coordinates || effectiveState?.dropCoords || [75.8937, 22.7533],
-        [effectiveState?.dropCoords, liveRaw.dropLocation?.coordinates],
+        () => readCoordinatePair(
+            liveRaw?.drop,
+            liveRaw?.dropLocation,
+            liveRequest?.drop,
+            liveRequest?.dropLocation,
+            liveRequest?.raw?.drop,
+            liveRequest?.raw?.dropLocation,
+            effectiveState?.drop,
+            effectiveState?.dropLocation,
+            effectiveState?.request?.raw?.drop,
+            effectiveState?.request?.raw?.dropLocation,
+            effectiveState?.dropCoords,
+        ) || resolvedDropCoords || [75.8937, 22.7533],
+        [effectiveState?.drop, effectiveState?.dropCoords, effectiveState?.dropLocation, effectiveState?.request?.raw?.drop, effectiveState?.request?.raw?.dropLocation, liveRaw?.drop, liveRaw?.dropLocation, liveRequest?.drop, liveRequest?.dropLocation, liveRequest?.raw?.drop, liveRequest?.raw?.dropLocation, resolvedDropCoords],
     );
-    const assignedDriverCoords =
-        liveRaw.driverLocation?.coordinates ||
-        liveRequest.driverLocation?.coordinates ||
-        effectiveState?.driverCoords ||
-        effectiveState?.currentDriverCoords ||
-        readStoredDriverCoords() ||
-        null;
+    const assignedDriverCoords = readCoordinatePair(
+        liveRaw?.driverLocation,
+        liveRequest?.driverLocation,
+        effectiveState?.driverCoords,
+        effectiveState?.currentDriverCoords,
+        readStoredDriverCoords(),
+    );
 
     const pickupPosition = useMemo(() => toLatLng(pickupCoords), [pickupCoords]);
     const dropPosition = useMemo(() => toLatLng(dropCoords), [dropCoords]);
@@ -695,6 +772,7 @@ const ActiveTrip = () => {
     const isSimulationEnabledRef = React.useRef(false);
     const hasResolvedLivePositionRef = React.useRef(false);
     const hasHydratedUiStateRef = React.useRef(false);
+    const mapFrameKeyRef = React.useRef('');
 
     const activeDestination = phase === 'to_pickup' || phase === 'otp_verification' ? pickupPosition : dropPosition;
     const pickupDistanceMeters = useMemo(
@@ -906,6 +984,99 @@ const ActiveTrip = () => {
 
         setPhase((current) => (current === 'to_pickup' ? restoredPhase : current));
     }, [effectiveState, hydratedTripState, liveRaw, liveRequest, rideId]);
+
+    useEffect(() => {
+        setResolvedPickupCoords(null);
+        setResolvedDropCoords(null);
+    }, [rideId]);
+
+    useEffect(() => {
+        if (!isLoaded || !window.google?.maps?.Geocoder) {
+            return;
+        }
+
+        const geocoder = new window.google.maps.Geocoder();
+        let active = true;
+
+        const resolveAddressCoords = (address, setter) => {
+            const trimmedAddress = String(address || '').trim();
+
+            if (!trimmedAddress) {
+                return;
+            }
+
+            geocoder.geocode({ address: trimmedAddress }, (results, status) => {
+                if (!active || status !== 'OK' || !results?.[0]?.geometry?.location) {
+                    return;
+                }
+
+                const locationPoint = results[0].geometry.location;
+                setter([locationPoint.lng(), locationPoint.lat()]);
+            });
+        };
+
+        if (!readCoordinatePair(
+            liveRaw?.pickup,
+            liveRaw?.pickupLocation,
+            liveRequest?.pickup,
+            liveRequest?.pickupLocation,
+            liveRequest?.raw?.pickup,
+            liveRequest?.raw?.pickupLocation,
+            effectiveState?.pickup,
+            effectiveState?.pickupLocation,
+            effectiveState?.request?.raw?.pickup,
+            effectiveState?.request?.raw?.pickupLocation,
+            effectiveState?.pickupCoords,
+        ) && pickupAddressLabel) {
+            resolveAddressCoords(pickupAddressLabel, setResolvedPickupCoords);
+        }
+
+        if (!readCoordinatePair(
+            liveRaw?.drop,
+            liveRaw?.dropLocation,
+            liveRequest?.drop,
+            liveRequest?.dropLocation,
+            liveRequest?.raw?.drop,
+            liveRequest?.raw?.dropLocation,
+            effectiveState?.drop,
+            effectiveState?.dropLocation,
+            effectiveState?.request?.raw?.drop,
+            effectiveState?.request?.raw?.dropLocation,
+            effectiveState?.dropCoords,
+        ) && dropAddressLabel) {
+            resolveAddressCoords(dropAddressLabel, setResolvedDropCoords);
+        }
+
+        return () => {
+            active = false;
+        };
+    }, [
+        dropAddressLabel,
+        effectiveState?.dropCoords,
+        effectiveState?.drop,
+        effectiveState?.dropLocation,
+        effectiveState?.pickup,
+        effectiveState?.pickupCoords,
+        effectiveState?.pickupLocation,
+        effectiveState?.request?.raw?.drop,
+        effectiveState?.request?.raw?.dropLocation,
+        effectiveState?.request?.raw?.pickup,
+        effectiveState?.request?.raw?.pickupLocation,
+        isLoaded,
+        liveRaw?.drop,
+        liveRaw?.dropLocation,
+        liveRaw?.pickup,
+        liveRaw?.pickupLocation,
+        liveRequest?.drop,
+        liveRequest?.dropLocation,
+        liveRequest?.pickup,
+        liveRequest?.pickupLocation,
+        liveRequest?.raw?.drop,
+        liveRequest?.raw?.dropLocation,
+        liveRequest?.raw?.pickup,
+        liveRequest?.raw?.pickupLocation,
+        pickupAddressLabel,
+    ]);
 
     const tripData = isParcel ? {
         sender: {
@@ -1521,6 +1692,19 @@ const ActiveTrip = () => {
             map.panTo(driverPosition);
             return;
         }
+
+        const frameKey = [
+            phase,
+            activeDestination?.lat?.toFixed?.(5) || activeDestination?.lat,
+            activeDestination?.lng?.toFixed?.(5) || activeDestination?.lng,
+            routePath.length > 1 ? 'route' : 'direct',
+        ].join(':');
+
+        if (mapFrameKeyRef.current === frameKey) {
+            return;
+        }
+
+        mapFrameKeyRef.current = frameKey;
 
         if (arePositionsNearlyEqual(driverPosition, activeDestination)) {
             map.setCenter(driverPosition);

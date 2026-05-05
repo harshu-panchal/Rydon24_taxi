@@ -582,6 +582,7 @@ const SenderReceiverDetails = () => {
   const [googleDropSuggestions, setGoogleDropSuggestions] = useState([]);
   const [isFetchingDropSuggestions, setIsFetchingDropSuggestions] = useState(false);
   const autoPickupRequestedRef = useRef(false);
+  const livePickupHydratedRef = useRef(false);
   const dropInputRef = useRef(null);
   const dropGeocodeTimerRef = useRef(null);
   const dropSuggestionTimerRef = useRef(null);
@@ -591,8 +592,18 @@ const SenderReceiverDetails = () => {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    window.sessionStorage.setItem(PARCEL_BOOKING_DRAFT_KEY, JSON.stringify(parcelState));
-  }, [parcelState]);
+    window.sessionStorage.setItem(PARCEL_BOOKING_DRAFT_KEY, JSON.stringify({
+      ...parcelState,
+      senderName,
+      senderMobile,
+      receiverName,
+      receiverMobile,
+      pickup,
+      drop,
+      pickupCoords,
+      dropCoords,
+    }));
+  }, [drop, dropCoords, parcelState, pickup, pickupCoords, receiverMobile, receiverName, senderMobile, senderName]);
 
   useEffect(() => {
     if (dropInputRef.current) {
@@ -879,14 +890,15 @@ const SenderReceiverDetails = () => {
   });
 
   useEffect(() => {
-    if (autoPickupRequestedRef.current || pickup.trim()) return;
+    if (autoPickupRequestedRef.current || livePickupHydratedRef.current) return;
     autoPickupRequestedRef.current = true;
+    livePickupHydratedRef.current = true;
     const timer = setTimeout(() => {
       requestCurrentPickupLocation();
     }, 0);
 
     return () => clearTimeout(timer);
-  }, [pickup]);
+  }, [requestCurrentPickupLocation]);
 
   useEffect(() => {
     if (!pickupCoords || !pickup || !isCoordinateLabel(pickup) || !isGoogleMapsLoaded) {
@@ -1192,11 +1204,9 @@ const SenderReceiverDetails = () => {
 
           <div className="pl-8 space-y-6">
             {/* Sender Card */}
-            <div 
-              className="bg-slate-50/80 rounded-2xl p-4 flex items-center justify-between group cursor-pointer border border-slate-100/50" 
-              onClick={() => setIsContactSheetOpen(true)}
-            >
+            <div className="bg-slate-50/80 rounded-2xl p-4 flex items-center justify-between gap-3 border border-slate-100/50">
               <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500">Pickup</p>
                 <div className="flex items-center gap-2">
                    <p className="text-[14px] font-black text-slate-900">{senderName || 'Sender Details'}</p>
                    {senderMobile && (
@@ -1208,7 +1218,24 @@ const SenderReceiverDetails = () => {
                 </div>
                 <p className="text-[13px] font-medium text-slate-500 truncate mt-1">{pickup || 'Pickup location'}</p>
               </div>
-              <ChevronRight size={14} className="text-slate-300 group-hover:translate-x-0.5 transition-transform" />
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setActiveMapPicker('pickup')}
+                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-100 bg-white text-emerald-600 shadow-sm"
+                  aria-label="Change pickup location"
+                >
+                  <LocateFixed size={18} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsContactSheetOpen(true)}
+                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-100 bg-white text-slate-400 shadow-sm"
+                  aria-label="Open sender details"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
             </div>
 
             {/* Drop Input Area */}

@@ -34,6 +34,7 @@ import IncomingRideRequest from './IncomingRideRequest';
 import api from '../../../shared/api/axiosInstance';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import { uploadService } from '../../../shared/services/uploadService';
+import { BACKEND_ORIGIN } from '../../../shared/api/runtimeConfig';
 
 // Vehicle Icons for Map
 import BikeIcon from '@/assets/icons/bike.png';
@@ -204,8 +205,14 @@ const compressSelfieDataUrl = async (dataUrl) => {
 
 const getMapIconForVehicle = (iconType = '') => {
     const raw = String(iconType || '').trim();
-    if (/^(https?:|data:image\/|blob:|\/uploads\/|\/images\/|\/[^/])/.test(raw)) {
+    if (/^(https?:|data:image\/|blob:)/.test(raw)) {
         return raw;
+    }
+    if (raw.startsWith('/')) {
+        return `${BACKEND_ORIGIN}${raw}`;
+    }
+    if (/^(uploads\/|images\/)/.test(raw)) {
+        return `${BACKEND_ORIGIN}/${raw}`;
     }
 
     const value = raw.toLowerCase();
