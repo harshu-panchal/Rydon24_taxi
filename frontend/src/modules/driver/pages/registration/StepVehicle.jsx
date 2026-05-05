@@ -293,12 +293,12 @@ const StepVehicle = () => {
 
                 <div className="space-y-5">
                     {!isOwner && (
-                        <section className="space-y-5 rounded-[2.5rem] border border-slate-100 bg-white p-6 shadow-[0_10px_40px_rgba(0,0,0,0.04)]">
+                        <section className="space-y-4 rounded-[2.5rem] border border-slate-100 bg-white p-6 shadow-[0_10px_40px_rgba(0,0,0,0.04)]">
                             <div className="space-y-1 px-1">
                                 <h2 className="text-lg font-black tracking-tight text-slate-900">Service Category</h2>
                                 <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest opacity-60">Selection Required</p>
                             </div>
-                            <div className="grid grid-cols-1 gap-3">
+                            <div className="grid grid-cols-2 gap-2">
                                 {registerTypes.map((item) => (
                                     <button
                                         key={item.id}
@@ -315,24 +315,22 @@ const StepVehicle = () => {
                                                 registerFor: getPrimaryRegisterFor(nextServiceCategories, previous.registerFor),
                                             };
                                         })}
-                                        className={`flex items-center gap-4 p-4 rounded-[1.8rem] border-2 transition-all group ${
+                                        className={`flex items-center gap-2.5 px-3 py-3 rounded-2xl border-2 transition-all group relative overflow-hidden ${
                                             formData.serviceCategories.includes(item.id)
-                                            ? 'bg-slate-900 border-slate-900 text-white shadow-xl shadow-slate-900/10' 
+                                            ? 'bg-slate-900 border-slate-900 text-white' 
                                             : 'bg-slate-50 border-slate-50 text-slate-600 hover:border-slate-200'
                                         }`}
                                     >
-                                        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all ${
+                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
                                             formData.serviceCategories.includes(item.id) ? 'bg-white text-slate-900' : 'bg-white shadow-sm text-slate-400'
                                         }`}>
                                             {item.icon}
                                         </div>
-                                        <div className="flex-1 text-left">
-                                            <span className="block text-[14px] font-black uppercase tracking-widest leading-none">{item.label}</span>
-                                        </div>
-                                        {formData.serviceCategories.includes(item.id) ? (
-                                             <CheckCircle2 size={20} className="text-white" strokeWidth={3} />
-                                        ) : (
-                                            <div className="w-6 h-6 rounded-full border-2 border-slate-200 group-hover:border-slate-300 transition-colors" />
+                                        <span className="text-[11px] font-black uppercase tracking-widest">{item.label}</span>
+                                        {formData.serviceCategories.includes(item.id) && (
+                                             <div className="absolute top-1.5 right-1.5">
+                                                <CheckCircle2 size={12} className="text-white" strokeWidth={3} />
+                                             </div>
                                         )}
                                     </button>
                                 ))}

@@ -281,7 +281,7 @@ const OTPVerification = () => {
                             Verify <span className="text-slate-400">Phone</span>
                         </h1>
                         <p className="text-[15px] leading-relaxed text-slate-500 font-bold opacity-80 max-w-[28ch]">
-                            Enter the 4-digit code sent to <span className="text-slate-900 underline underline-offset-4 decoration-2 decoration-slate-900/10">+91 {phone}</span>
+                            Enter the 4-digit code sent to <span className="whitespace-nowrap text-slate-900 underline underline-offset-4 decoration-2 decoration-slate-900/10">+91 {phone}</span>
                         </p>
                     </motion.section>
                 </motion.header>
