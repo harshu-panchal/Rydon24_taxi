@@ -173,6 +173,7 @@ const DriverDocuments = () => {
         name: field.label,
         templateName: field.templateName,
         reviewStatus: getDocumentReviewStatus(doc),
+        hasDocument: hasDoc,
         status: verified
           ? 'Verified'
           : rejected
@@ -198,6 +199,9 @@ const DriverDocuments = () => {
       };
     });
   }, [driver?.documents, templates]);
+
+  const uploadedCount = docs.filter((doc) => doc.hasDocument).length;
+  const actionRequiredCount = docs.filter((doc) => !doc.verified).length;
 
   useEffect(() => {
     if (!focusDocumentKey || isLoading || imageUploading) {
@@ -279,10 +283,10 @@ const DriverDocuments = () => {
             </div>
             <div className="space-y-0.5">
               <h3 className="text-[14px] font-black tracking-tight leading-none text-slate-900 uppercase">
-                {isLoading ? 'Loading Documents' : `${docs.filter((doc) => doc.status === 'Uploaded').length} Uploaded`}
+                {isLoading ? 'Loading Documents' : `${uploadedCount} Uploaded`}
               </h3>
               <p className="text-[10px] font-bold text-slate-400 opacity-60 leading-tight tracking-widest">
-                {docs.filter((doc) => doc.status !== 'Uploaded').length} Action Required
+                {actionRequiredCount} Action Required
               </p>
             </div>
           </div>

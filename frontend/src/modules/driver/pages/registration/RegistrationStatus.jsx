@@ -260,7 +260,7 @@ const getStatusColor = (status) => {
 
   return (
     <div 
-        className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-32 pt-12 select-none overflow-x-hidden flex flex-col items-center"
+        className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-10 pt-12 select-none overflow-x-hidden flex flex-col items-center"
         style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
     >
       <div className="mb-8 w-full flex justify-center">
@@ -368,7 +368,7 @@ const getStatusColor = (status) => {
             </div>
         </section>
 
-        <div className="fixed bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex flex-col gap-3">
+        <div className="sticky bottom-0 z-10 -mx-1 mt-2 rounded-[28px] border border-slate-100 bg-white/95 p-4 shadow-[0_-12px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl flex flex-col gap-3">
             {rejectedDocs.length > 0 ? (
                 <div className="rounded-2xl bg-rose-50 border border-rose-100 px-4 py-3 text-[12px] font-semibold leading-relaxed text-rose-600">
                     Select a rejected document above to re-upload the correct file. You can do this one by one for multiple rejected documents.
