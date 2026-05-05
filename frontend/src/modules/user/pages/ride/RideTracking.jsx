@@ -19,6 +19,7 @@ const DEFAULT_CENTER = { lat: 22.7196, lng: 75.8577 };
 const TERMINAL_STATUSES = new Set(['completed', 'cancelled', 'delivered']);
 const ACTIVE_RIDE_VALIDATE_MS = 15000;
 const COMPLETED_TRACKING_STATUSES = new Set(['completed', 'delivered']);
+const POST_RIDE_REDIRECT_STATUSES = new Set(['arrived', 'completed', 'delivered']);
 
 const toLatLng = (coords, fallback = DEFAULT_CENTER) => {
   const [lng, lat] = coords || [];
@@ -543,7 +544,8 @@ const RideTracking = () => {
         status: statusValue,
         liveStatus: statusValue,
         feedback: rideRealtime?.feedback || state.feedback || null,
-        completedAt: rideRealtime?.completedAt || Date.now(),
+        arrivedAt: rideRealtime?.arrivedAt || state.arrivedAt || '',
+        completedAt: rideRealtime?.completedAt || rideRealtime?.arrivedAt || state.arrivedAt || Date.now(),
       };
 
       saveCurrentRide(completedRideSnapshot);
@@ -580,6 +582,38 @@ const RideTracking = () => {
         const nextStatus = String(payload?.liveStatus || payload?.status || '').toLowerCase();
 
         if (!active) {
+          return;
+        }
+
+        if (POST_RIDE_REDIRECT_STATUSES.has(nextStatus)) {
+          const mergedDriver = mergeDriverSnapshot(fallbackDriver, payload?.driver || {});
+          setRideRealtime({
+            pickup: {
+              coordinates: payload?.pickupLocation?.coordinates,
+              address: payload?.pickupAddress || latestStateRef.current.pickup || 'Pickup',
+            },
+            drop: {
+              coordinates: payload?.dropLocation?.coordinates,
+              address: payload?.dropAddress || latestStateRef.current.drop || 'Drop',
+            },
+            driverLocation: payload?.lastDriverLocation
+              ? { coordinates: payload.lastDriverLocation.coordinates }
+              : null,
+            status: nextStatus,
+            fare: payload?.fare || latestStateRef.current.fare || 0,
+            paymentMethod: payload?.paymentMethod || latestStateRef.current.paymentMethod || 'Cash',
+            vehicleIconType: payload?.vehicleIconType || latestStateRef.current.vehicleIconType || '',
+            vehicleIconUrl: payload?.vehicleIconUrl || latestStateRef.current.vehicleIconUrl || '',
+            scheduledAt: payload?.scheduledAt || latestStateRef.current.scheduledAt || null,
+            otp: payload?.otp || latestStateRef.current.otp || latestStateRef.current.ride_otp || '',
+            arrivedAt: payload?.arrivedAt || latestStateRef.current.arrivedAt || '',
+            pricingSnapshot: payload?.pricingSnapshot || latestStateRef.current.pricingSnapshot || null,
+            driverPaymentCollection: payload?.driverPaymentCollection || latestStateRef.current.driverPaymentCollection || null,
+            completedAt: payload?.completedAt || null,
+            feedback: payload?.feedback || null,
+            driver: mergedDriver,
+          });
+          completeTracking(nextStatus);
           return;
         }
 
@@ -780,7 +814,7 @@ const RideTracking = () => {
         driver: mergeDriverSnapshot(prev?.driver || latestFallbackDriver, payload.driver || {}),
       }));
 
-      if (COMPLETED_TRACKING_STATUSES.has(nextStatus)) {
+      if (POST_RIDE_REDIRECT_STATUSES.has(nextStatus)) {
         latestCompleteTrackingRef.current(nextStatus);
         return;
       }
@@ -812,10 +846,11 @@ const RideTracking = () => {
       const nextStatus = payload.liveStatus || payload.status || 'accepted';
       const normalizedStatus = String(nextStatus).toLowerCase();
 
-      if (COMPLETED_TRACKING_STATUSES.has(normalizedStatus)) {
+      if (POST_RIDE_REDIRECT_STATUSES.has(normalizedStatus)) {
         setRideRealtime((prev) => ({
           ...(prev || {}),
           status: normalizedStatus,
+          arrivedAt: payload.arrivedAt || prev?.arrivedAt || null,
           driverPaymentCollection: payload.driverPaymentCollection || prev?.driverPaymentCollection || null,
           completedAt: payload.completedAt || prev?.completedAt || null,
         }));

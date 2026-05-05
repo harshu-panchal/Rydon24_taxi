@@ -93,6 +93,7 @@ const RideComplete = () => {
   const [walletSnapshot, setWalletSnapshot] = useState({ balance: 0, currency: 'INR' });
   const [walletLoading, setWalletLoading] = useState(false);
   const [paymentCollection, setPaymentCollection] = useState(() => state.driverPaymentCollection || null);
+  const [rideLiveStatus, setRideLiveStatus] = useState(() => String(state.liveStatus || state.status || '').toLowerCase());
   const [tipSettings, setTipSettings] = useState({
     enable_tips: '1',
     min_tip_amount: '10',
@@ -125,6 +126,7 @@ const RideComplete = () => {
   const totalBill = fare + Number(selectedTip || 0);
   const fareDueNow = isCollectionPaid(paymentCollection) ? 0 : fare;
   const payableNow = fareDueNow + Number(selectedTip || 0);
+  const isRideFinalized = ['completed', 'delivered'].includes(rideLiveStatus) || Boolean(state.feedback?.submittedAt);
   const tipsEnabled = String(tipSettings.enable_tips || '1') === '1';
   const minimumTipAmount = Number(tipSettings.min_tip_amount || 0);
   const availableTipOptions = useMemo(() => {
@@ -137,8 +139,8 @@ const RideComplete = () => {
 
     return nextOptions;
   }, [minimumTipAmount, tipsEnabled]);
-  const rideDate = new Date(state.completedAt || Date.now()).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-  const rideTime = new Date(state.completedAt || Date.now()).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const rideDate = new Date(state.completedAt || state.arrivedAt || Date.now()).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const rideTime = new Date(state.completedAt || state.arrivedAt || Date.now()).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
   useEffect(() => {
     // We keep the ride state for the review screen to allow refreshes
   }, []);
@@ -170,9 +172,11 @@ const RideComplete = () => {
         const response = await api.get(`/rides/${rideId}`);
         const payload = response?.data?.data || response?.data || response || {};
         const feedback = payload?.feedback || null;
+        const nextLiveStatus = String(payload?.liveStatus || payload?.status || '').toLowerCase();
 
         if (active) {
           setPaymentCollection(payload?.driverPaymentCollection || null);
+          setRideLiveStatus(nextLiveStatus);
         }
 
         if (!active || !feedback) {
@@ -189,9 +193,13 @@ const RideComplete = () => {
     };
 
     hydrateCompletedRide();
+    const refreshTimer = window.setInterval(() => {
+      hydrateCompletedRide();
+    }, 5000);
 
     return () => {
       active = false;
+      window.clearInterval(refreshTimer);
     };
   }, [rideId]);
 
@@ -292,6 +300,11 @@ const RideComplete = () => {
 
     if (rating < 1) {
       setError('Please rate your driver before finishing.');
+      return;
+    }
+
+    if (!isRideFinalized) {
+      setError('Waiting for the driver to finish the trip. You can rate as soon as the ride is finalized.');
       return;
     }
 
@@ -459,13 +472,26 @@ const RideComplete = () => {
           </div>
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-              {serviceType === 'parcel' ? 'Delivery Completed' : 'Ride Completed'}
+              {isRideFinalized
+                ? (serviceType === 'parcel' ? 'Delivery Completed' : 'Ride Completed')
+                : (serviceType === 'parcel' ? 'Reached Destination' : 'Reached Destination')}
             </p>
             <h1 className="text-[22px] font-black text-slate-900">
-              {serviceType === 'parcel' ? 'Package delivered' : 'You have arrived'}
+              {isRideFinalized
+                ? (serviceType === 'parcel' ? 'Package delivered' : 'You have arrived')
+                : (serviceType === 'parcel' ? 'Package reached destination' : 'Driver reached destination')}
             </h1>
           </div>
         </div>
+
+        {!isRideFinalized ? (
+          <div className="rounded-[18px] border border-amber-100 bg-amber-50/90 px-4 py-3 text-center shadow-[0_8px_20px_rgba(245,158,11,0.08)]">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Finalizing trip</p>
+            <p className="mt-1 text-[12px] font-bold text-amber-900">
+              The driver has marked destination arrival. This page will unlock rating and payment as soon as the trip is finalized.
+            </p>
+          </div>
+        ) : null}
 
         <div className="overflow-hidden rounded-[22px] border border-white/80 bg-white/95 shadow-[0_12px_30px_rgba(15,23,42,0.08)]">
           <div className="flex items-center justify-between bg-slate-900 px-4 py-3">
@@ -773,7 +799,7 @@ const RideComplete = () => {
           <button
             type="button"
             onClick={submitFeedback}
-            disabled={isSubmitting || isSubmitted || (selectedPaymentMethod === 'wallet' && Number(payableNow || 0) > Number(walletSnapshot.balance || 0))}
+            disabled={isSubmitting || isSubmitted || !isRideFinalized || (selectedPaymentMethod === 'wallet' && Number(payableNow || 0) > Number(walletSnapshot.balance || 0))}
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-[16px] bg-slate-900 py-3.5 text-[14px] font-black text-white shadow-[0_12px_24px_rgba(15,23,42,0.18)] disabled:opacity-60"
           >
             {isSubmitting
@@ -788,6 +814,8 @@ const RideComplete = () => {
               )
               : isSubmitted
                 ? 'Feedback already saved'
+                : !isRideFinalized
+                  ? 'Waiting for driver to finalize trip'
                 : (
                   payableNow > 0
                     ? selectedPaymentMethod === 'wallet'
