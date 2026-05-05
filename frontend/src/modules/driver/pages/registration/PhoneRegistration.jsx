@@ -174,20 +174,33 @@ const PhoneRegistration = () => {
                 <div className="absolute inset-0 bg-gradient-to-b from-white/80 via-white/40 to-white/90" />
             </div>
 
-            <main className="relative z-10 mx-auto max-w-sm px-6 pt-16 pb-36">
+            <main className="relative z-10 mx-auto max-w-sm px-6 pt-10 pb-36">
                 <motion.header 
                     variants={containerVariants}
                     initial="hidden"
                     animate="visible"
-                    className="space-y-6 mb-12"
+                    className="space-y-6 mb-10"
                 >
-                    <div className="flex items-center">
-                        <motion.div 
-                            variants={itemVariants}
-                            className="rounded-full bg-slate-900/5 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500 border border-slate-900/5"
-                        >
-                            {isLoginPage ? 'Secure Portal' : 'Driver Onboarding'}
-                        </motion.div>
+                    <div className="flex items-center justify-between">
+                        <div className="flex flex-col gap-4">
+                            {settings.general?.logo || settings.customization?.logo ? (
+                                <img 
+                                    src={settings.general?.logo || settings.customization?.logo} 
+                                    alt={appName} 
+                                    className="h-10 w-auto object-contain self-start drop-shadow-sm"
+                                />
+                            ) : (
+                                <div className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-black tracking-tighter text-white shadow-xl shadow-slate-900/10 self-start">
+                                    {appName}
+                                </div>
+                            )}
+                            <motion.div 
+                                variants={itemVariants}
+                                className="rounded-full bg-slate-900/5 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500 border border-slate-900/5 w-fit"
+                            >
+                                {isLoginPage ? 'Secure Portal' : 'Driver Onboarding'}
+                            </motion.div>
+                        </div>
                     </div>
 
                     <motion.section 
@@ -222,7 +235,7 @@ const PhoneRegistration = () => {
                 >
                     <motion.div 
                         variants={itemVariants}
-                        className="flex items-center gap-2 mb-8 bg-slate-100 p-1.5 rounded-[1.5rem]"
+                        className="flex items-center gap-2 mb-8 bg-slate-100 p-1.5 rounded-[1.5rem] overflow-x-auto no-scrollbar scroll-smooth"
                     >
                         {roleOptions.map((option) => {
                             const active = role === option.id;
@@ -232,7 +245,7 @@ const PhoneRegistration = () => {
                                     layout
                                     whileTap={{ scale: 0.97 }}
                                     onClick={() => setRole(option.id)}
-                                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-2 rounded-2xl transition-all ${
+                                    className={`flex-none flex items-center justify-center gap-2 py-3 px-4 rounded-2xl transition-all whitespace-nowrap ${
                                         active
                                             ? 'bg-white text-slate-900 shadow-sm border border-slate-200'
                                             : 'text-slate-400 hover:text-slate-600'
@@ -276,7 +289,7 @@ const PhoneRegistration = () => {
                                                 }}
                                                 onFocus={() => phoneCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
                                                 placeholder="00000 00000"
-                                                className="min-w-0 w-full border-none bg-transparent p-0 text-xl font-black text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200"
+                                                className="min-w-0 w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200"
                                             />
                                         </div>
                                     </div>
