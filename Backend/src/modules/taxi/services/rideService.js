@@ -1460,13 +1460,35 @@ export const increaseRideBidCeiling = async ({ rideId, userId, incrementSteps = 
 
   const safeSteps = Math.max(1, Math.round(Number(incrementSteps || 1)));
   const safeStepAmount = normalizeBidStepAmount(ride.bidStepAmount);
-  ride.userMaxBidFare = Math.max(
+  const nextUserMaxBidFare = Math.max(
     Number(ride.baseFare || ride.fare || 0),
     Number(ride.userMaxBidFare || ride.fare || 0) + (safeSteps * safeStepAmount),
   );
-  await ride.save();
+  const updatedRide = await Ride.findOneAndUpdate(
+    {
+      _id: rideId,
+      userId,
+      status: RIDE_STATUS.SEARCHING,
+      liveStatus: RIDE_LIVE_STATUS.SEARCHING,
+      bookingMode: 'bidding',
+      biddingStatus: 'open',
+    },
+    {
+      $set: {
+        userMaxBidFare: nextUserMaxBidFare,
+      },
+    },
+    {
+      new: true,
+      runValidators: true,
+    },
+  );
 
-  return serializeRideRealtime(ride);
+  if (!updatedRide) {
+    throw new ApiError(409, 'Ride is not open for bid increases');
+  }
+
+  return serializeRideRealtime(updatedRide);
 };
 
 export const acceptRideBidAssignment = async ({ rideId, bidId, userId }) => {

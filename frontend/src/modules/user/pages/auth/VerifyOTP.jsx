@@ -194,16 +194,27 @@ const VerifyOTP = () => {
 
   return (
     <AuthLayout
-      title="Verify your number"
-      subtitle={`Enter the 4-digit code sent to +91 ${maskedPhone || phone}`}
+      title=""
+      subtitle=""
     >
-      <div className="lg:hidden mb-2 -mt-4">
-        <button
-          onClick={() => navigate(-1)}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-900 shadow-sm transition-all hover:bg-gray-50"
-        >
-          <ArrowLeft size={20} className="text-gray-900" />
-        </button>
+      <div className="mb-8">
+        <div className="grid grid-cols-[2.5rem_1fr_2.5rem] items-start gap-3 lg:grid-cols-[1fr]">
+          <button
+            onClick={() => navigate(-1)}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-900 shadow-sm transition-all hover:bg-gray-50 lg:hidden"
+          >
+            <ArrowLeft size={20} className="text-gray-900" />
+          </button>
+          <div className="text-center lg:text-left">
+            <h1 className="text-3xl md:text-4xl font-black text-gray-900 leading-tight tracking-tight">
+              Verify your number
+            </h1>
+            <p className="mt-4 text-base font-medium leading-relaxed text-gray-500">
+              {`Enter the 4-digit code sent to +91 ${maskedPhone || phone}`}
+            </p>
+          </div>
+          <div className="h-10 w-10 lg:hidden" />
+        </div>
       </div>
 
       <div className="space-y-10">

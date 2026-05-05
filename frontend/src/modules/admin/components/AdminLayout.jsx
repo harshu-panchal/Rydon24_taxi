@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { socketService } from '../../../shared/api/socket';
 import { useSettings } from '../../../shared/context/SettingsContext';
+import { getSupportConversations, markSupportMessagesRead } from '../../shared/chat/chatApi';
 import { adminService } from '../services/adminService';
 import toast from 'react-hot-toast';
 import {
@@ -97,7 +98,7 @@ const readDismissedNotifications = () => {
       bookings: Array.isArray(parsed?.bookings) ? parsed.bookings : [],
       chats: Array.isArray(parsed?.chats) ? parsed.chats : [],
     };
-  } catch (error) {
+  } catch {
     return { ride_requests: [], bookings: [], chats: [] };
   }
 };
@@ -208,7 +209,35 @@ const normalizeHexColor = (value, fallback = '') => {
   return fallback;
 };
 
-const SidebarItem = ({ icon, label, path, isCollapsed, sidebarTextColor }) => (
+const getSidebarItemCount = (item, unreadCountsByPath = {}) => {
+  if (item?.path) {
+    return Math.max(0, Number(unreadCountsByPath[item.path] || 0));
+  }
+
+  if (Array.isArray(item?.subItems)) {
+    return item.subItems.reduce((sum, child) => sum + getSidebarItemCount(child, unreadCountsByPath), 0);
+  }
+
+  return 0;
+};
+
+const SidebarBadge = ({ count, isActive = false }) => {
+  if (count <= 0) {
+    return null;
+  }
+
+  return (
+    <span
+      className={`ml-auto inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-black ${
+        isActive ? 'bg-white/20 text-white' : 'bg-orange-500 text-white'
+      }`}
+    >
+      {count > 99 ? '99+' : count}
+    </span>
+  );
+};
+
+const SidebarItem = ({ icon, label, path, isCollapsed, sidebarTextColor, unreadCount = 0 }) => (
   <NavLink
     to={path}
     end
@@ -226,7 +255,10 @@ const SidebarItem = ({ icon, label, path, isCollapsed, sidebarTextColor }) => (
     }
   >
     {React.createElement(icon, { size: 18, className: 'shrink-0' })}
-    {!isCollapsed && <span className="text-[14px] font-bold tracking-tight">{label}</span>}
+    {!isCollapsed && <span className="min-w-0 flex-1 text-[14px] font-bold tracking-tight">{label}</span>}
+    {!isCollapsed && (
+      <SidebarBadge count={unreadCount} />
+    )}
   </NavLink>
 );
 
@@ -241,10 +273,12 @@ const SidebarGroup = ({
   expandedGroups,
   setExpandedGroups,
   sidebarTextColor,
+  unreadCountsByPath,
 }) => {
   const isActive = hasActiveChild(pathname, subItems);
   const isOpen = expandedGroups.includes(groupKey);
   const isExpanded = forceOpen || isActive || isOpen;
+  const unreadCount = subItems.reduce((sum, item) => sum + getSidebarItemCount(item, unreadCountsByPath), 0);
   const toggleGroup = () => {
     setExpandedGroups((current) =>
       current.includes(groupKey)
@@ -263,16 +297,19 @@ const SidebarGroup = ({
         }`}
         style={isActive || isExpanded ? { backgroundColor: 'rgba(255, 255, 255, 0.16)' } : { color: sidebarTextColor }}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           {React.createElement(icon, {
             size: 18,
             className: 'shrink-0',
             style: isActive || isExpanded ? { color: '#FFFFFF' } : { color: sidebarTextColor },
           })}
-          {!isCollapsed && <span className="text-[14px] font-bold tracking-tight">{label}</span>}
+          {!isCollapsed && <span className="truncate text-[14px] font-bold tracking-tight">{label}</span>}
         </div>
         {!isCollapsed && (
-          <ChevronRight size={14} className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+          <div className="ml-3 flex items-center gap-2">
+            <SidebarBadge count={unreadCount} isActive={isActive || isExpanded} />
+            <ChevronRight size={14} className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+          </div>
         )}
       </button>
 
@@ -290,6 +327,7 @@ const SidebarGroup = ({
                 expandedGroups={expandedGroups}
                 setExpandedGroups={setExpandedGroups}
                 sidebarTextColor={sidebarTextColor}
+                unreadCountsByPath={unreadCountsByPath}
               />
             ) : (
               <NavLink
@@ -302,7 +340,8 @@ const SidebarGroup = ({
                 }
               >
                 <div className="h-1 w-1 shrink-0 rounded-full bg-slate-600" />
-                <span>{item.label}</span>
+                <span className="min-w-0 flex-1">{item.label}</span>
+                <SidebarBadge count={getSidebarItemCount(item, unreadCountsByPath)} />
               </NavLink>
             )
           )}
@@ -321,10 +360,12 @@ const NestedGroup = ({
   expandedGroups,
   setExpandedGroups,
   sidebarTextColor,
+  unreadCountsByPath,
 }) => {
   const isActive = hasActiveChild(pathname, subItems);
   const isOpen = expandedGroups.includes(groupKey);
   const isExpanded = forceOpen || isActive || isOpen;
+  const unreadCount = subItems.reduce((sum, item) => sum + getSidebarItemCount(item, unreadCountsByPath), 0);
   const toggleGroup = () => {
     setExpandedGroups((current) =>
       current.includes(groupKey)
@@ -343,11 +384,14 @@ const NestedGroup = ({
         }`}
         style={isActive || isExpanded ? { backgroundColor: 'rgba(255, 255, 255, 0.12)' } : { color: sidebarTextColor }}
       >
-        <span className="flex items-center gap-3 text-[12px] font-medium">
+        <span className="flex min-w-0 items-center gap-3 text-[12px] font-medium">
           <div className="h-1 w-1 shrink-0 rounded-full bg-slate-600" />
-          <span>{label}</span>
+          <span className="truncate">{label}</span>
         </span>
-        <ChevronRight size={12} className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+        <span className="ml-3 flex items-center gap-2">
+          <SidebarBadge count={unreadCount} isActive={isActive || isExpanded} />
+          <ChevronRight size={12} className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+        </span>
       </button>
 
       {isExpanded && (
@@ -363,7 +407,8 @@ const NestedGroup = ({
               }
             >
               <div className="h-0.5 w-0.5 shrink-0 rounded-full bg-slate-700" />
-              <span>{item.label}</span>
+              <span className="min-w-0 flex-1">{item.label}</span>
+              <SidebarBadge count={getSidebarItemCount(item, unreadCountsByPath)} />
             </NavLink>
           ))}
         </div>
@@ -457,6 +502,7 @@ const AdminLayout = () => {
   });
   const [bookingsFeed, setBookingsFeed] = useState([]);
   const [chatNotifications, setChatNotifications] = useState([]);
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
   const [rideRequestPage, setRideRequestPage] = useState(1);
   const [bookingPage, setBookingPage] = useState(1);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
@@ -470,7 +516,7 @@ const AdminLayout = () => {
       const saved = window.localStorage.getItem(SIDEBAR_EXPANSION_STORAGE_KEY);
       const parsed = saved ? JSON.parse(saved) : [];
       return Array.isArray(parsed) ? parsed : [];
-    } catch (error) {
+    } catch {
       return [];
     }
   });
@@ -478,8 +524,6 @@ const AdminLayout = () => {
   const notificationsMenuRef = useRef(null);
 
   const appName = settings.general?.app_name || 'App';
-  const appLogo = settings.general?.logo || settings.customization?.logo;
-
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
@@ -810,8 +854,15 @@ const AdminLayout = () => {
   );
 
   const isOwnerRoute = location.pathname.startsWith('/admin/owners') || location.pathname.startsWith('/admin/fleet');
+  const isAdminChatRoute = pathMatches(location.pathname, '/admin/chat');
   const mode = isOwnerRoute ? OWNER_MODE : ADMIN_MODE;
   const sidebarSections = mode === OWNER_MODE ? ownerSections : adminSections;
+  const unreadCountsByPath = useMemo(
+    () => ({
+      '/admin/chat': chatUnreadCount,
+    }),
+    [chatUnreadCount],
+  );
   const pageTitle = resolvePageTitle(location.pathname, sidebarSections, appName);
   const searchEntries = useMemo(() => flattenSearchEntries(flattenItems(sidebarSections)), [sidebarSections]);
   const filteredSearchEntries = useMemo(() => {
@@ -894,6 +945,67 @@ const AdminLayout = () => {
     setSearchTerm('');
     setIsNotificationsOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('adminToken');
+
+    if (!token || mode !== ADMIN_MODE) {
+      setChatUnreadCount(0);
+      return undefined;
+    }
+
+    let active = true;
+
+    const syncUnreadChats = async () => {
+      try {
+        const response = await getSupportConversations(token);
+        const conversations = response?.data?.conversations || [];
+        const unreadTotal = conversations.reduce(
+          (sum, conversation) => sum + Math.max(0, Number(conversation?.unreadCount || 0)),
+          0,
+        );
+
+        if (!active) {
+          return;
+        }
+
+        if (isAdminChatRoute) {
+          const unreadConversationKeys = conversations
+            .filter((conversation) => Number(conversation?.unreadCount || 0) > 0)
+            .map((conversation) => conversation.conversationKey)
+            .filter(Boolean);
+
+          if (unreadConversationKeys.length > 0) {
+            await Promise.all(
+              unreadConversationKeys.map((conversationKey) => markSupportMessagesRead(conversationKey, token)),
+            );
+          }
+
+          if (!active) {
+            return;
+          }
+
+          setChatNotifications([]);
+          setChatUnreadCount(0);
+          return;
+        }
+
+        setChatUnreadCount(unreadTotal);
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        console.error('Failed to sync admin chat unread count:', error);
+      }
+    };
+
+    syncUnreadChats();
+
+    return () => {
+      active = false;
+    };
+  }, [isAdminChatRoute, mode]);
 
   useEffect(() => {
     if (!isNotificationsOpen) return undefined;
@@ -1000,6 +1112,18 @@ const AdminLayout = () => {
         return;
       }
 
+      if (isAdminChatRoute) {
+        if (payload.conversationKey) {
+          markSupportMessagesRead(payload.conversationKey, token).catch((error) => {
+            console.error('Failed to mark live admin chat message as read:', error);
+          });
+        }
+
+        setChatNotifications([]);
+        setChatUnreadCount(0);
+        return;
+      }
+
       const senderName =
         String(payload.sender?.name || '').trim() ||
         (senderRole === 'driver' ? 'Driver' : senderRole === 'user' ? 'User' : 'Support contact');
@@ -1021,6 +1145,7 @@ const AdminLayout = () => {
       });
 
       if (wasAdded) {
+        setChatUnreadCount((current) => current + 1);
         toast(nextItem.body, {
           duration: 4500,
           className: 'font-bold text-[13px] rounded-2xl shadow-xl border border-sky-50 bg-white',
@@ -1035,7 +1160,7 @@ const AdminLayout = () => {
       socketService.off('new_driver_registration');
       socketService.off('chat:message', handleSupportChatNotification);
     };
-  }, [navigate]);
+  }, [isAdminChatRoute, navigate]);
 
   const handleLogout = () => {
     socketService.disconnect();
@@ -1114,6 +1239,7 @@ const AdminLayout = () => {
                       expandedGroups={expandedSidebarGroups}
                       setExpandedGroups={setExpandedSidebarGroups}
                       sidebarTextColor={sidebarTextColor}
+                      unreadCountsByPath={unreadCountsByPath}
                     />
                   ) : (
                     <SidebarItem
@@ -1121,6 +1247,7 @@ const AdminLayout = () => {
                       {...item}
                       isCollapsed={isCollapsed}
                       sidebarTextColor={sidebarTextColor}
+                      unreadCount={getSidebarItemCount(item, unreadCountsByPath)}
                     />
                   )
                 )}
