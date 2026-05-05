@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { User, Mail, Phone, ChevronRight } from 'lucide-react';
+import { User, Mail, Phone, ChevronRight, ArrowLeft } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
     getStoredDriverRegistrationSession,
@@ -101,110 +102,103 @@ const StepPersonal = () => {
             style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
         >
             <main className="mx-auto max-w-sm space-y-6">
-                <header className="space-y-5">
-                    <div className="flex justify-end">
-                        <div className="rounded-full border border-[#dcc9ab] bg-[#f7efe2] px-3 py-1 text-[11px] font-semibold tracking-[0.18em] text-[#8a6a3d] uppercase">
+                <header className="space-y-6">
+                    <div className="flex items-center justify-between">
+                         <div className="rounded-full bg-slate-900/5 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500 border border-slate-900/5">
                             Step 1 of 4
                         </div>
                     </div>
 
-                    <section className="rounded-[28px] border border-white/80 bg-white/88 p-6 shadow-[0_22px_60px_rgba(148,116,70,0.12)] backdrop-blur-sm">
-                        <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f3e4cd] text-[#8a5a22]">
-                            <User size={18} />
+                    <section className="space-y-3">
+                        <div className="flex items-center gap-3">
+                             <div className="flex h-11 w-11 items-center justify-center rounded-[1.25rem] bg-slate-900 text-white shadow-xl shadow-slate-900/10">
+                                <User size={22} strokeWidth={2.5} />
+                            </div>
+                            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 opacity-60">
+                                Profile Setup
+                            </span>
                         </div>
-                        <div className="space-y-2">
-                            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9a7b50]">
-                                {isOwner ? 'Owner onboarding' : 'Driver onboarding'}
-                            </p>
-                            <h1 className="text-[30px] font-semibold leading-[1.05] tracking-[-0.04em] text-slate-950">
-                                Personal details
-                            </h1>
-                            <p className="max-w-[28ch] text-sm leading-6 text-slate-600">
-                                Let&apos;s get the basics in place so your profile feels complete from day one.
-                            </p>
-                        </div>
+                        <h1 className="font-['Outfit'] text-[48px] font-black leading-[1] tracking-[-0.04em] text-slate-900">
+                            Personal <span className="text-slate-400">Info</span>
+                        </h1>
+                        <p className="text-[15px] leading-relaxed text-slate-500 font-bold opacity-80 max-w-[28ch]">
+                            Let's get the basics in place so your profile feels complete from day one.
+                        </p>
                     </section>
                 </header>
 
-                <section className="space-y-4 rounded-[30px] border border-slate-200/70 bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
-                    <div className="space-y-1 px-1 pt-1">
-                        <h2 className="text-base font-semibold tracking-[-0.03em] text-slate-950">Profile information</h2>
-                        <p className="text-sm text-slate-500">Clear labels, readable fields, no guesswork.</p>
+                <section className="space-y-5 rounded-[2.5rem] border border-slate-100 bg-white p-6 shadow-[0_10px_40px_rgba(0,0,0,0.04)]">
+                    <div className="space-y-1 px-1">
+                        <h2 className="text-lg font-black tracking-tight text-slate-900">Profile Information</h2>
+                        <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest opacity-60">Verified Credentials</p>
                     </div>
 
-                    <div className="space-y-3.5">
-                        <div className="rounded-[24px] border border-slate-200 bg-[#fcfcfb] p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all focus-within:border-[#c59d66] focus-within:bg-white focus-within:shadow-[0_16px_40px_rgba(197,157,102,0.14)]">
-                            <div className="flex items-start gap-3.5">
-                                <div className="mt-0.5 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f7efe2] text-[#8a5a22]">
-                                    <User size={18} />
+                    <div className="space-y-4">
+                        <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                            <div className="flex items-center gap-4">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
+                                    <User size={20} strokeWidth={2.5} />
                                 </div>
-                                <div className="flex-1 space-y-1.5">
-                                    <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600">Enter Name</label>
+                                <div className="min-w-0 flex-1 space-y-0.5">
+                                    <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70">Full Name</label>
                                     <input
                                         value={formData.fullName}
                                         onChange={(e) => setFormData(p => ({ ...p, fullName: e.target.value.replace(/[^A-Za-z .'-]/g, '') }))}
-                                        placeholder="Hritik Raghuwanshi"
-                                        className="w-full border-none bg-transparent p-0 text-[16px] font-semibold text-slate-950 outline-none focus:outline-none focus:ring-0 placeholder:text-slate-400"
+                                        placeholder="Enter your name"
+                                        className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200"
                                     />
                                 </div>
                             </div>
                         </div>
 
-                        <div className="rounded-[24px] border border-[#e5dccd] bg-[#f8f4ed] p-4 shadow-[0_8px_24px_rgba(15,23,42,0.03)]">
-                            <div className="flex items-start gap-3.5">
-                                <div className="mt-0.5 flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#8a6a3d] shadow-sm">
-                                    <Phone size={18} />
+                        <div className="rounded-[1.8rem] border-2 border-emerald-50 bg-emerald-50/30 p-4">
+                            <div className="flex items-center gap-4">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-sm">
+                                    <Phone size={20} strokeWidth={2.5} />
                                 </div>
-                                <div className="flex-1 space-y-1.5">
-                                    <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600">Mobile number</label>
-                                    <p className="text-[16px] font-semibold text-slate-900">+91 {phone}</p>
-                                    <p className="text-xs text-slate-500">Verified from your OTP step.</p>
+                                <div className="min-w-0 flex-1 space-y-0.5">
+                                    <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-emerald-600/60">Phone Number</label>
+                                    <p className="text-lg font-black text-slate-900">+91 {phone}</p>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="rounded-[24px] border border-slate-200 bg-[#fcfcfb] p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all focus-within:border-[#c59d66] focus-within:bg-white focus-within:shadow-[0_16px_40px_rgba(197,157,102,0.14)]">
-                            <div className="flex items-start gap-3.5">
-                                <div className="mt-0.5 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f7efe2] text-[#8a5a22]">
-                                    <Mail size={18} />
+                        <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                            <div className="flex items-center gap-4">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
+                                    <Mail size={20} strokeWidth={2.5} />
                                 </div>
-                                <div className="flex-1 space-y-1.5">
-                                    <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600">Email address</label>
+                                <div className="min-w-0 flex-1 space-y-0.5">
+                                    <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70">Email Address</label>
                                     <input
                                         type="email"
                                         value={formData.email}
                                         onChange={(e) => setFormData(p => ({ ...p, email: e.target.value.trim().toLowerCase() }))}
-                                        placeholder="name@example.com"
-                                        className="w-full border-none bg-transparent p-0 text-[16px] font-semibold text-slate-950 outline-none focus:outline-none focus:ring-0 placeholder:text-slate-400"
+                                        placeholder="name@gmail.com"
+                                        className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200"
                                     />
                                 </div>
                             </div>
                         </div>
 
-                        <div className="rounded-[24px] border border-slate-200 bg-[#fcfcfb] p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
-                            <div className="space-y-3">
-                                <div className="space-y-1">
-                                    <label className="block text-[12px] font-medium tracking-[0.02em] text-slate-600">Gender</label>
-                                    <p className="text-sm text-slate-500">Choose the option that matches your profile.</p>
-                                </div>
-                                <div className="grid grid-cols-3 gap-2.5">
-                                    {genders.map((g) => (
-                                        <button
-                                            key={g}
-                                            onClick={() => setFormData(p => ({ ...p, gender: g }))}
-                                            className={`rounded-2xl border px-3 py-3 text-sm font-medium transition-all ${
-                                                formData.gender === g
-                                                    ? 'border-[#b8894f] bg-[#8a5a22] text-white shadow-[0_12px_24px_rgba(138,90,34,0.22)]'
-                                                    : 'border-slate-200 bg-white text-slate-700 hover:border-[#cfb28b] hover:bg-[#fbf6ef]'
-                                            }`}
-                                        >
-                                            {g}
-                                        </button>
-                                    ))}
-                                </div>
+                        <div className="space-y-3 pt-2">
+                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70 px-2">Select Gender</label>
+                            <div className="grid grid-cols-3 gap-3">
+                                {genders.map((g) => (
+                                    <button
+                                        key={g}
+                                        onClick={() => setFormData(p => ({ ...p, gender: g }))}
+                                        className={`rounded-2xl h-12 text-[12px] font-black uppercase tracking-widest transition-all ${
+                                            formData.gender === g
+                                                ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/20'
+                                                : 'bg-white border-2 border-slate-50 text-slate-400 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        {g}
+                                    </button>
+                                ))}
                             </div>
                         </div>
-
                     </div>
                 </section>
 
@@ -214,20 +208,28 @@ const StepPersonal = () => {
                     </div>
                 )}
 
-                <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200/70 bg-white/88 p-5 backdrop-blur-md">
+                <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent">
                     <div className="mx-auto max-w-sm">
-                        <button
+                        <motion.button
+                            whileHover={{ scale: 1.02, y: -2 }}
+                            whileTap={{ scale: 0.98 }}
                             onClick={handleContinue}
                             disabled={loading}
-                            className={`flex h-14 w-full items-center justify-center gap-2 rounded-[22px] text-[15px] font-semibold tracking-[0.01em] shadow-[0_18px_40px_rgba(15,23,42,0.12)] transition-all ${
+                            className={`group flex h-16 w-full items-center justify-center gap-3 rounded-[1.8rem] text-[15px] font-black tracking-tight transition-all relative overflow-hidden ${
                                 formData.fullName && formData.email && formData.gender
-                                    ? 'bg-slate-950 text-white hover:bg-slate-900'
-                                    : 'pointer-events-none bg-slate-200 text-slate-500 shadow-none'
+                                    ? 'bg-slate-900 text-white shadow-[0_20px_40px_rgba(0,0,0,0.2)] active:bg-black'
+                                    : 'pointer-events-none bg-slate-200 text-slate-400 shadow-none'
                             }`}
                         >
-                            {loading ? 'Saving...' : 'Continue'}
-                            <ChevronRight size={17} strokeWidth={2.8} />
-                        </button>
+                            {loading ? (
+                                <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : (
+                                <>
+                                    <span className="relative z-10 uppercase tracking-widest">Continue</span>
+                                    <ChevronRight size={18} strokeWidth={3} className="relative z-10 group-hover:translate-x-1 transition-transform" />
+                                </>
+                            )}
+                        </motion.button>
                     </div>
                 </div>
             </main>

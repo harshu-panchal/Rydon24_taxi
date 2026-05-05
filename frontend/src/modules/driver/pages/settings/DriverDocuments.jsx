@@ -227,43 +227,46 @@ const DriverDocuments = () => {
 
   return (
     <div className="min-h-screen bg-[#f8f9fb] font-sans p-6 pt-10 pb-32 overflow-x-hidden">
-      <header className="flex items-center gap-4 mb-10 text-slate-900 uppercase">
-        <button onClick={() => navigate(`${routePrefix}/profile`)} className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center">
-          <ArrowLeft size={18} />
+      <header className="flex items-center gap-4 mb-8">
+        <button onClick={() => navigate(`${routePrefix}/profile`)} className="w-9 h-9 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center text-slate-600 hover:text-slate-900 active:scale-95 transition-all">
+          <ArrowLeft size={18} strokeWidth={2.5} />
         </button>
-        <h1 className="text-lg font-black tracking-tight tracking-tighter uppercase underline decoration-emerald-500/20">Documents</h1>
+        <div>
+          <h1 className="text-lg font-black text-slate-900 uppercase tracking-tight">Documents</h1>
+          <div className="h-0.5 w-8 bg-emerald-500 rounded-full mt-0.5" />
+        </div>
       </header>
 
       <AnimatePresence>
         {selectedDoc ? (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-6">
-            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-white p-7 rounded-[2.5rem] shadow-2xl space-y-5 max-w-xs w-full text-center">
-              <div className="flex justify-between items-center mb-2">
-                <div className="w-12 h-12 bg-slate-50 text-slate-900 rounded-2xl flex items-center justify-center border border-slate-100 shadow-sm">
-                  <FileText size={20} />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white p-6 rounded-[1.8rem] shadow-2xl space-y-4 max-w-[320px] w-full text-center">
+              <div className="flex justify-between items-start">
+                <div className="w-10 h-10 bg-slate-50 text-slate-900 rounded-xl flex items-center justify-center border border-slate-100">
+                  <FileText size={20} strokeWidth={2.5} />
                 </div>
-                <button onClick={() => setSelectedDoc(null)} className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
-                  <X size={18} />
+                <button onClick={() => setSelectedDoc(null)} className="w-8 h-8 bg-slate-50 hover:bg-slate-100 rounded-full flex items-center justify-center text-slate-400 transition-colors">
+                  <X size={18} strokeWidth={2.5} />
                 </button>
               </div>
-              <div className="space-y-1">
-                <h4 className="text-lg font-black text-slate-900 leading-tight uppercase tracking-tight">{selectedDoc.name}</h4>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{selectedDoc.templateName}</p>
+              <div className="text-left space-y-0.5">
+                <h4 className="text-base font-black text-slate-900 leading-tight uppercase tracking-tight">{selectedDoc.name}</h4>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{selectedDoc.templateName}</p>
               </div>
-              <div className="aspect-[3/2] bg-slate-100 rounded-2xl flex items-center justify-center border border-slate-200 shadow-inner group overflow-hidden">
+              <div className="aspect-[4/3] bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 shadow-inner group overflow-hidden">
                 {selectedDoc.previewUrl ? (
                   <img src={selectedDoc.previewUrl} alt={selectedDoc.name} className="w-full h-full object-cover" />
                 ) : (
-                  <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Document Preview Unavailable</p>
+                  <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">No Preview Available</p>
                 )}
               </div>
               {selectedDoc.reason ? (
-                <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-left">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-rose-500">Admin note</p>
-                  <p className="mt-1 text-xs font-semibold leading-relaxed text-rose-700">{selectedDoc.reason}</p>
+                <div className="rounded-xl border border-rose-100 bg-rose-50 px-4 py-3 text-left">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-rose-500">Admin Feedback</p>
+                  <p className="mt-1 text-[11px] font-semibold leading-relaxed text-rose-700">{selectedDoc.reason}</p>
                 </div>
               ) : null}
-              <button onClick={() => setSelectedDoc(null)} className="w-full h-12 bg-slate-900 text-white rounded-2xl text-[12px] font-black uppercase tracking-widest mt-2 active:scale-97 transition-all">
+              <button onClick={() => setSelectedDoc(null)} className="w-full h-11 bg-slate-900 text-white rounded-xl text-[12px] font-black uppercase tracking-widest active:scale-95 transition-all">
                 Close Viewer
               </button>
             </motion.div>
@@ -272,26 +275,26 @@ const DriverDocuments = () => {
       </AnimatePresence>
 
       <main className="space-y-6">
-        <div className="bg-white p-5 rounded-[2rem] border border-white shadow-xl flex items-center justify-between group active:scale-[0.99] transition-all">
+        <div className="bg-white p-4.5 rounded-[1.8rem] border border-slate-100 shadow-[0_10px_30px_rgba(0,0,0,0.03)] flex items-center justify-between group active:scale-[0.99] transition-all">
           <div className="flex gap-4 items-center">
-            <div className="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center border border-emerald-500/10 shadow-sm shadow-emerald-500/5">
-              <CheckCircle2 size={24} strokeWidth={3} />
+            <div className="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center border border-emerald-100 shadow-sm">
+              <CheckCircle2 size={24} strokeWidth={2.5} />
             </div>
             <div className="space-y-0.5">
-              <h3 className="text-[14px] font-black tracking-tight leading-none text-slate-900 uppercase">
-                {isLoading ? 'Loading Documents' : `${docs.filter((doc) => doc.status === 'Uploaded').length} Uploaded`}
+              <h3 className="text-[15px] font-black tracking-tight leading-none text-slate-900 uppercase">
+                {isLoading ? 'Scanning...' : `${docs.filter((doc) => doc.status === 'Uploaded' || doc.verified).length} Uploaded`}
               </h3>
-              <p className="text-[10px] font-bold text-slate-400 opacity-60 leading-tight tracking-widest">
-                {docs.filter((doc) => doc.status !== 'Uploaded').length} Action Required
+              <p className="text-[10px] font-bold text-slate-400 leading-tight tracking-widest uppercase opacity-70">
+                {docs.filter((doc) => doc.status !== 'Uploaded' && !doc.verified).length} Action Required
               </p>
             </div>
           </div>
           <button
             onClick={loadDriver}
-            className={`text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl transition-all shadow-sm ${isSyncing ? 'bg-slate-100 text-slate-300' : 'bg-blue-50 text-blue-500 active:bg-blue-100'}`}
+            className={`text-[10px] font-black uppercase tracking-widest px-4 py-2.5 rounded-xl transition-all shadow-sm ${isSyncing ? 'bg-slate-100 text-slate-300' : 'bg-slate-900 text-white hover:bg-slate-800 active:scale-95'}`}
             disabled={isSyncing}
           >
-            {isSyncing ? <RefreshCw className="animate-spin" size={14} /> : 'Refresh'}
+            {isSyncing ? <Loader2 size={14} className="animate-spin" /> : 'Refresh'}
           </button>
         </div>
 
@@ -317,87 +320,88 @@ const DriverDocuments = () => {
                 <div
                   key={doc.id}
                   onClick={() => setSelectedDoc(doc)}
-                  className="bg-white p-4 py-5 rounded-2xl border border-white shadow-[0_5px_30px_rgba(0,0,0,0.015)] flex items-center justify-between group active:scale-98 transition-all overflow-hidden relative cursor-pointer"
+                  className="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-[0_2px_15px_rgba(0,0,0,0.02)] flex items-center justify-between group active:scale-[0.99] transition-all relative cursor-pointer"
                 >
-                  <div className={`absolute top-0 bottom-0 left-0 w-1 ${doc.status === 'Uploaded' ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-rose-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]'}`} />
+                  <div className={`absolute top-3 bottom-3 left-0 w-1 rounded-r-full ${doc.verified ? 'bg-emerald-500' : doc.status === 'Uploaded' ? 'bg-blue-500' : 'bg-rose-500'}`} />
 
-                  <div className="flex items-center gap-4">
-                    <div className="w-11 h-11 rounded-xl flex items-center justify-center border border-slate-50 bg-slate-50 text-slate-400 shadow-sm ml-1 group-hover:bg-slate-900 group-hover:text-white transition-all">
-                      <FileText size={20} />
+                  <div className="flex items-center gap-3.5 overflow-hidden">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-slate-50 text-slate-400 group-hover:bg-slate-900 group-hover:text-white transition-all flex-shrink-0">
+                      <FileText size={18} strokeWidth={2.5} />
                     </div>
-                    <div className="space-y-0.5">
-                      <h4 className="text-[14px] font-black text-slate-900 leading-tight uppercase tracking-tight">{doc.name}</h4>
-                      <p className="text-[11px] font-bold text-slate-400 opacity-60 leading-tight uppercase tracking-widest">{doc.date}</p>
-                      {doc.expiryDate ? (
-                        <p className={`text-[10px] font-bold uppercase tracking-widest ${doc.expired ? 'text-rose-500' : 'text-slate-400'}`}>
-                          {doc.expired ? 'Expired' : 'Expires'} {formatExpiryDate(doc.expiryDate)}
+                    <div className="min-w-0">
+                      <h4 className="text-[13px] font-black text-slate-900 leading-tight uppercase truncate">{doc.name}</h4>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate">{doc.date}</p>
+                        {doc.expiryDate && (
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 ${doc.expired ? 'text-rose-500' : 'text-slate-500'}`}>
+                            {doc.expired ? 'Expired' : 'Exp'} {formatExpiryDate(doc.expiryDate)}
+                          </span>
+                        )}
+                      </div>
+                      
+                      {doc.reverificationPending && (
+                        <p className="text-[9px] font-bold text-blue-500 mt-1 leading-tight max-w-[180px]">
+                          Waiting for admin verification
                         </p>
-                      ) : null}
-                      {doc.reason ? (
-                        <p className="max-w-[220px] text-[10px] font-bold leading-relaxed text-rose-500">
-                          Reason: {doc.reason}
+                      )}
+                      {doc.reason && !doc.reverificationPending && (
+                        <p className="text-[9px] font-bold text-rose-500 mt-1 leading-tight max-w-[180px] line-clamp-1">
+                          {doc.reason}
                         </p>
-                      ) : null}
-                      {doc.reverificationPending ? (
-                        <p className="max-w-[220px] text-[10px] font-bold leading-relaxed text-blue-500">
-                          Re-uploaded and waiting for admin verification.
-                        </p>
-                      ) : null}
+                      )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`text-[8px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border shadow-sm ${
+
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md border shadow-sm ${
                       doc.verified
-                        ? 'bg-emerald-50 text-emerald-500 border-emerald-500/10'
+                        ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
                         : doc.reverificationPending
-                          ? 'bg-blue-50 text-blue-500 border-blue-500/10'
-                        : doc.rejected
-                          ? 'bg-rose-50 text-rose-500 border-rose-500/10'
-                        : doc.expired
-                          ? 'bg-rose-50 text-rose-500 border-rose-500/10'
-                          : doc.status === 'Uploaded'
-                            ? 'bg-blue-50 text-blue-500 border-blue-500/10'
-                            : 'bg-rose-50 text-rose-500 border-rose-500/10 animate-pulse'
+                          ? 'bg-blue-50 text-blue-600 border-blue-100'
+                        : doc.rejected || doc.expired
+                          ? 'bg-rose-50 text-rose-600 border-rose-100'
+                        : doc.status === 'Uploaded'
+                          ? 'bg-blue-50 text-blue-600 border-blue-100'
+                          : 'bg-rose-50 text-rose-600 border-rose-100'
                     }`}>
-                      {doc.status}
+                      {doc.status === 'Pending Reverification' ? 'Pending' : doc.status}
                     </span>
-                    <label
-                      onClick={(event) => event.stopPropagation()}
-                      className={`h-8 w-8 rounded-xl flex items-center justify-center transition-all ${
-                        doc.reviewStatus === 'verified' || doc.reviewStatus === 'approved'
-                          ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                          : 'bg-blue-50 text-blue-500 cursor-pointer active:scale-95'
-                      }`}
-                      title={doc.reviewStatus === 'verified' || doc.reviewStatus === 'approved' ? 'Verified documents cannot be changed' : 'Change document image'}
-                    >
-                      {imageUploading && uploadingDocumentKey === doc.id ? (
-                        <Loader2 size={15} className="animate-spin" />
-                      ) : (
-                        <Camera size={15} strokeWidth={2.5} />
-                      )}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        ref={(node) => {
-                          if (node) {
-                            documentInputRefs.current[doc.id] = node;
-                          } else {
-                            delete documentInputRefs.current[doc.id];
-                          }
-                        }}
-                        disabled={imageUploading || doc.reviewStatus === 'verified' || doc.reviewStatus === 'approved'}
-                        onChange={(event) => {
-                          if (doc.reviewStatus === 'verified' || doc.reviewStatus === 'approved') {
-                            return;
-                          }
-                          uploadingDocumentKeyRef.current = doc.id;
-                          setUploadingDocumentKey(doc.id);
-                          onDocumentImageChange(event);
-                        }}
-                      />
-                    </label>
-                    <Eye size={18} className="text-slate-200 group-hover:text-blue-500 transition-colors" />
+                    
+                    <div className="flex items-center gap-1.5 ml-1">
+                      <label
+                        onClick={(event) => event.stopPropagation()}
+                        className={`h-7 w-7 rounded-lg flex items-center justify-center transition-all ${
+                          doc.verified
+                            ? 'bg-slate-50 text-slate-200 cursor-not-allowed'
+                            : 'bg-blue-50 text-blue-500 cursor-pointer hover:bg-blue-100 active:scale-90'
+                        }`}
+                      >
+                        {imageUploading && uploadingDocumentKey === doc.id ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <Camera size={13} strokeWidth={2.5} />
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          ref={(node) => {
+                            if (node) documentInputRefs.current[doc.id] = node;
+                            else delete documentInputRefs.current[doc.id];
+                          }}
+                          disabled={imageUploading || doc.verified}
+                          onChange={(event) => {
+                            if (doc.verified) return;
+                            uploadingDocumentKeyRef.current = doc.id;
+                            setUploadingDocumentKey(doc.id);
+                            onDocumentImageChange(event);
+                          }}
+                        />
+                      </label>
+                      <div className="h-7 w-7 rounded-lg flex items-center justify-center text-slate-300 group-hover:text-slate-400 transition-colors">
+                        <Eye size={14} strokeWidth={2.5} />
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))

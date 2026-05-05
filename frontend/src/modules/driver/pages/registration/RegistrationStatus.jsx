@@ -260,40 +260,42 @@ const getStatusColor = (status) => {
 
   return (
     <div 
-        className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-32 pt-12 select-none overflow-x-hidden flex flex-col items-center"
+        className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-36 pt-12 select-none overflow-x-hidden flex flex-col items-center"
         style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
     >
-      <div className="mb-8 w-full flex justify-center">
+      <div className="mb-10 w-full flex flex-col items-center gap-6">
         {appLogo ? (
           <img
             src={appLogo}
             alt={appName}
-            className="h-8 object-contain"
+            className="h-10 object-contain drop-shadow-sm"
           />
         ) : (
-          <span className="text-xl font-bold text-slate-900 tracking-tight">{appName}</span>
+          <div className="rounded-2xl bg-slate-900 px-5 py-2.5 text-lg font-black tracking-tighter text-white shadow-xl shadow-slate-900/10">
+            {appName}
+          </div>
         )}
       </div>
 
-      <main className="w-full max-w-sm space-y-6">
+      <main className="w-full max-w-sm space-y-8">
         <section className="flex flex-col items-center text-center space-y-6">
-            <div className="relative">
-                <div className="w-24 h-24 bg-white rounded-[32px] flex items-center justify-center text-[#8a5a22] shadow-[0_20px_50px_rgba(148,116,70,0.15)] border border-white/80">
-                    <Clock size={36} strokeWidth={2} className="animate-pulse" />
+            <div className="relative group">
+                <div className="w-28 h-28 bg-white rounded-[2.5rem] flex items-center justify-center text-slate-900 shadow-[0_20px_50px_rgba(0,0,0,0.08)] border border-white/80 group-hover:scale-105 transition-transform duration-500">
+                    <Clock size={42} strokeWidth={2.5} className="animate-pulse" />
                 </div>
-                <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-amber-500 rounded-2xl flex items-center justify-center text-white border-4 border-white shadow-lg">
-                    <Search size={14} strokeWidth={3} />
+                <div className="absolute -bottom-1 -right-1 w-10 h-10 bg-slate-950 rounded-2xl flex items-center justify-center text-white border-4 border-white shadow-xl">
+                    <Search size={16} strokeWidth={3} />
                 </div>
             </div>
 
-            <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9a7b50]">
-                    {pendingReverificationDocs.length > 0 ? "Reverification submitted" : isVehicleReapproval ? "Update under review" : "Application status"}
+            <div className="space-y-3">
+                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 opacity-60">
+                    {pendingReverificationDocs.length > 0 ? "Submission received" : isVehicleReapproval ? "Update in review" : "Live Audit Status"}
                 </p>
-                <h1 className="text-[32px] font-semibold leading-[1.05] tracking-[-0.04em] text-slate-950">
-                    {rejectedDocs.length > 0 ? "Action Required" : pendingReverificationDocs.length > 0 ? "Reverification Pending" : "Review Pending"}
+                <h1 className="font-['Outfit'] text-[42px] font-black leading-[1] tracking-[-0.04em] text-slate-900">
+                    {rejectedDocs.length > 0 ? "Action <span className='text-slate-400'>Required</span>" : pendingReverificationDocs.length > 0 ? "Verification <span className='text-slate-400'>Pending</span>" : "Review <span className='text-slate-400'>Started</span>"}
                 </h1>
-                <p className="mx-auto max-w-[28ch] text-sm leading-6 text-slate-600">
+                <p className="mx-auto max-w-[28ch] text-[15px] font-bold leading-relaxed text-slate-500 opacity-80">
                     {rejectedDocs.length > 0 
                         ? "Some of your documents were rejected. Please re-upload them to continue."
                         : pendingReverificationDocs.length > 0
@@ -304,43 +306,44 @@ const getStatusColor = (status) => {
         </section>
 
         {driver && (
-            <section className="bg-white rounded-[30px] p-5 border border-slate-100 shadow-sm space-y-4">
+            <section className="bg-white rounded-[2.5rem] p-6 border border-slate-100 shadow-[0_10px_40px_rgba(0,0,0,0.04)] space-y-4">
                 <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400">
-                        <Mail size={20} />
+                    <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400">
+                        <Mail size={24} />
                     </div>
-                    <div>
-                        <h4 className="text-[16px] font-bold text-slate-900">{driver.name || 'Partner'}</h4>
-                        <p className="text-[13px] font-medium text-slate-500">+91 {driver.phone}</p>
+                    <div className="flex-1">
+                        <h4 className="text-lg font-black tracking-tight text-slate-900">{driver.name || 'Partner'}</h4>
+                        <p className="text-[13px] font-black text-slate-400 uppercase tracking-widest opacity-60">+91 {driver.phone}</p>
                     </div>
-                    <div className="ml-auto px-3 py-1 bg-amber-50 text-amber-600 rounded-full text-[10px] font-black uppercase tracking-widest">
+                    <div className="px-4 py-1.5 bg-slate-900 text-white rounded-full text-[10px] font-black uppercase tracking-[0.15em] shadow-lg shadow-slate-900/20">
                         {driver.status || 'Pending'}
                     </div>
                 </div>
             </section>
         )}
 
-        <section className="space-y-3">
-            <h3 className="text-[13px] font-black text-slate-400 uppercase tracking-widest px-2">Document Status</h3>
-            <div className="space-y-3">
+        <section className="space-y-4">
+            <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 opacity-60">Checklist Summary</h3>
+            <div className="space-y-4">
                 {docDetails.length > 0 ? docDetails.map((doc, idx) => (
-                    <div key={idx} className="bg-white rounded-[24px] border border-slate-100 p-4 shadow-sm space-y-3">
+                    <div key={idx} className="bg-white rounded-[1.8rem] border border-slate-100 p-5 shadow-[0_8px_30px_rgba(0,0,0,0.03)] space-y-4">
                         <div className="flex items-center justify-between">
-                            <span className="text-[14px] font-bold text-slate-800">{doc.label}</span>
-                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${getStatusColor(doc.status)}`}>
+                            <span className="text-[15px] font-black tracking-tight text-slate-800">{doc.label}</span>
+                            <span className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${getStatusColor(doc.status)}`}>
                                 {doc.status}
                             </span>
                         </div>
                         {doc.reason && (
-                            <div className="p-3 bg-rose-50/50 border border-rose-100 rounded-xl">
-                                <p className="text-[12px] font-bold text-rose-600 leading-relaxed">
-                                    Reason: <span className="font-medium text-rose-500">{doc.reason}</span>
+                            <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl">
+                                <p className="text-[13px] font-bold text-rose-600 leading-relaxed">
+                                    <span className="opacity-60 uppercase text-[10px] block mb-1 tracking-widest">Reason for rejection:</span>
+                                    {doc.reason}
                                 </p>
                             </div>
                         )}
                         {doc.reverificationPending && (
-                            <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl">
-                                <p className="text-[12px] font-bold text-blue-600 leading-relaxed">
+                            <div className="p-4 bg-slate-900/5 border border-slate-900/10 rounded-2xl">
+                                <p className="text-[13px] font-bold text-slate-600 leading-relaxed">
                                     Re-uploaded and waiting for admin re-verification.
                                 </p>
                             </div>
@@ -353,30 +356,30 @@ const getStatusColor = (status) => {
                                         fromRegistrationStatus: true,
                                     },
                                 })}
-                                className="w-full h-11 bg-slate-900 text-white rounded-2xl flex items-center justify-center gap-2 text-[13px] font-bold active:scale-95 transition-all shadow-sm"
+                                className="w-full h-12 bg-slate-900 text-white rounded-2xl flex items-center justify-center gap-2 text-[13px] font-black uppercase tracking-widest active:scale-95 transition-all shadow-xl shadow-slate-900/10"
                             >
-                                Re-upload {doc.label} <ChevronRight size={16} />
+                                Fix Document <ChevronRight size={16} strokeWidth={3} />
                             </button>
                         )}
                     </div>
                 )) : (
-                    <div className="bg-white rounded-[24px] border border-slate-100 p-8 text-center">
-                        <div className="h-5 w-5 border-2 border-slate-100 border-t-[#8a5a22] rounded-full animate-spin mx-auto mb-3" />
-                        <p className="text-[13px] font-bold text-slate-400">Loading document checklist...</p>
+                    <div className="bg-white rounded-[1.8rem] border border-slate-100 p-10 text-center shadow-sm">
+                        <div className="h-6 w-6 border-2 border-slate-100 border-t-slate-900 rounded-full animate-spin mx-auto mb-4" />
+                        <p className="text-[12px] font-black uppercase tracking-widest text-slate-400 opacity-60">Syncing documents...</p>
                     </div>
                 )}
             </div>
         </section>
 
-        <div className="fixed bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex flex-col gap-3">
+        <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent flex flex-col gap-4">
             {rejectedDocs.length > 0 ? (
-                <div className="rounded-2xl bg-rose-50 border border-rose-100 px-4 py-3 text-[12px] font-semibold leading-relaxed text-rose-600">
-                    Select a rejected document above to re-upload the correct file. You can do this one by one for multiple rejected documents.
+                <div className="rounded-2xl bg-rose-50 border border-rose-100 px-5 py-4 text-[12px] font-bold leading-relaxed text-rose-600 shadow-sm">
+                    Select a rejected document above to re-upload the correct file.
                 </div>
             ) : null}
             <button 
                 onClick={() => navigate(`${routePrefix}/support`)}
-                className="w-full h-14 bg-white border border-slate-200 text-slate-600 rounded-2xl flex items-center justify-center gap-2 text-[15px] font-bold active:scale-95 transition-all"
+                className="w-full h-16 bg-white border border-slate-200 text-slate-900 rounded-[1.8rem] flex items-center justify-center gap-3 text-[15px] font-black uppercase tracking-widest active:scale-95 transition-all shadow-sm"
             >
                 Contact Support
             </button>
