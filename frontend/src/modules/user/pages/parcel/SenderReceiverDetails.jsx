@@ -346,6 +346,7 @@ const MapPickerSheet = ({ open, title, confirmLabel, value, initialCoords, onClo
 const ContactDetailsSheet = ({
   open,
   onClose,
+  onSave,
   senderName,
   setSenderName,
   senderMobile,
@@ -457,7 +458,11 @@ const ContactDetailsSheet = ({
           </div>
 
           <div className="border-t border-slate-100 px-5 py-4">
-            <button type="button" onClick={onClose} className="flex h-14 w-full items-center justify-center gap-2 rounded-[20px] bg-slate-900 text-sm font-black text-white shadow-[0_14px_28px_rgba(15,23,42,0.18)]">
+            <button
+              type="button"
+              onClick={onSave}
+              className="flex h-14 w-full items-center justify-center gap-2 rounded-[20px] bg-slate-900 text-sm font-black text-white shadow-[0_14px_28px_rgba(15,23,42,0.18)]"
+            >
               Save Details
               <ChevronRight size={16} />
             </button>
@@ -732,16 +737,22 @@ const SenderReceiverDetails = () => {
     clearError('drop');
   };
 
-  const handleProceed = () => {
+  const handleProceed = ({ fromContactSheet = false } = {}) => {
     const { isValid, nextErrors } = validate();
 
     if (!isValid) {
       if (nextErrors.senderName || nextErrors.senderMobile || nextErrors.receiverName || nextErrors.receiverMobile) {
         setIsContactSheetOpen(true);
+        return;
+      }
+
+      if (fromContactSheet) {
+        setIsContactSheetOpen(false);
       }
       return;
     }
 
+    setIsContactSheetOpen(false);
     navigate(`${routePrefix}/parcel/searching`, {
       state: {
         ...parcelState,
@@ -811,6 +822,7 @@ const SenderReceiverDetails = () => {
       <ContactDetailsSheet
         open={isContactSheetOpen}
         onClose={() => setIsContactSheetOpen(false)}
+        onSave={() => handleProceed({ fromContactSheet: true })}
         senderName={senderName}
         setSenderName={setSenderName}
         senderMobile={senderMobile}

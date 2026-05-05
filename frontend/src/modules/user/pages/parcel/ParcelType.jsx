@@ -185,34 +185,7 @@ const ParcelType = () => {
         </motion.div>
 
         {/* Announcements Section */}
-        <div className="mb-8">
-            <h3 className="text-[13px] font-black text-slate-400 uppercase tracking-widest mb-4">Announcements</h3>
-            
-            <motion.div 
-               initial={{ opacity: 0, y: 10 }}
-               animate={{ opacity: 1, y: 0 }}
-               className="bg-white rounded-[24px] p-5 shadow-sm border border-slate-100 flex items-center justify-between gap-4"
-            >
-                <div className="flex items-center gap-4 min-w-0">
-                    <div className="w-12 h-12 rounded-[16px] bg-blue-50 flex items-center justify-center shrink-0">
-                       <div className="relative">
-                          <Megaphone size={24} className="text-blue-600 fill-blue-600/10" />
-                          <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 border-2 border-white flex items-center justify-center text-[8px] font-black text-white">2</div>
-                       </div>
-                    </div>
-                    <div className="min-w-0">
-                       <p className="text-[13px] font-bold text-slate-800 leading-tight">Introducing Porter Enterprise</p>
-                       <div className="flex gap-1 mt-1.5">
-                          <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
-                          <div className="w-1.5 h-1.5 rounded-full bg-slate-200" />
-                       </div>
-                    </div>
-                </div>
-                <button className="px-4 py-2 rounded-full bg-blue-50 text-[11px] font-black text-blue-600 hover:bg-blue-100 transition-colors">
-                    View all
-                </button>
-            </motion.div>
-        </div>
+        
 
         {/* Footer Illustration */}
         <div className="mt-4 flex justify-center">
@@ -242,9 +215,9 @@ const ParcelType = () => {
       {/* Floating Back Button */}
       <button 
         onClick={() => navigate(-1)}
-        className="fixed top-4 left-4 z-50 w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white border border-white/10"
+        className="fixed top-2 left-4 z-50 w-8 h-8 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white border border-white/10"
       >
-        <ArrowLeft size={20} />
+        <ArrowLeft size={16} />
       </button>
 
     </div>
