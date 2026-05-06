@@ -412,7 +412,10 @@ const getFallbackVehicleEstimate = (type) => {
 
 const getSetPriceRows = (response) => {
   const data = unwrap(response);
-  return data?.paginator?.data || data?.results || [];
+  return (data?.paginator?.data || data?.results || []).filter((row) => {
+    const scope = String(row?.pricing_scope || 'ride').trim().toLowerCase();
+    return scope === 'ride';
+  });
 };
 
 const normalizeId = (value) => String(value?._id || value?.id || value || '').trim();
@@ -440,41 +443,63 @@ const sortPricingRules = (rules = []) => (
   })
 );
 
-const findBestPricingRule = ({ rules, vehicleTypeId, serviceLocationId }) => {
+const isActiveRidePricingRule = (rule) => {
+  const isActive = Number(rule?.active ?? 1) === 1 && String(rule?.status || 'active').toLowerCase() !== 'inactive';
+  const scope = String(rule?.pricing_scope || 'ride').trim().toLowerCase();
+  return isActive && scope === 'ride';
+};
+
+const matchesTransportType = (rule, transportType) => {
+  const normalizedRuleTransport = String(rule?.transport_type || 'taxi').trim().toLowerCase();
+  const normalizedTransportType = String(transportType || 'taxi').trim().toLowerCase() || 'taxi';
+
+  return normalizedRuleTransport === normalizedTransportType
+    || normalizedRuleTransport === 'both';
+};
+
+const findBestPricingRule = ({ rules, vehicleTypeId, serviceLocationId, transportType }) => {
   const normalizedVehicleTypeId = normalizeId(vehicleTypeId);
   const normalizedServiceLocationId = normalizeId(serviceLocationId);
+  const normalizedTransportType = String(transportType || 'taxi').trim().toLowerCase() || 'taxi';
 
   const candidates = sortPricingRules(rules.filter((rule) => {
     const matchesVehicle = normalizeId(rule?.vehicle_type?._id || rule?.vehicle_type || rule?.type_id) === normalizedVehicleTypeId;
-    const isActive = Number(rule?.active ?? 1) === 1 && String(rule?.status || 'active').toLowerCase() !== 'inactive';
-    const transportType = String(rule?.transport_type || 'taxi').toLowerCase();
-    const isTaxi = transportType === 'taxi' || transportType === 'both';
-
-    return matchesVehicle && isActive && isTaxi;
+    return matchesVehicle && isActiveRidePricingRule(rule) && matchesTransportType(rule, normalizedTransportType);
   }));
 
   if (!candidates.length) {
     return null;
   }
 
+  const exactTransportMatch = (rule) => String(rule?.transport_type || 'taxi').trim().toLowerCase() === normalizedTransportType;
   const exactServiceLocation = candidates.find((rule) => (
-    normalizedServiceLocationId && getRuleServiceLocationId(rule) === normalizedServiceLocationId
+    normalizedServiceLocationId
+    && getRuleServiceLocationId(rule) === normalizedServiceLocationId
+    && exactTransportMatch(rule)
   ));
 
   if (exactServiceLocation) {
     return exactServiceLocation;
   }
 
-  const genericCandidates = candidates.filter((rule) => !getRuleServiceLocationId(rule));
-  if (genericCandidates.length) {
-    return genericCandidates[0];
+  const exactServiceLocationAnyTransport = candidates.find((rule) => (
+    normalizedServiceLocationId && getRuleServiceLocationId(rule) === normalizedServiceLocationId
+  ));
+
+  if (exactServiceLocationAnyTransport) {
+    return exactServiceLocationAnyTransport;
   }
 
-  if (!normalizedServiceLocationId && candidates.length > 1) {
-    return null;
+  const genericTransportMatch = candidates.find((rule) => (
+    !getRuleServiceLocationId(rule) && exactTransportMatch(rule)
+  ));
+
+  if (genericTransportMatch) {
+    return genericTransportMatch;
   }
 
-  return candidates[0];
+  const genericBoth = candidates.find((rule) => !getRuleServiceLocationId(rule));
+  return genericBoth || candidates[0];
 };
 
 const calculateEstimatedFare = ({ vehicle, pricingRule, distanceMeters, durationMinutes }) => {
@@ -636,6 +661,7 @@ const normalizeVehicleType = (type, index) => {
   return {
     id,
     vehicleTypeId: type?._id || type?.id || '',
+    transportType: String(type?.transport_type || 'taxi').trim().toLowerCase() || 'taxi',
     iconType: type?.icon_types || 'car',
     icon: getVehiclePreviewImage(type),
     vehicleIconUrl: getVehicleMapIcon(type),
@@ -798,7 +824,9 @@ const SelectVehicle = () => {
       setIsLoadingPricingRules(true);
 
       try {
-        const response = await api.get('/admin/types/set-prices');
+        const response = await api.get('/admin/types/set-prices', {
+          params: { scope: 'ride' },
+        });
 
         if (!active) {
           return;
@@ -903,6 +931,7 @@ const SelectVehicle = () => {
           rules: pricingRules,
           vehicleTypeId: vehicle.vehicleTypeId,
           serviceLocationId,
+          transportType: vehicle.transportType || routeState.transport_type || routeState.transportType || 'taxi',
         });
 
         return {
@@ -1357,14 +1386,36 @@ const SelectVehicle = () => {
                 </button>
 
                 <div className="flex flex-col items-end gap-2 shrink-0 z-10">
-                  <button
-                    type="button"
-                    onClick={() => setPreviewVehicleId(v.id)}
-                    aria-label={`View details for ${v.name}`}
-                    className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-orange-200 hover:text-orange-500"
-                  >
-                    <Eye size={15} strokeWidth={2.4} />
-                  </button>
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewVehicleId(v.id)}
+                      aria-label={`View details for ${v.name}`}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-orange-200 hover:text-orange-500"
+                    >
+                      <Eye size={15} strokeWidth={2.4} />
+                    </button>
+                    {isSelected && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          openPicker(scheduledAtInputRef);
+                        }}
+                        className={`flex h-8 min-w-[56px] items-center justify-center gap-1 rounded-full border px-2 transition-all ${
+                          rideMode === 'schedule'
+                            ? 'border-blue-100 bg-blue-50 text-blue-600 shadow-[0_10px_24px_-12px_rgba(59,130,246,0.6)]'
+                            : 'border-slate-200 bg-white text-slate-600'
+                        }`}
+                        aria-label={rideMode === 'schedule' ? `Scheduled for ${formatScheduledDisplay(scheduledAt)}` : `Schedule ${v.name}`}
+                        title={rideMode === 'schedule' ? formatScheduledDisplay(scheduledAt) : `Schedule ${v.name}`}
+                      >
+                        <Clock3 size={13} strokeWidth={2.4} />
+                        <span className="text-[8px] font-black uppercase tracking-wider">
+                          {rideMode === 'schedule' ? 'Set' : 'Later'}
+                        </span>
+                      </button>
+                    )}
+                  </div>
                   <div className="text-right">
                     <span className={`text-[15px] font-black tracking-tight block ${isUnavailable ? 'text-slate-300' : 'text-slate-900'}`}>
                       {isUnavailable ? 'N/A' : isFarePending ? '...' : formatVehicleFare(v)}
@@ -1375,18 +1426,6 @@ const SelectVehicle = () => {
                       </span>
                     )}
                   </div>
-                  {isSelected && (
-                    <motion.div
-                      layoutId="check-icon"
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="w-5 h-5 rounded-full bg-orange-500 flex items-center justify-center"
-                    >
-                      <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                        <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </motion.div>
-                  )}
                 </div>
               </motion.div>
             );
@@ -1409,26 +1448,6 @@ const SelectVehicle = () => {
             }}
             className="sr-only"
           />
-
-          <motion.button
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setShowPaymentModal(true)}
-            className="w-full flex items-center justify-between px-4 py-2.5 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-7 h-7 rounded-xl bg-white flex items-center justify-center shadow-sm border border-slate-50">
-                {paymentMethod === 'Cash' ? <Banknote size={15} className="text-emerald-600" /> : <CreditCard size={15} className="text-blue-600" />}
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-none mb-0.5">Method</p>
-                <span className="text-[13px] font-bold text-slate-800">{paymentMethod}</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-1 text-slate-400">
-              <span className="text-[10px] font-bold uppercase">Change</span>
-              <ChevronRight size={12} strokeWidth={3} />
-            </div>
-          </motion.button>
 
           <div className="flex items-stretch gap-3">
             <motion.button
@@ -1475,18 +1494,17 @@ const SelectVehicle = () => {
 
             <button
               type="button"
-              onClick={() => {
-                openPicker(scheduledAtInputRef);
-              }}
-              className={`flex h-auto min-h-[56px] w-[56px] shrink-0 items-center justify-center rounded-[20px] border transition-all ${
-                rideMode === 'schedule'
-                  ? 'border-blue-100 bg-blue-50 text-blue-600 shadow-[0_10px_24px_-12px_rgba(59,130,246,0.6)]'
-                  : 'border-slate-200 bg-white text-slate-600'
+              onClick={() => setShowPaymentModal(true)}
+              className={`flex h-auto min-h-[56px] min-w-[72px] shrink-0 flex-col items-center justify-center rounded-[20px] border transition-all ${
+                paymentMethod === 'Cash'
+                  ? 'border-emerald-100 bg-emerald-50 text-emerald-600 shadow-[0_10px_24px_-12px_rgba(16,185,129,0.45)]'
+                  : 'border-blue-100 bg-blue-50 text-blue-600 shadow-[0_10px_24px_-12px_rgba(59,130,246,0.45)]'
               }`}
-              aria-label={rideMode === 'schedule' ? `Scheduled for ${formatScheduledDisplay(scheduledAt)}` : 'Schedule ride'}
-              title={rideMode === 'schedule' ? formatScheduledDisplay(scheduledAt) : 'Schedule ride'}
+              aria-label={`Payment method ${paymentMethod}`}
+              title={`Payment method ${paymentMethod}`}
             >
-              <Clock3 size={18} strokeWidth={2.4} />
+              {paymentMethod === 'Cash' ? <Banknote size={18} strokeWidth={2.4} /> : <CreditCard size={18} strokeWidth={2.4} />}
+              <span className="mt-1 text-[9px] font-black uppercase tracking-wider">{paymentMethod}</span>
             </button>
           </div>
 
@@ -1498,10 +1516,6 @@ const SelectVehicle = () => {
                 Scheduled for {formatScheduledDisplay(scheduledAt)}. Drivers will be notified automatically.
               </p>
             )
-          ) : selectedVehicle?.supportsBidding && !shouldUseDriverBidding ? (
-            <p className="text-[11px] font-medium text-slate-500">
-              If nobody accepts, you can increase the fare later from the searching screen.
-            </p>
           ) : null}
         </div>
       </div>

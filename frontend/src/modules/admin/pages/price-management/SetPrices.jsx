@@ -58,6 +58,14 @@ const normalizePaymentTypes = (value) => {
   return Array.from(new Set(normalized)).filter((item) => paymentTypeOptions.some((option) => option.value === item));
 };
 
+const normalizeTransportType = (value = '') => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'delivery') return 'delivery';
+  if (normalized === 'pooling') return 'pooling';
+  if (normalized === 'both' || normalized === 'all') return 'both';
+  return normalized === 'taxi' ? 'taxi' : '';
+};
+
 const togglePaymentType = (currentValue, targetValue) => {
   const currentItems = normalizePaymentTypes(currentValue);
 
@@ -135,6 +143,36 @@ const SetPrices = ({ mode }) => {
   const [zones, setZones] = useState([]);
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const { transportTypes } = useTaxiTransportTypes();
+  const transportTypeOptions = React.useMemo(() => {
+    const normalized = new Map();
+
+    (Array.isArray(transportTypes) ? transportTypes : []).forEach((item) => {
+      const value = normalizeTransportType(item?.name || item?.transport_type || item?.id || '');
+      if (!value) return;
+
+      normalized.set(value, {
+        id: item?.id || item?._id || value,
+        name: value,
+        display_name: value === 'both'
+          ? 'Both'
+          : (item?.display_name || item?.label || value.charAt(0).toUpperCase() + value.slice(1)),
+      });
+    });
+
+    if (!normalized.has('taxi')) {
+      normalized.set('taxi', { id: 'taxi', name: 'taxi', display_name: 'Taxi' });
+    }
+
+    if (!normalized.has('delivery')) {
+      normalized.set('delivery', { id: 'delivery', name: 'delivery', display_name: 'Delivery' });
+    }
+
+    if (!normalized.has('both')) {
+      normalized.set('both', { id: 'both', name: 'both', display_name: 'Both' });
+    }
+
+    return Array.from(normalized.values());
+  }, [transportTypes]);
 
   const [formData, setFormData] = useState(initialFormState);
 
@@ -153,6 +191,7 @@ const SetPrices = ({ mode }) => {
           ...initialFormState,
           ...pData,
           zone_id: pData.zone_id?._id || pData.zone_id || '',
+          transport_type: normalizeTransportType(pData.transport_type),
           vehicle_type: pData.vehicle_type?._id || pData.vehicle_type || '',
           admin_commision: pData.admin_commision ?? pData.customer_commission ?? '',
           admin_commision_type: String(pData.admin_commision_type ?? 1),
@@ -217,6 +256,7 @@ const SetPrices = ({ mode }) => {
         body: JSON.stringify({
           ...formData,
           pricing_scope: 'ride',
+          transport_type: normalizeTransportType(formData.transport_type),
           payment_type: normalizePaymentTypes(formData.payment_type).length ? normalizePaymentTypes(formData.payment_type) : ['cash']
         })
       });
@@ -391,7 +431,7 @@ const SetPrices = ({ mode }) => {
                         <div className="relative">
                             <select required className={inputClass + " appearance-none cursor-pointer"} value={formData.transport_type} onChange={e => setFormData(p=>({...p, transport_type: e.target.value}))}>
                                <option value="">Select Transport Type</option>
-                               {transportTypes.map(t => (
+                               {transportTypeOptions.map(t => (
                                  <option key={t.id || t._id} value={t.name}>{t.display_name}</option>
                                ))}
                             </select>

@@ -282,6 +282,27 @@ const formatFareLabel = (value) => {
     return `Rs ${amount}`;
 };
 
+const normalizeTodaySummary = (value = {}) => ({
+    dateKey: String(value?.dateKey || ''),
+    earnings: Number(value?.earnings || 0),
+    distanceMeters: Number(value?.distanceMeters || 0),
+    rides: Number(value?.rides || 0),
+    activeSeconds: Math.max(0, Math.round(Number(value?.activeSeconds || 0))),
+});
+
+const formatSummaryMoney = (value) => `₹${Math.round(Number(value || 0)).toLocaleString('en-IN')}`;
+
+const formatSummaryDistance = (meters) => {
+    const value = Number(meters || 0);
+
+    if (!Number.isFinite(value) || value <= 0) {
+        return '0 km';
+    }
+
+    const km = value / 1000;
+    return km >= 10 ? `${Math.round(km)} km` : `${km.toFixed(1)} km`;
+};
+
 const isOwnerManagedDriverProfile = (driver = {}) => {
     const accountType = String(
         driver?.accountType
@@ -558,8 +579,8 @@ const DriverHome = () => {
     const [showLowBalanceModal, setShowLowBalanceModal] = useState(false);
 
     const [currentRequest, setCurrentRequest] = useState(null);
-    const [completedRides, setCompletedRides] = useState(0);
     const [dutySeconds, setDutySeconds] = useState(0);
+    const [todaySummary, setTodaySummary] = useState(() => normalizeTodaySummary());
     const [map, setMap] = useState(null);
     const [driverCoords, setDriverCoords] = useState(() => readStoredDriverCoords());
     const [statusMessage, setStatusMessage] = useState('');
@@ -881,6 +902,7 @@ const DriverHome = () => {
         setVehicleIconUrl(driver?.vehicleIconUrl || '');
         setIsOnline(Boolean(driver?.isOnline));
         setIsOwnerManagedDriver(isOwnerManagedDriverProfile(driver));
+        setTodaySummary(normalizeTodaySummary(driver?.todaySummary));
         if (driver?.wallet) {
             setWalletSummary(driver.wallet);
         }
@@ -914,6 +936,18 @@ const DriverHome = () => {
                 },
                 coordinates: savedCoords,
             });
+        }
+
+        return driver;
+    }, []);
+
+    const refreshTodaySummary = useCallback(async () => {
+        const response = await getCurrentDriver();
+        const driver = response?.data?.data || response?.data || response;
+
+        setTodaySummary(normalizeTodaySummary(driver?.todaySummary));
+        if (driver?.wallet) {
+            setWalletSummary(driver.wallet);
         }
 
         return driver;
@@ -1021,6 +1055,37 @@ const DriverHome = () => {
             active = false;
         };
     }, [fetchActiveJob, hydrateDriverState, navigate, openActiveJob]);
+
+    useEffect(() => {
+        let intervalId;
+        let cancelled = false;
+
+        const syncSummary = async () => {
+            try {
+                await refreshTodaySummary();
+            } catch {
+                if (!cancelled) {
+                    console.warn('[driver-home] failed to refresh today summary');
+                }
+            }
+        };
+
+        intervalId = setInterval(syncSummary, 60000);
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                syncSummary();
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            cancelled = true;
+            clearInterval(intervalId);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [refreshTodaySummary]);
 
     useEffect(() => {
         if (map && driverCoords) {
@@ -1133,6 +1198,7 @@ const DriverHome = () => {
                     ? 'You are online. Matching rides from your selected route area.'
                     : 'You are online. Waiting for nearby bookings.',
             );
+            refreshTodaySummary().catch(() => {});
         } catch (error) {
             console.error('[driver-home] goOnline failed', error);
             setIsOnline(false);
@@ -1145,7 +1211,7 @@ const DriverHome = () => {
         } finally {
             setIsTogglingDuty(false);
         }
-    }, [expiredDocumentNames, routeBookingPreferences.coordinates, routeBookingPreferences.enabled, updateDriverLocation, vehicleReapprovalPending, walletAlertState]);
+    }, [expiredDocumentNames, refreshTodaySummary, routeBookingPreferences.coordinates, routeBookingPreferences.enabled, updateDriverLocation, vehicleReapprovalPending, walletAlertState]);
 
     const goOffline = useCallback(async () => {
         setIsTogglingDuty(true);
@@ -1160,13 +1226,14 @@ const DriverHome = () => {
             setCurrentRequest(null);
             setStatusMessage('You are offline.');
             socketService.disconnect();
+            refreshTodaySummary().catch(() => {});
         } catch (error) {
             setIsOnline(true);
             setStatusMessage(error.message || 'Could not go offline.');
         } finally {
             setIsTogglingDuty(false);
         }
-    }, []);
+    }, [refreshTodaySummary]);
 
     const stopSelfieCameraStream = useCallback(() => {
         if (selfieStreamRef.current) {
@@ -1597,7 +1664,6 @@ const DriverHome = () => {
                     return;
                 }
 
-                setCompletedRides(prev => prev + 1);
                 navigate('/taxi/driver/active-trip', {
                     state: {
                         type: nextType,
@@ -1789,12 +1855,14 @@ const DriverHome = () => {
             interval = setInterval(() => setDutySeconds(s => s + 1), 1000);
         } else {
             clearInterval(interval);
+            setDutySeconds(0);
         }
         return () => clearInterval(interval);
     }, [isOnline]);
 
-    const dutyHours = Math.floor(dutySeconds / 3600);
-    const dutyMins = Math.floor((dutySeconds % 3600) / 60);
+    const liveActiveSeconds = Math.max(0, Number(todaySummary.activeSeconds || 0)) + (isOnline ? dutySeconds : 0);
+    const dutyHours = Math.floor(liveActiveSeconds / 3600);
+    const dutyMins = Math.floor((liveActiveSeconds % 3600) / 60);
 
     const handleAccept = () => {
         if (!currentRequest?.rideId || acceptingRideId) {
@@ -2227,9 +2295,8 @@ const DriverHome = () => {
                     ) : null}
                 </AnimatePresence>
 
-                {/* Today's Stats Summary - Visible only when offline */}
+                {/* Today's Stats Summary - Visible in both offline and online modes */}
                 <AnimatePresence>
-                    {!isOnline && (
                         <motion.div
                             initial={{ opacity: 0, y: 40 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -2243,11 +2310,14 @@ const DriverHome = () => {
                             </div>
                             
                             <div className="grid grid-cols-4 gap-2">
-                                <div className="flex flex-col items-center">
+                                <div className="relative flex flex-col items-center">
                                     <div className="h-10 w-10 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 mb-2">
                                         <IndianRupee size={18} strokeWidth={2.5} />
                                     </div>
                                     <span className="text-[14px] font-black text-slate-900">₹0</span>
+                                    <span className="absolute top-[48px] left-1/2 -translate-x-1/2 bg-white px-1 text-[14px] font-black text-slate-900">
+                                        {formatSummaryMoney(todaySummary.earnings)}
+                                    </span>
                                     <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Earnings</span>
                                 </div>
 
@@ -2255,7 +2325,7 @@ const DriverHome = () => {
                                     <div className="h-10 w-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 mb-2">
                                         <Clock size={18} strokeWidth={2.5} />
                                     </div>
-                                    <span className="text-[14px] font-black text-slate-900">0h 0m</span>
+                                    <span className="text-[14px] font-black text-slate-900">{`${dutyHours}h ${dutyMins}m`}</span>
                                     <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Active</span>
                                 </div>
 
@@ -2263,7 +2333,7 @@ const DriverHome = () => {
                                     <div className="h-10 w-10 rounded-2xl bg-orange-50 flex items-center justify-center text-orange-600 mb-2">
                                         <Navigation size={18} strokeWidth={2.5} />
                                     </div>
-                                    <span className="text-[14px] font-black text-slate-900">0 km</span>
+                                    <span className="text-[14px] font-black text-slate-900">{formatSummaryDistance(todaySummary.distanceMeters)}</span>
                                     <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Distance</span>
                                    </div>
 
@@ -2271,12 +2341,11 @@ const DriverHome = () => {
                                     <div className="h-10 w-10 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600 mb-2">
                                         <BarChart2 size={18} strokeWidth={2.5} />
                                     </div>
-                                    <span className="text-[14px] font-black text-slate-900">0</span>
+                                    <span className="text-[14px] font-black text-slate-900">{todaySummary.rides}</span>
                                     <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Rides</span>
                                 </div>
                             </div>
                         </motion.div>
-                    )}
                 </AnimatePresence>
             </div>
 

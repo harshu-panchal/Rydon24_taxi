@@ -1084,9 +1084,7 @@ const SearchingDriver = () => {
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-600">Current Offer</p>
                       <p className="mt-1 text-[18px] font-black text-slate-900">{formatCurrency(biddingSummary.userMaxBidFare)}</p>
-                      <p className="mt-1 text-[12px] font-bold text-slate-600">
-                        If nobody accepts, you can raise the fare after the configured wait time and send the request again to all nearby drivers.
-                      </p>
+                   
                     </div>
                     <button
                       type="button"
