@@ -1960,7 +1960,7 @@ const DriverHome = () => {
                                         setShowSelfieCameraCapture(false);
                                         setShowOnlineSelfiePrompt(false);
                                     }}
-                                    className="h-12 rounded-[16px] border border-slate-200 bg-slate-50 text-[12px] font-black uppercase tracking-[0.14em] text-slate-500 disabled:opacity-60"
+                                    className="h-12 px-3 rounded-[16px] border border-slate-200 bg-slate-50 text-[11px] font-black uppercase tracking-[0.08em] text-slate-500 disabled:opacity-60 overflow-hidden"
                                 >
                                     Cancel
                                 </button>
@@ -1978,11 +1978,11 @@ const DriverHome = () => {
                                         type="button"
                                         disabled={selfieUploading}
                                         onClick={openSelfieCamera}
-                                        className="relative h-12 rounded-[16px] bg-emerald-500 text-[11px] font-black uppercase tracking-[0.14em] text-white shadow-[0_14px_28px_rgba(16,185,129,0.28)] disabled:opacity-60"
+                                        className="relative h-12 px-3 rounded-[16px] bg-emerald-500 text-[10px] font-black uppercase tracking-[0.08em] text-white shadow-[0_14px_28px_rgba(16,185,129,0.28)] disabled:opacity-60 overflow-hidden"
                                     >
-                                        <span className="flex items-center justify-center gap-2">
-                                            <Camera size={14} />
-                                            Take New Selfie
+                                        <span className="flex items-center justify-center gap-1.5 w-full">
+                                            <Camera size={14} className="shrink-0" />
+                                            <span className="truncate">Take New Selfie</span>
                                         </span>
                                         <input
                                             ref={selfieCameraInputRef}
