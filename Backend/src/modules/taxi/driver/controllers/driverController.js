@@ -104,6 +104,72 @@ const normalizeBusPassengerPhone = (value = "") =>
 const normalizeEmail = (value = "") => String(value || "").trim().toLowerCase();
 const BUS_DRIVER_NAME_REGEX = /^[A-Za-z]+(?:[ .'-][A-Za-z]+)*$/;
 
+const normalizeFleetVehicleDocumentValue = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    const url = String(value || "").trim();
+    if (!url) {
+      return null;
+    }
+
+    return {
+      previewUrl: url,
+      secureUrl: url,
+      uploaded: true,
+    };
+  }
+
+  if (typeof value !== "object") {
+    return null;
+  }
+
+  const previewUrl = String(
+    value.previewUrl ||
+      value.secureUrl ||
+      value.url ||
+      value.imageUrl ||
+      value.image ||
+      value.fileUrl ||
+      value.document ||
+      value.file ||
+      "",
+  ).trim();
+
+  if (!previewUrl) {
+    return null;
+  }
+
+  return {
+    ...value,
+    previewUrl,
+    secureUrl: String(value.secureUrl || previewUrl).trim(),
+    uploaded: value.uploaded ?? true,
+  };
+};
+
+const normalizeFleetVehicleDocuments = (documents = {}, rcFile = "") => {
+  const normalizedDocuments = {};
+
+  if (documents && typeof documents === "object" && !Array.isArray(documents)) {
+    for (const [key, value] of Object.entries(documents)) {
+      const normalizedValue = normalizeFleetVehicleDocumentValue(value);
+      if (normalizedValue) {
+        normalizedDocuments[String(key).trim()] = normalizedValue;
+      }
+    }
+  }
+
+  const normalizedRcFile = String(rcFile || "").trim();
+  if (normalizedRcFile && !normalizedDocuments.rc) {
+    normalizedDocuments.rc = normalizeFleetVehicleDocumentValue(normalizedRcFile);
+  }
+
+  return normalizedDocuments;
+};
+
 const serializeDriverRouteBooking = (routeBooking = {}) => {
   const coordinates = Array.isArray(routeBooking?.anchorLocation?.coordinates)
     ? routeBooking.anchorLocation.coordinates
@@ -4164,7 +4230,16 @@ export const getServiceLocations = async (_req, res) => {
 export const getDriverDocumentTemplates = async (_req, res) => {
   const requestedRole = String(_req.query?.role || "driver").trim().toLowerCase();
   const isOwnerRequest = requestedRole === "owner";
-  const results = isOwnerRequest
+  const isFleetRequest =
+    requestedRole === "fleet" ||
+    requestedRole === "owner_vehicle" ||
+    requestedRole === "owner-vehicle";
+  const results = isFleetRequest
+    ? await listDriverNeededDocuments({
+        activeOnly: true,
+        includeFields: true,
+      })
+    : isOwnerRequest
     ? await listOwnerNeededDocuments()
     : await listDriverNeededDocuments({
         activeOnly: true,
@@ -4206,6 +4281,8 @@ export const getDriverDocumentTemplates = async (_req, res) => {
                 },
               ],
       }))
+      : isFleetRequest
+        ? results
       : results,
     },
   });
@@ -4221,7 +4298,7 @@ export const addOwnerVehicle = async (req, res) => {
     );
   }
 
-  const { vehicleTypeId, make, model, number, color, rcFile } = req.body;
+  const { vehicleTypeId, make, model, number, color, rcFile, documents } = req.body;
 
   if (!make?.trim()) {
     throw new ApiError(400, "Car brand/make is required");
@@ -4240,6 +4317,28 @@ export const addOwnerVehicle = async (req, res) => {
   }
 
   const normalizedPlate = String(number).trim().toUpperCase();
+
+  const normalizedDocuments = normalizeFleetVehicleDocuments(documents, rcFile);
+  const configuredFleetDocuments = await listDriverNeededDocuments({
+    activeOnly: true,
+    includeFields: true,
+  });
+  const requiredFleetDocumentKeys = configuredFleetDocuments.flatMap((template) =>
+    (Array.isArray(template.fields) ? template.fields : [])
+      .filter((field) => (field.required ?? template.is_required ?? false))
+      .map((field) => String(field.key || "").trim())
+      .filter(Boolean),
+  );
+  const missingFleetDocuments = requiredFleetDocumentKeys.filter(
+    (key) => !normalizedDocuments[key],
+  );
+
+  if (missingFleetDocuments.length > 0) {
+    throw new ApiError(
+      400,
+      `Missing required fleet documents: ${missingFleetDocuments.join(", ")}`,
+    );
+  }
 
   // Check for duplicate license plate for this owner
   const existing = await FleetVehicle.findOne({
@@ -4278,7 +4377,7 @@ export const addOwnerVehicle = async (req, res) => {
     car_color: String(color).trim(),
     status: "pending",
     active: true,
-    documents: rcFile ? { rc: rcFile } : {},
+    documents: normalizedDocuments,
   });
 
   const populated = await FleetVehicle.findById(vehicle._id)
@@ -4414,13 +4513,15 @@ export const updateOwnerFleetVehicle = async (req, res) => {
   const color = String(
     req.body?.vehicleColor || req.body?.color || req.body?.car_color || "",
   ).trim();
-  const rcFile = String(
-    req.body?.rcFile ||
+  const rcFile = String(req.body?.rcFile || "").trim();
+  const nextDocuments = normalizeFleetVehicleDocuments(
+    req.body?.documents || {},
+    rcFile ||
       req.body?.documents?.rc ||
       req.body?.document ||
       req.body?.file ||
       "",
-  ).trim();
+  );
 
   if (!vehicleTypeId || !mongoose.isValidObjectId(vehicleTypeId)) {
     throw new ApiError(400, "A valid vehicle type is required");
@@ -4460,10 +4561,10 @@ export const updateOwnerFleetVehicle = async (req, res) => {
   vehicle.car_model = model;
   vehicle.license_plate_number = number;
   vehicle.car_color = color;
-  if (rcFile) {
+  if (Object.keys(nextDocuments).length > 0) {
     vehicle.documents = {
       ...(vehicle.documents || {}),
-      rc: rcFile,
+      ...nextDocuments,
     };
     vehicle.markModified("documents");
   }

@@ -12,9 +12,16 @@ import {
   X,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getDriverVehicleTypes } from "../../services/registrationService";
+import {
+  getDriverDocumentTemplates,
+  getDriverVehicleTypes,
+} from "../../services/registrationService";
 import api from "../../../../shared/api/axiosInstance";
 import { uploadService } from "../../../../shared/services/uploadService";
+import {
+  flattenDriverDocumentFields,
+  normalizeDriverDocumentTemplates,
+} from "../../utils/documentTemplates";
 
 import CarIcon from "../../../../assets/icons/car.png";
 import BikeIcon from "../../../../assets/icons/bike.png";
@@ -107,6 +114,12 @@ const fileToDataUrl = (file) =>
     reader.readAsDataURL(file);
   });
 
+const getDocumentSideLabel = (field = {}) => {
+  if (field.side === "front") return "Front";
+  if (field.side === "back") return "Back";
+  return "Document";
+};
+
 const AddVehicle = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -122,20 +135,35 @@ const AddVehicle = () => {
     model: "",
     number: "",
     color: "",
-    rcFile: null,
+    documents: {},
   });
   const [vehicleTypes, setVehicleTypes] = useState([]);
+  const [documentTemplates, setDocumentTemplates] = useState([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const typesResponse = await getDriverVehicleTypes();
+        setTemplatesLoading(true);
+
+        const [typesResponse, templatesResponse] = await Promise.all([
+          getDriverVehicleTypes(),
+          getDriverDocumentTemplates("fleet"),
+        ]);
         const types = getVehicleTypes(typesResponse);
+        const templateResults =
+          templatesResponse?.data?.data?.results ||
+          templatesResponse?.data?.results ||
+          [];
+
         setVehicleTypes(Array.isArray(types) ? types : []);
+        setDocumentTemplates(normalizeDriverDocumentTemplates(templateResults));
       } catch (err) {
-        setError("Failed to load vehicle types");
+        setError("Failed to load vehicle setup");
         console.error(err);
+      } finally {
+        setTemplatesLoading(false);
       }
     };
 
@@ -157,31 +185,76 @@ const AddVehicle = () => {
     Boolean(formData.number.trim()) &&
     Boolean(formData.color.trim());
 
-  const handleFileUpload = (event) => {
+  const uploadFields = useMemo(
+    () => flattenDriverDocumentFields(documentTemplates),
+    [documentTemplates],
+  );
+
+  const requiredDocumentFields = useMemo(
+    () => uploadFields.filter((field) => Boolean(field.isRequired)),
+    [uploadFields],
+  );
+
+  const handleFileUpload = (documentKey, event) => {
     const file = event.target.files?.[0];
     if (file) {
-      setFormData((prev) => ({ ...prev, rcFile: file }));
+      setFormData((prev) => ({
+        ...prev,
+        documents: {
+          ...(prev.documents || {}),
+          [documentKey]: file,
+        },
+      }));
     }
   };
+
+  const clearDocumentFile = (documentKey) => {
+    setFormData((prev) => {
+      const nextDocuments = { ...(prev.documents || {}) };
+      delete nextDocuments[documentKey];
+      return {
+        ...prev,
+        documents: nextDocuments,
+      };
+    });
+  };
+
+  const canSubmit =
+    !templatesLoading &&
+    requiredDocumentFields.every((field) => Boolean(formData.documents?.[field.key]));
 
   const handleSubmit = async () => {
     try {
       setError("");
       setIsSubmitting(true);
+      const uploadedDocuments = {};
 
-      let rcFileUrl = null;
-
-      if (formData.rcFile) {
-        if (!String(formData.rcFile.type || "").startsWith("image/")) {
-          throw new Error("RC upload currently supports image files only.");
+      for (const field of uploadFields) {
+        const selectedFile = formData.documents?.[field.key];
+        if (!selectedFile) {
+          continue;
         }
 
-        const dataUrl = await fileToDataUrl(formData.rcFile);
+        if (!String(selectedFile.type || "").startsWith("image/")) {
+          throw new Error(`${field.label || "Document"} currently supports image files only.`);
+        }
+
+        const dataUrl = await fileToDataUrl(selectedFile);
         const uploadResult = await uploadService.uploadImage(
           dataUrl,
           "fleet-vehicle-documents",
         );
-        rcFileUrl = uploadResult?.url || uploadResult?.secureUrl || null;
+        const uploadedUrl = uploadResult?.url || uploadResult?.secureUrl || "";
+
+        if (!uploadedUrl) {
+          throw new Error(`Failed to upload ${field.label || "document"}.`);
+        }
+
+        uploadedDocuments[field.key] = {
+          previewUrl: uploadedUrl,
+          secureUrl: uploadedUrl,
+          uploaded: true,
+        };
       }
 
       await api.post("/drivers/fleet/vehicles", {
@@ -190,7 +263,7 @@ const AddVehicle = () => {
         model: formData.model,
         number: formData.number,
         color: formData.color,
-        rcFile: rcFileUrl,
+        documents: uploadedDocuments,
       });
 
       setStep(3);
@@ -515,57 +588,98 @@ const AddVehicle = () => {
                 <div className="border-b border-slate-100 px-6 py-5">
                   <h2 className="text-lg font-bold text-slate-900">Vehicle Documents</h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    Upload the RC file for the vehicle you just added to the fleet.
+                    Upload only the vehicle documents configured by admin in fleet document settings.
                   </p>
                 </div>
 
-                <div className="p-6">
-                  <label className={labelClass}>RC Document *</label>
-                  <div className="rounded-2xl border border-dashed border-slate-300 p-4">
-                    <div className="relative flex min-h-[280px] items-center justify-center overflow-hidden rounded-2xl bg-slate-50">
-                      <input
-                        type="file"
-                        className="absolute inset-0 cursor-pointer opacity-0"
-                        onChange={handleFileUpload}
-                        accept="image/*,.pdf"
-                      />
-                      <div className="flex flex-col items-center gap-3 text-center">
-                        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-orange-500 shadow-sm">
-                          <Upload size={20} />
-                        </span>
-                        <span className="text-sm font-semibold text-slate-700">
-                          Upload RC file
-                        </span>
-                        <span className="text-xs text-slate-400">
-                          Image or PDF, up to 5MB
-                        </span>
-                      </div>
+                <div className="space-y-5 p-6">
+                  {templatesLoading ? (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                      Loading required fleet documents...
                     </div>
-                  </div>
+                  ) : uploadFields.length === 0 ? (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                      No fleet vehicle documents are configured right now.
+                    </div>
+                  ) : (
+                    uploadFields.map((field) => {
+                      const selectedFile = formData.documents?.[field.key] || null;
 
-                  {formData.rcFile ? (
-                    <div className="mt-4 flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-sm">
-                          <ShieldCheck size={18} />
+                      return (
+                        <div
+                          key={field.key}
+                          className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4"
+                        >
+                          <div className="mb-3 flex items-start justify-between gap-3">
+                            <div>
+                              <label className={labelClass}>
+                                {field.label || field.templateName || "Vehicle Document"}
+                                {field.isRequired ? " *" : ""}
+                              </label>
+                              <p className="text-xs text-slate-500">
+                                {field.templateName || "Vehicle document"} • {getDocumentSideLabel(field)}
+                              </p>
+                            </div>
+                            <span
+                              className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${
+                                field.isRequired
+                                  ? "bg-orange-100 text-orange-700"
+                                  : "bg-slate-200 text-slate-600"
+                              }`}
+                            >
+                              {field.isRequired ? "Required" : "Optional"}
+                            </span>
+                          </div>
+
+                          <div className="rounded-2xl border border-dashed border-slate-300 p-4">
+                            <div className="relative flex min-h-[180px] items-center justify-center overflow-hidden rounded-2xl bg-white">
+                              <input
+                                type="file"
+                                className="absolute inset-0 cursor-pointer opacity-0"
+                                onChange={(event) => handleFileUpload(field.key, event)}
+                                accept="image/*"
+                              />
+                              <div className="flex flex-col items-center gap-3 text-center">
+                                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-orange-500 shadow-sm">
+                                  <Upload size={20} />
+                                </span>
+                                <span className="text-sm font-semibold text-slate-700">
+                                  Upload {field.label || field.templateName || "document"}
+                                </span>
+                                <span className="text-xs text-slate-400">
+                                  Image upload only
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {selectedFile ? (
+                            <div className="mt-4 flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-sm">
+                                  <ShieldCheck size={18} />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-semibold text-emerald-800">
+                                    {selectedFile.name}
+                                  </p>
+                                  <p className="text-xs text-emerald-600">
+                                    File attached successfully
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => clearDocumentFile(field.key)}
+                                className="rounded-xl p-2 text-emerald-700 transition hover:bg-white hover:text-rose-500"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
+                          ) : null}
                         </div>
-                        <div>
-                          <p className="text-sm font-semibold text-emerald-800">
-                            {formData.rcFile.name}
-                          </p>
-                          <p className="text-xs text-emerald-600">
-                            File attached successfully
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setFormData((prev) => ({ ...prev, rcFile: null }))}
-                        className="rounded-xl p-2 text-emerald-700 transition hover:bg-white hover:text-rose-500"
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-                  ) : null}
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
@@ -619,6 +733,27 @@ const AddVehicle = () => {
                       <p className="mt-2 text-sm leading-6 text-slate-500">
                         The vehicle will be created in pending status and shown in the fleet after submission.
                       </p>
+                    </div>
+
+                    <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
+                        <ShieldCheck size={16} className="text-orange-500" />
+                        Document Summary
+                      </div>
+                      <div className="space-y-2 text-sm text-slate-600">
+                        <p>
+                          Configured uploads:{" "}
+                          <span className="font-semibold text-slate-900">
+                            {uploadFields.length}
+                          </span>
+                        </p>
+                        <p>
+                          Attached files:{" "}
+                          <span className="font-semibold text-slate-900">
+                            {Object.keys(formData.documents || {}).length}
+                          </span>
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -694,9 +829,9 @@ const AddVehicle = () => {
             ) : (
               <button
                 onClick={handleSubmit}
-                disabled={!formData.rcFile || isSubmitting}
+                disabled={!canSubmit || isSubmitting}
                 className={`inline-flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-semibold transition ${
-                  formData.rcFile && !isSubmitting
+                  canSubmit && !isSubmitting
                     ? "bg-[#ff6b4a] text-white shadow-lg shadow-orange-200 hover:bg-[#f55a37]"
                     : "bg-slate-100 text-slate-400"
                 }`}
