@@ -8,6 +8,7 @@ import { DriverRegistrationSession } from '../models/DriverRegistrationSession.j
 import { Owner } from '../../admin/models/Owner.js';
 import { ServiceLocation } from '../../admin/models/ServiceLocation.js';
 import { Vehicle } from '../../admin/models/Vehicle.js';
+import { AdminBusinessSetting } from '../../admin/models/AdminBusinessSetting.js';
 import {
   listDriverDocumentUploadFields,
   listDriverNeededDocuments,
@@ -17,6 +18,8 @@ import {
 import { hashPassword, signAccessToken } from './authService.js';
 import { findZoneByPickup } from './locationService.js';
 import { sendOtpSms } from '../../services/smsService.js';
+import { WalletTransaction } from '../models/WalletTransaction.js';
+import { applyDriverWalletAdjustment } from './walletService.js';
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -85,6 +88,112 @@ const getPrimaryRegisterFor = (serviceCategories = [], fallback = 'taxi') => {
 
   return String(fallback || 'taxi').trim().toLowerCase() || 'taxi';
 };
+const normalizeReferralCode = (value = '') => String(value || '').trim().toUpperCase();
+const generateDriverReferralCode = (driver) => {
+  const idPart = String(driver?._id || '')
+    .slice(-6)
+    .toUpperCase();
+  const phonePart = String(driver?.phone || '').slice(-4);
+  return `DRV${phonePart}${idPart}`.replace(/\W/g, '');
+};
+
+const getDriverReferralProgramSettings = async () => {
+  const setting = await AdminBusinessSetting.findOne({ scope: 'default' }).lean();
+  const driverReferral = setting?.referral?.driver || {};
+
+  return {
+    enabled: Boolean(driverReferral.enabled),
+    type: String(driverReferral.type || 'instant_referrer').trim().toLowerCase(),
+    amount: Math.max(0, Number(driverReferral.amount || 0) || 0),
+    rideCount: Math.max(0, Number(driverReferral.ride_count || 0) || 0),
+  };
+};
+
+const findDriverByReferralCode = async (referralCode) => {
+  const normalizedCode = normalizeReferralCode(referralCode);
+
+  if (!normalizedCode) {
+    return null;
+  }
+
+  return Driver.findOne({ referralCode: normalizedCode });
+};
+
+const creditDriverWalletByReference = async ({ driverId, amount, title, referenceKey, metadata = {} }) => {
+  const normalizedAmount = Math.max(0, Number(amount || 0) || 0);
+  const normalizedReferenceKey = String(referenceKey || '').trim();
+
+  if (!driverId || normalizedAmount <= 0 || !normalizedReferenceKey) {
+    return 'skipped';
+  }
+
+  const existingTransaction = await WalletTransaction.findOne({
+    driverId,
+    'metadata.referenceKey': normalizedReferenceKey,
+  })
+    .select('_id')
+    .lean();
+
+  if (existingTransaction) {
+    return 'existing';
+  }
+
+  await applyDriverWalletAdjustment({
+    driverId,
+    amount: normalizedAmount,
+    type: 'adjustment',
+    description: String(title || 'Referral Reward').trim(),
+    metadata: {
+      ...metadata,
+      referenceKey: normalizedReferenceKey,
+      source: 'driver_referral',
+    },
+  });
+
+  return 'credited';
+};
+
+const processDriverSignupReferralRewards = async ({ driver, referrer }) => {
+  if (!driver?._id || !referrer?._id) {
+    return;
+  }
+
+  const settings = await getDriverReferralProgramSettings();
+  if (!settings.enabled || settings.amount <= 0) {
+    return;
+  }
+
+  const referralType = settings.type;
+  const rewardBaseKey = `driver-referral:signup:${String(driver._id)}`;
+
+  if (referralType === 'instant_referrer' || referralType === 'instant_referrer_new') {
+    await creditDriverWalletByReference({
+      driverId: referrer._id,
+      amount: settings.amount,
+      title: `Referral reward for inviting driver ${driver.phone || ''}`.trim(),
+      referenceKey: `${rewardBaseKey}:referrer`,
+      metadata: {
+        invitedDriverId: String(driver._id),
+      },
+    });
+  }
+
+  if (referralType === 'instant_referrer_new') {
+    await creditDriverWalletByReference({
+      driverId: driver._id,
+      amount: settings.amount,
+      title: 'Welcome referral reward',
+      referenceKey: `${rewardBaseKey}:new-driver`,
+      metadata: {
+        referrerDriverId: String(referrer._id),
+      },
+    });
+
+    driver.referralRewardGrantedAt = driver.referralRewardGrantedAt || new Date();
+    await driver.save();
+  }
+};
+
 const matchesDocumentRole = (accountType, role) => {
   const normalizedAccountType = String(accountType || 'individual').trim().toLowerCase();
   const normalizedRole = normalizeRole(role);
@@ -493,7 +602,16 @@ export const saveDriverPersonalDetails = async ({ registrationId, phone, fullNam
 export const saveDriverReferral = async ({ registrationId, phone, referralCode = '' }) => {
   const session = await getSession(registrationId, phone);
 
-  session.referralCode = String(referralCode || '').trim().toUpperCase();
+  const normalizedReferralCode = normalizeReferralCode(referralCode);
+
+  if (normalizedReferralCode) {
+    const referrer = await findDriverByReferralCode(normalizedReferralCode);
+    if (!referrer?._id) {
+      throw new ApiError(400, 'Invalid referral code');
+    }
+  }
+
+  session.referralCode = normalizedReferralCode;
   await session.save();
 
   return {
@@ -819,6 +937,15 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
     };
   }
 
+  const normalizedReferralCode = normalizeReferralCode(session.referralCode);
+  const referrer = normalizedReferralCode
+    ? await findDriverByReferralCode(normalizedReferralCode)
+    : null;
+
+  if (normalizedReferralCode && !referrer?._id) {
+    throw new ApiError(400, 'Invalid referral code');
+  }
+
   const driver = await Driver.create({
     name: session.personal.fullName,
     phone: session.phone,
@@ -839,7 +966,7 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
     vehicleNumber: session.vehicle.number,
     vehicleColor: session.vehicle.color,
     city: session.vehicle.city || session.vehicle.locationName,
-    referralCode: session.referralCode,
+    referredBy: referrer?._id || null,
     approve: false,
     status: 'pending',
     zoneId: zone?._id || null,
@@ -870,6 +997,16 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
       },
     },
   });
+
+  if (!String(driver.referralCode || '').trim()) {
+    driver.referralCode = generateDriverReferralCode(driver);
+    await driver.save();
+  }
+
+  if (referrer?._id) {
+    await Driver.updateOne({ _id: referrer._id }, { $inc: { referralCount: 1 } });
+    await processDriverSignupReferralRewards({ driver, referrer });
+  }
 
   session.finalDriverId = driver._id;
   session.status = 'completed';

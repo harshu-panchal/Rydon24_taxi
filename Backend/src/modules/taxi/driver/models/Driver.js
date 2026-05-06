@@ -178,6 +178,26 @@ const driverSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    referredBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TaxiDriver',
+      default: null,
+      index: true,
+    },
+    referralCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    referredRideCompletionCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    referralRewardGrantedAt: {
+      type: Date,
+      default: null,
+    },
     approve: {
       type: Boolean,
       default: true,

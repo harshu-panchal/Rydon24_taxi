@@ -6,8 +6,9 @@ import { AdminBusinessSetting } from '../admin/models/AdminBusinessSetting.js';
 import { SetPrice } from '../admin/models/SetPrice.js';
 import { Vehicle } from '../admin/models/Vehicle.js';
 import { Driver } from '../driver/models/Driver.js';
+import { WalletTransaction } from '../driver/models/WalletTransaction.js';
 import { incrementDriverTodaySummaryForCompletedRide } from '../driver/services/driverTodaySummaryService.js';
-import { ensureDriverWalletCanAcceptRide, settleCompletedRideWallet } from '../driver/services/walletService.js';
+import { applyDriverWalletAdjustment, ensureDriverWalletCanAcceptRide, settleCompletedRideWallet } from '../driver/services/walletService.js';
 import { Delivery } from '../user/models/Delivery.js';
 import { RideBid } from '../user/models/RideBid.js';
 import { Ride } from '../user/models/Ride.js';
@@ -107,6 +108,18 @@ const getUserReferralProgramSettings = async () => {
   };
 };
 
+const getDriverReferralProgramSettings = async () => {
+  const setting = await AdminBusinessSetting.findOne({ scope: 'default' }).lean();
+  const driverReferral = setting?.referral?.driver || {};
+
+  return {
+    enabled: Boolean(driverReferral.enabled),
+    type: String(driverReferral.type || 'instant_referrer').trim().toLowerCase(),
+    amount: Math.max(0, Number(driverReferral.amount || 0) || 0),
+    rideCount: Math.max(0, Number(driverReferral.ride_count || 0) || 0),
+  };
+};
+
 const creditUserWalletByReference = async ({ userId, amount, title, referenceKey }) => {
   const normalizedAmount = Math.max(0, Number(amount || 0) || 0);
   const normalizedReferenceKey = String(referenceKey || '').trim();
@@ -147,6 +160,40 @@ const creditUserWalletByReference = async ({ userId, amount, title, referenceKey
       },
     },
   );
+
+  return 'credited';
+};
+
+const creditDriverWalletByReference = async ({ driverId, amount, title, referenceKey, metadata = {} }) => {
+  const normalizedAmount = Math.max(0, Number(amount || 0) || 0);
+  const normalizedReferenceKey = String(referenceKey || '').trim();
+
+  if (!driverId || normalizedAmount <= 0 || !normalizedReferenceKey) {
+    return 'skipped';
+  }
+
+  const existingTransaction = await WalletTransaction.findOne({
+    driverId,
+    'metadata.referenceKey': normalizedReferenceKey,
+  })
+    .select('_id')
+    .lean();
+
+  if (existingTransaction) {
+    return 'existing';
+  }
+
+  await applyDriverWalletAdjustment({
+    driverId,
+    amount: normalizedAmount,
+    type: 'adjustment',
+    description: String(title || 'Referral Reward').trim(),
+    metadata: {
+      ...metadata,
+      referenceKey: normalizedReferenceKey,
+      source: 'driver_referral',
+    },
+  });
 
   return 'credited';
 };
@@ -215,6 +262,82 @@ const processCompletedRideReferralReward = async (ride) => {
   if (rewardSatisfied) {
     await User.updateOne(
       { _id: ride.userId },
+      { $set: { referralRewardGrantedAt: new Date(), referredRideCompletionCount: completedRideCount } },
+    );
+  }
+};
+
+const processCompletedDriverReferralReward = async (ride) => {
+  if (!ride?.driverId) {
+    return;
+  }
+
+  const referredDriver = await Driver.findById(ride.driverId)
+    .select('phone referredBy referredRideCompletionCount referralRewardGrantedAt')
+    .lean();
+
+  if (!referredDriver?.referredBy || referredDriver?.referralRewardGrantedAt) {
+    return;
+  }
+
+  const settings = await getDriverReferralProgramSettings();
+  const isConditionalProgram =
+    settings.enabled &&
+    ['conditional_referrer', 'conditional_referrer_new'].includes(settings.type);
+
+  if (!isConditionalProgram) {
+    return;
+  }
+
+  const completedRideCount = await Ride.countDocuments({
+    driverId: ride.driverId,
+    status: RIDE_STATUS.COMPLETED,
+  });
+
+  const requiredRideCount = Math.max(1, settings.rideCount || 1);
+
+  await Driver.updateOne(
+    { _id: ride.driverId },
+    { $set: { referredRideCompletionCount: completedRideCount } },
+  );
+
+  if (completedRideCount < requiredRideCount || settings.amount <= 0) {
+    return;
+  }
+
+  const rewardBaseKey = `driver-referral:completed:${String(ride.driverId)}:${requiredRideCount}`;
+  const referrerResult = await creditDriverWalletByReference({
+    driverId: referredDriver.referredBy,
+    amount: settings.amount,
+    title: `Referral reward after ${completedRideCount} completed rides by ${referredDriver.phone || 'referred driver'}`,
+    referenceKey: `${rewardBaseKey}:referrer`,
+    metadata: {
+      referredDriverId: String(ride.driverId),
+      completedRideCount,
+    },
+  });
+
+  let newDriverResult = 'skipped';
+  if (settings.type === 'conditional_referrer_new') {
+    newDriverResult = await creditDriverWalletByReference({
+      driverId: ride.driverId,
+      amount: settings.amount,
+      title: `Referral completion reward after ${completedRideCount} rides`,
+      referenceKey: `${rewardBaseKey}:new-driver`,
+      metadata: {
+        referrerDriverId: String(referredDriver.referredBy),
+        completedRideCount,
+      },
+    });
+  }
+
+  const rewardSatisfied =
+    ['credited', 'existing'].includes(referrerResult) &&
+    (settings.type !== 'conditional_referrer_new' || ['credited', 'existing'].includes(newDriverResult));
+
+  if (rewardSatisfied) {
+    await Driver.updateOne(
+      { _id: ride.driverId },
       { $set: { referralRewardGrantedAt: new Date(), referredRideCompletionCount: completedRideCount } },
     );
   }
@@ -1328,6 +1451,7 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
     });
 
     await processCompletedRideReferralReward(ride);
+    await processCompletedDriverReferralReward(ride);
   }
 
   const populatedRide = await populateRideRealtime(ride._id);

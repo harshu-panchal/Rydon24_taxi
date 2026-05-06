@@ -18,6 +18,14 @@ const PhoneRegistration = () => {
     const location = useLocation();
     const { settings } = useSettings();
     const storedSession = getStoredDriverRegistrationSession();
+    const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+    const sharedReferralCode = String(
+        searchParams.get('ref') ||
+        searchParams.get('referral') ||
+        searchParams.get('code') ||
+        storedSession.referralCode ||
+        '',
+    ).trim().toUpperCase();
     const [phone, setPhone] = useState(() => String(location.state?.phone || storedSession.phone || '').replace(/\D/g, '').slice(-10));
     const [role, setRole] = useState(() => {
         const normalizePortalRole = (value) => {
@@ -31,6 +39,10 @@ const PhoneRegistration = () => {
 
         const stateRole = String(location.state?.role || '').toLowerCase();
         if (stateRole) return normalizePortalRole(stateRole);
+
+        if (sharedReferralCode && location.pathname.startsWith('/taxi/driver')) {
+            return 'driver';
+        }
 
         const savedRole = String(storedSession.role || '').toLowerCase();
         return normalizePortalRole(savedRole);
@@ -83,8 +95,9 @@ const PhoneRegistration = () => {
             role,
             phone,
             loginMode: isLoginPage,
+            referralCode: sharedReferralCode,
         });
-    }, [isLoginPage, role, phone]);
+    }, [isLoginPage, role, phone, sharedReferralCode]);
 
     useEffect(() => {
         const scrollPhoneIntoView = () => {
@@ -131,6 +144,7 @@ const PhoneRegistration = () => {
                 registrationId: sessionData.registrationId || '',
                 debugOtp: sessionData.debugOtp || '',
                 loginMode: isLoginPage,
+                referralCode: sharedReferralCode,
             });
 
             navigate(`${routePrefix}/otp-verify`, {

@@ -139,6 +139,9 @@ const DriverReferral = () => {
     normalizedDriverReferral,
     DRIVER_REFERRAL_TRANSLATION_FIELDS,
   );
+  const referralShareLink = referralCode
+    ? `${window.location.origin}/taxi/driver/reg-phone?ref=${encodeURIComponent(referralCode)}`
+    : '';
 
   const handleCopy = async () => {
     if (!referralCode) {
@@ -158,13 +161,14 @@ const DriverReferral = () => {
     if (!referralCode) {
       return;
     }
-    const shareText = `${bannerText}\nUse my referral code ${referralCode} and join as a driver.\n${window.location.origin}`;
+    const shareText = `${bannerText}\nJoin as a driver with my referral link and code ${referralCode}.\n${referralShareLink}`;
 
     try {
       if (navigator.share) {
         await navigator.share({
           title: bannerText,
           text: shareText,
+          url: referralShareLink,
         });
         return;
       }
@@ -207,7 +211,7 @@ const DriverReferral = () => {
         </div>
 
         <div className="px-4 py-4">
-          <div className="grid grid-cols-[1fr_auto] gap-2">
+          <div className="grid grid-cols-[1fr_auto_auto] gap-2">
             <div className="rounded-xl border border-dashed border-gray-300 px-3 py-3 text-center">
               <p className="text-[18px] font-semibold text-gray-900 tracking-wide">
                 {referralCode || 'Not available'}
@@ -223,6 +227,21 @@ const DriverReferral = () => {
               {copied ? <CheckCircle2 size={15} /> : <Copy size={15} />}
               Copy
             </button>
+            <button
+              type="button"
+              onClick={handleShare}
+              disabled={!referralCode}
+              className="rounded-xl bg-[#ef4444] text-white px-4 text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+            >
+              Share <Share2 size={15} />
+            </button>
+          </div>
+
+          <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400">Share link</p>
+            <p className="mt-1 break-all text-[12px] text-gray-700">
+              {referralShareLink || 'Share link will appear once your referral code is ready.'}
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-2 mt-3">
@@ -273,17 +292,6 @@ const DriverReferral = () => {
               <p className="text-xs text-gray-400 mt-2">Detailed driver referral history is not available on this screen yet.</p>
             </div>
           )}
-        </div>
-
-        <div className="px-4 pb-5">
-          <button
-            type="button"
-            onClick={handleShare}
-            disabled={!referralCode}
-            className="w-full rounded-xl bg-[#ef4444] text-white py-3.5 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            Refer now <Share2 size={16} />
-          </button>
         </div>
       </div>
 
