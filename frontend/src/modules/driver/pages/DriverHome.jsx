@@ -581,6 +581,7 @@ const DriverHome = () => {
     const [currentRequest, setCurrentRequest] = useState(null);
     const [dutySeconds, setDutySeconds] = useState(0);
     const [todaySummary, setTodaySummary] = useState(() => normalizeTodaySummary());
+    const [isTodaySummaryExpanded, setIsTodaySummaryExpanded] = useState(true);
     const [map, setMap] = useState(null);
     const [driverCoords, setDriverCoords] = useState(() => readStoredDriverCoords());
     const [statusMessage, setStatusMessage] = useState('');
@@ -2297,55 +2298,81 @@ const DriverHome = () => {
 
                 {/* Today's Stats Summary - Visible in both offline and online modes */}
                 <AnimatePresence>
-                        <motion.div
-                            initial={{ opacity: 0, y: 40 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: 40 }}
-                            transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                            className="w-full bg-white rounded-[28px] p-5 shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-slate-100"
+                    <motion.div
+                        layout
+                        initial={{ opacity: 0, y: 40 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 40 }}
+                        transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                        className="w-full overflow-hidden rounded-[28px] border border-slate-100 bg-white shadow-[0_20px_50px_rgba(0,0,0,0.1)]"
+                    >
+                        <button
+                            type="button"
+                            onClick={() => setIsTodaySummaryExpanded((current) => !current)}
+                            className="flex w-full items-center justify-between px-5 py-4 text-left"
+                            aria-expanded={isTodaySummaryExpanded}
+                            aria-label={isTodaySummaryExpanded ? 'Collapse today summary' : 'Expand today summary'}
                         >
-                            <div className="flex items-center justify-between mb-4 px-1">
+                            <div className="flex items-center gap-3">
                                 <h4 className="text-[13px] font-black uppercase tracking-widest text-slate-400">Today&apos;s Summary</h4>
                                 <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                             </div>
-                            
-                            <div className="grid grid-cols-4 gap-2">
-                                <div className="relative flex flex-col items-center">
-                                    <div className="h-10 w-10 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 mb-2">
-                                        <IndianRupee size={18} strokeWidth={2.5} />
-                                    </div>
-                                    <span className="text-[14px] font-black text-slate-900">₹0</span>
-                                    <span className="absolute top-[48px] left-1/2 -translate-x-1/2 bg-white px-1 text-[14px] font-black text-slate-900">
-                                        {formatSummaryMoney(todaySummary.earnings)}
-                                    </span>
-                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Earnings</span>
-                                </div>
+                            <motion.div
+                                animate={{ rotate: isTodaySummaryExpanded ? 90 : -90 }}
+                                transition={{ duration: 0.2 }}
+                                className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-50 text-slate-500"
+                            >
+                                <ChevronRight size={16} strokeWidth={2.8} />
+                            </motion.div>
+                        </button>
 
-                                <div className="flex flex-col items-center">
-                                    <div className="h-10 w-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 mb-2">
-                                        <Clock size={18} strokeWidth={2.5} />
-                                    </div>
-                                    <span className="text-[14px] font-black text-slate-900">{`${dutyHours}h ${dutyMins}m`}</span>
-                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Active</span>
-                                </div>
+                        <AnimatePresence initial={false}>
+                            {isTodaySummaryExpanded ? (
+                                <motion.div
+                                    key="today-summary-content"
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ duration: 0.24, ease: 'easeInOut' }}
+                                    className="overflow-hidden px-5 pb-5"
+                                >
+                                    <div className="grid grid-cols-4 gap-2">
+                                        <div className="flex flex-col items-center">
+                                            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                                                <IndianRupee size={18} strokeWidth={2.5} />
+                                            </div>
+                                            <span className="text-[14px] font-black text-slate-900">{formatSummaryMoney(todaySummary.earnings)}</span>
+                                            <span className="text-[9px] font-bold uppercase tracking-tight text-slate-400">Earnings</span>
+                                        </div>
 
-                                <div className="flex flex-col items-center">
-                                    <div className="h-10 w-10 rounded-2xl bg-orange-50 flex items-center justify-center text-orange-600 mb-2">
-                                        <Navigation size={18} strokeWidth={2.5} />
-                                    </div>
-                                    <span className="text-[14px] font-black text-slate-900">{formatSummaryDistance(todaySummary.distanceMeters)}</span>
-                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Distance</span>
-                                   </div>
+                                        <div className="flex flex-col items-center">
+                                            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                                                <Clock size={18} strokeWidth={2.5} />
+                                            </div>
+                                            <span className="text-[14px] font-black text-slate-900">{`${dutyHours}h ${dutyMins}m`}</span>
+                                            <span className="text-[9px] font-bold uppercase tracking-tight text-slate-400">Active</span>
+                                        </div>
 
-                                <div className="flex flex-col items-center">
-                                    <div className="h-10 w-10 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600 mb-2">
-                                        <BarChart2 size={18} strokeWidth={2.5} />
+                                        <div className="flex flex-col items-center">
+                                            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+                                                <Navigation size={18} strokeWidth={2.5} />
+                                            </div>
+                                            <span className="text-[14px] font-black text-slate-900">{formatSummaryDistance(todaySummary.distanceMeters)}</span>
+                                            <span className="text-[9px] font-bold uppercase tracking-tight text-slate-400">Distance</span>
+                                        </div>
+
+                                        <div className="flex flex-col items-center">
+                                            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-purple-50 text-purple-600">
+                                                <BarChart2 size={18} strokeWidth={2.5} />
+                                            </div>
+                                            <span className="text-[14px] font-black text-slate-900">{todaySummary.rides}</span>
+                                            <span className="text-[9px] font-bold uppercase tracking-tight text-slate-400">Rides</span>
+                                        </div>
                                     </div>
-                                    <span className="text-[14px] font-black text-slate-900">{todaySummary.rides}</span>
-                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Rides</span>
-                                </div>
-                            </div>
-                        </motion.div>
+                                </motion.div>
+                            ) : null}
+                        </AnimatePresence>
+                    </motion.div>
                 </AnimatePresence>
             </div>
 
