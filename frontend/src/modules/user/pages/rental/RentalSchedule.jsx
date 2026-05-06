@@ -254,15 +254,23 @@ const RentalSchedule = () => {
     [returnDate, returnTime],
   );
 
-  const { hours, totalCost, isValid } = useMemo(() => {
+  const { hours, totalCost, extraHours, extraHourRate, basePrice, includedHours, isValid } = useMemo(() => {
     const diff = (new Date(returnDateTimeValue) - new Date(pickup)) / 3600000;
     const hrs = Math.max(0, diff);
     let cost = 0;
+    let overrunHours = 0;
+    let hourlyOverrunRate = 0;
+    let packageBasePrice = 0;
+    let packageIncludedHours = 0;
 
     if (selectedPackage?.price && selectedPackage?.durationHours) {
+      packageIncludedHours = Math.max(1, Number(selectedPackage.durationHours || 0));
+      packageBasePrice = Number(selectedPackage.price || 0);
+      hourlyOverrunRate = Math.max(0, Number(selectedPackage.extraHourPrice || 0));
+      overrunHours = Math.max(0, hrs - packageIncludedHours);
       cost =
-        Math.ceil(hrs / Math.max(1, Number(selectedPackage.durationHours))) *
-        Number(selectedPackage.price || 0);
+        packageBasePrice +
+        Math.ceil(overrunHours) * hourlyOverrunRate;
     } else if (duration === 'Hourly') {
       cost = Math.ceil(hrs) * vehicle.prices['Hourly'];
     } else if (duration === 'Half-Day') {
@@ -274,6 +282,10 @@ const RentalSchedule = () => {
     return {
       hours: hrs.toFixed(1),
       totalCost: cost,
+      extraHours: overrunHours,
+      extraHourRate: hourlyOverrunRate,
+      basePrice: packageBasePrice,
+      includedHours: packageIncludedHours,
       isValid: diff > 0,
     };
   }, [duration, pickup, returnDateTimeValue, selectedPackage, vehicle]);
@@ -429,6 +441,14 @@ const RentalSchedule = () => {
                   <p className="text-[12px] font-bold text-slate-400">
                     {hours} hrs - Rs.{selectedPackage?.price || vehicle.prices[duration]}/{suffix}
                   </p>
+                  {selectedPackage?.durationHours ? (
+                    <p className="text-[11px] font-bold text-slate-400">
+                      Includes {includedHours} hrs for Rs.{basePrice}
+                      {extraHours > 0
+                        ? ` + ${Math.ceil(extraHours)} extra hr x Rs.${extraHourRate}`
+                        : ' with no extra-hour charge'}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="text-right">
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">

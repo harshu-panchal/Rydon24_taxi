@@ -5,6 +5,7 @@ import { Autocomplete, GoogleMap, MarkerF, Polygon } from '@react-google-maps/ap
 import {
   ArrowLeft,
   Building2,
+  Car,
   ChevronRight,
   Edit2,
   Loader2,
@@ -50,6 +51,7 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
   const [stores, setStores] = useState([]);
   const [zones, setZones] = useState([]);
   const [serviceLocations, setServiceLocations] = useState([]);
+  const [rentalVehicles, setRentalVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -108,10 +110,11 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [storesRes, zonesRes, locationsRes] = await Promise.allSettled([
+      const [storesRes, zonesRes, locationsRes, rentalVehiclesRes] = await Promise.allSettled([
         adminService.getServiceStores(),
         adminService.getZones(),
         adminService.getServiceLocations(),
+        adminService.getRentalVehicleTypes(),
       ]);
 
       const nextStores =
@@ -135,10 +138,18 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
             locationsRes.value?.results ||
             []
           : [];
+      const nextRentalVehicles =
+        rentalVehiclesRes.status === 'fulfilled'
+          ? rentalVehiclesRes.value?.data?.data?.results ||
+            rentalVehiclesRes.value?.data?.results ||
+            rentalVehiclesRes.value?.results ||
+            []
+          : [];
 
       setStores(Array.isArray(nextStores) ? nextStores : []);
       setZones(Array.isArray(nextZones) ? nextZones : []);
       setServiceLocations(Array.isArray(nextServiceLocations) ? nextServiceLocations : []);
+      setRentalVehicles(Array.isArray(nextRentalVehicles) ? nextRentalVehicles : []);
 
       if (id && initialMode === 'edit') {
         const storeToEdit = nextStores.find((item) => String(item._id || item.id) === String(id));
@@ -212,6 +223,15 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
   const selectedStoreStaff = useMemo(
     () => (Array.isArray(selectedStore?.staff) ? selectedStore.staff : []),
     [selectedStore],
+  );
+
+  const selectedStoreVehicles = useMemo(
+    () =>
+      rentalVehicles.filter((vehicle) =>
+        Array.isArray(vehicle?.serviceStoreIds) &&
+        vehicle.serviceStoreIds.some((storeId) => String(storeId) === String(selectedStoreId)),
+      ),
+    [rentalVehicles, selectedStoreId],
   );
 
   const getGeocoder = () => {
@@ -605,8 +625,31 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
               </div>
             </div>
 
-            <div className="grid gap-6 xl:grid-cols-12">
-              <div className="space-y-6 xl:col-span-4">
+            <div className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
+              <div className="space-y-5">
+                {selectedStoreId ? (
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">
+                        Staff
+                      </p>
+                      <p className="mt-2 text-2xl font-black text-gray-900">{selectedStoreStaff.length}</p>
+                    </div>
+                    <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">
+                        Cars
+                      </p>
+                      <p className="mt-2 text-2xl font-black text-gray-900">{selectedStoreVehicles.length}</p>
+                    </div>
+                    <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">
+                        Status
+                      </p>
+                      <p className="mt-2 text-sm font-bold capitalize text-gray-900">{formData.status || 'active'}</p>
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
                   <div className="mb-6 flex items-center gap-3 border-b border-gray-100 pb-4">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
@@ -649,17 +692,6 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
                     </div>
 
                     <div>
-                      <label className={labelClass}>Service Location</label>
-                      <input
-                        type="text"
-                        value={selectedServiceLocation?.name || ''}
-                        readOnly
-                        placeholder="Auto-filled from zone"
-                        className={`${inputClass} bg-gray-50 text-gray-500`}
-                      />
-                    </div>
-
-                    <div>
                       <label className={labelClass}>Address</label>
                       <textarea
                         value={formData.address}
@@ -677,35 +709,62 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
                       </p>
                     </div>
 
-                    <div>
-                      <label className={labelClass}>Service Owner Name</label>
-                      <input
-                        type="text"
-                        value={formData.owner_name}
-                        onChange={(event) =>
-                          setFormData((current) => ({ ...current, owner_name: event.target.value }))
-                        }
-                        placeholder="Enter owner name"
-                        className={inputClass}
-                      />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelClass}>Service Location</label>
+                        <input
+                          type="text"
+                          value={selectedServiceLocation?.name || ''}
+                          readOnly
+                          placeholder="Auto-filled from zone"
+                          className={`${inputClass} bg-gray-50 text-gray-500`}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Status</label>
+                        <select
+                          value={formData.status}
+                          onChange={(event) =>
+                            setFormData((current) => ({ ...current, status: event.target.value }))
+                          }
+                          className={inputClass}
+                        >
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
+                        </select>
+                      </div>
                     </div>
 
-                    <div>
-                      <label className={labelClass}>Service Owner Number</label>
-                      <input
-                        type="tel"
-                        value={formData.owner_phone}
-                        onChange={(event) =>
-                          setFormData((current) => ({
-                            ...current,
-                            owner_phone: event.target.value.replace(/[^\d+]/g, '').slice(0, 15),
-                          }))
-                        }
-                        placeholder="Enter owner mobile number"
-                        inputMode="numeric"
-                        maxLength={15}
-                        className={inputClass}
-                      />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelClass}>Owner Name</label>
+                        <input
+                          type="text"
+                          value={formData.owner_name}
+                          onChange={(event) =>
+                            setFormData((current) => ({ ...current, owner_name: event.target.value }))
+                          }
+                          placeholder="Enter owner name"
+                          className={inputClass}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Owner Number</label>
+                        <input
+                          type="tel"
+                          value={formData.owner_phone}
+                          onChange={(event) =>
+                            setFormData((current) => ({
+                              ...current,
+                              owner_phone: event.target.value.replace(/[^\d+]/g, '').slice(0, 15),
+                            }))
+                          }
+                          placeholder="Enter owner mobile number"
+                          inputMode="numeric"
+                          maxLength={15}
+                          className={inputClass}
+                        />
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -733,20 +792,6 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
                           className={inputClass}
                         />
                       </div>
-                    </div>
-
-                    <div>
-                      <label className={labelClass}>Status</label>
-                      <select
-                        value={formData.status}
-                        onChange={(event) =>
-                          setFormData((current) => ({ ...current, status: event.target.value }))
-                        }
-                        className={inputClass}
-                      >
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                      </select>
                     </div>
                   </div>
                 </div>
@@ -821,9 +866,68 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
                     )}
                   </div>
                 ) : null}
+
+                {selectedStoreId ? (
+                  <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                    <div className="mb-5 flex items-start justify-between gap-3 border-b border-gray-100 pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
+                          <Car size={18} />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Available Cars</h3>
+                          <p className="text-xs text-gray-400">
+                            Rental vehicles currently assigned to this store.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="rounded-full bg-gray-100 px-3 py-1 text-[11px] font-semibold text-gray-600">
+                        {selectedStoreVehicles.length} vehicles
+                      </div>
+                    </div>
+
+                    {selectedStoreVehicles.length > 0 ? (
+                      <div className="space-y-3">
+                        {selectedStoreVehicles.map((vehicle) => (
+                          <div
+                            key={vehicle._id || vehicle.id}
+                            className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-gray-900">
+                                  {vehicle.name || 'Unnamed vehicle'}
+                                </p>
+                                <p className="mt-1 text-xs font-medium text-gray-500">
+                                  {vehicle.vehicleCategory || 'Vehicle'} · {vehicle.capacity || 0} seats · {vehicle.luggageCapacity || 0} bags
+                                </p>
+                              </div>
+                              <span
+                                className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                                  vehicle.active !== false && vehicle.status !== 'inactive'
+                                    ? 'bg-emerald-100 text-emerald-700'
+                                    : 'bg-rose-100 text-rose-700'
+                                }`}
+                              >
+                                {vehicle.status || (vehicle.active !== false ? 'active' : 'inactive')}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center">
+                        <p className="text-sm font-semibold text-gray-700">No cars assigned yet</p>
+                        <p className="mt-1 text-xs text-gray-400">
+                          Vehicles linked from rental vehicle types will show here.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
               </div>
 
-              <div className="space-y-6 xl:col-span-8">
+              <div className="space-y-6">
                 <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
                   <div className="flex flex-col gap-3 border-b border-gray-100 px-4 py-4 md:flex-row md:items-center md:justify-between">
                     <div className="w-full md:max-w-md">
