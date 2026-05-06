@@ -1317,14 +1317,16 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
       Driver.findByIdAndUpdate(driverId, { isOnRide: false }),
     ]);
 
+    walletUpdate = await settleCompletedRideWallet({ rideId: ride._id });
+    const settledRide = await Ride.findById(ride._id).select('completedAt driverEarnings estimatedDistanceMeters');
+
     await incrementDriverTodaySummaryForCompletedRide({
       driverId,
-      completedAt: ride.completedAt,
-      driverEarnings: ride.driverEarnings,
-      distanceMeters: ride.estimatedDistanceMeters,
+      completedAt: settledRide?.completedAt || ride.completedAt,
+      driverEarnings: settledRide?.driverEarnings,
+      distanceMeters: settledRide?.estimatedDistanceMeters,
     });
 
-    walletUpdate = await settleCompletedRideWallet({ rideId: ride._id });
     await processCompletedRideReferralReward(ride);
   }
 

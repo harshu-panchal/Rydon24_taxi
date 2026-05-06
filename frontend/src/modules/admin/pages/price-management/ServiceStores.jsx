@@ -10,6 +10,7 @@ import {
   Loader2,
   MapPin,
   Plus,
+  Users,
   Save,
   Search,
   Trash2,
@@ -201,6 +202,17 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
         .some((value) => String(value).toLowerCase().includes(query)),
     );
   }, [searchTerm, stores]);
+
+  const selectedStore = useMemo(
+    () =>
+      stores.find((item) => String(item._id || item.id) === String(selectedStoreId)) || null,
+    [selectedStoreId, stores],
+  );
+
+  const selectedStoreStaff = useMemo(
+    () => (Array.isArray(selectedStore?.staff) ? selectedStore.staff : []),
+    [selectedStore],
+  );
 
   const getGeocoder = () => {
     if (!window.google?.maps?.Geocoder) {
@@ -750,6 +762,65 @@ const ServiceStores = ({ mode: initialMode = 'list' }) => {
                     {selectedStoreId ? 'Update Store' : 'Save Store'}
                   </button>
                 </div>
+
+                {selectedStoreId ? (
+                  <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                    <div className="mb-5 flex items-start justify-between gap-3 border-b border-gray-100 pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                          <Users size={18} />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Assigned Staff</h3>
+                          <p className="text-xs text-gray-400">
+                            Team members linked to this service store.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="rounded-full bg-gray-100 px-3 py-1 text-[11px] font-semibold text-gray-600">
+                        {selectedStoreStaff.length} staff
+                      </div>
+                    </div>
+
+                    {selectedStoreStaff.length > 0 ? (
+                      <div className="space-y-3">
+                        {selectedStoreStaff.map((member) => (
+                          <div
+                            key={member._id || member.id}
+                            className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">
+                                  {member.name || 'Unnamed staff'}
+                                </p>
+                                <p className="mt-1 text-xs font-medium text-gray-500">
+                                  {member.phone || '-'}
+                                </p>
+                              </div>
+                              <span
+                                className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                                  member.active !== false && member.status !== 'inactive'
+                                    ? 'bg-emerald-100 text-emerald-700'
+                                    : 'bg-rose-100 text-rose-700'
+                                }`}
+                              >
+                                {member.status || (member.active !== false ? 'active' : 'inactive')}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center">
+                        <p className="text-sm font-semibold text-gray-700">No staff assigned yet</p>
+                        <p className="mt-1 text-xs text-gray-400">
+                          Staff will appear here once they are added for this service center.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
               </div>
 
               <div className="space-y-6 xl:col-span-8">

@@ -10,11 +10,10 @@ import {
   ChevronLeft, 
   Share2, 
   Package, 
-  MapPin, 
+  CheckCircle2,
+  Receipt,
   Clock, 
   ShieldCheck, 
-  Zap,
-  Navigation,
   ChevronRight
 } from 'lucide-react';
 import { GoogleMap, MarkerF, OverlayView, OverlayViewF, PolylineF } from '@react-google-maps/api';
@@ -33,8 +32,9 @@ import deliveryIcon from '../../../../assets/icons/Delivery.png';
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
 const DEFAULT_CENTER = { lat: 22.7196, lng: 75.8577 };
 const TERMINAL_STATUSES = new Set(['completed', 'cancelled', 'delivered']);
-const ACTIVE_RIDE_VALIDATE_MS = 15000;
+const ACTIVE_RIDE_VALIDATE_MS = 4000;
 const COMPLETED_TRACKING_STATUSES = new Set(['completed', 'delivered']);
+const TIP_OPTIONS = [0, 20, 50, 100];
 
 const toLatLng = (coords, fallback = DEFAULT_CENTER) => {
   const [lng, lat] = coords || [];
@@ -110,6 +110,8 @@ const getTrackingVehicleIcon = (ride, driver) => {
   return deliveryIcon;
 };
 
+const unwrapApiPayload = (response) => response?.data?.data || response?.data || response;
+
 const resolveAssetUrl = (value = '') => {
   const raw = String(value || '').trim();
   if (!raw) return '';
@@ -129,6 +131,14 @@ const mergeDriverSnapshot = (baseDriver = {}, incomingDriver = {}) => ({
   plate: incomingDriver.plate || baseDriver.plate || incomingDriver.vehicleNumber || baseDriver.vehicleNumber || 'Assigned',
 });
 
+const getInitials = (name = '') =>
+  String(name || '')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || '')
+    .join('') || 'DC';
+
 const ParcelTracking = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -145,7 +155,23 @@ const ParcelTracking = () => {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [shareToast, setShareToast] = useState(false);
   const [map, setMap] = useState(null);
+  const [rating, setRating] = useState(() => Number(state.feedback?.rating || 0));
+  const [comment, setComment] = useState(() => state.feedback?.comment || '');
+  const [selectedTip, setSelectedTip] = useState(() => Number(state.feedback?.tipAmount || 0));
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+  const [isFeedbackSubmitted, setIsFeedbackSubmitted] = useState(Boolean(state.feedback?.submittedAt));
+  const [feedbackError, setFeedbackError] = useState('');
+  const [tipSettings, setTipSettings] = useState({
+    enable_tips: '1',
+    min_tip_amount: '10',
+  });
   const { isLoaded, loadError } = useAppGoogleMapsLoader();
+  const latestStateRef = useRef(state);
+  const latestDriverRef = useRef(state.driver || {});
+  const latestRideRealtimeRef = useRef(null);
+  const hydrateRideStateRef = useRef(async () => {});
+  const hasAutoFramedMapRef = useRef(false);
+  const hasCompletedRedirectRef = useRef(false);
 
   const rideId = state.rideId || '';
   const tripStatus = String(rideRealtime?.status || state.liveStatus || state.status || 'accepted').toLowerCase();
@@ -153,12 +179,226 @@ const ParcelTracking = () => {
   const pickupPosition = useMemo(() => toLatLng(rideRealtime?.pickup?.coordinates || state.pickupCoords || [75.9048, 22.7039]), [rideRealtime?.pickup?.coordinates, state.pickupCoords]);
   const dropPosition = useMemo(() => toLatLng(rideRealtime?.drop?.coordinates || state.dropCoords || [75.8937, 22.7533], pickupPosition), [pickupPosition, rideRealtime?.drop?.coordinates, state.dropCoords]);
   const driverPosition = useMemo(() => toLatLng(rideRealtime?.driverLocation?.coordinates, pickupPosition), [pickupPosition, rideRealtime?.driverLocation?.coordinates]);
-  const activeDestination = useMemo(() => (tripStatus === 'started' ? dropPosition : pickupPosition), [dropPosition, pickupPosition, tripStatus]);
+  const activeDestination = useMemo(
+    () => (['started', 'ongoing', 'arrived', 'completed', 'delivered'].includes(tripStatus) ? dropPosition : pickupPosition),
+    [dropPosition, pickupPosition, tripStatus],
+  );
 
   const driver = useMemo(() => mergeDriverSnapshot(state.driver || {}, rideRealtime?.driver || {}), [state.driver, rideRealtime?.driver]);
   const vehicleIcon = getTrackingVehicleIcon(state, driver);
+  const displayDriverHeading = useMemo(() => {
+    if (Number.isFinite(Number(rideRealtime?.driverLocation?.heading))) {
+      return normalizeHeading(rideRealtime.driverLocation.heading);
+    }
+
+    return getRouteHeading(
+      driverPosition,
+      routePath,
+      calculateBearing(driverPosition, activeDestination),
+    );
+  }, [activeDestination, driverPosition, rideRealtime?.driverLocation?.heading, routePath]);
   const fare = rideRealtime?.fare || state.fare || 45;
   const otp = String(rideRealtime?.otp || state.otp || '');
+  const completedAt = rideRealtime?.completedAt || state.completedAt || Date.now();
+  const isDeliveryCompleted = COMPLETED_TRACKING_STATUSES.has(tripStatus);
+  const tipsEnabled = String(tipSettings.enable_tips || '1') === '1';
+  const minimumTipAmount = Number(tipSettings.min_tip_amount || 0);
+  const availableTipOptions = useMemo(
+    () =>
+      [...new Set([0, minimumTipAmount, ...TIP_OPTIONS].filter((amount) => Number.isFinite(amount) && amount >= 0))]
+        .sort((left, right) => left - right),
+    [minimumTipAmount],
+  );
+  const totalBill = Number(fare || 0) + Number(selectedTip || 0);
+  const completedDateLabel = new Date(completedAt).toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+  const completedTimeLabel = new Date(completedAt).toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  useEffect(() => {
+    hasCompletedRedirectRef.current = false;
+  }, [rideId]);
+
+  useEffect(() => {
+    const fetchTipSettings = async () => {
+      try {
+        const response = await api.get('/rides/app-settings/tip');
+        const nextSettings = response?.data?.settings || response?.settings || {};
+        setTipSettings((current) => ({
+          ...current,
+          ...nextSettings,
+        }));
+      } catch {
+        // keep defaults for parcel feedback
+      }
+    };
+
+    fetchTipSettings();
+  }, []);
+
+  useEffect(() => {
+    const feedback = rideRealtime?.feedback || state.feedback || null;
+    if (!feedback) {
+      return;
+    }
+
+    setRating(Number(feedback.rating || 0));
+    setComment(feedback.comment || '');
+    setSelectedTip(Number(feedback.tipAmount || 0));
+    setIsFeedbackSubmitted(Boolean(feedback.submittedAt));
+  }, [rideRealtime?.feedback, state.feedback]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!rideId) {
+      return () => {
+        active = false;
+      };
+    }
+
+    const hydrateRideState = async () => {
+      try {
+        const payload = unwrapApiPayload(await api.get(`/rides/${rideId}`));
+
+        if (!active || !payload) {
+          return;
+        }
+
+        const mergedDriver = mergeDriverSnapshot(latestStateRef.current.driver || {}, payload?.driver || {});
+        const nextRealtime = {
+          pickup: {
+            coordinates: payload?.pickupLocation?.coordinates,
+            address: payload?.pickupAddress || latestStateRef.current.pickup || 'Pickup',
+          },
+          drop: {
+            coordinates: payload?.dropLocation?.coordinates,
+            address: payload?.dropAddress || latestStateRef.current.drop || 'Drop',
+          },
+          driverLocation: payload?.lastDriverLocation
+            ? {
+                coordinates: payload.lastDriverLocation.coordinates,
+                heading: payload.lastDriverLocation.heading,
+              }
+            : latestRideRealtimeRef.current?.driverLocation || null,
+          status: payload?.liveStatus || payload?.status || 'accepted',
+          fare: payload?.fare || latestStateRef.current.fare || 0,
+          paymentMethod: payload?.paymentMethod || latestStateRef.current.paymentMethod || 'Cash',
+          vehicleIconType: payload?.vehicleIconType || latestStateRef.current.vehicleIconType || '',
+          vehicleIconUrl: payload?.vehicleIconUrl || latestStateRef.current.vehicleIconUrl || '',
+          otp: payload?.otp || latestStateRef.current.otp || '',
+          completedAt: payload?.completedAt || latestStateRef.current.completedAt || null,
+          feedback: payload?.feedback || latestStateRef.current.feedback || null,
+          driver: mergedDriver,
+        };
+
+        const nextStatus = String(nextRealtime.status || '').toLowerCase();
+        if (COMPLETED_TRACKING_STATUSES.has(nextStatus)) {
+          setRideRealtime(nextRealtime);
+          saveCurrentRide({
+            ...latestStateRef.current,
+            ...payload,
+            rideId,
+            driver: mergedDriver,
+            fare: payload?.fare || latestStateRef.current.fare || 0,
+            paymentMethod: payload?.paymentMethod || latestStateRef.current.paymentMethod || 'Cash',
+            status: nextStatus,
+            liveStatus: nextStatus,
+            completedAt: payload?.completedAt || latestStateRef.current.completedAt || Date.now(),
+            feedback: payload?.feedback || latestStateRef.current.feedback || null,
+          });
+          return;
+        }
+
+        if (TERMINAL_STATUSES.has(nextStatus)) {
+          clearCurrentRide();
+          navigate(userHomeRoute, { replace: true });
+          return;
+        }
+
+        setRideRealtime(nextRealtime);
+        saveCurrentRide({
+          ...latestStateRef.current,
+          rideId,
+          driver: mergedDriver,
+          status: payload?.status || latestStateRef.current.status || 'accepted',
+          liveStatus: payload?.liveStatus || payload?.status || latestStateRef.current.liveStatus || 'accepted',
+        });
+      } catch {
+        // socket updates continue to drive the UI
+      }
+    };
+
+    hydrateRideStateRef.current = hydrateRideState;
+    hydrateRideState();
+    const intervalId = window.setInterval(hydrateRideState, ACTIVE_RIDE_VALIDATE_MS);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [rideId]);
+
+  useEffect(() => {
+    latestStateRef.current = state;
+  }, [state]);
+
+  useEffect(() => {
+    latestDriverRef.current = driver;
+  }, [driver]);
+
+  useEffect(() => {
+    latestRideRealtimeRef.current = rideRealtime;
+  }, [rideRealtime]);
+
+  useEffect(() => {
+    if (!rideId) {
+      return undefined;
+    }
+
+    const refreshTrackingState = () => {
+      if (document.visibilityState && document.visibilityState !== 'visible') {
+        return;
+      }
+
+      socketService.connect({ role: 'user' });
+      socketService.emit('ride:join', { rideId });
+
+      const hydrate = hydrateRideStateRef.current;
+      if (typeof hydrate === 'function') {
+        Promise.resolve(hydrate()).catch(() => {});
+      }
+    };
+
+    document.addEventListener('visibilitychange', refreshTrackingState);
+    window.addEventListener('focus', refreshTrackingState);
+
+    return () => {
+      document.removeEventListener('visibilitychange', refreshTrackingState);
+      window.removeEventListener('focus', refreshTrackingState);
+    };
+  }, [rideId]);
+
+  useEffect(() => {
+    hasAutoFramedMapRef.current = false;
+  }, [rideId, tripStatus, activeDestination.lat, activeDestination.lng]);
+
+  useEffect(() => {
+    if (!tipsEnabled && selectedTip !== 0) {
+      setSelectedTip(0);
+      return;
+    }
+
+    if (tipsEnabled && minimumTipAmount > 0 && selectedTip > 0 && selectedTip < minimumTipAmount) {
+      setSelectedTip(minimumTipAmount);
+    }
+  }, [minimumTipAmount, selectedTip, tipsEnabled]);
 
   // Socket & Polling
   useEffect(() => {
@@ -167,13 +407,95 @@ const ParcelTracking = () => {
     if (!socket) return;
 
     const onRideState = (payload) => {
-      if (String(payload.rideId) === String(rideId)) setRideRealtime(payload);
+      if (String(payload?.rideId) !== String(rideId)) {
+        return;
+      }
+
+      const nextStatus = String(payload?.liveStatus || payload?.status || '').toLowerCase();
+      if (COMPLETED_TRACKING_STATUSES.has(nextStatus)) {
+        const mergedDriver = mergeDriverSnapshot(latestDriverRef.current, payload?.driver || {});
+        setRideRealtime((prev) => ({
+          ...(prev || {}),
+          pickup: {
+            coordinates: payload?.pickupLocation?.coordinates,
+            address: payload?.pickupAddress || latestStateRef.current.pickup || 'Pickup',
+          },
+          drop: {
+            coordinates: payload?.dropLocation?.coordinates,
+            address: payload?.dropAddress || latestStateRef.current.drop || 'Drop',
+          },
+          driverLocation: payload?.lastDriverLocation
+            ? {
+                coordinates: payload.lastDriverLocation.coordinates,
+                heading: payload.lastDriverLocation.heading,
+              }
+            : prev?.driverLocation || latestRideRealtimeRef.current?.driverLocation || null,
+          status: nextStatus,
+          fare: payload?.fare || prev?.fare || latestStateRef.current.fare || 0,
+          paymentMethod: payload?.paymentMethod || prev?.paymentMethod || latestStateRef.current.paymentMethod || 'Cash',
+          vehicleIconType: payload?.vehicleIconType || prev?.vehicleIconType || latestStateRef.current.vehicleIconType || '',
+          vehicleIconUrl: payload?.vehicleIconUrl || prev?.vehicleIconUrl || latestStateRef.current.vehicleIconUrl || '',
+          otp: payload?.otp || prev?.otp || latestStateRef.current.otp || '',
+          completedAt: payload?.completedAt || prev?.completedAt || Date.now(),
+          feedback: payload?.feedback || prev?.feedback || null,
+          driver: mergedDriver,
+        }));
+        saveCurrentRide({
+          ...latestStateRef.current,
+          ...payload,
+          rideId,
+          driver: mergedDriver,
+          fare: payload?.fare || latestStateRef.current.fare || 0,
+          paymentMethod: payload?.paymentMethod || latestStateRef.current.paymentMethod || 'Cash',
+          status: nextStatus,
+          liveStatus: nextStatus,
+          completedAt: payload?.completedAt || Date.now(),
+          feedback: payload?.feedback || null,
+        });
+        return;
+      }
+
+      if (TERMINAL_STATUSES.has(nextStatus)) {
+        clearCurrentRide();
+        navigate(userHomeRoute, { replace: true });
+        return;
+      }
+
+      const mergedDriver = mergeDriverSnapshot(latestDriverRef.current, payload?.driver || {});
+      setRideRealtime((prev) => ({
+        pickup: {
+          coordinates: payload?.pickupLocation?.coordinates,
+          address: payload?.pickupAddress || latestStateRef.current.pickup || 'Pickup',
+        },
+        drop: {
+          coordinates: payload?.dropLocation?.coordinates,
+          address: payload?.dropAddress || latestStateRef.current.drop || 'Drop',
+        },
+        driverLocation: payload?.lastDriverLocation
+          ? {
+              coordinates: payload.lastDriverLocation.coordinates,
+              heading: payload.lastDriverLocation.heading,
+            }
+          : prev?.driverLocation || null,
+        status: payload?.liveStatus || payload?.status || prev?.status || 'accepted',
+        fare: payload?.fare || prev?.fare || latestStateRef.current.fare || 0,
+        paymentMethod: payload?.paymentMethod || prev?.paymentMethod || latestStateRef.current.paymentMethod || 'Cash',
+        vehicleIconType: payload?.vehicleIconType || prev?.vehicleIconType || latestStateRef.current.vehicleIconType || '',
+        vehicleIconUrl: payload?.vehicleIconUrl || prev?.vehicleIconUrl || latestStateRef.current.vehicleIconUrl || '',
+        otp: payload?.otp || prev?.otp || latestStateRef.current.otp || '',
+        completedAt: payload?.completedAt || prev?.completedAt || null,
+        feedback: payload?.feedback || prev?.feedback || null,
+        driver: mergedDriver,
+      }));
     };
     const onLocationUpdated = (payload) => {
       if (String(payload.rideId) === String(rideId)) {
         setRideRealtime(prev => ({
           ...prev,
-          driverLocation: { coordinates: payload.coordinates, heading: payload.heading }
+          driverLocation: {
+            coordinates: payload.coordinates,
+            heading: payload.heading ?? prev?.driverLocation?.heading ?? null,
+          }
         }));
       }
     };
@@ -181,7 +503,28 @@ const ParcelTracking = () => {
       if (String(payload.rideId) === String(rideId)) {
         const nextStatus = String(payload.liveStatus || payload.status).toLowerCase();
         if (COMPLETED_TRACKING_STATUSES.has(nextStatus)) {
-          navigate(`${routePrefix}/ride/complete`, { state: { ...state, ...payload, status: nextStatus } });
+          setRideRealtime((prev) => ({
+            ...(prev || {}),
+            status: nextStatus,
+            completedAt: payload?.completedAt || prev?.completedAt || Date.now(),
+            feedback: payload?.feedback || prev?.feedback || null,
+          }));
+          saveCurrentRide({
+            ...latestStateRef.current,
+            ...payload,
+            rideId,
+            driver: latestDriverRef.current,
+            status: nextStatus,
+            liveStatus: nextStatus,
+            completedAt: payload?.completedAt || Date.now(),
+            feedback: payload?.feedback || null,
+          });
+          return;
+        }
+        if (TERMINAL_STATUSES.has(nextStatus)) {
+          clearCurrentRide();
+          navigate(userHomeRoute, { replace: true });
+          return;
         }
         setRideRealtime(prev => ({ ...prev, status: nextStatus }));
       }
@@ -197,22 +540,87 @@ const ParcelTracking = () => {
       socketService.off('ride:driver-location:updated', onLocationUpdated);
       socketService.off('ride:status:updated', onStatusUpdated);
     };
-  }, [rideId, navigate, routePrefix, state]);
+  }, [rideId, navigate, routePrefix, userHomeRoute]);
+
+  useEffect(() => {
+    if (!TERMINAL_STATUSES.has(tripStatus)) {
+      return;
+    }
+
+    if (COMPLETED_TRACKING_STATUSES.has(tripStatus)) {
+      return;
+    }
+
+    clearCurrentRide();
+    navigate(userHomeRoute, { replace: true });
+  }, [navigate, tripStatus, userHomeRoute]);
 
   // Route Path Update
   useEffect(() => {
-    if (!isLoaded || !window.google) return;
+    if (!isLoaded || !window.google?.maps?.DirectionsService) {
+      setRoutePath(arePositionsNearlyEqual(driverPosition, activeDestination) ? [driverPosition] : [driverPosition, activeDestination]);
+      return;
+    }
+
+    if (arePositionsNearlyEqual(driverPosition, activeDestination)) {
+      setRoutePath([driverPosition]);
+      return;
+    }
+
+    let active = true;
     const directionsService = new window.google.maps.DirectionsService();
     directionsService.route({
       origin: driverPosition,
       destination: activeDestination,
       travelMode: window.google.maps.TravelMode.DRIVING,
+      provideRouteAlternatives: false,
     }, (result, status) => {
-      if (status === 'OK') {
-        setRoutePath(result.routes[0].overview_path.map(p => ({ lat: p.lat(), lng: p.lng() })));
+      if (!active) {
+        return;
       }
+
+      if (status === 'OK' && result?.routes?.[0]?.overview_path?.length) {
+        setRoutePath(result.routes[0].overview_path.map(p => ({ lat: p.lat(), lng: p.lng() })));
+        return;
+      }
+
+      setRoutePath([driverPosition, activeDestination]);
     });
+
+    return () => {
+      active = false;
+    };
   }, [isLoaded, driverPosition, activeDestination]);
+
+  useEffect(() => {
+    if (!map || !window.google?.maps) {
+      return;
+    }
+
+    if (routePath.length > 1) {
+      if (!hasAutoFramedMapRef.current) {
+        const bounds = new window.google.maps.LatLngBounds();
+        routePath.forEach((point) => bounds.extend(point));
+        bounds.extend(driverPosition);
+        bounds.extend(activeDestination);
+        map.fitBounds(bounds, { top: 120, right: 48, bottom: 320, left: 48 });
+        hasAutoFramedMapRef.current = true;
+        return;
+      }
+
+      map.panTo(driverPosition);
+      return;
+    }
+
+    if (!hasAutoFramedMapRef.current) {
+      map.panTo(driverPosition);
+      map.setZoom(15);
+      hasAutoFramedMapRef.current = true;
+      return;
+    }
+
+    map.panTo(driverPosition);
+  }, [activeDestination, driverPosition, map, routePath]);
 
   const handleCall = () => {
     if (driver.phone) window.open(`tel:${driver.phone}`, '_self');
@@ -225,6 +633,69 @@ const ParcelTracking = () => {
       navigator.clipboard.writeText(text);
       setShareToast(true);
       setTimeout(() => setShareToast(false), 2000);
+    }
+  };
+
+  const submitParcelFeedback = async () => {
+    if (!rideId) {
+      clearCurrentRide();
+      navigate(userHomeRoute, { replace: true });
+      return;
+    }
+
+    if (rating < 1) {
+      setFeedbackError('Please rate your delivery driver before finishing.');
+      return;
+    }
+
+    if (!tipsEnabled && Number(selectedTip || 0) > 0) {
+      setFeedbackError('Tips are currently disabled.');
+      return;
+    }
+
+    if (tipsEnabled && Number(selectedTip || 0) > 0 && minimumTipAmount > 0 && Number(selectedTip || 0) < minimumTipAmount) {
+      setFeedbackError(`Minimum tip amount is Rs ${minimumTipAmount}.`);
+      return;
+    }
+
+    try {
+      setIsSubmittingFeedback(true);
+      setFeedbackError('');
+      const response = await api.patch(`/rides/${rideId}/feedback`, {
+        rating,
+        comment,
+        tipAmount: selectedTip || 0,
+      });
+      const payload = unwrapApiPayload(response) || {};
+      const feedback = payload?.feedback || {
+        rating,
+        comment,
+        tipAmount: selectedTip || 0,
+        submittedAt: new Date().toISOString(),
+      };
+
+      setRideRealtime((prev) => ({
+        ...(prev || {}),
+        feedback,
+        completedAt: payload?.completedAt || prev?.completedAt || Date.now(),
+      }));
+      setIsFeedbackSubmitted(true);
+      saveCurrentRide({
+        ...latestStateRef.current,
+        ...(rideRealtime || {}),
+        rideId,
+        driver,
+        fare,
+        paymentMethod: rideRealtime?.paymentMethod || state.paymentMethod || 'Cash',
+        status: tripStatus,
+        liveStatus: tripStatus,
+        completedAt: payload?.completedAt || completedAt,
+        feedback,
+      });
+    } catch (error) {
+      setFeedbackError(error?.message || 'Could not submit feedback right now.');
+    } finally {
+      setIsSubmittingFeedback(false);
     }
   };
 
@@ -249,10 +720,10 @@ const ParcelTracking = () => {
             {routePath.length > 0 && (
               <PolylineF
                 path={routePath}
-                options={{ strokeColor: '#4f46e5', strokeOpacity: 0.8, strokeWeight: 6 }}
+                options={{ strokeColor: '#0f172a', strokeOpacity: 0.9, strokeWeight: 6 }}
               />
             )}
-            <RotatingVehicleMarker position={driverPosition} iconUrl={vehicleIcon} />
+            <RotatingVehicleMarker position={driverPosition} iconUrl={vehicleIcon} heading={displayDriverHeading} />
             <MarkerF position={activeDestination} />
           </GoogleMap>
         ) : (
@@ -265,16 +736,15 @@ const ParcelTracking = () => {
         <button onClick={() => navigate(userHomeRoute, { replace: true })} className="w-12 h-12 bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl border border-white/80 flex items-center justify-center text-gray-900">
           <ChevronLeft size={20} strokeWidth={2.5} />
         </button>
-        <div className="flex-1 bg-white/90 backdrop-blur-xl rounded-2xl p-3 shadow-xl border border-white/80 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+        <div className="min-w-0 flex-1 bg-white/90 backdrop-blur-xl rounded-2xl p-3 shadow-xl border border-white/80 flex items-center gap-3 overflow-hidden">
+          <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-900">
             <Package size={16} strokeWidth={2.5} />
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 text-xs font-black text-gray-900 truncate">
-              <span>{state.pickup || 'Pickup'}</span>
-              <ChevronRight size={10} className="text-gray-300" />
-              <span>{state.drop || 'Drop'}</span>
-            </div>
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">Destination</p>
+            <p className="mt-1 truncate text-xs font-black text-gray-900">
+              {state.drop || 'Drop'}
+            </p>
           </div>
         </div>
       </motion.div>
@@ -296,13 +766,190 @@ const ParcelTracking = () => {
       >
         <div className="w-12 h-1.5 bg-gray-100 rounded-full mx-auto mb-6" />
 
+        {isDeliveryCompleted ? (
+          <div className="space-y-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 shadow-[0_8px_20px_rgba(16,185,129,0.28)]">
+                <CheckCircle2 size={22} className="text-white" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Parcel Delivered</p>
+                <h2 className="text-[22px] font-black text-slate-900">Delivered successfully</h2>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-[22px] border border-white/80 bg-white/95 shadow-[0_12px_30px_rgba(15,23,42,0.08)]">
+              <div className="flex items-center justify-between bg-slate-900 px-4 py-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-white/10">
+                    <Receipt size={14} className="text-orange-300" />
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-black text-white">Delivery Summary</p>
+                    <p className="text-[10px] font-bold text-slate-400">{completedDateLabel} · {completedTimeLabel}</p>
+                  </div>
+                </div>
+                <button type="button" onClick={handleShare} className="flex items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-black text-white">
+                  <Share2 size={12} />
+                  Share
+                </button>
+              </div>
+
+              <div className="space-y-4 px-4 py-4">
+                <div className="flex items-center gap-3 rounded-[18px] border border-slate-100 bg-slate-50/80 p-3">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-[16px] bg-slate-900 text-[18px] font-black text-white">
+                    {getInitials(driver.name)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[16px] font-black text-slate-900">{driver.name}</p>
+                    <p className="truncate text-[11px] font-bold text-slate-500">{driver.plate || 'Assigned'} · {driver.vehicle || 'Delivery Agent'}</p>
+                    <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-yellow-50 px-2 py-0.5 text-[10px] font-black text-slate-800">
+                      <Star size={10} className="fill-yellow-500 text-yellow-500" />
+                      {driver.rating || '4.9'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[18px] border border-slate-100 bg-white p-3">
+                  <div className="flex gap-3">
+                    <div className="flex flex-col items-center pt-1">
+                      <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                      <div className="h-10 border-l border-dashed border-slate-200" />
+                      <div className="h-2.5 w-2.5 rounded-full bg-orange-500" />
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-3">
+                      <div>
+                        <p className="truncate text-[13px] font-black text-slate-900">{state.pickup || 'Pickup'}</p>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Pickup</p>
+                      </div>
+                      <div>
+                        <p className="truncate text-[13px] font-black text-slate-900">{state.drop || 'Drop'}</p>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Destination</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[18px] border border-slate-100 bg-white p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[12px] font-bold text-slate-500">Delivery fare</span>
+                    <span className="text-[13px] font-black text-slate-900">Rs {Number(fare || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="text-[12px] font-bold text-slate-500">Tip</span>
+                    <span className="text-[13px] font-black text-slate-900">Rs {Number(selectedTip || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
+                    <span className="text-[15px] font-black text-slate-900">Total</span>
+                    <span className="text-[18px] font-black text-slate-900">Rs {totalBill.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-[20px] border border-white/80 bg-white/95 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
+              {isFeedbackSubmitted ? (
+                <div className="text-center">
+                  <p className="text-center text-[10px] font-black uppercase tracking-[0.22em] text-emerald-500">Feedback submitted</p>
+                  <p className="mt-2 text-[12px] font-bold text-slate-500">
+                    Rating: {rating || 0}/5 {selectedTip > 0 ? `| Tip added: Rs ${Number(selectedTip || 0).toFixed(2)}` : '| No tip added'}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-center text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                    {tipsEnabled ? 'Tip your delivery driver' : 'Driver tips disabled'}
+                  </p>
+                  {tipsEnabled && minimumTipAmount > 0 ? (
+                    <p className="mt-2 text-center text-[11px] font-bold text-slate-500">Minimum tip amount: Rs {minimumTipAmount}</p>
+                  ) : null}
+                  <div className="mt-3 flex flex-wrap justify-center gap-2">
+                    {availableTipOptions.map((amount) => (
+                      <button
+                        key={amount}
+                        type="button"
+                        onClick={() => {
+                          setSelectedTip(amount);
+                          setFeedbackError('');
+                        }}
+                        disabled={!tipsEnabled && amount > 0}
+                        className={`rounded-full border px-4 py-2 text-[11px] font-black transition-all ${
+                          selectedTip === amount ? 'border-orange-500 bg-orange-500 text-white shadow-[0_8px_18px_rgba(249,115,22,0.24)]' : 'border-slate-100 bg-slate-50 text-slate-600'
+                        } ${!tipsEnabled && amount > 0 ? 'cursor-not-allowed opacity-50' : ''}`}
+                      >
+                        {amount === 0 ? 'No tip' : `Rs ${amount}`}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="rounded-[20px] border border-white/80 bg-white/95 px-4 py-4 text-center shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
+              <p className="text-[16px] font-black text-slate-900">How was your delivery with {driver.name?.split(' ')[0] || 'your driver'}?</p>
+              <div className="mt-4 flex justify-center gap-2">
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => {
+                      setRating(value);
+                      setFeedbackError('');
+                    }}
+                    disabled={isFeedbackSubmitted}
+                    className={`flex h-11 w-11 items-center justify-center rounded-[12px] transition-all ${
+                      rating >= value ? 'bg-orange-500 shadow-[0_10px_20px_rgba(249,115,22,0.24)]' : 'bg-slate-100'
+                    } ${isFeedbackSubmitted ? 'cursor-default' : ''}`}
+                  >
+                    <Star size={19} className={rating >= value ? 'fill-white text-white' : 'text-slate-300'} />
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-4 rounded-[16px] border border-slate-100 bg-slate-50/80 px-3 py-3">
+                <textarea
+                  value={comment}
+                  onChange={(event) => setComment(event.target.value)}
+                  rows={3}
+                  maxLength={500}
+                  disabled={isFeedbackSubmitted}
+                  placeholder="Tell us about the delivery"
+                  className="w-full resize-none rounded-[12px] border border-slate-100 bg-white px-3 py-2 text-[13px] font-bold text-slate-900 outline-none placeholder:text-slate-300"
+                />
+              </div>
+
+              {feedbackError ? <p className="mt-3 text-[12px] font-black text-red-500">{feedbackError}</p> : null}
+
+              <button
+                type="button"
+                onClick={submitParcelFeedback}
+                disabled={isSubmittingFeedback || isFeedbackSubmitted}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-[16px] bg-slate-900 py-3.5 text-[14px] font-black text-white shadow-[0_12px_24px_rgba(15,23,42,0.18)] disabled:opacity-60"
+              >
+                {isSubmittingFeedback ? 'Saving your feedback...' : isFeedbackSubmitted ? 'Feedback already saved' : 'Submit rating'}
+                <ChevronRight size={16} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  clearCurrentRide();
+                  navigate(userHomeRoute, { replace: true });
+                }}
+                className="mt-3 text-[12px] font-black text-slate-500"
+              >
+                Continue home
+              </button>
+            </div>
+          </div>
+        ) : (
         <div className="space-y-6">
           {/* Driver Info Section */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="relative">
-                <div className="w-16 h-16 rounded-[24px] bg-indigo-50 overflow-hidden border-2 border-white shadow-sm">
-                  <img src={`https://ui-avatars.com/api/?name=${driver.name.replace(' ', '+')}&background=4f46e5&color=fff&bold=true`} alt="Driver" className="w-full h-full object-cover" />
+                <div className="w-16 h-16 rounded-[24px] bg-slate-900 overflow-hidden border-2 border-white shadow-sm">
+                  <img src={`https://ui-avatars.com/api/?name=${driver.name.replace(' ', '+')}&background=0f172a&color=fff&bold=true`} alt="Driver" className="w-full h-full object-cover" />
                 </div>
                 <div className="absolute -bottom-1 -right-1 bg-white px-2 py-0.5 rounded-full border border-gray-100 flex items-center gap-1 shadow-sm">
                   <Star size={10} className="text-amber-400 fill-amber-400" />
@@ -312,10 +959,14 @@ const ParcelTracking = () => {
               <div className="min-w-0">
                 <h3 className="text-lg font-black text-gray-900 leading-tight tracking-tight">{driver.name}</h3>
                 <p className="text-xs font-bold text-gray-400 mt-0.5 uppercase tracking-tight">{driver.plate} • {driver.vehicle || 'Delivery Agent'}</p>
-                <div className="flex items-center gap-1.5 mt-2 text-indigo-600">
+                <div className="flex items-center gap-1.5 mt-2 text-slate-900">
                   <Clock size={12} strokeWidth={3} />
                   <span className="text-[11px] font-black uppercase tracking-wider">
-                    {tripStatus === 'started' ? 'Heading to Drop' : 'Arriving Shortly'}
+                    {tripStatus === 'arrived' || tripStatus === 'arriving'
+                      ? 'Driver Has Arrived'
+                      : tripStatus === 'started' || tripStatus === 'ongoing'
+                        ? 'Heading to Drop'
+                        : 'Arriving Shortly'}
                   </span>
                 </div>
               </div>
@@ -323,9 +974,9 @@ const ParcelTracking = () => {
 
             {/* OTP Display */}
             {otp && (
-              <div className="bg-indigo-50 border border-indigo-100 rounded-2xl px-4 py-3 flex flex-col items-center">
-                <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest mb-0.5">OTP</span>
-                <span className="text-xl font-black text-indigo-700 leading-none">{otp}</span>
+              <div className="bg-slate-100 border border-slate-200 rounded-2xl px-4 py-3 flex flex-col items-center">
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-0.5">OTP</span>
+                <span className="text-xl font-black text-slate-900 leading-none">{otp}</span>
               </div>
             )}
           </div>
@@ -335,7 +986,7 @@ const ParcelTracking = () => {
             <ActionButton icon={Phone} label="Call" onClick={handleCall} />
             <ActionButton icon={MessageCircle} label="Chat" onClick={() => navigate(`${routePrefix}/ride/chat`, { state: { rideId, peer: driver } })} />
             <ActionButton icon={Share2} label="Share" onClick={handleShare} />
-            <ActionButton icon={ShieldCheck} label="Safety" onClick={() => navigate(`${routePrefix}/support`)} color="indigo" />
+            <ActionButton icon={ShieldCheck} label="Safety" onClick={() => navigate(`${routePrefix}/support`)} color="dark" />
           </div>
 
           {/* Trip Footer */}
@@ -356,6 +1007,7 @@ const ParcelTracking = () => {
             </motion.button>
           </div>
         </div>
+        )}
       </motion.div>
 
       {/* Cancel Confirmation Modal */}
@@ -396,7 +1048,11 @@ const ActionButton = ({ icon: Icon, label, onClick, color = 'gray' }) => (
   <motion.button
     whileTap={{ scale: 0.94 }}
     onClick={onClick}
-    className={`flex flex-col items-center gap-1.5 py-4 rounded-[24px] border ${color === 'indigo' ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 'bg-gray-50 border-gray-100 text-gray-700'}`}
+    className={`flex flex-col items-center gap-1.5 py-4 rounded-[24px] border ${
+      color === 'dark'
+        ? 'bg-slate-900 border-slate-900 text-white'
+        : 'bg-gray-50 border-gray-100 text-gray-700'
+    }`}
   >
     <Icon size={20} strokeWidth={2.5} />
     <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>

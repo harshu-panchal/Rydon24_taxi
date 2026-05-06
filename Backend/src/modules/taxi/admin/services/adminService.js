@@ -28,6 +28,7 @@ import { RentalVehicleType } from '../models/RentalVehicleType.js';
 import { RentalQuoteRequest } from '../models/RentalQuoteRequest.js';
 import { SetPrice } from '../models/SetPrice.js';
 import { ServiceLocation } from '../models/ServiceLocation.js';
+import { ServiceCenterStaff } from '../models/ServiceCenterStaff.js';
 import { ServiceStore } from '../models/ServiceStore.js';
 import { Vehicle } from '../models/Vehicle.js';
 import { Driver } from '../../driver/models/Driver.js';
@@ -1236,6 +1237,18 @@ const serializeServiceStore = (store) => ({
     Number(store.longitude ?? store.location?.coordinates?.[0] ?? null),
   status: store.status || (store.active === false ? 'inactive' : 'active'),
   active: store.active !== false,
+  staff: Array.isArray(store.staff)
+    ? store.staff.map((member) => ({
+        _id: member._id,
+        id: member._id,
+        name: member.name || '',
+        phone: member.phone || '',
+        active: member.active !== false,
+        status: member.status || (member.active === false ? 'inactive' : 'active'),
+        createdAt: member.createdAt || null,
+        updatedAt: member.updatedAt || null,
+      }))
+    : [],
   createdAt: store.createdAt,
   updatedAt: store.updatedAt,
 });
@@ -6327,7 +6340,28 @@ export const getDashboardData = async () => {
       .sort({ createdAt: -1 })
       .lean();
 
-    return stores.map(serializeServiceStore);
+    const storeIds = stores.map((store) => store._id).filter(Boolean);
+    const staffItems = storeIds.length
+      ? await ServiceCenterStaff.find({ serviceCenterId: { $in: storeIds } })
+          .sort({ createdAt: -1 })
+          .lean()
+      : [];
+
+    const staffByStoreId = new Map();
+    staffItems.forEach((member) => {
+      const storeId = String(member.serviceCenterId || '');
+      if (!staffByStoreId.has(storeId)) {
+        staffByStoreId.set(storeId, []);
+      }
+      staffByStoreId.get(storeId).push(member);
+    });
+
+    return stores.map((store) =>
+      serializeServiceStore({
+        ...store,
+        staff: staffByStoreId.get(String(store._id)) || [],
+      }),
+    );
   };
 
   export const createServiceStore = async (payload) => {
@@ -6368,7 +6402,10 @@ export const getDashboardData = async () => {
       .populate('service_location_id', 'name service_location_name country')
       .lean();
 
-    return serializeServiceStore(populatedStore);
+    return serializeServiceStore({
+      ...populatedStore,
+      staff: [],
+    });
   };
 
   export const updateServiceStore = async (id, payload) => {
@@ -6430,7 +6467,14 @@ export const getDashboardData = async () => {
       .populate('service_location_id', 'name service_location_name country')
       .lean();
 
-    return serializeServiceStore(populatedStore);
+    const staff = await ServiceCenterStaff.find({ serviceCenterId: store._id })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return serializeServiceStore({
+      ...populatedStore,
+      staff,
+    });
   };
 
   export const deleteServiceStore = async (id) => {
