@@ -11,6 +11,14 @@ const normalizeNumber = (value) => {
   return Number.isFinite(next) ? next : 0;
 };
 
+const getElapsedIstDayMinutes = (value = new Date()) => {
+  const istNow = toIstDate(value);
+  return Math.max(0, Math.round(
+    (istNow.getTime() - new Date(istNow.getFullYear(), istNow.getMonth(), istNow.getDate()).getTime()) /
+      (60 * 1000),
+  ));
+};
+
 const mergeSummary = (summary = {}, dateKey) => {
   if (String(summary?.dateKey || '') !== dateKey) {
     return {
@@ -107,7 +115,10 @@ export const buildDriverTodaySummaryFromDocument = (driver, { now = new Date() }
     : null;
 
   const baseSummary = mergeSummary(driver?.todaySummary, todayKey);
-  const activeMinutes = normalizeNumber(todayActivity?.activeMinutes);
+  const activeMinutes = Math.min(
+    normalizeNumber(todayActivity?.activeMinutes),
+    getElapsedIstDayMinutes(now),
+  );
 
   return {
     ...baseSummary,
@@ -123,11 +134,6 @@ export const syncDriverTodaySummaryDocument = async (driver, { now = new Date() 
   }
 
   const nextSummary = buildDriverTodaySummaryFromDocument(driver, { now });
-  const nextTracking = mergeOnlineSessionIntoTracking(
-    driver?.incentiveTracking || {},
-    driver?.incentiveTracking?.currentOnlineStartedAt,
-    now,
-  );
 
   const currentSummary = mergeSummary(driver?.todaySummary, nextSummary.dateKey);
   const changed =
@@ -147,22 +153,12 @@ export const syncDriverTodaySummaryDocument = async (driver, { now = new Date() 
     {
       $set: {
         todaySummary: nextSummary,
-        incentiveTracking: {
-          ...(driver?.incentiveTracking || {}),
-          ...nextTracking,
-        },
       },
     },
   );
 
   if (driver.todaySummary) {
     driver.todaySummary = nextSummary;
-  }
-  if (driver.incentiveTracking) {
-    driver.incentiveTracking = {
-      ...(driver.incentiveTracking || {}),
-      ...nextTracking,
-    };
   }
 
   return nextSummary;
@@ -196,14 +192,6 @@ export const incrementDriverTodaySummaryForCompletedRide = async ({ driverId, co
     {
       $set: {
         todaySummary: nextSummary,
-        incentiveTracking: {
-          ...(driver?.incentiveTracking || {}),
-          ...mergeOnlineSessionIntoTracking(
-            driver?.incentiveTracking || {},
-            driver?.incentiveTracking?.currentOnlineStartedAt,
-            now,
-          ),
-        },
       },
     },
   );
