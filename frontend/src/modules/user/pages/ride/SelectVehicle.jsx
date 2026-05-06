@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Users, X, Banknote, CreditCard, ChevronDown, ChevronRight, Clock3, LoaderCircle, Eye } from 'lucide-react';
+import { ArrowLeft, X, Banknote, CreditCard, ChevronDown, Clock3, LoaderCircle, Eye } from 'lucide-react';
 import { GoogleMap, MarkerF, OverlayView, PolylineF } from '@react-google-maps/api';
 import api from '../../../../shared/api/axiosInstance';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../../admin/utils/googleMaps';
@@ -844,7 +844,6 @@ const SelectVehicle = () => {
     location.state?.scheduledAt ? String(location.state.scheduledAt).slice(0, 16) : getMinScheduledDateTime()
   ));
   const [scheduleError, setScheduleError] = useState('');
-  const [showPromo, setShowPromo] = useState(true);
   const [bidStepCount, setBidStepCount] = useState(2);
   const [isLoadingVehicles, setIsLoadingVehicles] = useState(true);
   const [isLoadingDrivers, setIsLoadingDrivers] = useState(false);
@@ -1142,7 +1141,6 @@ const SelectVehicle = () => {
     () => displayedVehicles.some((vehicle) => (availabilityByVehicleId[vehicle.id]?.totalDrivers || 0) > 0),
     [availabilityByVehicleId, displayedVehicles],
   );
-  const shouldShowBottomPaymentAction = rideMode === 'schedule' || hasBookableVehicles;
   const shouldUseDriverBidding = Boolean(
     routeState.intercity ||
     routeState.serviceType === 'intercity' ||
@@ -1153,9 +1151,6 @@ const SelectVehicle = () => {
   const selectedBidSteps = Number(selectedVehicle?.maxBidSteps || 5);
   const selectedBidIncrement = (selectedVehicle?.supportsBidding ? bidStepCount : 0) * selectedBidStepAmount;
   const selectedBidCeiling = Number(selectedVehicle?.price || 0) + selectedBidIncrement;
-  const selectedFareDisplay = selectedVehicle?.supportsBidding && shouldUseDriverBidding
-    ? formatVehicleFare(selectedVehicle, bidStepCount)
-    : formatCurrency(selectedVehicle?.price);
   const allowedPaymentMethods = useMemo(
     () => normalizeAllowedPaymentMethods(selectedAvailability?.allowedPaymentMethods),
     [selectedAvailability?.allowedPaymentMethods],
@@ -1327,6 +1322,18 @@ const SelectVehicle = () => {
     inputRef.current?.click();
   };
 
+  const openLocationEditor = () => {
+    navigate(`${routePrefix}/ride/select-location`, {
+      state: {
+        pickup,
+        drop,
+        pickupCoords,
+        dropCoords,
+        stops,
+      },
+    });
+  };
+
   const proceedToBooking = () => {
     if (!selectedVehicle) {
       return;
@@ -1433,72 +1440,57 @@ const SelectVehicle = () => {
           >
             <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
           </motion.button>
-          <div className="flex-1 min-w-0 bg-white/95 rounded-[14px] px-4 py-2.5 shadow-[0_4px_14px_rgba(15,23,42,0.10)] flex items-center gap-2">
-            <span className="text-[14px] font-bold text-slate-800 truncate flex-1">{drop}</span>
+        </div>
+
+      </div>
+
+      <div className="absolute bottom-0 left-0 right-0 z-40 flex max-h-[69dvh] min-h-[360px] flex-col overflow-hidden rounded-t-[26px] bg-white shadow-[0_-12px_44px_rgba(15,23,42,0.16)]">
+        <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-2.5 mb-2 shrink-0" />
+
+        <div className="shrink-0 border-b border-slate-100 px-4 pb-3">
+          <div className="flex items-end gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex gap-3">
+                <div className="flex w-2.5 shrink-0 flex-col items-center">
+                  <span className="mt-1.5 h-2.5 w-2.5 rounded-full bg-[#7fc76d]" />
+                  <span className="my-1 h-6 w-px bg-slate-300" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#d95c6a]" />
+                </div>
+                <div className="min-w-0 flex-1 space-y-3">
+                  <p className="pt-0.5 truncate text-[13px] font-medium text-slate-700">{pickup}</p>
+                  <button
+                    type="button"
+                    onClick={openLocationEditor}
+                    className="flex w-full items-start rounded-[12px] -mx-1 px-1 py-1 text-left transition hover:bg-slate-50"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-medium text-slate-700">{drop}</p>
+                    </div>
+                    <span className="shrink-0 text-[11px] font-semibold text-slate-400">Edit</span>
+                  </button>
+                </div>
+              </div>
+            </div>
             <button
               type="button"
-              onClick={() =>
-                navigate(`${routePrefix}/ride/select-location`, {
-                  state: {
-                    pickup,
-                    drop,
-                    pickupCoords,
-                    dropCoords,
-                    stops,
-                  },
-                })
-              }
-              className="shrink-0 rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-              aria-label="Change destination"
+              onClick={() => openPicker(scheduledAtInputRef)}
+              className={`flex w-[42px] shrink-0 flex-col items-center justify-center rounded-[12px] border px-1 py-2 text-[10px] font-medium ${
+                rideMode === 'schedule'
+                  ? 'border-slate-900 bg-slate-900 text-white'
+                  : 'border-slate-200 bg-white text-slate-600'
+              }`}
             >
-              <X size={15} className="shrink-0" />
+              <Clock3 size={14} strokeWidth={2.2} />
+              <span className="mt-1">{rideMode === 'schedule' ? 'Later' : 'Now'}</span>
             </button>
           </div>
         </div>
 
-        <AnimatePresence>
-          {showPromo && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 8 }}
-              className="absolute bottom-20 left-4 right-4 bg-white/95 backdrop-blur-md border border-white/80 rounded-[18px] flex items-center overflow-hidden z-30 shadow-[0_8px_24px_rgba(15,23,42,0.10)] pr-3"
-            >
-              <div className="flex-1 px-4 py-3">
-                <p className="text-[12px] font-bold text-slate-900 leading-tight">Going a few kms away?</p>
-                <p className="text-[10px] font-semibold text-orange-500 mt-0.5 uppercase tracking-wider">Use GOFREE on 1st cab ride</p>
-              </div>
-              <img src="/ride_now_banner.png" className="h-12 w-16 object-cover rounded-[10px] shrink-0" alt="Promo" />
-              <button onClick={() => setShowPromo(false)} className="ml-2.5 pl-2.5 border-l border-slate-100">
-                <X size={13} className="text-slate-400" />
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <div className="absolute left-4 right-4 bottom-4 z-20 flex items-center justify-between gap-3">
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl px-4 py-2.5 shadow-[0_8px_32px_rgba(15,23,42,0.12)] border border-white/80">
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Drivers Nearby</p>
-            <p className="text-[16px] font-extrabold text-slate-900 leading-none mt-1">
-              {isLoadingDrivers ? '...' : `${selectedAvailability.totalDrivers || 0} online`}
-            </p>
-          </div>
-          {driverLoadError && (
-            <div className="bg-red-50/95 rounded-[14px] px-3 py-2 border border-red-100 max-w-[190px]">
-              <p className="text-[10px] font-bold text-red-500 leading-tight">{driverLoadError}</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="absolute bottom-0 left-0 right-0 z-40 flex max-h-[66dvh] min-h-[260px] flex-col overflow-hidden rounded-t-[28px] bg-white shadow-[0_-12px_44px_rgba(15,23,42,0.15)]">
-        <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-3 mb-1 shrink-0" />
-
         <div className="relative flex-1 overflow-hidden">
-          <div 
+          <div
             ref={scrollRef}
             onScroll={handleScroll}
-            className="flex-1 overflow-y-auto no-scrollbar px-4 pt-2 pb-2 space-y-2 max-h-[230px]"
+            className="flex-1 overflow-y-auto no-scrollbar px-3 pt-3 pb-2 space-y-2.5"
           >
             {isLoadingVehicles && (
               <div className="min-h-[180px] flex flex-col items-center justify-center gap-3 text-slate-400">
@@ -1508,165 +1500,138 @@ const SelectVehicle = () => {
             )}
 
             {!isLoadingVehicles && vehicleLoadError && (
-              <div className="bg-white border border-red-50 rounded-[18px] px-4 py-5 text-center">
+              <div className="rounded-[18px] border border-red-50 bg-white px-4 py-5 text-center">
                 <p className="text-[12px] font-black text-red-500">{vehicleLoadError}</p>
-                <p className="text-[10px] font-bold text-slate-400 mt-1">Please try again later.</p>
+                <p className="mt-1 text-[10px] font-bold text-slate-400">Please try again later.</p>
               </div>
             )}
 
             {!isLoadingVehicles && !vehicleLoadError && displayedVehicles.length === 0 && (
-              <div className="bg-white border border-slate-50 rounded-[18px] px-4 py-5 text-center">
+              <div className="rounded-[18px] border border-slate-100 bg-white px-4 py-5 text-center">
                 <p className="text-[13px] font-bold text-slate-900">No vehicles available</p>
-                <p className="text-[11px] font-bold text-slate-400 mt-1">Try changing your location or method.</p>
+                <p className="mt-1 text-[11px] font-bold text-slate-400">Try changing your location or method.</p>
               </div>
             )}
 
-          {!isLoadingVehicles && !vehicleLoadError && displayedVehicles.map((v, i) => {
-            const isSelected = selected === v.id;
-            const availability = availabilityByVehicleId[v.id] || DEFAULT_AVAILABILITY;
-            const badge = getAvailabilityBadge(availability) || v.badge;
-            const isUnavailable = !availability.totalDrivers;
-            const canSelectVehicle = rideMode === 'schedule' || !isUnavailable;
+            {!isLoadingVehicles && !vehicleLoadError && displayedVehicles.map((v, i) => {
+              const isSelected = selected === v.id;
+              const availability = availabilityByVehicleId[v.id] || DEFAULT_AVAILABILITY;
+              const isUnavailable = !availability.totalDrivers;
+              const canSelectVehicle = rideMode === 'schedule' || !isUnavailable;
+              const compactEta = Math.max(
+                1,
+                availability.closestDriverEtaMinutes || tripMetrics.durationMinutes || 1,
+              );
+              const fareLabel = isUnavailable && rideMode !== 'schedule'
+                ? 'N/A'
+                : isFarePending
+                  ? '...'
+                  : formatVehicleFare(v);
 
-            return (
-              <motion.div
-                key={v.id}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: i * 0.04, ease: [0.23, 1, 0.32, 1] }}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[24px] border-2 transition-all text-left relative overflow-hidden min-h-[74px] ${
-                  isSelected
-                    ? 'bg-orange-50/50 border-orange-500 shadow-[0_12px_24px_-8px_rgba(249,115,22,0.22)]'
-                    : isUnavailable && rideMode !== 'schedule'
-                      ? 'bg-slate-100/60 border-transparent opacity-60'
-                      : 'bg-white border-slate-50 shadow-[0_2px_8px_rgba(15,23,42,0.02)] hover:border-slate-200'
-                }`}
-              >
-                {isSelected && (
-                  <motion.div
-                    layoutId="selection-glow"
-                    className="absolute inset-0 bg-gradient-to-r from-orange-50/0 via-orange-50/20 to-orange-50/0 pointer-events-none"
-                  />
-                )}
-
-                <div
-                  role={canSelectVehicle ? 'button' : undefined}
-                  tabIndex={canSelectVehicle ? 0 : undefined}
-                  onClick={() => {
-                    if (canSelectVehicle) {
-                      setSelected(v.id);
-                    }
-                  }}
-                  onKeyDown={(event) => {
-                    if (!canSelectVehicle) {
-                      return;
-                    }
-
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      setSelected(v.id);
-                    }
-                  }}
-                  className={`flex min-w-0 flex-1 items-center gap-3 text-left ${
-                    canSelectVehicle ? 'cursor-pointer' : 'cursor-default'
+              return (
+                <motion.div
+                  key={v.id}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: i * 0.04, ease: [0.23, 1, 0.32, 1] }}
+                  className={`overflow-hidden rounded-[18px] border transition-all ${
+                    isSelected
+                      ? 'border-slate-200 bg-[#fbfaf8] shadow-[0_6px_16px_rgba(15,23,42,0.08)]'
+                      : 'border-transparent bg-white'
                   }`}
                 >
-                  <div className={`w-16 h-14 rounded-[18px] flex items-center justify-center shrink-0 transition-all duration-300 ${
-                    isSelected ? 'bg-white shadow-sm scale-105' : isUnavailable ? 'bg-slate-200' : 'bg-slate-50'
-                  }`}>
-                    <img src={v.icon} alt={v.name} className="h-12 w-16 max-w-none object-contain drop-shadow-sm" draggable={false} />
-                  </div>
+                  <div
+                    role={canSelectVehicle ? 'button' : undefined}
+                    tabIndex={canSelectVehicle ? 0 : undefined}
+                    onClick={() => {
+                      if (canSelectVehicle) {
+                        setSelected(v.id);
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (!canSelectVehicle) {
+                        return;
+                      }
 
-                  <div className="flex-1 min-w-0 z-10">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className={`text-[13px] font-extrabold leading-tight ${isUnavailable ? 'text-slate-500' : 'text-slate-900'}`}>
-                        {v.name}
-                      </span>
-                      <div className="flex items-center gap-1 text-slate-400 bg-slate-50 px-1 py-0.5 rounded-md">
-                        <Users size={10} strokeWidth={3} />
-                        <span className="text-[9px] font-bold">{v.capacity}</span>
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        setSelected(v.id);
+                      }
+                    }}
+                    className={`flex items-center gap-3 px-3 py-3 text-left ${
+                      canSelectVehicle ? 'cursor-pointer' : 'cursor-default opacity-55'
+                    }`}
+                  >
+                    <div className="flex w-[52px] shrink-0 flex-col items-center">
+                      <div className="flex h-9 w-full items-center justify-center">
+                        <img src={v.icon} alt={v.name} className="h-8 w-12 object-contain" draggable={false} />
                       </div>
-                      {badge && (
-                        <span className={`text-[7px] font-black px-1 py-0.5 rounded-md border uppercase tracking-tighter ${
-                          isUnavailable
-                            ? 'bg-white text-slate-300 border-slate-100'
-                            : badge === 'FASTEST'
-                              ? 'bg-orange-500 text-white border-orange-400'
-                              : 'bg-orange-50 text-orange-600 border-orange-100'
-                        }`}>
-                          {badge}
-                        </span>
-                      )}
+                      <span className="mt-1 text-[10px] font-medium text-slate-500">{compactEta} min</span>
                     </div>
-                    <p className="text-[10px] font-bold text-slate-400 leading-tight truncate max-w-[140px]">{v.sublabel}</p>
-                    <div className="flex items-center gap-1.5 mt-1 border-t border-slate-50 pt-0.5">
-                      <div className={`w-1 h-1 rounded-full ${isUnavailable ? 'bg-slate-300' : 'bg-emerald-500 animate-pulse'}`} />
-                      <p className={`text-[9px] font-bold truncate flex-1 ${isUnavailable && rideMode !== 'schedule' ? 'text-slate-400' : 'text-slate-600'}`}>
-                        {isUnavailable
-                          ? rideMode === 'schedule'
-                            ? 'Can be scheduled for later'
-                            : 'Unavailable'
-                          : formatAvailabilityLine(availability)}
-                      </p>
-                      {(!isUnavailable || rideMode === 'schedule') && !isFarePending && tripMetrics.distanceMeters > 0 && (
-                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter shrink-0 bg-slate-100 px-1 py-0.5 rounded">
-                          {tripMetrics.durationMinutes || 1}m
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
 
-                <div className="flex flex-col items-end gap-2 shrink-0 z-10">
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPreviewVehicleId(v.id)}
-                      aria-label={`View details for ${v.name}`}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-orange-200 hover:text-orange-500"
-                    >
-                      <Eye size={15} strokeWidth={2.4} />
-                    </button>
-                    {isSelected && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          openPicker(scheduledAtInputRef);
-                        }}
-                        className={`flex h-8 min-w-[56px] items-center justify-center gap-1 rounded-full border px-2 transition-all ${
-                          rideMode === 'schedule'
-                            ? 'border-blue-100 bg-blue-50 text-blue-600 shadow-[0_10px_24px_-12px_rgba(59,130,246,0.6)]'
-                            : 'border-slate-200 bg-white text-slate-600'
-                        }`}
-                        aria-label={rideMode === 'schedule' ? `Scheduled for ${formatScheduledDisplay(scheduledAt)}` : `Schedule ${v.name}`}
-                        title={rideMode === 'schedule' ? formatScheduledDisplay(scheduledAt) : `Schedule ${v.name}`}
-                      >
-                        <Clock3 size={13} strokeWidth={2.4} />
-                        <span className="text-[8px] font-black uppercase tracking-wider">
-                          {rideMode === 'schedule' ? 'Set' : 'Later'}
-                        </span>
-                      </button>
-                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <span className="block truncate text-[14px] font-semibold leading-tight text-slate-900">
+                            {v.name}
+                          </span>
+                          <p className="mt-0.5 truncate text-[11px] font-medium text-slate-400">
+                            {v.sublabel}
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <span className={`block text-[20px] font-semibold leading-none ${isUnavailable && rideMode !== 'schedule' ? 'text-slate-300' : 'text-slate-900'}`}>
+                            {fareLabel}
+                          </span>
+                          {isSelected && (
+                            <div className="mt-1 flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setPreviewVehicleId(v.id);
+                                }}
+                                className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+                                aria-label={`View details for ${v.name}`}
+                                title={`View details for ${v.name}`}
+                              >
+                                <Eye size={12} strokeWidth={2.4} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {isSelected && (
+                        <div className="mt-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-[11px] font-medium text-slate-500">
+                              {rideMode === 'schedule'
+                                ? `Scheduled for ${formatScheduledDisplay(scheduledAt)}`
+                                : isUnavailable
+                                  ? 'Unavailable right now'
+                                  : formatAvailabilityLine(availability)}
+                            </p>
+                            {driverLoadError && (
+                              <p className="mt-1 text-[10px] font-medium text-rose-500">{driverLoadError}</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className={`text-[15px] font-black tracking-tight block ${isUnavailable ? 'text-slate-300' : 'text-slate-900'}`}>
-                      {isUnavailable ? 'N/A' : isFarePending ? '...' : formatVehicleFare(v)}
-                    </span>
-                    {!isUnavailable && (
-                      <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter opacity-70">
-                        {isFarePending ? 'calc.' : (v.supportsBidding && shouldUseDriverBidding) ? 'bid range' : 'est.'}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
+
+                  {!isSelected && i < displayedVehicles.length - 1 && (
+                    <div className="ml-[68px] border-b border-slate-100" />
+                  )}
+                </motion.div>
+              );
+            })}
           </div>
           <ScrollIndicator show={showScrollArrow} />
         </div>
 
-        <div className="shrink-0 border-t border-slate-100 bg-white/80 backdrop-blur-xl px-5 pb-6 pt-3.5 space-y-3.5 shadow-[0_-12px_40px_rgba(15,23,42,0.08)]">
+        <div className="shrink-0 border-t border-slate-100 bg-white px-3 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-2.5">
           <input
             ref={scheduledAtInputRef}
             type="datetime-local"
@@ -1681,77 +1646,63 @@ const SelectVehicle = () => {
             className="sr-only"
           />
 
-          <div className="flex items-stretch gap-3">
-            <motion.button
-              whileHover={canProceed ? { scale: 1.01, translateY: -2 } : {}}
-              whileTap={canProceed ? { scale: 0.98 } : undefined}
-              disabled={!canProceed}
-              onClick={handleBook}
-              className={`py-4 rounded-[20px] text-[15px] font-extrabold shadow-xl transition-all duration-300 uppercase tracking-tight flex items-center justify-center gap-3 ${
-                shouldShowBottomPaymentAction ? 'flex-1' : 'w-full'
-              } ${
-                canProceed
-                  ? 'bg-[#f8e001] text-slate-900 shadow-[0_12px_28px_-4px_rgba(248,224,1,0.4)] active:shadow-none'
-                  : 'bg-slate-200 text-slate-400 shadow-none cursor-not-allowed'
-              }`}
+          <div className="grid grid-cols-3 rounded-[12px] border border-slate-200 bg-white">
+            <button
+              type="button"
+              onClick={() => setShowPaymentModal(true)}
+              className="flex items-center justify-center gap-2 border-r border-slate-200 px-3 py-2.5 text-[12px] font-medium text-slate-700"
             >
-              {selectedVehicle
-                ? isFarePending
-                  ? 'Calculating fare...'
-                  : selectedVehicle.supportsBidding && shouldUseDriverBidding
-                  ? (
-                    <>
-                      <span>{`Request Bid for ${selectedVehicle.name}`}</span>
-                      <div className="w-1.5 h-1.5 rounded-full bg-slate-900/20" />
-                      <span>{selectedFareDisplay}</span>
-                    </>
-                  )
-                  : rideMode === 'schedule'
-                  ? (
-                    <>
-                      <span>{`Schedule ${selectedVehicle.name}`}</span>
-                      <div className="w-1.5 h-1.5 rounded-full bg-slate-900/20" />
-                      <span>{formatCurrency(selectedVehicle.supportsBidding && shouldUseDriverBidding ? selectedBidCeiling : selectedVehicle.price)}</span>
-                    </>
-                  )
-                  : selectedAvailability.totalDrivers
-                  ? (
-                    <>
-                      <span>{`Book ${selectedVehicle.name}`}</span>
-                      <div className="w-1.5 h-1.5 rounded-full bg-slate-900/20" />
-                      <span>{formatCurrency(selectedVehicle.price)}</span>
-                    </>
-                  )
-                  : `${selectedVehicle.name} Unavailable`
-                : rideMode !== 'schedule' && !hasBookableVehicles
-                  ? 'No Vehicles Available'
-                  : 'Select Vehicle'}
-            </motion.button>
-
-            {shouldShowBottomPaymentAction && (
-              <button
-                type="button"
-                onClick={() => setShowPaymentModal(true)}
-                className={`flex h-auto min-h-[56px] min-w-[72px] shrink-0 flex-col items-center justify-center rounded-[20px] border transition-all ${
-                  paymentMethod === 'Cash'
-                    ? 'border-emerald-100 bg-emerald-50 text-emerald-600 shadow-[0_10px_24px_-12px_rgba(16,185,129,0.45)]'
-                    : 'border-blue-100 bg-blue-50 text-blue-600 shadow-[0_10px_24px_-12px_rgba(59,130,246,0.45)]'
-                }`}
-                aria-label={`Payment method ${paymentMethod}`}
-                title={`Payment method ${paymentMethod}`}
-              >
-                {paymentMethod === 'Cash' ? <Banknote size={18} strokeWidth={2.4} /> : <CreditCard size={18} strokeWidth={2.4} />}
-                <span className="mt-1 text-[9px] font-black uppercase tracking-wider">{paymentMethod}</span>
-              </button>
-            )}
+              <Banknote size={15} strokeWidth={2.2} className="text-green-600" />
+              <span>{paymentMethod === 'Cash' ? 'Cash' : 'Online'}</span>
+            </button>
+            <button
+              type="button"
+              className="flex items-center justify-center gap-2 border-r border-slate-200 px-3 py-2.5 text-[12px] font-medium text-slate-400"
+            >
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-sm bg-green-100 text-[10px] text-green-700">%</span>
+              <span>Coupon</span>
+            </button>
+            <button
+              type="button"
+              className="flex items-center justify-center gap-2 px-3 py-2.5 text-[12px] font-medium text-slate-700"
+            >
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-100 text-[10px] text-slate-600">•</span>
+              <span>Myself</span>
+            </button>
           </div>
+
+          <motion.button
+            whileHover={canProceed ? { scale: 1.01 } : {}}
+            whileTap={canProceed ? { scale: 0.98 } : undefined}
+            disabled={!canProceed}
+            onClick={handleBook}
+            className={`mt-3 flex w-full items-center justify-center rounded-[8px] px-4 py-3.5 text-[16px] font-medium transition ${
+              canProceed
+                ? 'bg-[#1f1f1f] text-white'
+                : 'bg-slate-200 text-slate-400'
+            }`}
+          >
+            {selectedVehicle
+              ? isFarePending
+                ? 'Calculating fare...'
+                : selectedVehicle.supportsBidding && shouldUseDriverBidding
+                  ? `Request Bid for ${selectedVehicle.name}`
+                  : rideMode === 'schedule'
+                    ? `Schedule ${selectedVehicle.name}`
+                    : selectedAvailability.totalDrivers
+                      ? `Book ${selectedVehicle.name}`
+                      : `${selectedVehicle.name} Unavailable`
+              : rideMode !== 'schedule' && !hasBookableVehicles
+                ? 'No Vehicles Available'
+                : 'Select Vehicle'}
+          </motion.button>
 
           {rideMode === 'schedule' ? (
             scheduleError ? (
-              <p className="text-[11px] font-bold text-rose-500">{scheduleError}</p>
+              <p className="mt-2 text-[11px] font-medium text-rose-500">{scheduleError}</p>
             ) : (
-              <p className="text-[11px] font-medium text-slate-500">
-                Scheduled for {formatScheduledDisplay(scheduledAt)}. Drivers will be notified automatically.
+              <p className="mt-2 text-[11px] font-medium text-slate-500">
+                Scheduled for {formatScheduledDisplay(scheduledAt)}.
               </p>
             )
           ) : null}
