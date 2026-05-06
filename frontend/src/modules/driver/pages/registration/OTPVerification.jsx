@@ -28,6 +28,45 @@ const normalizeDriverRole = (role) => {
     }
     return 'driver';
 };
+
+const isDriverApproved = (driver) => {
+    if (!driver) {
+        return false;
+    }
+
+    const approval = String(driver?.approve ?? '').toLowerCase();
+    const status = String(driver?.status || '').toLowerCase();
+
+    return (
+        driver?.approve === true ||
+        driver?.approve === 1 ||
+        ['true', '1', 'yes', 'approved'].includes(approval) ||
+        ['approved', 'active', 'verified'].includes(status)
+    );
+};
+
+const getPostLoginRoute = (role, driver, routePrefix) => {
+    const normalizedRole = normalizeDriverRole(role);
+
+    if (normalizedRole === 'service_center' || normalizedRole === 'service_center_staff') {
+        return '/taxi/driver/service-center';
+    }
+
+    if (normalizedRole === 'bus_driver') {
+        return '/taxi/driver/bus-home';
+    }
+
+    if (normalizedRole === 'owner' || normalizedRole === 'driver') {
+        return isDriverApproved(driver)
+            ? normalizedRole === 'owner'
+                ? '/taxi/owner/home'
+                : '/taxi/driver/home'
+            : `${routePrefix}/registration-status`;
+    }
+
+    return '/taxi/driver/home';
+};
+
 const syncPushTokens = () => {
     window.__flushNativeFcmToken?.().catch?.(() => {});
     window.__registerBrowserFcmToken?.({ interactive: true }).catch?.(() => {});
@@ -130,16 +169,7 @@ const OTPVerification = () => {
 
                 clearDriverRegistrationSession();
                 const normalizedRole = normalizeDriverRole(role);
-                const nextPath =
-                    normalizedRole === 'owner' || normalizedRole === 'driver'
-                        ? `${routePrefix}/registration-status`
-                        : normalizedRole === 'service_center'
-                            ? '/taxi/driver/service-center'
-                            : normalizedRole === 'service_center_staff'
-                                ? '/taxi/driver/service-center'
-                                : normalizedRole === 'bus_driver'
-                                    ? '/taxi/driver/bus-home'
-                                    : '/taxi/driver/home';
+                const nextPath = getPostLoginRoute(normalizedRole, payload?.driver, routePrefix);
                 navigate(nextPath, { 
                     replace: true, 
                     state: { 

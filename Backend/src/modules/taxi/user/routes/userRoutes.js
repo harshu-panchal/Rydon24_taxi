@@ -21,6 +21,7 @@ import {
   getIntercityPackageCatalog,
   clearAllUserNotifications,
   getMyActiveRentalBooking,
+  listMyRentalBookings,
   loginUser,
   registerUser,
   requestAccountDeletion,
@@ -60,6 +61,7 @@ userRouter.get('/vehicle-types', asyncHandler(getPublicVehicleTypeCatalog));
 userRouter.get('/rental-vehicles', asyncHandler(getPublicRentalVehicleCatalog));
 userRouter.post('/rental-quote-requests', asyncHandler(createRentalQuoteRequest));
 userRouter.post('/rental-bookings', authenticateOrResolveUser(['user']), asyncHandler(createRentalBookingRequest));
+userRouter.get('/rental-bookings', authenticateOrResolveUser(['user']), asyncHandler(listMyRentalBookings));
 userRouter.get('/rental-bookings/active', authenticateOrResolveUser(['user']), asyncHandler(getMyActiveRentalBooking));
 userRouter.post('/rental-bookings/:id/end', authenticateOrResolveUser(['user']), asyncHandler(endMyActiveRentalRide));
 userRouter.post('/register', asyncHandler(registerUser));

@@ -8,6 +8,7 @@ import {
   Edit3,
   FileText,
   LoaderCircle,
+  Plus,
   Trash2,
   Truck,
   AlertCircle,
@@ -438,6 +439,10 @@ const OwnerVehicleFleet = () => {
       setMessage(error.message || "Could not delete vehicle.");
       setMessageType("error");
     }
+  };
+
+  const handleAddFleetVehicle = () => {
+    navigate(`${routePrefix}/add-vehicle`);
   };
 
   if (isLoading) {
@@ -891,7 +896,25 @@ const OwnerVehicleFleet = () => {
                 </p>
               </div>
             </div>
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={handleAddFleetVehicle}
+              className="hidden sm:inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition-all"
+            >
+              <Plus size={16} />
+              Add Fleet
+            </motion.button>
           </div>
+          <motion.button
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+            onClick={handleAddFleetVehicle}
+            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition-all sm:hidden"
+          >
+            <Plus size={16} />
+            Add Fleet Vehicle
+          </motion.button>
         </div>
       </div>
 
@@ -914,14 +937,22 @@ const OwnerVehicleFleet = () => {
 
         {/* Vehicles List */}
         {vehicles.length === 0 ? (
-          <div className="text-center py-20">
-            <Car size={48} className="mx-auto text-gray-300 mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          <div className="rounded-[28px] border border-dashed border-slate-300 bg-white/80 px-6 py-16 text-center shadow-sm">
+            <Car size={48} className="mx-auto mb-4 text-gray-300" />
+            <h3 className="mb-2 text-lg font-semibold text-gray-900">
               No vehicles yet
             </h3>
-            <p className="text-gray-600">
-              No fleet vehicles are available right now
+            <p className="mx-auto max-w-sm text-sm text-gray-600">
+              No fleet vehicles are available right now. Add your first fleet vehicle so it can go into admin verification.
             </p>
+            <button
+              type="button"
+              onClick={handleAddFleetVehicle}
+              className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition-all hover:brightness-105"
+            >
+              <Plus size={16} />
+              Add Fleet Vehicle
+            </button>
           </div>
         ) : (
           <div className="space-y-3">
@@ -1120,6 +1151,20 @@ const OwnerVehicleFleet = () => {
             </>
           )}
         </AnimatePresence>
+      </div>
+
+      <div className="fixed inset-x-0 bottom-[84px] z-20 px-4 sm:hidden">
+        <div className="mx-auto max-w-lg">
+          <motion.button
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+            onClick={handleAddFleetVehicle}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-[20px] bg-slate-900 px-4 py-3.5 text-sm font-bold text-white shadow-[0_16px_40px_rgba(15,23,42,0.18)]"
+          >
+            <Plus size={16} />
+            Add Fleet Vehicle
+          </motion.button>
+        </div>
       </div>
 
       <DriverBottomNav />

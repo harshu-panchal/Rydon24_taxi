@@ -23,11 +23,11 @@ import {
   countTotalSeats,
   createBlueprintFromTemplate,
   createBusDraft,
-  deleteAdminBus,
-  getAdminBuses,
-  upsertAdminBus,
+  deleteAdminBus as defaultDeleteBus,
+  getAdminBuses as defaultGetBuses,
+  upsertAdminBus as defaultUpsertBus,
 } from '../../services/busService';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 const DAY_OPTIONS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const AMENITY_OPTIONS = [
@@ -196,19 +196,57 @@ const SeatDeckPreview = ({ title, deckRows, onToggleSeat }) => {
   );
 };
 
-const BusServiceManager = ({ mode: modeProp = null }) => {
+const BusServiceManager = ({
+  mode: modeProp = null,
+  api = {},
+  basePath = '/admin/bus-service',
+  badgeLabel = 'Bus Service Control',
+  title = 'Manage Bus Fleet & Schedules',
+  description = 'Define coaches, preview seat blueprints, manage inventory, and publish recurring departures with multi-stop routes.',
+  emptyLabel = 'No buses found.',
+  defaultStatus = 'draft',
+}) => {
+  const buildFreshDraft = () => ({
+    ...createBusDraft(),
+    status: ['draft', 'active', 'paused'].includes(defaultStatus) ? defaultStatus : 'draft',
+  });
+
   const navigate = useNavigate();
+  const location = useLocation();
   const { id: routeBusId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const currentMode = modeProp || searchParams.get('mode') || 'list';
+  const getBuses = api.getBuses || defaultGetBuses;
+  const upsertBus = api.upsertBus || defaultUpsertBus;
+  const deleteBus = api.deleteBus || defaultDeleteBus;
+  const getDrivers = api.getDrivers;
+  const resolvedPathMode = useMemo(() => {
+    const pathname = String(location.pathname || '');
+
+    if (pathname === `${basePath}/create`) {
+      return 'create';
+    }
+
+    if (pathname.startsWith(`${basePath}/edit/`)) {
+      return 'edit';
+    }
+
+    if (routeBusId && pathname.startsWith(`${basePath}/`)) {
+      return 'details';
+    }
+
+    return '';
+  }, [basePath, location.pathname, routeBusId]);
+  const currentMode = modeProp || resolvedPathMode || searchParams.get('mode') || 'list';
   const currentBusId = routeBusId || searchParams.get('bus') || '';
   const [catalog, setCatalog] = useState([]);
   const [selectedBusId, setSelectedBusId] = useState(null);
   const [detailBusId, setDetailBusId] = useState(null);
   const [catalogSearch, setCatalogSearch] = useState('');
-  const [draft, setDraft] = useState(() => createBusDraft());
+  const [draft, setDraft] = useState(() => buildFreshDraft());
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [ownerDrivers, setOwnerDrivers] = useState([]);
+  const [driverSearch, setDriverSearch] = useState('');
   const coachTypeOptions = useMemo(() => {
     const discovered = Array.from(
       new Set(
@@ -225,7 +263,7 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
     const loadCatalog = async () => {
       setIsLoadingCatalog(true);
       try {
-        const buses = await getAdminBuses();
+        const buses = await getBuses();
         if (!active) return;
 
         setCatalog(buses);
@@ -238,7 +276,7 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
             current.id === buses[0].id ? current : JSON.parse(JSON.stringify(buses[0])),
           );
         } else {
-          const nextDraft = createBusDraft();
+          const nextDraft = buildFreshDraft();
           setSelectedBusId(nextDraft.id);
           setDraft(nextDraft);
         }
@@ -258,6 +296,30 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
       active = false;
     };
   }, [currentMode]);
+
+  useEffect(() => {
+    if (typeof getDrivers !== 'function') {
+      setOwnerDrivers([]);
+      return undefined;
+    }
+
+    let active = true;
+    const loadDrivers = async () => {
+      try {
+        const result = await getDrivers();
+        if (!active) return;
+        setOwnerDrivers(Array.isArray(result) ? result : []);
+      } catch (error) {
+        if (!active) return;
+        toast.error(error?.message || 'Failed to load owner drivers');
+      }
+    };
+
+    loadDrivers();
+    return () => {
+      active = false;
+    };
+  }, [getDrivers]);
 
   useEffect(() => {
     if (currentMode === 'create') return;
@@ -294,6 +356,21 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
         .some((value) => String(value).toLowerCase().includes(query)),
     );
   }, [catalog, catalogSearch]);
+  const selectedOwnerDriver = useMemo(
+    () => ownerDrivers.find((driver) => String(driver.id) === String(draft.ownerDriverId || '')) || null,
+    [draft.ownerDriverId, ownerDrivers],
+  );
+  const filteredOwnerDrivers = useMemo(() => {
+    const query = String(driverSearch || '').trim().toLowerCase();
+    if (!query) return ownerDrivers.slice(0, 8);
+    return ownerDrivers
+      .filter((driver) =>
+        [driver.name, driver.phone, driver.city, driver.status]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(query)),
+      )
+      .slice(0, 8);
+  }, [driverSearch, ownerDrivers]);
 
   useEffect(() => {
     if (currentMode !== 'edit' || !currentBusId) return;
@@ -306,17 +383,17 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
 
   const openListView = () => {
     setDetailBusId(null);
-    navigate('/admin/bus-service');
+    navigate(basePath);
   };
 
   const openEditView = (busId) => {
     setDetailBusId(null);
     setSelectedBusId(busId);
-    navigate(`/admin/bus-service/edit/${busId}`);
+    navigate(`${basePath}/edit/${busId}`);
   };
 
   const openDetailView = (busId) => {
-    navigate(`/admin/bus-service/${busId}`);
+    navigate(`${basePath}/${busId}`);
   };
 
   const updateDraft = (field, value) => {
@@ -546,11 +623,11 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
   };
 
   const handleCreateNew = () => {
-    const nextDraft = createBusDraft();
+    const nextDraft = buildFreshDraft();
     setDraft(nextDraft);
     setSelectedBusId(nextDraft.id);
     setDetailBusId(null);
-    navigate('/admin/bus-service/create');
+    navigate(`${basePath}/create`);
   };
 
   const handleDuplicate = () => {
@@ -563,7 +640,7 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
       driverName: '',
       driverPhone: '',
       busDriverId: '',
-      status: 'draft',
+      status: ['draft', 'active', 'paused'].includes(defaultStatus) ? defaultStatus : 'draft',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -571,7 +648,7 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
     setDraft(copy);
     setSelectedBusId(copy.id);
     setDetailBusId(null);
-    navigate('/admin/bus-service/create');
+    navigate(`${basePath}/create`);
     toast.success('Bus duplicated as a new draft');
   };
 
@@ -584,7 +661,7 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
     setIsSaving(true);
     try {
       const isNewBus = draft.id?.startsWith('bus-');
-      const nextBus = await upsertAdminBus({
+      const nextBus = await upsertBus({
         ...draft,
         status: draft.status || 'draft',
         capacity: totalSeats,
@@ -603,7 +680,7 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
       });
       setSelectedBusId(nextBus.id);
       setDraft(nextBus);
-      navigate(isNewBus ? '/admin/bus-service' : `/admin/bus-service/edit/${nextBus.id}`);
+      navigate(`${basePath}/edit/${nextBus.id}`);
       toast.success('Bus service saved');
     } catch (error) {
       toast.error(error?.message || 'Failed to save bus service');
@@ -614,24 +691,24 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
 
   const handleDelete = async () => {
     if (!catalog.some((item) => item.id === draft.id)) {
-      const nextDraft = createBusDraft();
+      const nextDraft = buildFreshDraft();
       setSelectedBusId(nextDraft.id);
       setDraft(nextDraft);
-      navigate('/admin/bus-service');
+      navigate(basePath);
       toast.success('Unsaved draft cleared');
       return;
     }
 
     setIsSaving(true);
     try {
-      await deleteAdminBus(draft.id);
+      await deleteBus(draft.id);
       const nextCatalog = catalog.filter((bus) => bus.id !== draft.id);
       setCatalog(nextCatalog);
-      const fallback = nextCatalog[0] || createBusDraft();
+      const fallback = nextCatalog[0] || buildFreshDraft();
       setSelectedBusId(fallback.id);
       setDraft(fallback);
       setDetailBusId(null);
-      navigate('/admin/bus-service');
+      navigate(basePath);
       toast.success('Bus service removed');
     } catch (error) {
       toast.error(error?.message || 'Failed to remove bus service');
@@ -641,17 +718,17 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
   };
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-3xl bg-slate-900 p-8 text-white shadow-xl shadow-slate-200">
+    <div className="space-y-5 sm:space-y-8">
+      <section className="rounded-3xl bg-slate-900 p-5 text-white shadow-xl shadow-slate-200 sm:p-8">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-3xl">
             <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-300">
               <Bus size={14} />
-              Bus Service Control
+              {badgeLabel}
             </div>
-            <h1 className="text-3xl font-bold tracking-tight">Manage Bus Fleet & Schedules</h1>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{title}</h1>
             <p className="mt-4 max-w-2xl text-sm font-medium leading-relaxed text-slate-400">
-              Define coaches, preview seat blueprints, manage inventory, and publish recurring departures with multi-stop routes.
+              {description}
             </p>
           </div>
 
@@ -701,7 +778,7 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
       </section>
 
       {currentMode === 'list' ? (
-      <section className="rounded-[32px] border border-slate-100 bg-white p-8 shadow-sm">
+      <section className="rounded-[32px] border border-slate-100 bg-white p-5 shadow-sm sm:p-8">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <h2 className="text-xl font-black tracking-tight text-slate-900">Bus Services</h2>
@@ -738,7 +815,67 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
           </div>
         </div>
 
-        <div className="mt-8 overflow-hidden rounded-[28px] border border-slate-100">
+        <div className="mt-8 space-y-3 md:hidden">
+          {isLoadingCatalog ? (
+            <div className="rounded-[24px] border border-slate-100 bg-white px-5 py-8 text-center text-sm font-bold text-slate-400">
+              Loading bus services...
+            </div>
+          ) : filteredCatalog.length === 0 ? (
+            <div className="rounded-[24px] border border-slate-100 bg-white px-5 py-8 text-center text-sm font-bold text-slate-400">
+              {emptyLabel}
+            </div>
+          ) : (
+            filteredCatalog.map((bus) => (
+              <div key={`mobile-catalog-${bus.id}`} className="rounded-[24px] border border-slate-100 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-black text-slate-900">{bus.busName || 'Untitled Bus'}</p>
+                    <p className="mt-1 truncate text-sm font-semibold text-slate-500">{bus.operatorName || 'Operator not set'}</p>
+                  </div>
+                  <span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wider ${statusTone[bus.status] || statusTone.draft}`}>
+                    {bus.status || 'draft'}
+                  </span>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Route</p>
+                    <p className="mt-1 text-xs font-bold text-slate-900">{bus.route?.originCity || 'Origin'} to {bus.route?.destinationCity || 'Destination'}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Fare</p>
+                    <p className="mt-1 text-xs font-bold text-slate-900">Rs {bus.seatPrice || 0}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Driver</p>
+                    <p className="mt-1 text-xs font-bold text-slate-900">{bus.driverName || 'Not assigned'}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Seats</p>
+                    <p className="mt-1 text-xs font-bold text-slate-900">{countTotalSeats(bus.blueprint)}</p>
+                  </div>
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openEditView(bus.id)}
+                    className="flex-1 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openDetailView(bus.id)}
+                    className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700"
+                  >
+                    View
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="mt-8 hidden overflow-hidden rounded-[28px] border border-slate-100 md:block">
           <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1fr)_120px_120px_170px] gap-4 bg-slate-100 px-6 py-5 text-sm font-black text-slate-700">
             <p>Name</p>
             <p>Driver</p>
@@ -751,7 +888,7 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
           {isLoadingCatalog ? (
             <div className="bg-white px-6 py-10 text-center text-sm font-bold text-slate-400">Loading bus services...</div>
           ) : filteredCatalog.length === 0 ? (
-            <div className="bg-white px-6 py-10 text-center text-sm font-bold text-slate-400">No buses found.</div>
+            <div className="bg-white px-6 py-10 text-center text-sm font-bold text-slate-400">{emptyLabel}</div>
           ) : (
             <div className="divide-y divide-slate-100 bg-white">
               {filteredCatalog.map((bus) => {
@@ -826,7 +963,7 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
       ) : null}
 
       {currentMode === 'details' && detailBus ? (
-        <section className="space-y-6 rounded-[32px] border border-slate-100 bg-white p-8 shadow-sm">
+        <section className="space-y-6 rounded-[32px] border border-slate-100 bg-white p-5 shadow-sm sm:p-8">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">Bus Details</p>
@@ -1020,7 +1157,7 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
       ) : null}
 
       {currentMode === 'edit' || currentMode === 'create' ? (
-      <section className="grid gap-8 xl:grid-cols-[360px_minmax(0,1fr)]">
+      <section className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)] xl:gap-8">
         <div className="space-y-4">
           <div className="hidden rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
             <div className="mb-6 flex items-center justify-between">
@@ -1232,12 +1369,80 @@ const BusServiceManager = ({ mode: modeProp = null }) => {
 
             <div className="grid gap-5 md:grid-cols-2">
               <div>
-                <label className={labelClassName}>Bus Driver Name</label>
-                <input className={fieldClassName} value={draft.driverName || ''} onChange={(event) => updateDraft('driverName', event.target.value)} placeholder="Rakesh Chauhan" />
+                <label className={labelClassName}>
+                  {typeof api.getDrivers === 'function' ? 'Assign Fleet Driver' : 'Bus Driver Name'}
+                </label>
+                {typeof api.getDrivers === 'function' ? (
+                  <div className="space-y-3">
+                    <input
+                      className={fieldClassName}
+                      value={driverSearch}
+                      onChange={(event) => setDriverSearch(event.target.value)}
+                      placeholder="Search owner drivers by name or phone"
+                    />
+                    <div className="max-h-52 space-y-2 overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-2">
+                      {filteredOwnerDrivers.length === 0 ? (
+                        <p className="px-3 py-4 text-xs font-semibold text-slate-500">No matching fleet drivers found.</p>
+                      ) : (
+                        filteredOwnerDrivers.map((driver) => {
+                          const isActive = String(draft.ownerDriverId || '') === String(driver.id);
+                          return (
+                            <button
+                              key={driver.id}
+                              type="button"
+                              onClick={() =>
+                                setDraft((current) => ({
+                                  ...current,
+                                  ownerDriverId: driver.id,
+                                  driverName: driver.name || '',
+                                  driverPhone: driver.phone || '',
+                                }))
+                              }
+                              className={`w-full rounded-2xl border px-3 py-3 text-left transition ${
+                                isActive
+                                  ? 'border-slate-900 bg-slate-900 text-white'
+                                  : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300'
+                              }`}
+                            >
+                              <p className="text-sm font-black">{driver.name || 'Driver'}</p>
+                              <p className={`mt-1 text-xs font-semibold ${isActive ? 'text-slate-300' : 'text-slate-500'}`}>
+                                {driver.phone || 'No phone'}{driver.city ? ` | ${driver.city}` : ''}
+                              </p>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                    {selectedOwnerDriver ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDraft((current) => ({
+                            ...current,
+                            ownerDriverId: '',
+                            driverName: '',
+                            driverPhone: '',
+                          }))
+                        }
+                        className="text-xs font-bold text-rose-600"
+                      >
+                        Clear assigned driver
+                      </button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <input className={fieldClassName} value={draft.driverName || ''} onChange={(event) => updateDraft('driverName', event.target.value)} placeholder="Rakesh Chauhan" />
+                )}
               </div>
               <div>
-                <label className={labelClassName}>Bus Driver Phone</label>
-                <input className={fieldClassName} value={draft.driverPhone || ''} onChange={(event) => updateDraft('driverPhone', event.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="9876543210" />
+                <label className={labelClassName}>{typeof api.getDrivers === 'function' ? 'Assigned Driver Phone' : 'Bus Driver Phone'}</label>
+                <input
+                  className={fieldClassName}
+                  value={draft.driverPhone || ''}
+                  onChange={(event) => updateDraft('driverPhone', event.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="9876543210"
+                  readOnly={typeof api.getDrivers === 'function'}
+                />
               </div>
               <div>
                 <label className={labelClassName}>Operator Name</label>

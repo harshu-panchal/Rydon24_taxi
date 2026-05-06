@@ -358,6 +358,10 @@ const normalizeBusServicePayload = (payload = {}, existing = {}) => {
       toObjectId(payload.busDriverId) ||
       toObjectId(existing.busDriverId) ||
       null,
+    ownerDriverId:
+      toObjectId(payload.ownerDriverId) ||
+      toObjectId(existing.ownerDriverId) ||
+      null,
     coachType: sanitizeBusText(payload.coachType, existing.coachType || 'AC Sleeper'),
     busCategory: sanitizeBusText(payload.busCategory, existing.busCategory || 'Sleeper'),
     registrationNumber: sanitizeBusText(payload.registrationNumber, existing.registrationNumber || ''),
@@ -401,6 +405,8 @@ const normalizeBusServicePayload = (payload = {}, existing = {}) => {
 const serializeBusService = (item = {}) => ({
   id: String(item._id || item.id || ''),
   _id: item._id,
+  ownerId: item.ownerId ? String(item.ownerId) : '',
+  ownerDriverId: item.ownerDriverId ? String(item.ownerDriverId) : '',
   operatorName: item.operatorName || '',
   busName: item.busName || '',
   serviceNumber: item.serviceNumber || '',
@@ -6728,16 +6734,24 @@ export const getDashboardData = async () => {
     return true;
   };
 
-  export const listBusServices = async () => {
-    const items = await BusService.find().sort({ createdAt: -1 }).lean();
-    return items.map((item) => serializeBusService(item));
-  };
+export const listBusServices = async (options = {}) => {
+  const filter = {};
+  const scopedOwnerId = toObjectId(options.ownerId);
 
-  export const createBusService = async (payload = {}) => {
-    const normalizedPayload = normalizeBusServicePayload(payload);
+  if (scopedOwnerId) {
+    filter.ownerId = scopedOwnerId;
+  }
 
-    if (!normalizedPayload.operatorName) {
-      throw new ApiError(400, 'Operator name is required');
+  const items = await BusService.find(filter).sort({ createdAt: -1 }).lean();
+  return items.map((item) => serializeBusService(item));
+};
+
+export const createBusService = async (payload = {}, options = {}) => {
+  const normalizedPayload = normalizeBusServicePayload(payload);
+  const ownerId = toObjectId(options.ownerId) || toObjectId(payload.ownerId) || null;
+
+  if (!normalizedPayload.operatorName) {
+    throw new ApiError(400, 'Operator name is required');
     }
 
     if (!normalizedPayload.busName) {
@@ -6752,17 +6766,23 @@ export const getDashboardData = async () => {
       throw new ApiError(400, 'Destination city is required');
     }
 
-    const item = await BusService.create(normalizedPayload);
-    await syncBusDriverForBusService(item, normalizedPayload);
-    await item.save();
-    return serializeBusService(item.toObject());
-  };
+  const item = await BusService.create({
+    ...normalizedPayload,
+    ownerId,
+  });
+  await syncBusDriverForBusService(item, normalizedPayload);
+  await item.save();
+  return serializeBusService(item.toObject());
+};
 
-  export const updateBusService = async (id, payload = {}) => {
-    const existingItem = await BusService.findById(id);
+export const updateBusService = async (id, payload = {}, options = {}) => {
+  const scopedOwnerId = toObjectId(options.ownerId);
+  const existingItem = scopedOwnerId
+    ? await BusService.findOne({ _id: id, ownerId: scopedOwnerId })
+    : await BusService.findById(id);
 
-    if (!existingItem) {
-      throw new ApiError(404, 'Bus service not found');
+  if (!existingItem) {
+    throw new ApiError(404, 'Bus service not found');
     }
 
     const normalizedPayload = normalizeBusServicePayload(payload, existingItem.toObject());
@@ -6784,14 +6804,20 @@ export const getDashboardData = async () => {
     }
 
     Object.assign(existingItem, normalizedPayload);
+    if (scopedOwnerId) {
+      existingItem.ownerId = scopedOwnerId;
+    }
     await syncBusDriverForBusService(existingItem, normalizedPayload);
     await existingItem.save();
 
     return serializeBusService(existingItem.toObject());
   };
 
-  export const deleteBusService = async (id) => {
-    const item = await BusService.findByIdAndDelete(id);
+  export const deleteBusService = async (id, options = {}) => {
+    const scopedOwnerId = toObjectId(options.ownerId);
+    const item = scopedOwnerId
+      ? await BusService.findOneAndDelete({ _id: id, ownerId: scopedOwnerId })
+      : await BusService.findByIdAndDelete(id);
     if (!item) throw new ApiError(404, 'Bus service not found');
     if (item.busDriverId) {
       await BusDriver.findByIdAndDelete(item.busDriverId);

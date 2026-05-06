@@ -2901,6 +2901,31 @@ export const getMyActiveRentalBooking = async (req, res) => {
   });
 };
 
+export const listMyRentalBookings = async (req, res) => {
+  const page = toPositiveInteger(req.query?.page, 1);
+  const limit = Math.min(20, toPositiveInteger(req.query?.limit, 10));
+  const query = {
+    userId: req.auth?.sub,
+  };
+
+  const [items, total] = await Promise.all([
+    RentalBookingRequest.find(query)
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean(),
+    RentalBookingRequest.countDocuments(query),
+  ]);
+
+  return res.status(200).json({
+    success: true,
+    data: {
+      results: items.map((item) => serializeRentalBookingRequest(item)),
+      pagination: buildPagination({ page, limit, total }),
+    },
+  });
+};
+
 export const endMyActiveRentalRide = async (req, res) => {
   const bookingId = String(req.params?.id || '').trim();
 

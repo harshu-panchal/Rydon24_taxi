@@ -47,11 +47,15 @@ import { getWalletSettings } from "../../services/appSettingsService.js";
 import { RIDE_LIVE_STATUS, RIDE_STATUS } from "../../constants/index.js";
 import {
   createRentalVehicleType,
+  createBusService,
+  deleteBusService,
   deleteRentalVehicleType,
   ensureThirdPartySettings,
   listDriverNeededDocuments,
+  listBusServices,
   listOwnerNeededDocuments,
   listRentalVehicleTypes,
+  updateBusService,
   updateRentalVehicleType,
 } from "../../admin/services/adminService.js";
 import { assignPushTokenToEntity } from "../../services/pushTokenService.js";
@@ -215,6 +219,376 @@ const flattenBusBlueprintSeats = (blueprint = {}) =>
       (Array.isArray(row) ? row : []).filter((cell) => String(cell?.kind || "") === "seat"),
     ),
   );
+
+const buildOwnerBusMonthWindow = (value) => {
+  const normalizedMonth = toCleanString(value);
+  if (/^\d{4}-\d{2}$/.test(normalizedMonth)) {
+    const [year, month] = normalizedMonth.split("-").map(Number);
+    const start = new Date(Date.UTC(year, month - 1, 1));
+    const end = new Date(Date.UTC(year, month, 1));
+    return {
+      month: normalizedMonth,
+      startDate: start.toISOString().slice(0, 10),
+      endDateExclusive: end.toISOString().slice(0, 10),
+    };
+  }
+
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+  const start = new Date(Date.UTC(year, month, 1));
+  const end = new Date(Date.UTC(year, month + 1, 1));
+
+  return {
+    month: `${year}-${String(month + 1).padStart(2, "0")}`,
+    startDate: start.toISOString().slice(0, 10),
+    endDateExclusive: end.toISOString().slice(0, 10),
+  };
+};
+
+const serializeOwnerBusBooking = (booking = {}) => {
+  const cancelledSeats = Array.isArray(booking.cancelledSeats) ? booking.cancelledSeats : [];
+  const cancelledSeatIdSet = new Set(
+    cancelledSeats.map((item) => toCleanString(item?.seatId)).filter(Boolean),
+  );
+  const originalSeatIds = Array.isArray(booking.seatIds) ? booking.seatIds : [];
+  const originalSeatLabels = Array.isArray(booking.seatLabels) ? booking.seatLabels : [];
+  const activeSeats = originalSeatIds
+    .map((seatId, index) => ({
+      seatId,
+      seatLabel: originalSeatLabels[index] || seatId,
+    }))
+    .filter((item) => !cancelledSeatIdSet.has(toCleanString(item.seatId)));
+
+  return {
+    id: String(booking._id || ""),
+    bookingCode: booking.bookingCode || "",
+    status: booking.status || "pending",
+    bookingSource: booking.bookingSource || "user",
+    travelDate: booking.travelDate || "",
+    scheduleId: booking.scheduleId || "",
+    amount: Number(booking.amount || 0),
+    currency: booking.currency || "INR",
+    createdAt: booking.createdAt || null,
+    updatedAt: booking.updatedAt || null,
+    passenger: booking.passenger || {},
+    payment: {
+      provider: booking.payment?.provider || "",
+      orderId: booking.payment?.orderId || "",
+      paymentId: booking.payment?.paymentId || "",
+      status: booking.payment?.status || "pending",
+      paidAt: booking.payment?.paidAt || null,
+    },
+    cancellation: booking.cancellation || {},
+    routeSnapshot: booking.routeSnapshot || {},
+    user: booking.userId
+      ? {
+          id: String(booking.userId?._id || booking.userId),
+          name: booking.userId?.name || "",
+          phone: booking.userId?.phone || "",
+          email: booking.userId?.email || "",
+        }
+      : null,
+    busService: booking.busServiceId
+      ? {
+          id: String(booking.busServiceId?._id || booking.busServiceId),
+          busName: booking.busServiceId?.busName || booking.routeSnapshot?.busName || "",
+          operatorName: booking.busServiceId?.operatorName || booking.routeSnapshot?.operatorName || "",
+          serviceNumber: booking.busServiceId?.serviceNumber || "",
+          coachType: booking.busServiceId?.coachType || booking.routeSnapshot?.coachType || "",
+          busCategory: booking.busServiceId?.busCategory || booking.routeSnapshot?.busCategory || "",
+          status: booking.busServiceId?.status || "draft",
+          route: booking.busServiceId?.route || null,
+        }
+      : null,
+    seatSummary: {
+      total: originalSeatIds.length,
+      active: activeSeats.length,
+      cancelled: cancelledSeats.length,
+    },
+    activeSeats,
+    cancelledSeats: cancelledSeats.map((item) => ({
+      seatId: item?.seatId || "",
+      seatLabel: item?.seatLabel || "",
+      cancelledAt: item?.cancelledAt || null,
+      refundAmount: Number(item?.refundAmount || 0),
+      chargeAmount: Number(item?.chargeAmount || 0),
+      refundStatus: item?.refundStatus || "",
+      notes: item?.notes || "",
+    })),
+  };
+};
+
+const resolveOwnerBusSeatPrice = (busService = {}, seat = {}) => {
+  const variantPricing = busService?.variantPricing || {};
+  const defaultPrice = Number(busService?.seatPrice || 0);
+  const variantKey = String(seat?.variant || "seat").trim().toLowerCase();
+  const resolvedPrice = variantPricing?.[variantKey] ?? variantPricing?.seat ?? defaultPrice;
+
+  return Number.isFinite(Number(resolvedPrice)) ? Number(resolvedPrice) : defaultPrice;
+};
+
+const parseOwnerBusDateTime = (travelDate, timeValue) => {
+  const date = toCleanString(travelDate);
+  const rawTime = toCleanString(timeValue);
+
+  if (!date || !rawTime) {
+    return null;
+  }
+
+  const dateMatch = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!dateMatch) {
+    return null;
+  }
+
+  const year = Number(dateMatch[1]);
+  const monthIndex = Number(dateMatch[2]) - 1;
+  const day = Number(dateMatch[3]);
+  const createIstDate = (hours, minutes) => {
+    if (
+      !Number.isInteger(year) ||
+      !Number.isInteger(monthIndex) ||
+      !Number.isInteger(day) ||
+      !Number.isInteger(hours) ||
+      !Number.isInteger(minutes)
+    ) {
+      return null;
+    }
+
+    const utcMillis = Date.UTC(year, monthIndex, day, hours, minutes) - ((5 * 60) + 30) * 60 * 1000;
+    const parsed = new Date(utcMillis);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const time24Match = rawTime.match(/^(\d{1,2}):(\d{2})$/);
+  if (time24Match) {
+    const hours = Number(time24Match[1]);
+    const minutes = Number(time24Match[2]);
+    if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+      return createIstDate(hours, minutes);
+    }
+  }
+
+  const time12Match = rawTime.match(/^(\d{1,2}):(\d{2})\s*([AP]M)$/i);
+  if (time12Match) {
+    let hours = Number(time12Match[1]);
+    const minutes = Number(time12Match[2]);
+    const meridiem = time12Match[3].toUpperCase();
+    if (hours >= 1 && hours <= 12 && minutes >= 0 && minutes <= 59) {
+      if (meridiem === "PM" && hours !== 12) hours += 12;
+      if (meridiem === "AM" && hours === 12) hours = 0;
+      return createIstDate(hours, minutes);
+    }
+  }
+
+  return null;
+};
+
+const normalizeOwnerBusCancellationRules = (rules = []) =>
+  (Array.isArray(rules) ? rules : [])
+    .map((rule, index) => ({
+      id: toCleanString(rule?.id) || `rule-${index + 1}`,
+      label: toCleanString(rule?.label) || `Rule ${index + 1}`,
+      hoursBeforeDeparture: Math.max(0, Number(rule?.hoursBeforeDeparture || 0)),
+      refundType: ["percentage", "fixed", "none"].includes(String(rule?.refundType || "").toLowerCase())
+        ? String(rule.refundType).toLowerCase()
+        : "none",
+      refundValue: Math.max(0, Number(rule?.refundValue || 0)),
+      notes: toCleanString(rule?.notes),
+    }))
+    .sort((a, b) => b.hoursBeforeDeparture - a.hoursBeforeDeparture);
+
+const buildOwnerBusPartialCancellationQuote = ({
+  booking,
+  busService,
+  seatIds = [],
+  travelDateOverride = "",
+  now = new Date(),
+}) => {
+  const bookingSnapshot =
+    booking && typeof booking.toObject === "function" ? booking.toObject() : booking;
+  const selectedSeatIds = [...new Set((Array.isArray(seatIds) ? seatIds : []).map((item) => toCleanString(item)).filter(Boolean))];
+  const totalSeatIds = Array.isArray(bookingSnapshot?.seatIds)
+    ? bookingSnapshot.seatIds.map((item) => toCleanString(item)).filter(Boolean)
+    : [];
+  const seatCount = totalSeatIds.length;
+  const selectedCount = selectedSeatIds.length;
+
+  if (seatCount === 0 || selectedCount === 0) {
+    return {
+      allowed: false,
+      reason: "No seats selected for cancellation",
+      departureDateTime: null,
+      hoursBeforeDeparture: null,
+      appliedRuleId: "",
+      appliedRuleLabel: "",
+      refundType: "none",
+      refundValue: 0,
+      refundAmount: 0,
+      chargeAmount: 0,
+      notes: "",
+    };
+  }
+
+  const perSeatAmount = Math.round((Number(bookingSnapshot?.amount || 0) / seatCount) * 100) / 100;
+  const partialAmount = Math.round(perSeatAmount * selectedCount * 100) / 100;
+  const schedule = findBusSchedule(busService, booking?.scheduleId);
+  const departureTime = schedule?.departureTime || booking?.routeSnapshot?.departureTime || "";
+  const resolvedTravelDate = toCleanString(travelDateOverride || booking?.travelDate);
+  const departureDateTime = parseOwnerBusDateTime(resolvedTravelDate, departureTime);
+  const rules = normalizeOwnerBusCancellationRules(busService?.cancellationRules);
+  const amount = Math.max(0, partialAmount);
+
+  if (!departureDateTime || Number.isNaN(departureDateTime.getTime())) {
+    return {
+      allowed: false,
+      reason: "Departure time is unavailable",
+      departureDateTime: null,
+      hoursBeforeDeparture: null,
+      appliedRuleId: "",
+      appliedRuleLabel: "",
+      refundType: "none",
+      refundValue: 0,
+      refundAmount: 0,
+      chargeAmount: amount,
+      notes: "",
+    };
+  }
+
+  const hoursBeforeDeparture = Math.round((((departureDateTime.getTime() - now.getTime()) / 3600000) + Number.EPSILON) * 100) / 100;
+  if (hoursBeforeDeparture <= 0) {
+    return {
+      allowed: false,
+      reason: "Bus departure time has passed",
+      departureDateTime,
+      hoursBeforeDeparture,
+      appliedRuleId: "",
+      appliedRuleLabel: "",
+      refundType: "none",
+      refundValue: 0,
+      refundAmount: 0,
+      chargeAmount: amount,
+      notes: "",
+    };
+  }
+
+  const matchedRule = rules.find((rule) => hoursBeforeDeparture >= rule.hoursBeforeDeparture) || null;
+  let refundAmount = 0;
+  if (matchedRule) {
+    if (matchedRule.refundType === "percentage") {
+      refundAmount = Math.round(amount * Math.min(100, matchedRule.refundValue) / 100 * 100) / 100;
+    } else if (matchedRule.refundType === "fixed") {
+      refundAmount = Math.min(amount, Math.round(matchedRule.refundValue * 100) / 100);
+    }
+  }
+
+  const chargeAmount = Math.max(0, Math.round((amount - refundAmount) * 100) / 100);
+
+  return {
+    allowed: true,
+    reason: "",
+    departureDateTime,
+    hoursBeforeDeparture,
+    appliedRuleId: matchedRule?.id || "",
+    appliedRuleLabel: matchedRule?.label || "",
+    refundType: matchedRule?.refundType || "none",
+    refundValue: matchedRule?.refundValue || 0,
+    refundAmount,
+    chargeAmount,
+    notes: matchedRule?.notes || "",
+  };
+};
+
+const resolveOwnerRazorpayCredentials = async () => {
+  const envKeyId = String(process.env.RAZORPAY_KEY_ID || "").trim();
+  const envKeySecret = String(process.env.RAZORPAY_KEY_SECRET || "").trim();
+  const envEnabled = String(process.env.RAZORPAY_ENABLED || "").trim();
+
+  if (envEnabled !== "0" && envKeyId && envKeySecret) {
+    return { keyId: envKeyId, keySecret: envKeySecret };
+  }
+
+  const settings = await ensureThirdPartySettings();
+  const razorpay = settings?.payment?.razor_pay || {};
+  const enabled = String(razorpay.enabled ?? "0") === "1";
+  if (!enabled) {
+    settings.payment = settings.payment || {};
+    settings.payment.razor_pay = {
+      ...razorpay,
+      enabled: "1",
+      environment: razorpay.environment || "test",
+    };
+    settings.markModified("payment");
+    await settings.save();
+  }
+
+  const environment = String(razorpay.environment || "test").toLowerCase();
+  const isLive = environment === "live";
+  const keyId = String(isLive ? razorpay.live_api_key : razorpay.test_api_key || "");
+  const keySecret = String(isLive ? razorpay.live_secret_key : razorpay.test_secret_key || "");
+
+  if (!keyId || !keySecret) {
+    throw new ApiError(500, "Razorpay credentials are not configured");
+  }
+
+  if (keyId.toLowerCase().includes("demo") || keySecret.toLowerCase().includes("demo")) {
+    throw new ApiError(500, "Razorpay keys are demo placeholders. Configure real keys in Admin > Payment Gateways");
+  }
+
+  return { keyId, keySecret };
+};
+
+const ownerRazorpayRequest = async ({ method, path, body, keyId, keySecret }) => {
+  const credentials = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+  const response = await fetch(`https://api.razorpay.com/v1${path}`, {
+    method,
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(response.status || 502, payload?.error?.description || payload?.error?.message || "Razorpay request failed");
+  }
+
+  return payload;
+};
+
+const resolveOwnerScopedBusDriverDetails = async (owner, payload = {}, existing = {}) => {
+  const requestedOwnerDriverId = toCleanString(payload.ownerDriverId || existing.ownerDriverId);
+  if (!requestedOwnerDriverId) {
+    return {
+      ownerDriverId: null,
+      driverName: toCleanString(payload.driverName || existing.driverName || ""),
+      driverPhone: normalizePhone(payload.driverPhone || existing.driverPhone || ""),
+    };
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(requestedOwnerDriverId)) {
+    throw new ApiError(400, "Valid owner driver is required");
+  }
+
+  const ownerDriver = await Driver.findOne({
+    _id: requestedOwnerDriverId,
+    owner_id: owner._id,
+    deletedAt: null,
+  })
+    .select("name phone status approve")
+    .lean();
+
+  if (!ownerDriver) {
+    throw new ApiError(404, "Selected fleet driver was not found");
+  }
+
+  return {
+    ownerDriverId: ownerDriver._id,
+    driverName: toCleanString(ownerDriver.name),
+    driverPhone: normalizePhone(ownerDriver.phone),
+  };
+};
 
 const buildBusDriverSeatLayout = async ({ busService, scheduleId, travelDate }) => {
   const activeHolds = await BusSeatHold.find({
@@ -4328,6 +4702,15 @@ export const getOwnerFleetDashboard = async (req, res) => {
   let todayMetrics = emptyMetrics;
   let transportBreakdown = [];
   let recentRides = [];
+  let busOverview = {
+    totalBuses: 0,
+    activeBuses: 0,
+    totalBookings: 0,
+    upcomingBookings: 0,
+    confirmedBookings: 0,
+    grossRevenue: 0,
+  };
+  let recentBusBookings = [];
 
   if (driverIds.length > 0) {
     const [rideMetricsResult, todayMetricsResult, transportBreakdownResult, recentRideDocs] =
@@ -4551,6 +4934,71 @@ export const getOwnerFleetDashboard = async (req, res) => {
     (vehicle) => String(vehicle.status || "").toLowerCase() === "rejected",
   );
 
+  const ownerBusServices = await BusService.find({ ownerId: owner._id })
+    .select("status")
+    .sort({ createdAt: -1 })
+    .lean();
+  const ownerBusServiceIds = ownerBusServices.map((item) => item._id);
+
+  if (ownerBusServiceIds.length > 0) {
+    const [busBookingMetrics, busRecentBookingDocs] = await Promise.all([
+      BusBooking.aggregate([
+        {
+          $match: {
+            busServiceId: { $in: ownerBusServiceIds },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalBookings: { $sum: 1 },
+            upcomingBookings: {
+              $sum: {
+                $cond: [
+                  { $in: ["$status", ["pending", "confirmed"]] },
+                  1,
+                  0,
+                ],
+              },
+            },
+            confirmedBookings: {
+              $sum: {
+                $cond: [{ $eq: ["$status", "confirmed"] }, 1, 0],
+              },
+            },
+            grossRevenue: {
+              $sum: {
+                $cond: [
+                  { $in: ["$status", ["pending", "confirmed"]] },
+                  { $ifNull: ["$amount", 0] },
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]),
+      BusBooking.find({ busServiceId: { $in: ownerBusServiceIds } })
+        .populate("busServiceId", "busName operatorName serviceNumber status")
+        .sort({ createdAt: -1 })
+        .limit(6)
+        .lean(),
+    ]);
+
+    const busMetrics = busBookingMetrics[0] || {};
+    busOverview = {
+      totalBuses: ownerBusServices.length,
+      activeBuses: ownerBusServices.filter(
+        (item) => String(item.status || "").toLowerCase() === "active",
+      ).length,
+      totalBookings: Number(busMetrics.totalBookings || 0),
+      upcomingBookings: Number(busMetrics.upcomingBookings || 0),
+      confirmedBookings: Number(busMetrics.confirmedBookings || 0),
+      grossRevenue: Number(busMetrics.grossRevenue || 0),
+    };
+    recentBusBookings = busRecentBookingDocs.map(serializeOwnerBusBooking);
+  }
+
   res.json({
     success: true,
     data: {
@@ -4618,6 +5066,7 @@ export const getOwnerFleetDashboard = async (req, res) => {
         onlineTrips: rideMetrics.onlineTrips,
         cashTrips: rideMetrics.cashTrips,
       },
+      busOverview,
       transportBreakdown,
       recentDrivers: drivers.slice(0, 5).map((driver) => ({
         id: String(driver._id),
@@ -4643,8 +5092,510 @@ export const getOwnerFleetDashboard = async (req, res) => {
           "",
         createdAt: vehicle.createdAt,
       })),
+      recentBusBookings,
       recentRides,
     },
+  });
+};
+
+export const listOwnerBusServices = async (req, res) => {
+  const owner = await Owner.findById(req.auth.sub).lean();
+
+  if (!owner) {
+    throw new ApiError(404, "Owner not found");
+  }
+
+  res.json({
+    success: true,
+    data: await listBusServices({ ownerId: owner._id }),
+  });
+};
+
+export const createOwnerBusService = async (req, res) => {
+  const owner = await Owner.findById(req.auth.sub).lean();
+
+  if (!owner) {
+    throw new ApiError(404, "Owner not found");
+  }
+
+  const resolvedDriver = await resolveOwnerScopedBusDriverDetails(owner, req.body || {});
+
+  res.status(201).json({
+    success: true,
+    data: await createBusService(
+      {
+        ...(req.body || {}),
+        ownerDriverId: resolvedDriver.ownerDriverId,
+        driverName: resolvedDriver.driverName,
+        driverPhone: resolvedDriver.driverPhone,
+      },
+      { ownerId: owner._id },
+    ),
+  });
+};
+
+export const updateOwnerBusService = async (req, res) => {
+  const owner = await Owner.findById(req.auth.sub).lean();
+
+  if (!owner) {
+    throw new ApiError(404, "Owner not found");
+  }
+
+  const existingBus = await BusService.findOne({ _id: req.params.id, ownerId: owner._id })
+    .select("ownerDriverId driverName driverPhone")
+    .lean();
+
+  if (!existingBus) {
+    throw new ApiError(404, "Bus service not found");
+  }
+
+  const resolvedDriver = await resolveOwnerScopedBusDriverDetails(owner, req.body || {}, existingBus);
+
+  res.json({
+    success: true,
+    data: await updateBusService(
+      req.params.id,
+      {
+        ...(req.body || {}),
+        ownerDriverId: resolvedDriver.ownerDriverId,
+        driverName: resolvedDriver.driverName,
+        driverPhone: resolvedDriver.driverPhone,
+      },
+      { ownerId: owner._id },
+    ),
+  });
+};
+
+export const deleteOwnerBusService = async (req, res) => {
+  const owner = await Owner.findById(req.auth.sub).lean();
+
+  if (!owner) {
+    throw new ApiError(404, "Owner not found");
+  }
+
+  await deleteBusService(req.params.id, { ownerId: owner._id });
+  res.json({
+    success: true,
+    message: "Bus service deleted",
+  });
+};
+
+export const getOwnerBusBookings = async (req, res) => {
+  const owner = await Owner.findById(req.auth.sub).lean();
+
+  if (!owner) {
+    throw new ApiError(404, "Owner not found");
+  }
+
+  const busServiceId = toCleanString(req.query?.busServiceId);
+  const travelDate = toCleanString(req.query?.travelDate || req.query?.date);
+  const scheduleId = toCleanString(req.query?.scheduleId);
+  const status = toCleanString(req.query?.status).toLowerCase();
+  const search = toCleanString(req.query?.search).toLowerCase();
+
+  const ownerBuses = await BusService.find({ ownerId: owner._id })
+    .sort({ operatorName: 1, busName: 1 })
+    .select("_id busName operatorName serviceNumber coachType busCategory status route schedules blueprint seatPrice variantPricing fareCurrency ownerDriverId driverName driverPhone")
+    .lean();
+
+  const allowedBusIds = ownerBuses.map((item) => item._id);
+  const query = {
+    busServiceId: { $in: allowedBusIds },
+  };
+
+  if (busServiceId) {
+    query.busServiceId = busServiceId;
+  }
+  if (travelDate) {
+    query.travelDate = normalizeBusTravelDate(travelDate);
+  }
+  if (scheduleId) {
+    query.scheduleId = scheduleId;
+  }
+  if (status && status !== "all") {
+    query.status = status;
+  }
+
+  const rawBookings = await BusBooking.find(query)
+    .populate("userId", "name phone email")
+    .populate("busServiceId", "busName operatorName serviceNumber coachType busCategory status route schedules blueprint")
+    .sort({ travelDate: 1, createdAt: -1 })
+    .lean();
+
+  const bookings = rawBookings
+    .filter((booking) => {
+      if (!search) return true;
+      const haystack = [
+        booking.bookingCode,
+        booking.passenger?.name,
+        booking.passenger?.phone,
+        booking.userId?.name,
+        booking.userId?.phone,
+        booking.userId?.email,
+        booking.routeSnapshot?.busName,
+        booking.routeSnapshot?.operatorName,
+        booking.travelDate,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(search);
+    })
+    .map(serializeOwnerBusBooking);
+
+  const selectedBus =
+    (busServiceId
+      ? ownerBuses.find((item) => String(item._id) === String(busServiceId))
+      : rawBookings[0]?.busServiceId) || null;
+  const selectedSchedules = Array.isArray(selectedBus?.schedules) ? selectedBus.schedules : [];
+
+  const filteredSeatBookings = bookings.filter(
+    (item) =>
+      (!busServiceId || item.busService?.id === String(busServiceId)) &&
+      (!travelDate || item.travelDate === normalizeBusTravelDate(travelDate)) &&
+      (!scheduleId || item.scheduleId === scheduleId) &&
+      item.status !== "failed" &&
+      item.status !== "expired" &&
+      item.status !== "cancelled",
+  );
+
+  const seatBookingMap = new Map();
+  filteredSeatBookings.forEach((booking) => {
+    booking.activeSeats.forEach((seat) => {
+      seatBookingMap.set(seat.seatId, {
+        bookingId: booking.id,
+        bookingCode: booking.bookingCode,
+        status: booking.status,
+        passengerName: booking.passenger?.name || booking.user?.name || "",
+        seatLabel: seat.seatLabel || seat.seatId,
+      });
+    });
+  });
+
+  const seatLayout = selectedBus
+    ? flattenBusBlueprintSeats(selectedBus.blueprint).map((seat) => {
+        const booked = seatBookingMap.get(String(seat.id || ""));
+        return {
+          seatId: seat.id || "",
+          seatLabel: seat.label || seat.id || "",
+          variant: seat.variant || "seat",
+          price: resolveOwnerBusSeatPrice(selectedBus, seat),
+          baseStatus: seat.status || "available",
+          liveStatus: booked ? "booked" : seat.status === "blocked" ? "blocked" : "available",
+          booking: booked || null,
+        };
+      })
+    : [];
+
+  const summary = bookings.reduce(
+    (acc, booking) => {
+      acc.totalBookings += 1;
+      acc.totalAmount += Number(booking.amount || 0);
+      acc.totalSeats += Number(booking.seatSummary?.active || 0);
+      const bucketKey = `${booking.status || "pending"}Bookings`;
+      if (Object.prototype.hasOwnProperty.call(acc, bucketKey)) {
+        acc[bucketKey] += 1;
+      }
+      return acc;
+    },
+    {
+      totalBookings: 0,
+      totalAmount: 0,
+      totalSeats: 0,
+      confirmedBookings: 0,
+      pendingBookings: 0,
+      cancelledBookings: 0,
+      failedBookings: 0,
+      expiredBookings: 0,
+    },
+  );
+
+  res.json({
+    success: true,
+    data: {
+      filters: {
+        busServiceId,
+        travelDate: travelDate ? normalizeBusTravelDate(travelDate) : "",
+        scheduleId,
+        status: status || "all",
+        search,
+      },
+      buses: ownerBuses.map((bus) => ({
+        id: String(bus._id),
+        busName: bus.busName || "",
+        operatorName: bus.operatorName || "",
+        serviceNumber: bus.serviceNumber || "",
+        coachType: bus.coachType || "",
+        busCategory: bus.busCategory || "",
+        status: bus.status || "draft",
+        route: bus.route || {},
+        seatPrice: Number(bus.seatPrice || 0),
+        variantPricing: bus.variantPricing || null,
+        fareCurrency: bus.fareCurrency || "INR",
+        schedules: Array.isArray(bus.schedules) ? bus.schedules : [],
+      })),
+      selectedBus: selectedBus
+        ? {
+            id: String(selectedBus._id),
+            busName: selectedBus.busName || "",
+            operatorName: selectedBus.operatorName || "",
+            serviceNumber: selectedBus.serviceNumber || "",
+            route: selectedBus.route || {},
+            schedules: selectedSchedules,
+          }
+        : null,
+      schedules: selectedSchedules,
+      summary,
+      seatLayout,
+      bookings,
+    },
+  });
+};
+
+export const getOwnerBusBookingCalendar = async (req, res) => {
+  const owner = await Owner.findById(req.auth.sub).lean();
+
+  if (!owner) {
+    throw new ApiError(404, "Owner not found");
+  }
+
+  const ownerBuses = await BusService.find({ ownerId: owner._id }).select("_id").lean();
+  const allowedBusIds = ownerBuses.map((item) => item._id);
+  const busServiceId = toCleanString(req.query?.busServiceId);
+  const scheduleId = toCleanString(req.query?.scheduleId);
+  const monthWindow = buildOwnerBusMonthWindow(req.query?.month);
+
+  const query = {
+    busServiceId: { $in: allowedBusIds },
+    travelDate: {
+      $gte: monthWindow.startDate,
+      $lt: monthWindow.endDateExclusive,
+    },
+  };
+
+  if (busServiceId) {
+    query.busServiceId = busServiceId;
+  }
+  if (scheduleId) {
+    query.scheduleId = scheduleId;
+  }
+
+  const items = await BusBooking.find(query)
+    .select("travelDate status seatIds cancelledSeats amount scheduleId busServiceId")
+    .sort({ travelDate: 1, createdAt: -1 })
+    .lean();
+
+  const calendarMap = new Map();
+  items.forEach((item) => {
+    const dateKey = item.travelDate || "";
+    if (!dateKey) return;
+    if (!calendarMap.has(dateKey)) {
+      calendarMap.set(dateKey, {
+        date: dateKey,
+        totalBookings: 0,
+        totalSeats: 0,
+        totalAmount: 0,
+        confirmedBookings: 0,
+        pendingBookings: 0,
+        cancelledBookings: 0,
+        failedBookings: 0,
+        expiredBookings: 0,
+      });
+    }
+
+    const day = calendarMap.get(dateKey);
+    const cancelledSeatIdSet = new Set(
+      (Array.isArray(item.cancelledSeats) ? item.cancelledSeats : [])
+        .map((seat) => toCleanString(seat?.seatId))
+        .filter(Boolean),
+    );
+    const totalActiveSeats = (Array.isArray(item.seatIds) ? item.seatIds : []).filter(
+      (seatId) => !cancelledSeatIdSet.has(toCleanString(seatId)),
+    ).length;
+
+    day.totalBookings += 1;
+    day.totalSeats += totalActiveSeats;
+    day.totalAmount += Number(item.amount || 0);
+    const bucketKey = `${item.status || "pending"}Bookings`;
+    if (Object.prototype.hasOwnProperty.call(day, bucketKey)) {
+      day[bucketKey] += 1;
+    }
+  });
+
+  res.json({
+    success: true,
+    data: {
+      month: monthWindow.month,
+      startDate: monthWindow.startDate,
+      endDateExclusive: monthWindow.endDateExclusive,
+      days: Array.from(calendarMap.values()),
+    },
+  });
+};
+
+export const cancelOwnerBusBookingSeats = async (req, res) => {
+  const owner = await Owner.findById(req.auth.sub).lean();
+
+  if (!owner) {
+    throw new ApiError(404, "Owner not found");
+  }
+
+  const bookingId = toCleanString(req.params?.id);
+  const selectedSeatIds = Array.isArray(req.body?.seatIds)
+    ? [...new Set(req.body.seatIds.map((item) => toCleanString(item)).filter(Boolean))]
+    : [];
+  const ownerNote = toCleanString(req.body?.notes || req.body?.ownerNote || "Cancelled by owner panel");
+
+  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+    throw new ApiError(400, "Valid booking id is required");
+  }
+
+  const booking = await BusBooking.findById(bookingId);
+  if (!booking) {
+    throw new ApiError(404, "Bus booking not found");
+  }
+
+  const busService = await BusService.findOne({
+    _id: booking.busServiceId,
+    ownerId: owner._id,
+  });
+  if (!busService) {
+    throw new ApiError(403, "This bus booking does not belong to your bus service");
+  }
+
+  if (String(booking.status || "") !== "confirmed") {
+    throw new ApiError(409, "Only confirmed bus bookings can be cancelled");
+  }
+
+  const originalSeatIds = Array.isArray(booking.seatIds) ? booking.seatIds : [];
+  const originalSeatLabels = Array.isArray(booking.seatLabels) ? booking.seatLabels : [];
+  const cancelledSeats = Array.isArray(booking.cancelledSeats) ? booking.cancelledSeats : [];
+  const cancelledSeatIds = new Set(
+    cancelledSeats.map((item) => toCleanString(item?.seatId)).filter(Boolean),
+  );
+  const activeSeats = originalSeatIds
+    .map((seatId, index) => ({
+      seatId: toCleanString(seatId),
+      seatLabel: originalSeatLabels[index] || seatId,
+    }))
+    .filter((item) => item.seatId && !cancelledSeatIds.has(item.seatId));
+  const seatsToCancel = selectedSeatIds.length > 0
+    ? activeSeats.filter((item) => selectedSeatIds.includes(item.seatId))
+    : activeSeats;
+
+  if (seatsToCancel.length === 0) {
+    throw new ApiError(400, "Select at least one active seat to cancel");
+  }
+  if (selectedSeatIds.length > 0 && seatsToCancel.length !== selectedSeatIds.length) {
+    throw new ApiError(409, "Some selected seats are already cancelled or not part of this booking");
+  }
+
+  const cancellationQuote = buildOwnerBusPartialCancellationQuote({
+    booking,
+    busService,
+    seatIds: seatsToCancel.map((item) => item.seatId),
+    travelDateOverride: req.body?.travelDate || req.body?.date,
+  });
+  if (!cancellationQuote.allowed) {
+    throw new ApiError(409, cancellationQuote.reason || "This booking can no longer be cancelled");
+  }
+
+  const cancelledAt = new Date();
+  let refundPayload = null;
+  if (cancellationQuote.refundAmount > 0) {
+    const paymentId = toCleanString(booking.payment?.paymentId);
+    if (!paymentId) {
+      throw new ApiError(409, "This booking cannot be refunded because the payment reference is missing");
+    }
+
+    const { keyId, keySecret } = await resolveOwnerRazorpayCredentials();
+    refundPayload = await ownerRazorpayRequest({
+      method: "POST",
+      path: `/payments/${paymentId}/refund`,
+      body: {
+        amount: Math.round(cancellationQuote.refundAmount * 100),
+        notes: {
+          bookingId: String(booking._id),
+          bookingCode: booking.bookingCode || "",
+          cancelledSeats: seatsToCancel.map((item) => item.seatLabel || item.seatId).join(", "),
+        },
+      },
+      keyId,
+      keySecret,
+    });
+  }
+
+  const perSeatRefundAmount = seatsToCancel.length > 0
+    ? Math.round((cancellationQuote.refundAmount / seatsToCancel.length) * 100) / 100
+    : 0;
+  const perSeatChargeAmount = seatsToCancel.length > 0
+    ? Math.round((cancellationQuote.chargeAmount / seatsToCancel.length) * 100) / 100
+    : 0;
+
+  booking.cancelledSeats = [
+    ...cancelledSeats,
+    ...seatsToCancel.map((item, index) => ({
+      seatId: item.seatId,
+      seatLabel: item.seatLabel,
+      cancelledAt,
+      refundAmount: index === seatsToCancel.length - 1
+        ? Math.max(0, Math.round((cancellationQuote.refundAmount - (perSeatRefundAmount * (seatsToCancel.length - 1))) * 100) / 100)
+        : perSeatRefundAmount,
+      chargeAmount: index === seatsToCancel.length - 1
+        ? Math.max(0, Math.round((cancellationQuote.chargeAmount - (perSeatChargeAmount * (seatsToCancel.length - 1))) * 100) / 100)
+        : perSeatChargeAmount,
+      refundStatus: refundPayload ? (refundPayload.status || "processed") : "not_applicable",
+      refundId: refundPayload?.id || "",
+      refundProcessedAt: refundPayload?.created_at ? new Date(Number(refundPayload.created_at) * 1000) : cancelledAt,
+      notes: ownerNote || cancellationQuote.notes || "",
+    })),
+  ];
+
+  const remainingActiveSeatCount = activeSeats.length - seatsToCancel.length;
+  booking.status = remainingActiveSeatCount <= 0 ? "cancelled" : "confirmed";
+  booking.cancelledAt = remainingActiveSeatCount <= 0 ? cancelledAt : null;
+  booking.cancellation = {
+    allowed: remainingActiveSeatCount > 0,
+    appliedRuleId: cancellationQuote.appliedRuleId,
+    appliedRuleLabel: cancellationQuote.appliedRuleLabel,
+    refundType: cancellationQuote.refundType,
+    refundValue: cancellationQuote.refundValue,
+    hoursBeforeDeparture: cancellationQuote.hoursBeforeDeparture,
+    refundAmount: cancellationQuote.refundAmount,
+    chargeAmount: cancellationQuote.chargeAmount,
+    notes: ownerNote || cancellationQuote.notes,
+  };
+  booking.payment.status = refundPayload
+    ? (remainingActiveSeatCount <= 0 ? "refunded" : "partially_refunded")
+    : (remainingActiveSeatCount <= 0 ? "cancelled" : booking.payment.status || "paid");
+  if (!booking.notes?.includes(ownerNote)) {
+    booking.notes = [booking.notes, ownerNote].filter(Boolean).join(" | ");
+  }
+  await booking.save();
+
+  await BusSeatHold.deleteMany({
+    bookingId: booking._id,
+    status: { $in: ["held", "booked"] },
+    seatId: { $in: seatsToCancel.map((item) => item.seatId) },
+  });
+
+  const hydratedBooking = await BusBooking.findById(booking._id)
+    .populate("userId", "name phone email")
+    .populate("busServiceId", "busName operatorName serviceNumber coachType busCategory status route schedules blueprint")
+    .lean();
+
+  res.json({
+    success: true,
+    data: serializeOwnerBusBooking(hydratedBooking),
+    message:
+      cancellationQuote.refundAmount > 0
+        ? (remainingActiveSeatCount <= 0
+          ? "Booking cancelled successfully and refund was initiated."
+          : "Selected seats cancelled successfully and refund was initiated.")
+        : (remainingActiveSeatCount <= 0
+          ? "Booking cancelled successfully."
+          : "Selected seats cancelled successfully."),
   });
 };
 

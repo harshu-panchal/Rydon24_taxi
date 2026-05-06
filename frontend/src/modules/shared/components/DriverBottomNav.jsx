@@ -2,6 +2,7 @@ import React from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Briefcase,
+  Bus,
   Car,
   Home,
   IndianRupee,
@@ -10,12 +11,15 @@ import {
   History,
   Users,
 } from "lucide-react";
+import { useSettings } from "../../../shared/context/SettingsContext";
 
 const DriverBottomNav = () => {
   const location = useLocation();
+  const { settings } = useSettings();
   const role = String(localStorage.getItem("role") || "driver").toLowerCase();
   const isOwner = role === "owner";
   const routePrefix = isOwner ? "/taxi/owner" : "/taxi/driver";
+  const busEnabled = String(settings.transportRide?.enable_bus_service || "0") === "1";
 
   // Matching user's latest screenshot labels: Home, History, Earnings, Accounts
   const navItems = isOwner
@@ -35,6 +39,15 @@ const DriverBottomNav = () => {
           label: "Vehicle",
           path: `${routePrefix}/vehicle-fleet`,
         },
+        ...(busEnabled
+          ? [
+              {
+                icon: <Bus size={22} />,
+                label: "Bus",
+                path: `${routePrefix}/bus-service`,
+              },
+            ]
+          : []),
         {
           icon: <User size={22} />,
           label: "Account",
@@ -74,6 +87,7 @@ const DriverBottomNav = () => {
       {navItems.map((item) => {
         const isActive =
           location.pathname === item.path ||
+          location.pathname.startsWith(`${item.path}/`) ||
           (item.path === `${routePrefix}/home` &&
             location.pathname === `${routePrefix}/dashboard`);
         return (

@@ -4,6 +4,8 @@ import { authenticate } from "../../middlewares/authMiddleware.js";
 import {
   addDriverEmergencyContact,
   completeOnboarding,
+  createOwnerBusService,
+  cancelOwnerBusBookingSeats,
   createDriverPaymentQr,
   createServiceCenterStaffMember,
   updateServiceCenterStaffMember,
@@ -36,9 +38,12 @@ import {
   getServiceCenterBookings,
   getServiceCenterStaffMembers,
   getServiceCenterVehicles,
+  listOwnerBusServices,
   saveDriverFcmToken,
   getOwnerFleetDrivers,
   getOwnerFleetDashboard,
+  getOwnerBusBookingCalendar,
+  getOwnerBusBookings,
   getMyWallet,
   getOnboardingSession,
   getServiceLocations,
@@ -57,10 +62,12 @@ import {
 
   updateCurrentDriver,
   updateDriverVehicle,
+  updateOwnerBusService,
   updateServiceCenterBooking,
   verifyOnboardingOtp,
   verifyDriverLoginOtpRequest,
   addOwnerVehicle,
+  deleteOwnerBusService,
   getOwnerFleetVehicles,
   deleteOwnerFleetVehicle,
   updateCurrentDriverDocument,
@@ -223,6 +230,41 @@ driverRouter.get(
   "/fleet/dashboard",
   authenticate(["owner"]),
   asyncHandler(getOwnerFleetDashboard),
+);
+driverRouter.get(
+  "/fleet/bus-services",
+  authenticate(["owner"]),
+  asyncHandler(listOwnerBusServices),
+);
+driverRouter.get(
+  "/fleet/bus-bookings",
+  authenticate(["owner"]),
+  asyncHandler(getOwnerBusBookings),
+);
+driverRouter.get(
+  "/fleet/bus-bookings/calendar",
+  authenticate(["owner"]),
+  asyncHandler(getOwnerBusBookingCalendar),
+);
+driverRouter.post(
+  "/fleet/bus-services",
+  authenticate(["owner"]),
+  asyncHandler(createOwnerBusService),
+);
+driverRouter.patch(
+  "/fleet/bus-services/:id",
+  authenticate(["owner"]),
+  asyncHandler(updateOwnerBusService),
+);
+driverRouter.delete(
+  "/fleet/bus-services/:id",
+  authenticate(["owner"]),
+  asyncHandler(deleteOwnerBusService),
+);
+driverRouter.post(
+  "/fleet/bus-bookings/:id/cancel",
+  authenticate(["owner"]),
+  asyncHandler(cancelOwnerBusBookingSeats),
 );
 driverRouter.get(
   "/fleet/drivers",

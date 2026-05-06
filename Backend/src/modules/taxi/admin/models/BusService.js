@@ -203,6 +203,18 @@ const busServiceSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    ownerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Owner',
+      default: null,
+      index: true,
+    },
+    ownerDriverId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Driver',
+      default: null,
+      index: true,
+    },
     coachType: {
       type: String,
       default: 'AC Sleeper',
@@ -409,6 +421,7 @@ const busServiceSchema = new mongoose.Schema(
 busServiceSchema.index({ operatorName: 1, busName: 1 });
 busServiceSchema.index({ serviceNumber: 1 });
 busServiceSchema.index({ 'route.originCity': 1, 'route.destinationCity': 1, status: 1 });
+busServiceSchema.index({ ownerId: 1, createdAt: -1 });
 
 export const BusService =
   mongoose.models.TaxiBusService || mongoose.model('TaxiBusService', busServiceSchema);

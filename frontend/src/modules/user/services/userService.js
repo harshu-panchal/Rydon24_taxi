@@ -33,6 +33,10 @@ export const userService = {
     const response = await api.post('/users/rental-bookings', payload);
     return response;
   },
+  getMyRentalBookings: async (params = {}) => {
+    const response = await api.get('/users/rental-bookings', { params });
+    return response;
+  },
   getActiveRentalBooking: async () => {
     const response = await api.get('/users/rental-bookings/active');
     return response;

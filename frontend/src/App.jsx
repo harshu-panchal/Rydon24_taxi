@@ -132,6 +132,8 @@ const ApplicationStatus = lazy(() => import('./modules/driver/pages/registration
 // Driver Module - Core
 const DriverHome = lazy(() => import('./modules/driver/pages/DriverHome'));
 const OwnerDashboard = lazy(() => import('./modules/driver/pages/OwnerDashboard'));
+const OwnerBusServicePage = lazy(() => import('./modules/driver/pages/OwnerBusServicePage'));
+const OwnerBusBookingsPage = lazy(() => import('./modules/driver/pages/OwnerBusBookingsPage'));
 const ActiveTrip = lazy(() => import('./modules/driver/pages/ActiveTrip'));
 const DriverWallet = lazy(() => import('./modules/driver/pages/DriverWallet'));
 const DriverProfile = lazy(() => import('./modules/driver/pages/DriverProfile'));
@@ -1018,6 +1020,11 @@ function App() {
                 <Route path="status" element={<ApplicationStatus />} />
                 <Route path="home" element={<OwnerDashboard />} />
                 <Route path="dashboard" element={<OwnerDashboard />} />
+                <Route path="bus-service" element={<OwnerBusServicePage />} />
+                <Route path="bus-service/create" element={<OwnerBusServicePage />} />
+                <Route path="bus-service/edit/:id" element={<OwnerBusServicePage />} />
+                <Route path="bus-service/:id" element={<OwnerBusServicePage />} />
+                <Route path="bus-bookings" element={<OwnerBusBookingsPage />} />
                 <Route path="profile" element={<DriverProfile />} />
                 <Route path="wallet" element={<DriverWallet />} />
                 <Route path="history" element={<RideRequests />} />

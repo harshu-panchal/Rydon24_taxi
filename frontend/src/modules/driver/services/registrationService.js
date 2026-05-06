@@ -247,6 +247,27 @@ export const updateOwnerFleetDriver = (driverId, payload) =>
 export const getOwnerFleetVehicles = () =>
   api.get("/drivers/fleet/vehicles", withDriverAuth());
 
+export const getOwnerBusServices = () =>
+  api.get("/drivers/fleet/bus-services", withDriverAuth());
+
+export const getOwnerBusBookings = (params = {}) =>
+  api.get("/drivers/fleet/bus-bookings", withDriverAuth({ params }));
+
+export const getOwnerBusBookingCalendar = (params = {}) =>
+  api.get("/drivers/fleet/bus-bookings/calendar", withDriverAuth({ params }));
+
+export const cancelOwnerBusBookingSeats = (bookingId, payload = {}) =>
+  api.post(`/drivers/fleet/bus-bookings/${bookingId}/cancel`, payload, withDriverAuth());
+
+export const createOwnerBusService = (payload) =>
+  api.post("/drivers/fleet/bus-services", payload, withDriverAuth());
+
+export const updateOwnerBusService = (busId, payload) =>
+  api.patch(`/drivers/fleet/bus-services/${busId}`, payload, withDriverAuth());
+
+export const deleteOwnerBusService = (busId) =>
+  api.delete(`/drivers/fleet/bus-services/${busId}`, withDriverAuth());
+
 export const createOwnerFleetVehicle = (payload) =>
   api.post("/drivers/fleet/vehicles", payload, withDriverAuth());
 

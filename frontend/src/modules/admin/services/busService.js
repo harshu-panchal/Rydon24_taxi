@@ -143,6 +143,7 @@ export const countTotalSeats = (blueprint = {}) =>
 
 export const createBusDraft = () => ({
   id: createId('bus'),
+  ownerDriverId: '',
   operatorName: '',
   busName: '',
   serviceNumber: '',
@@ -212,7 +213,7 @@ export const createBusDraft = () => ({
   updatedAt: new Date().toISOString(),
 });
 
-const normalizeCatalog = (catalog = []) =>
+export const normalizeBusCatalog = (catalog = []) =>
   catalog.map((bus) => {
     const fallbackDraft = createBusDraft();
     const blueprint = bus.blueprint || createBlueprintFromTemplate(bus.blueprint?.templateKey);
@@ -220,6 +221,7 @@ const normalizeCatalog = (catalog = []) =>
     return {
       ...fallbackDraft,
       ...bus,
+      ownerDriverId: bus.ownerDriverId || '',
       blueprint,
       seatPrice:
         bus.seatPrice !== undefined && bus.seatPrice !== null ? String(bus.seatPrice) : fallbackDraft.seatPrice,
@@ -280,7 +282,7 @@ const getResultsArray = (response) => {
 
 export const getAdminBuses = async () => {
   const response = await api.get('/admin/bus-services');
-  return normalizeCatalog(getResultsArray(response));
+  return normalizeBusCatalog(getResultsArray(response));
 };
 
 export const upsertAdminBus = async (payload) => {
@@ -295,7 +297,7 @@ export const upsertAdminBus = async (payload) => {
     ? await api.post('/admin/bus-services', requestPayload)
     : await api.patch(`/admin/bus-services/${payload.id}`, requestPayload);
 
-  return normalizeCatalog([response?.data || response])[0];
+  return normalizeBusCatalog([response?.data || response])[0];
 };
 
 export const deleteAdminBus = async (busId) => {
