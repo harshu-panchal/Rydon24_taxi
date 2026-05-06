@@ -432,17 +432,31 @@ const computeCommissionSummary = ({ fare = 0, pricingSnapshot = null, explicitCo
     const normalizedFare = Math.max(0, Number(fare || 0));
     const commissionType = Number(pricingSnapshot?.admin_commission_type_from_driver ?? 1);
     const commissionValue = Math.max(0, Number(pricingSnapshot?.admin_commission_from_driver ?? 0));
-    const derivedCommissionAmount = explicitCommissionAmount !== undefined && explicitCommissionAmount !== null
-        ? Math.max(0, Number(explicitCommissionAmount || 0))
-        : commissionType === 1
-            ? Math.round(((normalizedFare * commissionValue) / 100) * 100) / 100
-            : Math.min(normalizedFare, commissionValue);
-    const driverEarnings = explicitDriverEarnings !== undefined && explicitDriverEarnings !== null
-        ? Math.max(0, Number(explicitDriverEarnings || 0))
-        : Math.max(normalizedFare - derivedCommissionAmount, 0);
+    const fallbackCommissionAmount = commissionType === 1
+        ? Math.round(((normalizedFare * commissionValue) / 100) * 100) / 100
+        : Math.min(normalizedFare, commissionValue);
+    const normalizedExplicitCommission = Number(explicitCommissionAmount);
+    const normalizedExplicitDriverEarnings = Number(explicitDriverEarnings);
+    const hasSettledExplicitCommission = Number.isFinite(normalizedExplicitCommission) && (
+        normalizedExplicitCommission > 0
+        || normalizedFare <= 0
+        || fallbackCommissionAmount <= 0
+    );
+    const commissionAmount = hasSettledExplicitCommission
+        ? Math.max(0, normalizedExplicitCommission)
+        : fallbackCommissionAmount;
+    const derivedDriverEarnings = Math.max(normalizedFare - commissionAmount, 0);
+    const hasSettledExplicitDriverEarnings = Number.isFinite(normalizedExplicitDriverEarnings) && (
+        normalizedExplicitDriverEarnings > 0
+        || normalizedFare <= 0
+        || derivedDriverEarnings <= 0
+    );
+    const driverEarnings = hasSettledExplicitDriverEarnings
+        ? Math.max(0, normalizedExplicitDriverEarnings)
+        : derivedDriverEarnings;
 
     return {
-        commissionAmount: derivedCommissionAmount,
+        commissionAmount,
         driverEarnings,
         commissionType,
         commissionValue,

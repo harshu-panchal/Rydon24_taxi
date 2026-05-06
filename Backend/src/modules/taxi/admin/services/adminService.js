@@ -5214,7 +5214,7 @@ export const createSetPrice = async (payload) => {
     vehicle_type,
     service_location_id,
     pricing_scope: payload.pricing_scope || 'ride',
-    transport_type: payload.transport_type || 'taxi',
+    transport_type: normalizeVehicleTransportType(payload.transport_type || 'taxi'),
     package_type_id: toObjectId(payload.package_type_id?._id || payload.package_type_id?.id || payload.package_type_id),
     package_destination: String(payload.package_destination || '').trim(),
     package_availability: payload.package_availability || 'available',
@@ -5300,6 +5300,7 @@ export const updateSetPrice = async (id, payload) => {
     if (field === 'vehicle_type') value = payload.vehicle_type?._id || payload.vehicle_type?.id || payload.vehicle_type || payload.type_id;
     if (field === 'service_location_id') value = payload.service_location_id?._id || payload.service_location_id?.id || payload.service_location_id || payload.zone?._id || payload.zone?.service_location_id;
     if (field === 'package_type_id') value = payload.package_type_id?._id || payload.package_type_id?.id || payload.package_type_id;
+    if (field === 'transport_type' && value !== undefined) value = normalizeVehicleTransportType(value);
 
     if (value === undefined) {
       if (field === 'admin_commision') value = payload.customer_commission;

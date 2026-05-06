@@ -668,6 +668,54 @@ const buildDriverIncentiveSnapshot = ({ driver, settings, rides }) => {
   };
 };
 
+const buildDriverTodaySummary = async (driver) => {
+  const todayKey = toIstDayKey(new Date());
+  const todayStart = getIstDayStart(new Date());
+  const liveTracking = mergeOnlineSessionIntoTracking(
+    driver?.incentiveTracking || {},
+    driver?.incentiveTracking?.currentOnlineStartedAt,
+    new Date(),
+  );
+  const todayActivity = Array.isArray(liveTracking?.dailyActivity)
+    ? liveTracking.dailyActivity.find((item) => item?.date === todayKey)
+    : null;
+
+  const [metrics] = await Ride.aggregate([
+    {
+      $match: {
+        driverId: driver?._id,
+        status: RIDE_STATUS.COMPLETED,
+        completedAt: { $gte: todayStart },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        rides: { $sum: 1 },
+        earnings: {
+          $sum: {
+            $ifNull: ["$driverEarnings", 0],
+          },
+        },
+        distanceMeters: {
+          $sum: {
+            $ifNull: ["$estimatedDistanceMeters", 0],
+          },
+        },
+      },
+    },
+  ]);
+
+  return {
+    dateKey: todayKey,
+    rides: Number(metrics?.rides || 0),
+    earnings: Number(metrics?.earnings || 0),
+    distanceMeters: Number(metrics?.distanceMeters || 0),
+    activeMinutes: Number(todayActivity?.activeMinutes || 0),
+    activeSeconds: Math.round(Number(todayActivity?.activeMinutes || 0) * 60),
+  };
+};
+
 const normalizePaymentAmount = (value) => {
   const amount = Number(value);
 
@@ -1639,6 +1687,7 @@ export const getCurrentDriver = async (req, res) => {
 
   await clearDriverActiveRideIfStale(driver);
   const vehicleIconUrl = await resolveVehicleMapIcon(driver.vehicleTypeId);
+  const todaySummary = await buildDriverTodaySummary(driver);
 
   res.json({
     success: true,
@@ -1679,6 +1728,7 @@ export const getCurrentDriver = async (req, res) => {
         ? driver.emergencyContacts.map(serializeEmergencyContact)
         : [],
       onboarding: driver.onboarding || {},
+      todaySummary,
     },
   });
 };

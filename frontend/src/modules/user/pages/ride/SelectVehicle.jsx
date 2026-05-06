@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Users, X, Banknote, CreditCard, ChevronDown, ChevronRight, Clock3, LoaderCircle, Eye } from 'lucide-react';
-import { GoogleMap, MarkerF, PolylineF } from '@react-google-maps/api';
+import { GoogleMap, MarkerF, OverlayView, PolylineF } from '@react-google-maps/api';
 import api from '../../../../shared/api/axiosInstance';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../../admin/utils/googleMaps';
 import BikeIcon from '../../../../assets/icons/bike.png';
@@ -18,6 +18,15 @@ import HcvIcon from '../../../../assets/icons/hcv.png';
 import EhcvIcon from '../../../../assets/icons/ehcv.png';
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
+const SELECT_VEHICLE_MAP_OPTIONS = {
+  disableDefaultUI: true,
+  zoomControl: true,
+  clickableIcons: false,
+  streetViewControl: false,
+  fullscreenControl: false,
+  mapTypeControl: false,
+  gestureHandling: 'greedy',
+};
 
 const toLatLng = (coords, fallback = { lat: 22.7196, lng: 75.8577 }) => {
   const [lng, lat] = coords || [];
@@ -30,6 +39,76 @@ const toLatLng = (coords, fallback = { lat: 22.7196, lng: 75.8577 }) => {
 };
 
 const getDriverPosition = (driver) => toLatLng(driver?.location?.coordinates, null);
+
+const getOverlayCenterOffset = (width = 56, height = 56) => ({
+  x: -(width / 2),
+  y: -(height / 2),
+});
+
+const normalizeHeading = (value) => {
+  const numeric = Number(value);
+
+  if (!Number.isFinite(numeric)) {
+    return 0;
+  }
+
+  return ((numeric % 360) + 360) % 360;
+};
+
+const calculateHeadingBetween = (from, to) => {
+  if (!from || !to) {
+    return 0;
+  }
+
+  const angle = Math.atan2(Number(to.lat || 0) - Number(from.lat || 0), Number(to.lng || 0) - Number(from.lng || 0));
+  return normalizeHeading((angle * 180) / Math.PI + 90);
+};
+
+const AnimatedVehicleMarker = React.memo(({ driver, iconUrl, isMapInteracting = false }) => {
+  const position = getDriverPosition(driver);
+
+  if (!position) {
+    return null;
+  }
+
+  return (
+    <OverlayView
+      position={position}
+      mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+      getPixelPositionOffset={getOverlayCenterOffset}
+    >
+      <div className="pointer-events-none relative flex h-14 w-14 items-center justify-center">
+        {!isMapInteracting && (
+          <motion.span
+            className="absolute h-9 w-9 rounded-full border border-emerald-500/35 bg-emerald-400/10"
+            animate={{ scale: [0.8, 1.45, 0.8], opacity: [0.28, 0.08, 0.28] }}
+            transition={{ repeat: Infinity, duration: 2.2, ease: 'easeInOut' }}
+          />
+        )}
+        <motion.img
+          src={iconUrl || CarIcon}
+          alt={driver?.name || 'Available driver'}
+          draggable={false}
+          className="relative h-8 w-8 object-contain drop-shadow-[0_6px_8px_rgba(15,23,42,0.34)] will-change-transform"
+          animate={
+            isMapInteracting
+              ? { rotate: normalizeHeading(driver?.heading) }
+              : {
+                  rotate: normalizeHeading(driver?.heading),
+                  x: [0, 1.5, 0],
+                  y: [0, -1, 0],
+                }
+          }
+          transition={{
+            rotate: { duration: 0.8, ease: [0.22, 1, 0.36, 1] },
+            x: { repeat: Infinity, duration: 1.6, ease: 'easeInOut' },
+            y: { repeat: Infinity, duration: 1.6, ease: 'easeInOut' },
+          }}
+        />
+      </div>
+    </OverlayView>
+  );
+});
 
 const buildFallbackRoute = (origin, destination) => {
   if (!origin || !destination) {
@@ -52,9 +131,10 @@ const buildFallbackRoute = (origin, destination) => {
   ];
 };
 
-const VehicleMapPreview = ({ center, dropPosition, stops = [], drivers, selectedVehicle, isLoaded, loadError }) => {
+const VehicleMapPreview = React.memo(({ center, dropPosition, stops = [], drivers, selectedVehicle, isLoaded, loadError }) => {
   const [routePath, setRoutePath] = useState([]);
   const [routeError, setRouteError] = useState('');
+  const [isMapInteracting, setIsMapInteracting] = useState(false);
   const waypointRequests = useMemo(
     () =>
       (Array.isArray(stops) ? stops : [])
@@ -147,15 +227,10 @@ const VehicleMapPreview = ({ center, dropPosition, stops = [], drivers, selected
         mapContainerStyle={MAP_CONTAINER_STYLE}
         center={center}
         zoom={13}
-        options={{
-          disableDefaultUI: true,
-          zoomControl: true,
-          clickableIcons: false,
-          streetViewControl: false,
-          fullscreenControl: false,
-          mapTypeControl: false,
-          gestureHandling: 'greedy',
-        }}
+        options={SELECT_VEHICLE_MAP_OPTIONS}
+        onDragStart={() => setIsMapInteracting(true)}
+        onZoomChanged={() => setIsMapInteracting((current) => (current ? current : true))}
+        onIdle={() => setIsMapInteracting(false)}
       >
         <MarkerF
           position={center}
@@ -193,25 +268,14 @@ const VehicleMapPreview = ({ center, dropPosition, stops = [], drivers, selected
             }}
           />
         )}
-        {drivers.slice(0, 8).map((driver, index) => {
-          const position = getDriverPosition(driver);
-
-          if (!position) {
-            return null;
-          }
-
-          return (
-            <MarkerF
-              key={driver.id || driver._id || index}
-              position={position}
-              title={`${driver.name || 'Driver'} - ${driver.vehicleNumber || selectedVehicle?.name || 'Vehicle'}`}
-              icon={{
-                url: selectedVehicle?.vehicleIconUrl || selectedVehicle?.icon || '/4_Taxi.png',
-                scaledSize: new window.google.maps.Size(28, 28),
-              }}
-            />
-          );
-        })}
+        {drivers.slice(0, 8).map((driver, index) => (
+          <AnimatedVehicleMarker
+            key={driver.id || driver._id || index}
+            driver={driver}
+            iconUrl={selectedVehicle?.vehicleIconUrl || selectedVehicle?.icon || '/4_Taxi.png'}
+            isMapInteracting={isMapInteracting}
+          />
+        ))}
       </GoogleMap>
 
       <div className="pointer-events-none absolute bottom-24 left-4 rounded-[12px] border border-white/70 bg-white/90 px-3 py-2 shadow-sm">
@@ -226,7 +290,7 @@ const VehicleMapPreview = ({ center, dropPosition, stops = [], drivers, selected
       )}
     </div>
   );
-};
+});
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
 const PAYMENT_OPTIONS = [
@@ -251,8 +315,43 @@ const normalizeAllowedPaymentMethods = (value) => {
   return [...new Set(normalized)].length ? [...new Set(normalized)] : ['cash', 'online'];
 };
 
+const attachDriverMotionMetadata = (drivers = [], previousDrivers = []) => {
+  const previousById = new Map(
+    (Array.isArray(previousDrivers) ? previousDrivers : []).map((driver) => [String(driver?.id || driver?._id || ''), driver]),
+  );
+
+  return (Array.isArray(drivers) ? drivers : []).map((driver, index) => {
+    const key = String(driver?.id || driver?._id || index);
+    const previousDriver = previousById.get(key);
+    const currentPosition = getDriverPosition(driver);
+    const previousPosition = getDriverPosition(previousDriver);
+    const derivedHeading = calculateHeadingBetween(previousPosition, currentPosition);
+    const heading = Number.isFinite(Number(driver?.heading))
+      ? normalizeHeading(driver.heading)
+      : previousPosition && currentPosition
+        ? derivedHeading
+        : normalizeHeading(previousDriver?.heading ?? 90 + index * 16);
+
+    return {
+      ...driver,
+      heading,
+    };
+  });
+};
+
 const toPaymentStateValue = (methodId) => PAYMENT_OPTIONS.find((option) => option.id === methodId)?.stateValue || 'Cash';
 const normalizeSelectedPaymentState = (value) => String(value || '').trim().toLowerCase() === 'cash' ? 'cash' : 'online';
+const resolveRideTransportType = (...values) => {
+  for (const value of values) {
+    const normalized = String(value || '').trim().toLowerCase();
+
+    if (!normalized) continue;
+    if (normalized === 'both' || normalized === 'all') continue;
+    return normalized;
+  }
+
+  return 'taxi';
+};
 
 const getVehicleTypes = (response) => {
   const data = unwrap(response);
@@ -412,7 +511,10 @@ const getFallbackVehicleEstimate = (type) => {
 
 const getSetPriceRows = (response) => {
   const data = unwrap(response);
-  return data?.paginator?.data || data?.results || [];
+  return (data?.paginator?.data || data?.results || []).filter((row) => {
+    const scope = String(row?.pricing_scope || 'ride').trim().toLowerCase();
+    return scope === 'ride';
+  });
 };
 
 const normalizeId = (value) => String(value?._id || value?.id || value || '').trim();
@@ -440,41 +542,63 @@ const sortPricingRules = (rules = []) => (
   })
 );
 
-const findBestPricingRule = ({ rules, vehicleTypeId, serviceLocationId }) => {
+const isActiveRidePricingRule = (rule) => {
+  const isActive = Number(rule?.active ?? 1) === 1 && String(rule?.status || 'active').toLowerCase() !== 'inactive';
+  const scope = String(rule?.pricing_scope || 'ride').trim().toLowerCase();
+  return isActive && scope === 'ride';
+};
+
+const matchesTransportType = (rule, transportType) => {
+  const normalizedRuleTransport = String(rule?.transport_type || 'taxi').trim().toLowerCase();
+  const normalizedTransportType = String(transportType || 'taxi').trim().toLowerCase() || 'taxi';
+
+  return normalizedRuleTransport === normalizedTransportType
+    || normalizedRuleTransport === 'both';
+};
+
+const findBestPricingRule = ({ rules, vehicleTypeId, serviceLocationId, transportType }) => {
   const normalizedVehicleTypeId = normalizeId(vehicleTypeId);
   const normalizedServiceLocationId = normalizeId(serviceLocationId);
+  const normalizedTransportType = String(transportType || 'taxi').trim().toLowerCase() || 'taxi';
 
   const candidates = sortPricingRules(rules.filter((rule) => {
     const matchesVehicle = normalizeId(rule?.vehicle_type?._id || rule?.vehicle_type || rule?.type_id) === normalizedVehicleTypeId;
-    const isActive = Number(rule?.active ?? 1) === 1 && String(rule?.status || 'active').toLowerCase() !== 'inactive';
-    const transportType = String(rule?.transport_type || 'taxi').toLowerCase();
-    const isTaxi = transportType === 'taxi' || transportType === 'both';
-
-    return matchesVehicle && isActive && isTaxi;
+    return matchesVehicle && isActiveRidePricingRule(rule) && matchesTransportType(rule, normalizedTransportType);
   }));
 
   if (!candidates.length) {
     return null;
   }
 
+  const exactTransportMatch = (rule) => String(rule?.transport_type || 'taxi').trim().toLowerCase() === normalizedTransportType;
   const exactServiceLocation = candidates.find((rule) => (
-    normalizedServiceLocationId && getRuleServiceLocationId(rule) === normalizedServiceLocationId
+    normalizedServiceLocationId
+    && getRuleServiceLocationId(rule) === normalizedServiceLocationId
+    && exactTransportMatch(rule)
   ));
 
   if (exactServiceLocation) {
     return exactServiceLocation;
   }
 
-  const genericCandidates = candidates.filter((rule) => !getRuleServiceLocationId(rule));
-  if (genericCandidates.length) {
-    return genericCandidates[0];
+  const exactServiceLocationAnyTransport = candidates.find((rule) => (
+    normalizedServiceLocationId && getRuleServiceLocationId(rule) === normalizedServiceLocationId
+  ));
+
+  if (exactServiceLocationAnyTransport) {
+    return exactServiceLocationAnyTransport;
   }
 
-  if (!normalizedServiceLocationId && candidates.length > 1) {
-    return null;
+  const genericTransportMatch = candidates.find((rule) => (
+    !getRuleServiceLocationId(rule) && exactTransportMatch(rule)
+  ));
+
+  if (genericTransportMatch) {
+    return genericTransportMatch;
   }
 
-  return candidates[0];
+  const genericBoth = candidates.find((rule) => !getRuleServiceLocationId(rule));
+  return genericBoth || candidates[0];
 };
 
 const calculateEstimatedFare = ({ vehicle, pricingRule, distanceMeters, durationMinutes }) => {
@@ -636,6 +760,7 @@ const normalizeVehicleType = (type, index) => {
   return {
     id,
     vehicleTypeId: type?._id || type?.id || '',
+    transportType: String(type?.transport_type || 'taxi').trim().toLowerCase() || 'taxi',
     iconType: type?.icon_types || 'car',
     icon: getVehiclePreviewImage(type),
     vehicleIconUrl: getVehicleMapIcon(type),
@@ -709,6 +834,7 @@ const SelectVehicle = () => {
   const [isResolvingTripMetrics, setIsResolvingTripMetrics] = useState(true);
   const [showScrollArrow, setShowScrollArrow] = useState(false);
   const scrollRef = React.useRef(null);
+  const availabilityHistoryRef = useRef({});
   const scheduledAtInputRef = useRef(null);
   const navigate = useNavigate();
   const pickup = routeState.pickup || 'Pipaliyahana, Indore';
@@ -798,7 +924,9 @@ const SelectVehicle = () => {
       setIsLoadingPricingRules(true);
 
       try {
-        const response = await api.get('/admin/types/set-prices');
+        const response = await api.get('/admin/types/set-prices', {
+          params: { scope: 'ride' },
+        });
 
         if (!active) {
           return;
@@ -903,6 +1031,7 @@ const SelectVehicle = () => {
           rules: pricingRules,
           vehicleTypeId: vehicle.vehicleTypeId,
           serviceLocationId,
+          transportType: vehicle.transportType || routeState.transport_type || routeState.transportType || 'taxi',
         });
 
         return {
@@ -928,7 +1057,7 @@ const SelectVehicle = () => {
       return pricedVehicles;
     }
 
-    return pricedVehicles
+    const rankedVehicles = pricedVehicles
       .map((vehicle, index) => ({
         vehicle,
         index,
@@ -953,8 +1082,19 @@ const SelectVehicle = () => {
 
         return a.index - b.index;
       })
-      .map(({ vehicle }) => vehicle);
-  }, [availabilityByVehicleId, hasAvailabilityResults, pricedVehicles]);
+      .map(({ vehicle, availability }) => ({
+        vehicle,
+        availability,
+      }));
+
+    if (rideMode !== 'schedule') {
+      return rankedVehicles
+        .filter(({ availability }) => (availability.totalDrivers || 0) > 0)
+        .map(({ vehicle }) => vehicle);
+    }
+
+    return rankedVehicles.map(({ vehicle }) => vehicle);
+  }, [availabilityByVehicleId, hasAvailabilityResults, pricedVehicles, rideMode]);
 
   const selectedVehicle = useMemo(() => pricedVehicles.find((v) => v.id === selected), [pricedVehicles, selected]);
   const previewVehicle = useMemo(
@@ -964,6 +1104,11 @@ const SelectVehicle = () => {
   const selectedAvailability = selectedVehicle ? (availabilityByVehicleId[selectedVehicle.id] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
   const previewAvailability = previewVehicle ? (availabilityByVehicleId[previewVehicle.id] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
   const canProceed = Boolean(selectedVehicle) && !isFarePending && (rideMode === 'schedule' || Boolean(selectedAvailability.totalDrivers));
+  const hasBookableVehicles = useMemo(
+    () => displayedVehicles.some((vehicle) => (availabilityByVehicleId[vehicle.id]?.totalDrivers || 0) > 0),
+    [availabilityByVehicleId, displayedVehicles],
+  );
+  const shouldShowBottomPaymentAction = rideMode === 'schedule' || hasBookableVehicles;
   const shouldUseDriverBidding = Boolean(
     routeState.intercity ||
     routeState.serviceType === 'intercity' ||
@@ -1017,62 +1162,126 @@ const SelectVehicle = () => {
 
     if (firstAvailable && (!selected || currentAvailability.totalDrivers <= 0)) {
       setSelected(firstAvailable.id);
+      return;
     }
-  }, [availabilityByVehicleId, displayedVehicles, hasAvailabilityResults, selected]);
+
+    if (!firstAvailable && rideMode !== 'schedule' && selected && currentAvailability.totalDrivers <= 0) {
+      setSelected('');
+    }
+  }, [availabilityByVehicleId, displayedVehicles, hasAvailabilityResults, rideMode, selected]);
 
   useEffect(() => {
     let active = true;
+    let intervalId;
 
-    const loadOnlineDrivers = async () => {
-      if (!vehicles.length) {
-        setAvailabilityByVehicleId({});
+    const fetchVehicleAvailabilities = async (vehicleSubset, { replace = false, silent = false } = {}) => {
+      const fetchableVehicles = (Array.isArray(vehicleSubset) ? vehicleSubset : []).filter((vehicle) => vehicle?.vehicleTypeId);
+
+      if (!fetchableVehicles.length) {
+        if (replace) {
+          availabilityHistoryRef.current = {};
+          setAvailabilityByVehicleId({});
+        }
         return;
       }
 
-      setIsLoadingDrivers(true);
+      if (!silent) {
+        setIsLoadingDrivers(true);
+      }
       setDriverLoadError('');
 
       try {
         const responses = await Promise.all(
-          vehicles
-            .filter((vehicle) => vehicle.vehicleTypeId)
-            .map(async (vehicle) => {
-              const response = await api.get('/rides/available-drivers', {
-                params: {
-                  vehicleTypeId: vehicle.vehicleTypeId,
-                  vehicleIconType: vehicle.iconType,
-                  lng: pickupCoords[0],
-                  lat: pickupCoords[1],
-                  service_location_id: routeState.service_location_id || routeState.serviceLocationId || '',
-                  transport_type: vehicle.transportType || routeState.transport_type || routeState.transportType || 'taxi',
-                },
-              });
+          fetchableVehicles.map(async (vehicle) => {
+            const response = await api.get('/rides/available-drivers', {
+              params: {
+                vehicleTypeId: vehicle.vehicleTypeId,
+                vehicleIconType: vehicle.iconType,
+                lng: pickupCoords[0],
+                lat: pickupCoords[1],
+                service_location_id: routeState.service_location_id || routeState.serviceLocationId || '',
+                transport_type: vehicle.transportType || routeState.transport_type || routeState.transportType || 'taxi',
+              },
+            });
 
-              return [vehicle.id, { ...DEFAULT_AVAILABILITY, ...unwrap(response) }];
-            }),
+            return [vehicle.id, { ...DEFAULT_AVAILABILITY, ...unwrap(response) }];
+          }),
         );
 
-        if (active) {
-          setAvailabilityByVehicleId(Object.fromEntries(responses));
+        if (!active) {
+          return;
         }
+
+        setAvailabilityByVehicleId((current) => {
+          const base = replace ? {} : current;
+          const nextEntries = { ...base };
+
+          responses.forEach(([vehicleId, payload]) => {
+            const previousDrivers = availabilityHistoryRef.current?.[vehicleId]?.drivers || current?.[vehicleId]?.drivers || [];
+            nextEntries[vehicleId] = {
+              ...payload,
+              drivers: attachDriverMotionMetadata(payload?.drivers, previousDrivers),
+            };
+          });
+
+          availabilityHistoryRef.current = nextEntries;
+          return nextEntries;
+        });
       } catch (error) {
         if (active) {
-          setAvailabilityByVehicleId({});
+          if (replace) {
+            availabilityHistoryRef.current = {};
+            setAvailabilityByVehicleId({});
+          }
           setDriverLoadError(error.message || 'Could not load online drivers.');
         }
       } finally {
-        if (active) {
+        if (active && !silent) {
           setIsLoadingDrivers(false);
         }
       }
     };
 
-    loadOnlineDrivers();
+    if (!vehicles.length) {
+      availabilityHistoryRef.current = {};
+      setAvailabilityByVehicleId({});
+      return undefined;
+    }
+
+    fetchVehicleAvailabilities(vehicles, { replace: true });
+
+    const pollSelectedVehicle = () => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+
+      const activeVehicle =
+        vehicles.find((vehicle) => vehicle.id === selected)
+        || vehicles.find((vehicle) => vehicle.vehicleTypeId);
+
+      if (!activeVehicle) {
+        return;
+      }
+
+      fetchVehicleAvailabilities([activeVehicle], { silent: true });
+    };
+
+    intervalId = setInterval(pollSelectedVehicle, 8000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        pollSelectedVehicle();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       active = false;
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [pickupCoords, vehicles]);
+  }, [pickupCoords, routeState.serviceLocationId, routeState.service_location_id, routeState.transportType, routeState.transport_type, selected, vehicles]);
 
   const openPicker = (inputRef) => {
     if (typeof inputRef.current?.showPicker === 'function') {
@@ -1090,6 +1299,11 @@ const SelectVehicle = () => {
     }
 
     setShowBidModal(false);
+    const resolvedTransportType = resolveRideTransportType(
+      routeState.transport_type,
+      routeState.transportType,
+      selectedVehicle.transportType,
+    );
     navigate(`${routePrefix}/ride/searching`, {
       state: {
         pickup,
@@ -1098,7 +1312,7 @@ const SelectVehicle = () => {
         dropCoords,
         stops,
         service_location_id: routeState.service_location_id || routeState.serviceLocationId || '',
-        transport_type: selectedVehicle.transportType || routeState.transport_type || routeState.transportType || 'taxi',
+        transport_type: resolvedTransportType,
         vehicle: selectedVehicle,
         vehicleTypeId: selectedVehicle.vehicleTypeId,
         vehicleIconType: selectedVehicle.iconType,
@@ -1301,14 +1515,27 @@ const SelectVehicle = () => {
                   />
                 )}
 
-                <button
-                  type="button"
+                <div
+                  role={canSelectVehicle ? 'button' : undefined}
+                  tabIndex={canSelectVehicle ? 0 : undefined}
                   onClick={() => {
                     if (canSelectVehicle) {
                       setSelected(v.id);
                     }
                   }}
-                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                  onKeyDown={(event) => {
+                    if (!canSelectVehicle) {
+                      return;
+                    }
+
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setSelected(v.id);
+                    }
+                  }}
+                  className={`flex min-w-0 flex-1 items-center gap-3 text-left ${
+                    canSelectVehicle ? 'cursor-pointer' : 'cursor-default'
+                  }`}
                 >
                   <div className={`w-16 h-14 rounded-[18px] flex items-center justify-center shrink-0 transition-all duration-300 ${
                     isSelected ? 'bg-white shadow-sm scale-105' : isUnavailable ? 'bg-slate-200' : 'bg-slate-50'
@@ -1354,17 +1581,39 @@ const SelectVehicle = () => {
                       )}
                     </div>
                   </div>
-                </button>
+                </div>
 
                 <div className="flex flex-col items-end gap-2 shrink-0 z-10">
-                  <button
-                    type="button"
-                    onClick={() => setPreviewVehicleId(v.id)}
-                    aria-label={`View details for ${v.name}`}
-                    className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-orange-200 hover:text-orange-500"
-                  >
-                    <Eye size={15} strokeWidth={2.4} />
-                  </button>
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewVehicleId(v.id)}
+                      aria-label={`View details for ${v.name}`}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-orange-200 hover:text-orange-500"
+                    >
+                      <Eye size={15} strokeWidth={2.4} />
+                    </button>
+                    {isSelected && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          openPicker(scheduledAtInputRef);
+                        }}
+                        className={`flex h-8 min-w-[56px] items-center justify-center gap-1 rounded-full border px-2 transition-all ${
+                          rideMode === 'schedule'
+                            ? 'border-blue-100 bg-blue-50 text-blue-600 shadow-[0_10px_24px_-12px_rgba(59,130,246,0.6)]'
+                            : 'border-slate-200 bg-white text-slate-600'
+                        }`}
+                        aria-label={rideMode === 'schedule' ? `Scheduled for ${formatScheduledDisplay(scheduledAt)}` : `Schedule ${v.name}`}
+                        title={rideMode === 'schedule' ? formatScheduledDisplay(scheduledAt) : `Schedule ${v.name}`}
+                      >
+                        <Clock3 size={13} strokeWidth={2.4} />
+                        <span className="text-[8px] font-black uppercase tracking-wider">
+                          {rideMode === 'schedule' ? 'Set' : 'Later'}
+                        </span>
+                      </button>
+                    )}
+                  </div>
                   <div className="text-right">
                     <span className={`text-[15px] font-black tracking-tight block ${isUnavailable ? 'text-slate-300' : 'text-slate-900'}`}>
                       {isUnavailable ? 'N/A' : isFarePending ? '...' : formatVehicleFare(v)}
@@ -1375,18 +1624,6 @@ const SelectVehicle = () => {
                       </span>
                     )}
                   </div>
-                  {isSelected && (
-                    <motion.div
-                      layoutId="check-icon"
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="w-5 h-5 rounded-full bg-orange-500 flex items-center justify-center"
-                    >
-                      <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                        <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </motion.div>
-                  )}
                 </div>
               </motion.div>
             );
@@ -1410,33 +1647,15 @@ const SelectVehicle = () => {
             className="sr-only"
           />
 
-          <motion.button
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setShowPaymentModal(true)}
-            className="w-full flex items-center justify-between px-4 py-2.5 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-7 h-7 rounded-xl bg-white flex items-center justify-center shadow-sm border border-slate-50">
-                {paymentMethod === 'Cash' ? <Banknote size={15} className="text-emerald-600" /> : <CreditCard size={15} className="text-blue-600" />}
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-none mb-0.5">Method</p>
-                <span className="text-[13px] font-bold text-slate-800">{paymentMethod}</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-1 text-slate-400">
-              <span className="text-[10px] font-bold uppercase">Change</span>
-              <ChevronRight size={12} strokeWidth={3} />
-            </div>
-          </motion.button>
-
           <div className="flex items-stretch gap-3">
             <motion.button
               whileHover={canProceed ? { scale: 1.01, translateY: -2 } : {}}
               whileTap={canProceed ? { scale: 0.98 } : undefined}
               disabled={!canProceed}
               onClick={handleBook}
-              className={`flex-1 py-4 rounded-[20px] text-[15px] font-extrabold shadow-xl transition-all duration-300 uppercase tracking-tight flex items-center justify-center gap-3 ${
+              className={`py-4 rounded-[20px] text-[15px] font-extrabold shadow-xl transition-all duration-300 uppercase tracking-tight flex items-center justify-center gap-3 ${
+                shouldShowBottomPaymentAction ? 'flex-1' : 'w-full'
+              } ${
                 canProceed
                   ? 'bg-[#f8e001] text-slate-900 shadow-[0_12px_28px_-4px_rgba(248,224,1,0.4)] active:shadow-none'
                   : 'bg-slate-200 text-slate-400 shadow-none cursor-not-allowed'
@@ -1470,24 +1689,27 @@ const SelectVehicle = () => {
                     </>
                   )
                   : `${selectedVehicle.name} Unavailable`
-                : 'Select Vehicle'}
+                : rideMode !== 'schedule' && !hasBookableVehicles
+                  ? 'No Vehicles Available'
+                  : 'Select Vehicle'}
             </motion.button>
 
-            <button
-              type="button"
-              onClick={() => {
-                openPicker(scheduledAtInputRef);
-              }}
-              className={`flex h-auto min-h-[56px] w-[56px] shrink-0 items-center justify-center rounded-[20px] border transition-all ${
-                rideMode === 'schedule'
-                  ? 'border-blue-100 bg-blue-50 text-blue-600 shadow-[0_10px_24px_-12px_rgba(59,130,246,0.6)]'
-                  : 'border-slate-200 bg-white text-slate-600'
-              }`}
-              aria-label={rideMode === 'schedule' ? `Scheduled for ${formatScheduledDisplay(scheduledAt)}` : 'Schedule ride'}
-              title={rideMode === 'schedule' ? formatScheduledDisplay(scheduledAt) : 'Schedule ride'}
-            >
-              <Clock3 size={18} strokeWidth={2.4} />
-            </button>
+            {shouldShowBottomPaymentAction && (
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(true)}
+                className={`flex h-auto min-h-[56px] min-w-[72px] shrink-0 flex-col items-center justify-center rounded-[20px] border transition-all ${
+                  paymentMethod === 'Cash'
+                    ? 'border-emerald-100 bg-emerald-50 text-emerald-600 shadow-[0_10px_24px_-12px_rgba(16,185,129,0.45)]'
+                    : 'border-blue-100 bg-blue-50 text-blue-600 shadow-[0_10px_24px_-12px_rgba(59,130,246,0.45)]'
+                }`}
+                aria-label={`Payment method ${paymentMethod}`}
+                title={`Payment method ${paymentMethod}`}
+              >
+                {paymentMethod === 'Cash' ? <Banknote size={18} strokeWidth={2.4} /> : <CreditCard size={18} strokeWidth={2.4} />}
+                <span className="mt-1 text-[9px] font-black uppercase tracking-wider">{paymentMethod}</span>
+              </button>
+            )}
           </div>
 
           {rideMode === 'schedule' ? (
@@ -1498,10 +1720,6 @@ const SelectVehicle = () => {
                 Scheduled for {formatScheduledDisplay(scheduledAt)}. Drivers will be notified automatically.
               </p>
             )
-          ) : selectedVehicle?.supportsBidding && !shouldUseDriverBidding ? (
-            <p className="text-[11px] font-medium text-slate-500">
-              If nobody accepts, you can increase the fare later from the searching screen.
-            </p>
           ) : null}
         </div>
       </div>
