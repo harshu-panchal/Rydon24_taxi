@@ -1416,7 +1416,7 @@ const ServiceCenterDashboard = () => {
 
         {!isStaffUser && activeTab === 'staff' && (
           <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-lg font-bold text-slate-950">Staff Members</h2>
                 <p className="mt-1 text-sm text-slate-500">Add staff with their login number so they can handle assigned bookings.</p>
@@ -1424,41 +1424,51 @@ const ServiceCenterDashboard = () => {
               <button
                 type="button"
                 onClick={() => setShowStaffForm(true)}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 sm:w-auto"
               >
                 <UserRoundPlus size={16} />
                 Add Staff
               </button>
             </div>
 
-            <div className="mt-6 space-y-3">
+            <div className="mt-6 grid gap-4">
               {staff.length > 0 ? (
                 staff.map((member) => (
-                  <div key={member.id || member._id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-bold text-slate-900">{member.name}</p>
-                        <p className="mt-1 text-sm text-slate-500">{member.phone}</p>
+                  <div key={member.id || member._id} className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 flex items-start gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                          <UserRoundPlus size={18} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold text-slate-900">{member.name}</p>
+                          <p className="mt-1 text-sm text-slate-500">{member.phone}</p>
+                          <div className="mt-3 inline-flex rounded-full bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-600 shadow-sm">
+                            {String(member.status || (member.active !== false ? 'active' : 'inactive'))}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="rounded-full bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
+                      <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+                        <div className="rounded-full bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600 shadow-sm">
                           {(activeBookingCountByStaffId.get(String(member.id || member._id)) ?? member.bookingCount ?? 0)} bookings
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => handleEditStaff(member)}
-                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          disabled={savingStaff}
-                          onClick={() => handleDeleteStaff(member)}
-                          className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
-                        >
-                          Delete
-                        </button>
+                        <div className="grid w-full grid-cols-2 gap-2 sm:w-auto">
+                          <button
+                            type="button"
+                            onClick={() => handleEditStaff(member)}
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            disabled={savingStaff}
+                            onClick={() => handleDeleteStaff(member)}
+                            className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
