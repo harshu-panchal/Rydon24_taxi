@@ -1173,6 +1173,104 @@ const normalizeZoneCoordinates = (coordinates = []) => {
   return ring;
 };
 
+const normalizeZoneCircleCenter = (payload = {}) => {
+  const lat = Number(payload?.lat);
+  const lng = Number(payload?.lng);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new ApiError(400, 'Zone circle center contains invalid coordinates');
+  }
+
+  return { lat, lng };
+};
+
+const normalizeZoneCircleRadius = (radius) => {
+  const parsed = Number(radius);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new ApiError(400, 'Zone circle radius must be greater than 0');
+  }
+
+  return parsed;
+};
+
+const buildCirclePolygonRing = (center, radiusMeters, segments = 36) => {
+  const earthRadiusMeters = 6378137;
+  const latRadians = (Number(center.lat) * Math.PI) / 180;
+  const lngRadians = (Number(center.lng) * Math.PI) / 180;
+  const angularDistance = Number(radiusMeters) / earthRadiusMeters;
+  const ring = [];
+
+  for (let index = 0; index < segments; index += 1) {
+    const bearing = (2 * Math.PI * index) / segments;
+    const sinLat = Math.sin(latRadians);
+    const cosLat = Math.cos(latRadians);
+    const sinAngular = Math.sin(angularDistance);
+    const cosAngular = Math.cos(angularDistance);
+    const sinBearing = Math.sin(bearing);
+    const cosBearing = Math.cos(bearing);
+
+    const pointLat = Math.asin(
+      sinLat * cosAngular + cosLat * sinAngular * cosBearing,
+    );
+    const pointLng =
+      lngRadians +
+      Math.atan2(
+        sinBearing * sinAngular * cosLat,
+        cosAngular - sinLat * Math.sin(pointLat),
+      );
+
+    ring.push([
+      Number((((pointLng * 180) / Math.PI + 540) % 360) - 180),
+      Number((pointLat * 180) / Math.PI),
+    ]);
+  }
+
+  if (ring.length > 0) {
+    ring.push([...ring[0]]);
+  }
+
+  return ring;
+};
+
+const normalizeZoneGeometryPayload = (payload = {}, existing = {}) => {
+  const boundaryMode = String(
+    payload.boundary_mode || existing.boundary_mode || 'polygon',
+  ).toLowerCase() === 'circle'
+    ? 'circle'
+    : 'polygon';
+
+  if (boundaryMode === 'circle') {
+    const center = normalizeZoneCircleCenter(payload.circle_center || existing.circle_center || {});
+    const radiusMeters = normalizeZoneCircleRadius(
+      payload.circle_radius_meters ?? existing.circle_radius_meters,
+    );
+
+    return {
+      boundary_mode: 'circle',
+      circle_center: center,
+      circle_radius_meters: radiusMeters,
+      geometry: {
+        type: 'Polygon',
+        coordinates: [buildCirclePolygonRing(center, radiusMeters)],
+      },
+    };
+  }
+
+  return {
+    boundary_mode: 'polygon',
+    circle_center: {
+      lat: null,
+      lng: null,
+    },
+    circle_radius_meters: null,
+    geometry: {
+      type: 'Polygon',
+      coordinates: [normalizeZoneCoordinates(payload.coordinates)],
+    },
+  };
+};
+
 const normalizeAirportBoundary = (coordinates = []) => normalizeZoneCoordinates(coordinates);
 
 const normalizePointLocationPayload = (payload = {}, fallback = {}) => {
@@ -1208,6 +1306,17 @@ const serializeZone = (zone) => ({
   maximum_distance_for_outstation_rides: zone.maximum_distance_for_outstation_rides,
   active: zone.active !== false,
   status: zone.status || (zone.active === false ? 'inactive' : 'active'),
+  boundary_mode: zone.boundary_mode || 'polygon',
+  circle_center:
+    Number.isFinite(Number(zone.circle_center?.lat)) && Number.isFinite(Number(zone.circle_center?.lng))
+      ? {
+          lat: Number(zone.circle_center.lat),
+          lng: Number(zone.circle_center.lng),
+        }
+      : null,
+  circle_radius_meters: Number.isFinite(Number(zone.circle_radius_meters))
+    ? Number(zone.circle_radius_meters)
+    : null,
   coordinates: Array.isArray(zone.geometry?.coordinates?.[0])
     ? zone.geometry.coordinates[0].map(([lng, lat]) => ({ lat: Number(lat), lng: Number(lng) }))
     : [],
@@ -6497,6 +6606,8 @@ export const getDashboardData = async () => {
       throw new ApiError(400, 'Zone name is required');
     }
 
+    const normalizedGeometry = normalizeZoneGeometryPayload(payload);
+
     const zone = await Zone.create({
       name: String(payload.name).trim(),
       service_location_id: payload.service_location_id ? toObjectId(payload.service_location_id) : null,
@@ -6510,10 +6621,10 @@ export const getDashboardData = async () => {
       maximum_distance_for_outstation_rides: toNullableNumber(payload.maximum_distance_for_outstation_rides),
       active: payload.status ? payload.status === 'active' : true,
       status: payload.status || 'active',
-      geometry: {
-        type: 'Polygon',
-        coordinates: [normalizeZoneCoordinates(payload.coordinates)],
-      },
+      boundary_mode: normalizedGeometry.boundary_mode,
+      circle_center: normalizedGeometry.circle_center,
+      circle_radius_meters: normalizedGeometry.circle_radius_meters,
+      geometry: normalizedGeometry.geometry,
     });
 
     const populatedZone = await Zone.findById(zone._id)
@@ -6561,11 +6672,17 @@ export const getDashboardData = async () => {
       zone.status = payload.status || 'active';
       zone.active = zone.status === 'active';
     }
-    if (payload.coordinates !== undefined) {
-      zone.geometry = {
-        type: 'Polygon',
-        coordinates: [normalizeZoneCoordinates(payload.coordinates)],
-      };
+    if (
+      payload.coordinates !== undefined ||
+      payload.boundary_mode !== undefined ||
+      payload.circle_center !== undefined ||
+      payload.circle_radius_meters !== undefined
+    ) {
+      const normalizedGeometry = normalizeZoneGeometryPayload(payload, zone);
+      zone.boundary_mode = normalizedGeometry.boundary_mode;
+      zone.circle_center = normalizedGeometry.circle_center;
+      zone.circle_radius_meters = normalizedGeometry.circle_radius_meters;
+      zone.geometry = normalizedGeometry.geometry;
     }
 
     await zone.save();

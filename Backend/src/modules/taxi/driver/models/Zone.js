@@ -54,6 +54,26 @@ const zoneSchema = new mongoose.Schema(
       default: 'active',
       trim: true,
     },
+    boundary_mode: {
+      type: String,
+      enum: ['polygon', 'circle'],
+      default: 'polygon',
+      trim: true,
+    },
+    circle_center: {
+      lat: {
+        type: Number,
+        default: null,
+      },
+      lng: {
+        type: Number,
+        default: null,
+      },
+    },
+    circle_radius_meters: {
+      type: Number,
+      default: null,
+    },
     geometry: {
       type: {
         type: String,

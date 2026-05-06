@@ -25,6 +25,7 @@ import {
 import {
   GoogleMap,
   DrawingManager,
+  Circle,
   Polygon,
   Autocomplete,
 } from "@react-google-maps/api";
@@ -58,12 +59,16 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
   const [countryBoundaryPaths, setCountryBoundaryPaths] = useState([]);
   const [boundaryLoading, setBoundaryLoading] = useState(false);
   const mapRef = useRef(null);
+  const circleRef = useRef(null);
+  const circleListenersRef = useRef([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('English');
-  const [isPeakInfoOpen, setIsPeakInfoOpen] = useState(false);
 
   // Map & Drawing States
+  const [boundaryMode, setBoundaryMode] = useState('polygon');
   const [polygonCoords, setPolygonCoords] = useState([]);
+  const [circleCenter, setCircleCenter] = useState(null);
+  const [circleRadiusMeters, setCircleRadiusMeters] = useState('');
   const { isLoaded, loadError } = useAppGoogleMapsLoader();
 
   // Form State
@@ -166,9 +171,51 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
       lat: p.lat(),
       lng: p.lng()
     }));
+    setBoundaryMode('polygon');
     setPolygonCoords(coords);
+    setCircleCenter(null);
+    setCircleRadiusMeters('');
     polygon.setMap(null);
   };
+
+  const onCircleComplete = (circle) => {
+    const center = circle.getCenter();
+    setBoundaryMode('circle');
+    setCircleCenter({
+      lat: center.lat(),
+      lng: center.lng(),
+    });
+    setCircleRadiusMeters(String(Math.round(circle.getRadius())));
+    setPolygonCoords([]);
+    circle.setMap(null);
+  };
+
+  const syncCircleState = () => {
+    const circle = circleRef.current;
+    if (!circle) {
+      return;
+    }
+
+    const center = circle.getCenter();
+    const radius = circle.getRadius();
+
+    if (center) {
+      setCircleCenter({
+        lat: center.lat(),
+        lng: center.lng(),
+      });
+    }
+
+    if (Number.isFinite(radius)) {
+      setCircleRadiusMeters(String(Math.round(radius)));
+    }
+  };
+
+  useEffect(() => () => {
+    circleListenersRef.current.forEach((listener) => listener?.remove?.());
+    circleListenersRef.current = [];
+    circleRef.current = null;
+  }, []);
 
   const onPlaceChanged = () => {
     if (autocomplete !== null) {
@@ -185,15 +232,25 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
   };
 
   const handleSave = async () => {
-    if (!formData.name.English.trim() || polygonCoords.length === 0) {
-      alert("Please add a zone name and draw a polygon on the map.");
+    const hasPolygon = boundaryMode === 'polygon' && polygonCoords.length >= 3;
+    const hasCircle =
+      boundaryMode === 'circle' &&
+      Number(circleRadiusMeters) > 0 &&
+      Number.isFinite(Number(circleCenter?.lat)) &&
+      Number.isFinite(Number(circleCenter?.lng));
+
+    if (!formData.name.English.trim() || (!hasPolygon && !hasCircle)) {
+      alert("Please add a zone name and draw a polygon or circle boundary on the map.");
       return;
     }
     setSaving(true);
     try {
       const payload = {
         ...formData,
-        coordinates: polygonCoords,
+        boundary_mode: boundaryMode,
+        coordinates: boundaryMode === 'polygon' ? polygonCoords : undefined,
+        circle_center: boundaryMode === 'circle' ? circleCenter : undefined,
+        circle_radius_meters: boundaryMode === 'circle' ? Number(circleRadiusMeters) : undefined,
         name: formData.name.English
       };
       const res = editingId 
@@ -229,7 +286,10 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
       maximum_distance_for_outstation_rides: '',
       status: 'active'
     });
+    setBoundaryMode('polygon');
     setPolygonCoords([]);
+    setCircleCenter(null);
+    setCircleRadiusMeters('');
     setCountryBoundaryPaths([]);
   };
 
@@ -289,7 +349,22 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
       });
     }
     if (parsedCoords.length > 0) setMapCenter(parsedCoords[0]);
+    const nextBoundaryMode = zone.boundary_mode === 'circle' ? 'circle' : 'polygon';
+    setBoundaryMode(nextBoundaryMode);
     setPolygonCoords(parsedCoords);
+    setCircleCenter(
+      zone.circle_center && Number.isFinite(Number(zone.circle_center?.lat)) && Number.isFinite(Number(zone.circle_center?.lng))
+        ? {
+            lat: Number(zone.circle_center.lat),
+            lng: Number(zone.circle_center.lng),
+          }
+        : null,
+    );
+    setCircleRadiusMeters(
+      zone.circle_radius_meters !== null && zone.circle_radius_meters !== undefined
+        ? String(zone.circle_radius_meters)
+        : '',
+    );
   };
 
   const handleExplore = (zone) => {
@@ -539,80 +614,42 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                       </div>
 
                       <div>
-                        <label className={labelClass}>Select Unit</label>
-                        <select 
-                           value={formData.unit} 
-                           onChange={(e) => setFormData({...formData, unit: e.target.value})} 
-                           className={inputClass}
-                        >
-                           <option value="">Choose Unit</option>
-                           <option value="km">KM</option>
-                           <option value="miles">Miles</option>
-                        </select>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                         <div>
-                            <label className={labelClass}>Peak Zone Ride Count *</label>
-                            <input 
-                              type="number" value={formData.peak_zone_ride_count}
-                              onChange={(e) => setFormData({...formData, peak_zone_ride_count: e.target.value})}
-                              placeholder="Ride Count"
-                              className={inputClass}
-                            />
-                         </div>
-                         <div>
-                            <label className={labelClass}>Peak Zone Radius *</label>
-                            <input 
-                              type="number" value={formData.peak_zone_radius}
-                              onChange={(e) => setFormData({...formData, peak_zone_radius: e.target.value})}
-                              placeholder="Radius"
-                              className={inputClass}
-                            />
-                         </div>
-                         <div>
-                            <label className={labelClass}>Peak Selection Duration (mins) *</label>
-                            <input 
-                              type="number" value={formData.peak_zone_selection_duration}
-                              onChange={(e) => setFormData({...formData, peak_zone_selection_duration: e.target.value})}
-                              placeholder="Duration in mins"
-                              className={inputClass}
-                            />
-                         </div>
-                         <div>
-                            <label className={labelClass}>Peak Zone Duration (mins) *</label>
-                            <input 
-                              type="number" value={formData.peak_zone_duration}
-                              onChange={(e) => setFormData({...formData, peak_zone_duration: e.target.value})}
-                              placeholder="Duration in mins"
-                              className={inputClass}
-                            />
-                         </div>
-                      </div>
-
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                           <label className={labelClass + " mb-0"}>Peak Zone Surge percentage *</label>
-                           <button
-                             type="button"
-                             onClick={() => setIsPeakInfoOpen((current) => !current)}
-                             className="text-[10px] font-semibold text-indigo-600 hover:text-indigo-700 tracking-wider uppercase"
-                           >
-                             How It Works
-                           </button>
+                        <label className={labelClass}>Boundary Shape</label>
+                        <div className="grid grid-cols-2 gap-3">
+                          {[
+                            { id: 'polygon', label: 'Polygon Boundary' },
+                            { id: 'circle', label: 'Circle Radius' },
+                          ].map((option) => (
+                            <button
+                              key={option.id}
+                              type="button"
+                              onClick={() => setBoundaryMode(option.id)}
+                              className={`rounded-lg border px-4 py-3 text-sm font-semibold transition-colors ${
+                                boundaryMode === option.id
+                                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                                  : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
                         </div>
-                        <input 
-                           type="number" value={formData.peak_zone_surge_percentage}
-                           onChange={(e) => setFormData({...formData, peak_zone_surge_percentage: e.target.value})}
-                           placeholder="Enter Surge percentage"
-                           className={inputClass}
-                        />
-                        {isPeakInfoOpen ? (
-                          <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-xs font-medium leading-relaxed text-indigo-900">
-                            When ride demand inside the zone crosses the peak ride count during the selection duration, this surge percentage is applied for the configured peak zone duration before normal pricing resumes.
-                          </div>
-                        ) : null}
                       </div>
+
+                      {boundaryMode === 'circle' ? (
+                        <div>
+                          <label className={labelClass}>Circle Boundary Radius (meters)</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={circleRadiusMeters}
+                            onChange={(e) => setCircleRadiusMeters(e.target.value)}
+                            placeholder="Enter circle radius in meters"
+                            className={inputClass}
+                          />
+                        </div>
+                      ) : null}
+
                    </div>
                 </div>
 
@@ -659,7 +696,11 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                         </div>
                         <button 
                           type="button"
-                          onClick={() => setPolygonCoords([])}
+                          onClick={() => {
+                            setPolygonCoords([]);
+                            setCircleCenter(null);
+                            setCircleRadiusMeters('');
+                          }}
                           className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-[11px] font-black uppercase tracking-widest text-rose-600 shadow-sm transition-all border border-gray-200 hover:bg-rose-50 active:scale-95"
                         >
                           <X size={14} />
@@ -690,7 +731,10 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                                drawingControl: true,
                                drawingControlOptions: {
                                  position: window.google.maps.ControlPosition.TOP_RIGHT,
-                                 drawingModes: [window.google.maps.drawing.OverlayType.POLYGON],
+                                 drawingModes: [
+                                   window.google.maps.drawing.OverlayType.POLYGON,
+                                   window.google.maps.drawing.OverlayType.CIRCLE,
+                                 ],
                                },
                                polygonOptions: {
                                  fillColor: '#4f46e5',
@@ -699,14 +743,51 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                                  strokeWeight: 2,
                                  editable: true,
                                },
+                               circleOptions: {
+                                 fillColor: '#0f766e',
+                                 fillOpacity: 0.12,
+                                 strokeColor: '#0f766e',
+                                 strokeWeight: 2,
+                                 editable: true,
+                               },
                              }}
+                             onCircleComplete={onCircleComplete}
                            />
-                           {polygonCoords.length > 0 && (
+                           {boundaryMode === 'polygon' && polygonCoords.length > 0 && (
                              <Polygon
                                paths={polygonCoords}
                                options={{ fillColor: '#4f46e5', strokeColor: '#4f46e5', strokeWeight: 2, fillOpacity: 0.25, editable: true, draggable: true }}
                              />
                            )}
+                           {boundaryMode === 'circle' && circleCenter && Number(circleRadiusMeters) > 0 ? (
+                             <Circle
+                               center={circleCenter}
+                               radius={Number(circleRadiusMeters)}
+                               options={{
+                                 fillColor: '#0f766e',
+                                 strokeColor: '#0f766e',
+                                 strokeWeight: 2,
+                                 fillOpacity: 0.18,
+                                 editable: true,
+                                 draggable: true,
+                               }}
+                               onLoad={(circle) => {
+                                 circleListenersRef.current.forEach((listener) => listener?.remove?.());
+                                 circleListenersRef.current = [];
+                                 circleRef.current = circle;
+                                 circleListenersRef.current = [
+                                   circle.addListener('dragend', syncCircleState),
+                                   circle.addListener('radius_changed', syncCircleState),
+                                   circle.addListener('mouseup', syncCircleState),
+                                 ];
+                               }}
+                               onUnmount={() => {
+                                 circleListenersRef.current.forEach((listener) => listener?.remove?.());
+                                 circleListenersRef.current = [];
+                                 circleRef.current = null;
+                               }}
+                             />
+                           ) : null}
                            {countryBoundaryPaths.map((path, index) => (
                               <Polygon
                                 key={index} paths={path}
@@ -734,8 +815,7 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                     <Maximize2 className="absolute -right-4 -bottom-4 text-white/10" size={120} />
                     <h4 className="text-sm font-semibold mb-2">Instructions</h4>
                     <p className="text-xs text-indigo-100 leading-relaxed">
-                      Use the polygon tool at the top center of the map to draw your zone. Click to place vertices and return to the first point to close the shape. 
-                      The red dashed line represents the country boundary for reference.
+                      Use the polygon or circle tool at the top of the map to define your zone boundary. Click to place polygon vertices and close the shape, or drop a circle and adjust its radius for a radial market boundary. The red dashed line represents the country boundary for reference.
                     </p>
                 </div>
               </div>
