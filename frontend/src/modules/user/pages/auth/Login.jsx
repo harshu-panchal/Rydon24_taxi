@@ -61,20 +61,20 @@ const Login = () => {
           <label htmlFor="phone" className="text-sm font-semibold text-gray-700 tracking-tight ml-1">
             Mobile Number
           </label>
-            <div className="flex items-center gap-3 bg-[#F6F6F6] rounded-2xl p-4 focus-within:ring-2 focus-within:ring-black/5 focus-within:bg-white transition-all border border-transparent">
-            <div className="flex items-center gap-2 pr-3 border-r border-gray-200 opacity-70">
-               <img src="https://flagcdn.com/w40/in.png" alt="India" className="w-5 h-3.5 object-cover rounded-sm" />
-               <span className="text-[15px] font-bold text-gray-800">+91</span>
+            <div className="flex items-center gap-2 bg-[#F6F6F6] rounded-2xl p-4 focus-within:ring-2 focus-within:ring-black/5 focus-within:bg-white transition-all border border-transparent">
+            <div className="flex items-center gap-1.5 pr-2 border-r border-gray-200 opacity-70">
+               <img src="https://flagcdn.com/w40/in.png" alt="India" className="w-4 h-2.5 object-cover rounded-sm" />
+               <span className="text-[14px] font-bold text-gray-800 tracking-tight">+91</span>
             </div>
-            <div className="flex-1 flex items-center gap-3">
-               <Phone size={18} className="text-gray-400 opacity-50" />
+            <div className="flex-1 flex items-center gap-2">
+               <Phone size={16} className="text-gray-400 opacity-50 shrink-0" />
                <input 
                   type="tel" 
                   id="phone"
                   autoFocus
                   maxLength={10}
                   placeholder="Enter 10-digit number"
-                  className="w-full bg-transparent border-none text-[17px] font-medium text-gray-900 placeholder:text-gray-300 focus:outline-none"
+                  className="w-full bg-transparent border-none text-[17px] font-medium text-gray-900 placeholder:text-gray-300 focus:outline-none tracking-tight"
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
                />

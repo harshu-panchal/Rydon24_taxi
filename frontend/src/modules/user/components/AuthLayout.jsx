@@ -74,7 +74,7 @@ const AuthLayout = ({ children, title, subtitle }) => {
       </div>
 
       {/* Right side (Mobile-first login card) */}
-      <div className="flex-1 flex items-start lg:items-center justify-center p-4 md:p-12 pt-44 lg:pt-12 relative w-full bg-white lg:bg-[#F8F9FB]">
+      <div className="flex-1 flex items-start lg:items-center justify-center p-4 md:p-12 pt-36 lg:pt-12 relative w-full bg-white lg:bg-[#F8F9FB]">
         {/* Mobile Header (Visible only on small screens) */}
         <div className="lg:hidden absolute top-8 left-0 right-0 flex flex-col items-center px-4 text-center">
             {appLogo ? (
