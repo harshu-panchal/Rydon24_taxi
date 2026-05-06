@@ -677,16 +677,26 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                       <div className="w-full md:max-w-md">
                         <div className="flex h-12 w-full items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 shadow-sm">
                            <Search className="text-gray-400" size={18} />
-                           <Autocomplete 
-                              onLoad={a => setAutocomplete(a)} 
-                              onPlaceChanged={onPlaceChanged}
-                              className="flex-1"
-                            >
-                              <input 
-                                type="text" placeholder="Search for a city or zone" 
-                                className="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none placeholder:text-gray-400"
-                              />
-                           </Autocomplete>
+                           {isLoaded ? (
+                             <Autocomplete
+                               onLoad={a => setAutocomplete(a)}
+                               onPlaceChanged={onPlaceChanged}
+                               className="flex-1"
+                             >
+                               <input
+                                 type="text"
+                                 placeholder="Search for a city or zone"
+                                 className="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none placeholder:text-gray-400"
+                               />
+                             </Autocomplete>
+                           ) : (
+                             <input
+                               type="text"
+                               placeholder={loadError ? "Google Maps failed to load" : "Loading map search..."}
+                               disabled
+                               className="w-full bg-transparent text-sm font-semibold text-gray-400 outline-none placeholder:text-gray-400"
+                             />
+                           )}
                         </div>
                       </div>
 
