@@ -6,6 +6,7 @@ import { AdminBusinessSetting } from '../admin/models/AdminBusinessSetting.js';
 import { SetPrice } from '../admin/models/SetPrice.js';
 import { Vehicle } from '../admin/models/Vehicle.js';
 import { Driver } from '../driver/models/Driver.js';
+import { incrementDriverTodaySummaryForCompletedRide } from '../driver/services/driverTodaySummaryService.js';
 import { ensureDriverWalletCanAcceptRide, settleCompletedRideWallet } from '../driver/services/walletService.js';
 import { Delivery } from '../user/models/Delivery.js';
 import { RideBid } from '../user/models/RideBid.js';
@@ -1315,6 +1316,13 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
       User.findByIdAndUpdate(ride.userId, { currentRideId: null }),
       Driver.findByIdAndUpdate(driverId, { isOnRide: false }),
     ]);
+
+    await incrementDriverTodaySummaryForCompletedRide({
+      driverId,
+      completedAt: ride.completedAt,
+      driverEarnings: ride.driverEarnings,
+      distanceMeters: ride.estimatedDistanceMeters,
+    });
 
     walletUpdate = await settleCompletedRideWallet({ rideId: ride._id });
     await processCompletedRideReferralReward(ride);

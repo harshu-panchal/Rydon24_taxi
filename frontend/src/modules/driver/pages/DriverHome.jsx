@@ -579,7 +579,6 @@ const DriverHome = () => {
     const [showLowBalanceModal, setShowLowBalanceModal] = useState(false);
 
     const [currentRequest, setCurrentRequest] = useState(null);
-    const [dutySeconds, setDutySeconds] = useState(0);
     const [todaySummary, setTodaySummary] = useState(() => normalizeTodaySummary());
     const [isTodaySummaryExpanded, setIsTodaySummaryExpanded] = useState(true);
     const [map, setMap] = useState(null);
@@ -1071,7 +1070,8 @@ const DriverHome = () => {
             }
         };
 
-        intervalId = setInterval(syncSummary, 60000);
+        syncSummary();
+        intervalId = setInterval(syncSummary, isOnline ? 30000 : 120000);
 
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
@@ -1086,7 +1086,7 @@ const DriverHome = () => {
             clearInterval(intervalId);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
-    }, [refreshTodaySummary]);
+    }, [isOnline, refreshTodaySummary]);
 
     useEffect(() => {
         if (map && driverCoords) {
@@ -1850,18 +1850,7 @@ const DriverHome = () => {
         };
     }, [isOnline, scheduleRecoveryBurst]);
     
-    useEffect(() => {
-        let interval;
-        if (isOnline) {
-            interval = setInterval(() => setDutySeconds(s => s + 1), 1000);
-        } else {
-            clearInterval(interval);
-            setDutySeconds(0);
-        }
-        return () => clearInterval(interval);
-    }, [isOnline]);
-
-    const liveActiveSeconds = Math.max(0, Number(todaySummary.activeSeconds || 0)) + (isOnline ? dutySeconds : 0);
+    const liveActiveSeconds = Math.max(0, Number(todaySummary.activeSeconds || 0));
     const dutyHours = Math.floor(liveActiveSeconds / 3600);
     const dutyMins = Math.floor((liveActiveSeconds % 3600) / 60);
 

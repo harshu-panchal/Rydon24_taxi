@@ -65,6 +65,10 @@ import {
   startDriverOnboarding,
   verifyDriverOtp,
 } from "../services/onboardingService.js";
+import {
+  buildDriverTodaySummaryFromDocument,
+  syncDriverTodaySummaryDocument,
+} from "../services/driverTodaySummaryService.js";
 
 const generateDriverReferralCode = (driver) => {
   const idPart = String(driver?._id || "")
@@ -668,53 +672,7 @@ const buildDriverIncentiveSnapshot = ({ driver, settings, rides }) => {
   };
 };
 
-const buildDriverTodaySummary = async (driver) => {
-  const todayKey = toIstDayKey(new Date());
-  const todayStart = getIstDayStart(new Date());
-  const liveTracking = mergeOnlineSessionIntoTracking(
-    driver?.incentiveTracking || {},
-    driver?.incentiveTracking?.currentOnlineStartedAt,
-    new Date(),
-  );
-  const todayActivity = Array.isArray(liveTracking?.dailyActivity)
-    ? liveTracking.dailyActivity.find((item) => item?.date === todayKey)
-    : null;
-
-  const [metrics] = await Ride.aggregate([
-    {
-      $match: {
-        driverId: driver?._id,
-        status: RIDE_STATUS.COMPLETED,
-        completedAt: { $gte: todayStart },
-      },
-    },
-    {
-      $group: {
-        _id: null,
-        rides: { $sum: 1 },
-        earnings: {
-          $sum: {
-            $ifNull: ["$driverEarnings", 0],
-          },
-        },
-        distanceMeters: {
-          $sum: {
-            $ifNull: ["$estimatedDistanceMeters", 0],
-          },
-        },
-      },
-    },
-  ]);
-
-  return {
-    dateKey: todayKey,
-    rides: Number(metrics?.rides || 0),
-    earnings: Number(metrics?.earnings || 0),
-    distanceMeters: Number(metrics?.distanceMeters || 0),
-    activeMinutes: Number(todayActivity?.activeMinutes || 0),
-    activeSeconds: Math.round(Number(todayActivity?.activeMinutes || 0) * 60),
-  };
-};
+const buildDriverTodaySummary = async (driver) => buildDriverTodaySummaryFromDocument(driver);
 
 const normalizePaymentAmount = (value) => {
   const amount = Number(value);
@@ -1570,6 +1528,7 @@ export const goOnline = async (req, res) => {
     existingDriver.incentiveTracking?.currentOnlineStartedAt,
     new Date(),
   );
+  const nextTodaySummary = buildDriverTodaySummaryFromDocument(existingDriver);
 
   const nextOnlineSelfie =
     hasTodaySelfie && !String(selfieImageUrl || "").trim()
@@ -1593,6 +1552,7 @@ export const goOnline = async (req, res) => {
         currentOnlineStartedAt: new Date(),
         claimedRewards: pruneClaimedRewards(trackingBeforeOnline?.claimedRewards),
       },
+      todaySummary: nextTodaySummary,
     },
     { returnDocument: 'after' },
   );
@@ -1687,7 +1647,7 @@ export const getCurrentDriver = async (req, res) => {
 
   await clearDriverActiveRideIfStale(driver);
   const vehicleIconUrl = await resolveVehicleMapIcon(driver.vehicleTypeId);
-  const todaySummary = await buildDriverTodaySummary(driver);
+  const todaySummary = await syncDriverTodaySummaryDocument(driver);
 
   res.json({
     success: true,
@@ -1728,7 +1688,7 @@ export const getCurrentDriver = async (req, res) => {
         ? driver.emergencyContacts.map(serializeEmergencyContact)
         : [],
       onboarding: driver.onboarding || {},
-      todaySummary,
+      todaySummary: todaySummary || buildDriverTodaySummaryFromDocument(driver),
     },
   });
 };
@@ -4835,6 +4795,7 @@ export const goOffline = async (req, res) => {
     existingDriver.incentiveTracking?.currentOnlineStartedAt,
     new Date(),
   );
+  const finalizedTodaySummary = buildDriverTodaySummaryFromDocument(existingDriver);
 
   const driver = await Driver.findByIdAndUpdate(
     req.auth.sub,
@@ -4846,6 +4807,7 @@ export const goOffline = async (req, res) => {
         currentOnlineStartedAt: null,
         claimedRewards: pruneClaimedRewards(finalizedTracking?.claimedRewards),
       },
+      todaySummary: finalizedTodaySummary,
     },
     { returnDocument: 'after' },
   );

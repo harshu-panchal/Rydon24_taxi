@@ -578,142 +578,11 @@ const RideComplete = () => {
                 <span className="text-[15px] font-black text-slate-900">Total</span>
                 <span className="text-[18px] font-black text-slate-900">Rs {totalBill.toFixed(2)}</span>
               </div>
-              <div className="mt-2 text-right">
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600">
-                  {paymentMethodLabel}
-                </span>
-              </div>
             </div>
           </div>
         </div>
 
         <div className="rounded-[20px] border border-white/80 bg-white/95 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
-          {!isSubmitted ? (
-            <div className="mb-5">
-              <p className="text-center text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-                Choose payment method
-              </p>
-              <div className="mt-3 grid gap-2">
-                {PAYMENT_OPTIONS.map(({ id, label, sub, Icon }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedPaymentMethod(id);
-                      setError('');
-                    }}
-                    className={`flex items-center gap-3 rounded-[18px] border px-3 py-3 text-left transition-all ${
-                      selectedPaymentMethod === id
-                        ? 'border-orange-200 bg-orange-50/80'
-                        : 'border-slate-100 bg-slate-50/70'
-                    }`}
-                  >
-                    <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${
-                      selectedPaymentMethod === id ? 'bg-white text-orange-500' : 'bg-white text-slate-500'
-                    }`}>
-                      <Icon size={18} strokeWidth={2.5} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[13px] font-black text-slate-900">{label}</p>
-                      <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{sub}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-              <div className="mt-3 rounded-[18px] border border-slate-100 bg-slate-50/80 p-3">
-                {selectedPaymentMethod === 'online' ? (
-                  <>
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Choose online method</p>
-                    <div className="mt-2 grid grid-cols-1 gap-2">
-                      {ONLINE_PAYMENT_OPTIONS.map((option) => (
-                        <button
-                          key={option.id}
-                          type="button"
-                          onClick={() => setSelectedOnlineMethod(option.id)}
-                          className={`rounded-[14px] border px-3 py-2 text-left transition-all ${
-                            selectedOnlineMethod === option.id
-                              ? 'border-orange-200 bg-orange-50'
-                              : 'border-slate-100 bg-white'
-                          }`}
-                        >
-                          <p className="text-[12px] font-black text-slate-900">{option.label}</p>
-                          <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{option.sub}</p>
-                        </button>
-                      ))}
-                    </div>
-                    <div className="mt-3 rounded-[14px] border border-orange-100 bg-white px-3 py-2">
-                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
-                        <span>Ride fare</span>
-                        <span className="text-slate-900">Rs {fare.toFixed(2)}</span>
-                      </div>
-                      <div className="mt-1 flex items-center justify-between text-[11px] font-bold text-slate-500">
-                        <span>Tip</span>
-                        <span className="text-slate-900">Rs {Number(selectedTip || 0).toFixed(2)}</span>
-                      </div>
-                      <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2">
-                        <span className="text-[12px] font-black text-slate-900">Trip total</span>
-                        <span className="text-[14px] font-black text-slate-900">Rs {totalBill.toFixed(2)}</span>
-                      </div>
-                      <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2">
-                        <span className="text-[12px] font-black text-slate-900">Pay now</span>
-                        <span className="text-[14px] font-black text-orange-600">Rs {Number(payableNow || 0).toFixed(2)}</span>
-                      </div>
-                    </div>
-                    <p className="mt-2 text-[11px] font-bold text-slate-500">
-                      You&apos;ll continue in Razorpay checkout with {ONLINE_PAYMENT_OPTIONS.find((option) => option.id === selectedOnlineMethod)?.label || 'your selected method'} to pay the current due amount on this screen.
-                    </p>
-                  </>
-                ) : null}
-
-                {selectedPaymentMethod === 'wallet' ? (
-                  <>
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Wallet balance</p>
-                        <p className="mt-1 text-[16px] font-black text-slate-900">
-                          {walletLoading ? 'Loading...' : `Rs ${Number(walletSnapshot.balance || 0).toFixed(2)}`}
-                        </p>
-                      </div>
-                      <div className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
-                        {walletSnapshot.currency || 'INR'}
-                      </div>
-                    </div>
-                    <div className="mt-3 rounded-[14px] border border-emerald-100 bg-white px-3 py-2">
-                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
-                        <span>Ride fare</span>
-                        <span className="text-slate-900">Rs {fare.toFixed(2)}</span>
-                      </div>
-                      <div className="mt-1 flex items-center justify-between text-[11px] font-bold text-slate-500">
-                        <span>Tip</span>
-                        <span className="text-slate-900">Rs {Number(selectedTip || 0).toFixed(2)}</span>
-                      </div>
-                      <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2">
-                        <span className="text-[12px] font-black text-slate-900">Trip total</span>
-                        <span className="text-[14px] font-black text-slate-900">Rs {totalBill.toFixed(2)}</span>
-                      </div>
-                      <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2">
-                        <span className="text-[12px] font-black text-slate-900">Pay now</span>
-                        <span className="text-[14px] font-black text-emerald-600">Rs {Number(payableNow || 0).toFixed(2)}</span>
-                      </div>
-                    </div>
-                    <p className="mt-2 text-[11px] font-bold text-slate-500">
-                      Wallet payment on this screen will cover the current due amount, including fare if it has not been collected yet.
-                    </p>
-                    {Number(payableNow || 0) > Number(walletSnapshot.balance || 0) ? (
-                      <p className="mt-2 text-[11px] font-black text-red-500">Not enough wallet balance for the current due amount.</p>
-                    ) : null}
-                  </>
-                ) : null}
-
-                {selectedPaymentMethod === 'cash' ? (
-                  <p className="text-[11px] font-bold text-slate-500">
-                    Cash payment on this screen is treated as an offline handoff to the driver.
-                  </p>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
           {isSubmitted ? (
             <div className="text-center">
               <p className="text-center text-[10px] font-black uppercase tracking-[0.22em] text-emerald-500">
@@ -799,32 +668,16 @@ const RideComplete = () => {
           <button
             type="button"
             onClick={submitFeedback}
-            disabled={isSubmitting || isSubmitted || !isRideFinalized || (selectedPaymentMethod === 'wallet' && Number(payableNow || 0) > Number(walletSnapshot.balance || 0))}
+            disabled={isSubmitting || isSubmitted || !isRideFinalized}
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-[16px] bg-slate-900 py-3.5 text-[14px] font-black text-white shadow-[0_12px_24px_rgba(15,23,42,0.18)] disabled:opacity-60"
           >
             {isSubmitting
-              ? (
-                payableNow > 0
-                  ? selectedPaymentMethod === 'online'
-                    ? `Opening online payment for Rs ${payableNow.toFixed(2)}...`
-                    : selectedPaymentMethod === 'wallet'
-                      ? `Paying Rs ${payableNow.toFixed(2)} from wallet...`
-                      : `Saving cash payment of Rs ${payableNow.toFixed(2)}...`
-                  : 'Saving your feedback...'
-              )
+              ? 'Saving your feedback...'
               : isSubmitted
                 ? 'Feedback already saved'
                 : !isRideFinalized
                   ? 'Waiting for driver to finalize trip'
-                : (
-                  payableNow > 0
-                    ? selectedPaymentMethod === 'wallet'
-                      ? `Pay Rs ${payableNow.toFixed(2)} from wallet`
-                      : selectedPaymentMethod === 'online'
-                        ? `Pay Rs ${payableNow.toFixed(2)} online`
-                        : `Confirm cash payment of Rs ${payableNow.toFixed(2)}`
-                    : 'Submit rating'
-                )}
+                : 'Submit rating'}
             <ChevronRight size={16} />
           </button>
 

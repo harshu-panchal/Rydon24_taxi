@@ -707,19 +707,35 @@ const ActiveTrip = () => {
         '',
     ).trim();
 
-    const pickupCoords = readCoordinatePair(
-        liveRaw?.pickup,
-        liveRaw?.pickupLocation,
-        liveRequest?.pickup,
-        liveRequest?.pickupLocation,
-        liveRequest?.raw?.pickup,
-        liveRequest?.raw?.pickupLocation,
-        effectiveState?.pickup,
-        effectiveState?.pickupLocation,
-        effectiveState?.request?.raw?.pickup,
-        effectiveState?.request?.raw?.pickupLocation,
-        effectiveState?.pickupCoords,
-    ) || resolvedPickupCoords || DEFAULT_DRIVER_COORDS;
+    const pickupCoords = useMemo(
+        () => readCoordinatePair(
+            liveRaw?.pickup,
+            liveRaw?.pickupLocation,
+            liveRequest?.pickup,
+            liveRequest?.pickupLocation,
+            liveRequest?.raw?.pickup,
+            liveRequest?.raw?.pickupLocation,
+            effectiveState?.pickup,
+            effectiveState?.pickupLocation,
+            effectiveState?.request?.raw?.pickup,
+            effectiveState?.request?.raw?.pickupLocation,
+            effectiveState?.pickupCoords,
+        ) || resolvedPickupCoords || DEFAULT_DRIVER_COORDS,
+        [
+            effectiveState?.pickup,
+            effectiveState?.pickupCoords,
+            effectiveState?.pickupLocation,
+            effectiveState?.request?.raw?.pickup,
+            effectiveState?.request?.raw?.pickupLocation,
+            liveRaw?.pickup,
+            liveRaw?.pickupLocation,
+            liveRequest?.pickup,
+            liveRequest?.pickupLocation,
+            liveRequest?.raw?.pickup,
+            liveRequest?.raw?.pickupLocation,
+            resolvedPickupCoords,
+        ],
+    );
     const dropCoords = useMemo(
         () => readCoordinatePair(
             liveRaw?.drop,
@@ -788,7 +804,10 @@ const ActiveTrip = () => {
     const hasHydratedUiStateRef = React.useRef(false);
     const mapFrameKeyRef = React.useRef('');
 
-    const activeDestination = phase === 'to_pickup' || phase === 'otp_verification' ? pickupPosition : dropPosition;
+    const activeDestination = useMemo(
+        () => (phase === 'to_pickup' || phase === 'otp_verification' ? pickupPosition : dropPosition),
+        [dropPosition, phase, pickupPosition],
+    );
     const pickupDistanceMeters = useMemo(
         () => getDistanceMeters(driverPosition, pickupPosition),
         [driverPosition, pickupPosition],
@@ -1526,7 +1545,9 @@ const ActiveTrip = () => {
 
     useEffect(() => {
         if (!isSimulationEnabled && !hasResolvedLivePositionRef.current) {
-            setDriverPosition(initialDriverPosition);
+            setDriverPosition((currentPosition) =>
+                arePositionsNearlyEqual(currentPosition, initialDriverPosition) ? currentPosition : initialDriverPosition,
+            );
         }
     }, [initialDriverPosition, isSimulationEnabled]);
 
@@ -1656,7 +1677,11 @@ const ActiveTrip = () => {
         }
 
         if (arePositionsNearlyEqual(driverPosition, activeDestination)) {
-            setRoutePath([driverPosition]);
+            setRoutePath((currentPath) => (
+                currentPath.length === 1 && arePositionsNearlyEqual(currentPath[0], driverPosition)
+                    ? currentPath
+                    : [driverPosition]
+            ));
             setRouteError('');
             return;
         }

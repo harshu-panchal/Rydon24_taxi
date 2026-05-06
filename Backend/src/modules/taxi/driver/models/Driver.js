@@ -353,6 +353,37 @@ const driverSchema = new mongoose.Schema(
         default: [],
       },
     },
+    todaySummary: {
+      dateKey: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      rides: {
+        type: Number,
+        default: 0,
+      },
+      earnings: {
+        type: Number,
+        default: 0,
+      },
+      distanceMeters: {
+        type: Number,
+        default: 0,
+      },
+      activeMinutes: {
+        type: Number,
+        default: 0,
+      },
+      activeSeconds: {
+        type: Number,
+        default: 0,
+      },
+      updatedAt: {
+        type: Date,
+        default: null,
+      },
+    },
   },
   { 
     timestamps: true,
