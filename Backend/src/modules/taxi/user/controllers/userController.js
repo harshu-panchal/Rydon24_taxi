@@ -888,9 +888,30 @@ const computeRentalRideMetrics = (item = {}, endedAt = null) => {
   };
 };
 
+const resolveAuthenticatedUserObjectId = (req) => {
+  const userId = String(req.auth?.sub || '').trim();
+  return mongoose.Types.ObjectId.isValid(userId) ? userId : '';
+};
+
 const toPositiveInteger = (value, fallback) => {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const buildPagination = ({ page = 1, limit = 10, total = 0 }) => {
+  const safeLimit = Math.max(1, Number(limit) || 10);
+  const safeTotal = Math.max(0, Number(total) || 0);
+  const totalPages = Math.max(1, Math.ceil(safeTotal / safeLimit));
+  const safePage = Math.min(Math.max(1, Number(page) || 1), totalPages);
+
+  return {
+    page: safePage,
+    limit: safeLimit,
+    total: safeTotal,
+    totalPages,
+    hasNextPage: safePage < totalPages,
+    hasPrevPage: safePage > 1,
+  };
 };
 
 const toUserPayload = (user) => ({
@@ -2873,8 +2894,17 @@ export const createRentalBookingRequest = async (req, res) => {
 };
 
 export const getMyActiveRentalBooking = async (req, res) => {
+  const userId = resolveAuthenticatedUserObjectId(req);
+
+  if (!userId) {
+    return res.status(200).json({
+      success: true,
+      data: null,
+    });
+  }
+
   const item = await RentalBookingRequest.findOne({
-    userId: req.auth?.sub,
+    userId,
     status: { $in: ['assigned', 'confirmed', 'end_requested'] },
   })
     .sort({ updatedAt: -1, createdAt: -1 })
@@ -2904,8 +2934,20 @@ export const getMyActiveRentalBooking = async (req, res) => {
 export const listMyRentalBookings = async (req, res) => {
   const page = toPositiveInteger(req.query?.page, 1);
   const limit = Math.min(20, toPositiveInteger(req.query?.limit, 10));
+  const userId = resolveAuthenticatedUserObjectId(req);
+
+  if (!userId) {
+    return res.status(200).json({
+      success: true,
+      data: {
+        results: [],
+        pagination: buildPagination({ page, limit, total: 0 }),
+      },
+    });
+  }
+
   const query = {
-    userId: req.auth?.sub,
+    userId,
   };
 
   const [items, total] = await Promise.all([
@@ -2928,14 +2970,19 @@ export const listMyRentalBookings = async (req, res) => {
 
 export const endMyActiveRentalRide = async (req, res) => {
   const bookingId = String(req.params?.id || '').trim();
+  const userId = resolveAuthenticatedUserObjectId(req);
 
   if (!mongoose.Types.ObjectId.isValid(bookingId)) {
     throw new ApiError(400, 'Valid rental booking id is required');
   }
 
+  if (!userId) {
+    throw new ApiError(401, 'Authenticated user id is invalid');
+  }
+
   const item = await RentalBookingRequest.findOne({
     _id: bookingId,
-    userId: req.auth?.sub,
+    userId,
   });
 
   if (!item) {
