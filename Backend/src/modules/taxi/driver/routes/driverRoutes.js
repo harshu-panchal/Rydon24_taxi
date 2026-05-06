@@ -65,6 +65,7 @@ import {
   deleteOwnerFleetVehicle,
   updateCurrentDriverDocument,
 } from "../controllers/driverController.js";
+import { triggerDriverSosAlert } from '../../safety/controllers/safetyController.js';
 
 export const driverRouter = Router();
 
@@ -114,6 +115,11 @@ driverRouter.post(
   "/me/delete-request",
   authenticate(["driver"]),
   asyncHandler(requestDriverAccountDeletion),
+);
+driverRouter.post(
+  "/sos",
+  authenticate(["driver", "owner"]),
+  asyncHandler(triggerDriverSosAlert),
 );
 driverRouter.get(
   "/emergency-contacts",

@@ -18,6 +18,7 @@ const scheduledDispatchTimers = new Map();
 
 export const getUserRoom = (userId) => `user:${userId}`;
 export const getDriverRoom = (driverId) => `driver:${driverId}`;
+export const getAdminRoom = () => 'admin:broadcast';
 
 export const setSocketServer = (io) => {
   ioInstance = io;
@@ -28,6 +29,11 @@ export const joinRideRoom = (socket, rideId) => {
 };
 
 export const addSocketSubscriptions = (socket, { role, entityId }) => {
+  if (role === 'admin') {
+    socket.join(getAdminRoom());
+    return;
+  }
+
   if (role === 'user') {
     socket.join(getUserRoom(entityId));
     return;
@@ -70,6 +76,10 @@ export const emitToDriver = (driverId, event, payload) => {
   if (driverId) {
     emitToRoom(getDriverRoom(driverId), event, payload);
   }
+};
+
+export const emitToAdmins = (event, payload) => {
+  emitToRoom(getAdminRoom(), event, payload);
 };
 
 const clearDispatchTimer = (rideId) => {
