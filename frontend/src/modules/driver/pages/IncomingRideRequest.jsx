@@ -195,7 +195,7 @@ const IncomingRideRequest = ({
                 </div>
                 <div className="min-w-0">
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/45">{isPreviewMode ? 'Scheduled trip' : 'Ride offer'}</p>
-                  <h2 className="mt-1 truncate text-[22px] font-black leading-tight tracking-tight">{title}</h2>
+                  <h2 className="mt-1 text-[21px] font-black leading-tight tracking-tight">{title}</h2>
                   <p className="mt-0.5 truncate text-[12px] font-semibold text-white/55">{category}</p>
                   {isPreviewMode ? (
                     <p className="mt-1 truncate text-[10px] font-black uppercase tracking-[0.14em] text-white/35">
@@ -389,7 +389,7 @@ const IncomingRideRequest = ({
               )
             ) : (
               <>
-                <div className="grid grid-cols-[86px_1fr] gap-3">
+                <div className="grid grid-cols-[86px_1fr] gap-3 items-end">
                   <button
                     type="button"
                     onClick={onDecline}
