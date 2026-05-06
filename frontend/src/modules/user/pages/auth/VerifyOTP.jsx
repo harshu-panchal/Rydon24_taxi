@@ -197,23 +197,22 @@ const VerifyOTP = () => {
       title=""
       subtitle=""
     >
-      <div className="mb-8">
-        <div className="grid grid-cols-[2.5rem_1fr_2.5rem] items-start gap-3 lg:grid-cols-[1fr]">
+      <div className="mb-6">
+        <div className="flex items-start gap-4">
           <button
             onClick={() => navigate(-1)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-900 shadow-sm transition-all hover:bg-gray-50 lg:hidden"
+            className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-900 shadow-sm transition-all hover:bg-gray-50"
           >
             <ArrowLeft size={20} className="text-gray-900" />
           </button>
-          <div className="text-center lg:text-left">
-            <h1 className="text-3xl md:text-4xl font-black text-gray-900 leading-tight tracking-tight">
+          <div className="text-left">
+            <h1 className="text-2xl md:text-3xl font-black text-gray-900 leading-tight tracking-tight">
               Verify your number
             </h1>
-            <p className="mt-4 text-base font-medium leading-relaxed text-gray-500">
-              {`Enter the 4-digit code sent to +91 ${maskedPhone || phone}`}
+            <p className="mt-2 text-[15px] font-medium leading-snug text-gray-500">
+              Enter the 4-digit code sent to <span className="text-black font-bold whitespace-nowrap">+91 {maskedPhone || phone}</span>
             </p>
           </div>
-          <div className="h-10 w-10 lg:hidden" />
         </div>
       </div>
 
