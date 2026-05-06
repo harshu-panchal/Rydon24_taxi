@@ -45,6 +45,28 @@ const getOverlayCenterOffset = (width = 56, height = 56) => ({
   y: -(height / 2),
 });
 
+const getMarkerDimensionsForZoom = (zoom) => {
+  const normalizedZoom = Number.isFinite(Number(zoom)) ? Number(zoom) : 13;
+
+  if (normalizedZoom <= 10) {
+    return { shell: 76, pulse: 52, icon: 42 };
+  }
+
+  if (normalizedZoom <= 11) {
+    return { shell: 70, pulse: 48, icon: 38 };
+  }
+
+  if (normalizedZoom <= 12) {
+    return { shell: 64, pulse: 44, icon: 35 };
+  }
+
+  if (normalizedZoom <= 13) {
+    return { shell: 58, pulse: 40, icon: 32 };
+  }
+
+  return { shell: 54, pulse: 36, icon: 30 };
+};
+
 const normalizeHeading = (value) => {
   const numeric = Number(value);
 
@@ -64,8 +86,9 @@ const calculateHeadingBetween = (from, to) => {
   return normalizeHeading((angle * 180) / Math.PI + 90);
 };
 
-const AnimatedVehicleMarker = React.memo(({ driver, iconUrl, isMapInteracting = false }) => {
+const AnimatedVehicleMarker = React.memo(({ driver, iconUrl, isMapInteracting = false, mapZoom = 13 }) => {
   const position = getDriverPosition(driver);
+  const markerDimensions = useMemo(() => getMarkerDimensionsForZoom(mapZoom), [mapZoom]);
 
   if (!position) {
     return null;
@@ -75,36 +98,34 @@ const AnimatedVehicleMarker = React.memo(({ driver, iconUrl, isMapInteracting = 
     <OverlayView
       position={position}
       mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
-      getPixelPositionOffset={getOverlayCenterOffset}
+      getPixelPositionOffset={() => getOverlayCenterOffset(markerDimensions.shell, markerDimensions.shell)}
     >
-      <div className="pointer-events-none relative flex h-14 w-14 items-center justify-center">
+      <div
+        className="pointer-events-none relative flex items-center justify-center"
+        style={{ width: markerDimensions.shell, height: markerDimensions.shell }}
+      >
         {!isMapInteracting && (
           <motion.span
-            className="absolute h-9 w-9 rounded-full border border-emerald-500/35 bg-emerald-400/10"
-            animate={{ scale: [0.8, 1.45, 0.8], opacity: [0.28, 0.08, 0.28] }}
+            className="absolute rounded-full border border-emerald-500/35 bg-emerald-400/10"
+            style={{ width: markerDimensions.pulse, height: markerDimensions.pulse }}
+            animate={{ scale: [0.92, 1.2, 0.92], opacity: [0.24, 0.08, 0.24] }}
             transition={{ repeat: Infinity, duration: 2.2, ease: 'easeInOut' }}
           />
         )}
-        <motion.img
-          src={iconUrl || CarIcon}
-          alt={driver?.name || 'Available driver'}
-          draggable={false}
-          className="relative h-8 w-8 object-contain drop-shadow-[0_6px_8px_rgba(15,23,42,0.34)] will-change-transform"
-          animate={
-            isMapInteracting
-              ? { rotate: normalizeHeading(driver?.heading) }
-              : {
-                  rotate: normalizeHeading(driver?.heading),
-                  x: [0, 1.5, 0],
-                  y: [0, -1, 0],
-                }
-          }
-          transition={{
-            rotate: { duration: 0.8, ease: [0.22, 1, 0.36, 1] },
-            x: { repeat: Infinity, duration: 1.6, ease: 'easeInOut' },
-            y: { repeat: Infinity, duration: 1.6, ease: 'easeInOut' },
-          }}
-        />
+        <motion.div
+          className="relative flex items-center justify-center"
+          style={{ width: markerDimensions.icon + 10, height: markerDimensions.icon + 10 }}
+          animate={{ rotate: normalizeHeading(driver?.heading) }}
+          transition={{ rotate: { duration: 0.8, ease: [0.22, 1, 0.36, 1] } }}
+        >
+          <img
+            src={iconUrl || CarIcon}
+            alt={driver?.name || 'Available driver'}
+            draggable={false}
+            className="object-contain drop-shadow-[0_6px_8px_rgba(15,23,42,0.34)] will-change-transform"
+            style={{ width: markerDimensions.icon, height: markerDimensions.icon }}
+          />
+        </motion.div>
       </div>
     </OverlayView>
   );
@@ -132,9 +153,11 @@ const buildFallbackRoute = (origin, destination) => {
 };
 
 const VehicleMapPreview = React.memo(({ center, dropPosition, stops = [], drivers, selectedVehicle, isLoaded, loadError }) => {
+  const mapRef = useRef(null);
   const [routePath, setRoutePath] = useState([]);
   const [routeError, setRouteError] = useState('');
   const [isMapInteracting, setIsMapInteracting] = useState(false);
+  const [mapZoom, setMapZoom] = useState(13);
   const waypointRequests = useMemo(
     () =>
       (Array.isArray(stops) ? stops : [])
@@ -228,8 +251,18 @@ const VehicleMapPreview = React.memo(({ center, dropPosition, stops = [], driver
         center={center}
         zoom={13}
         options={SELECT_VEHICLE_MAP_OPTIONS}
+        onLoad={(map) => {
+          mapRef.current = map;
+          setMapZoom(map.getZoom?.() || 13);
+        }}
+        onUnmount={() => {
+          mapRef.current = null;
+        }}
         onDragStart={() => setIsMapInteracting(true)}
-        onZoomChanged={() => setIsMapInteracting((current) => (current ? current : true))}
+        onZoomChanged={() => {
+          setIsMapInteracting(true);
+          setMapZoom(mapRef.current?.getZoom?.() || 13);
+        }}
         onIdle={() => setIsMapInteracting(false)}
       >
         <MarkerF
@@ -274,6 +307,7 @@ const VehicleMapPreview = React.memo(({ center, dropPosition, stops = [], driver
             driver={driver}
             iconUrl={selectedVehicle?.vehicleIconUrl || selectedVehicle?.icon || '/4_Taxi.png'}
             isMapInteracting={isMapInteracting}
+            mapZoom={mapZoom}
           />
         ))}
       </GoogleMap>
