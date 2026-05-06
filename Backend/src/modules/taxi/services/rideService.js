@@ -549,6 +549,16 @@ export const getAllowedRidePaymentMethodsForPricing = async ({ serviceLocationId
   };
 };
 
+const normalizeRideTransportType = (value = 'taxi') => {
+  const normalized = String(value || 'taxi').trim().toLowerCase() || 'taxi';
+
+  if (normalized === 'both' || normalized === 'all') {
+    return 'taxi';
+  }
+
+  return normalized;
+};
+
 const buildDriverVehicleAcceptFilter = async (ride) => {
   const vehicleTypeIds = normalizeVehicleTypeIds(ride.dispatchVehicleTypeIds || [], ride.vehicleTypeId);
 
@@ -661,7 +671,7 @@ export const createRideRecord = async ({
   const resolvedVehicleIconUrl = String(
     vehicleIconUrl || primaryVehicle?.map_icon || primaryVehicle?.icon || primaryVehicle?.image || '',
   ).trim();
-  const normalizedTransportType = String(transport_type || 'taxi').trim().toLowerCase() || 'taxi';
+  const normalizedTransportType = normalizeRideTransportType(transport_type);
   const resolvedServiceLocationId =
     service_location_id && mongoose.Types.ObjectId.isValid(service_location_id)
       ? new mongoose.Types.ObjectId(service_location_id)
