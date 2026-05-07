@@ -4292,21 +4292,24 @@ export const getDriverDocumentTemplates = async (_req, res) => {
 export const getDriverVehicleFieldTemplates = async (req, res) => {
   const requestedRole = String(req.query?.role || "driver").trim().toLowerCase();
   const results = await listDriverVehicleFieldTemplates({ activeOnly: true });
+  const matchesAccountType = (accountType) => {
+    const normalizedAccountType = String(accountType || "individual").trim().toLowerCase();
+
+    if (normalizedAccountType === "both") {
+      return true;
+    }
+
+    if (requestedRole === "owner") {
+      return normalizedAccountType === "fleet_drivers" || normalizedAccountType === "fleet drivers";
+    }
+
+    return normalizedAccountType === "individual";
+  };
 
   res.json({
     success: true,
     data: {
-      results: results.filter((item) => {
-        if (item.account_type === "both") {
-          return true;
-        }
-
-        if (requestedRole === "owner") {
-          return item.account_type === "fleet_drivers";
-        }
-
-        return item.account_type === "individual";
-      }),
+      results: results.filter((item) => matchesAccountType(item.account_type)),
     },
   });
 };

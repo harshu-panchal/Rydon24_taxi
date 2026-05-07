@@ -25,6 +25,19 @@ const VEHICLE_NUMBER_REGEX = /^[A-Z]{2}\d{1,2}[A-Z]{1,3}\d{4}$/;
 const getCurrentVehicleYear = () => new Date().getFullYear();
 const normalizeVehicleNumber = (value = '') => String(value).replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 11);
 const normalizePostalCode = (value = '') => String(value).replace(/\D/g, '').slice(0, 6);
+const matchesVehicleFieldAccountType = (accountType, isOwner) => {
+    const normalizedAccountType = String(accountType || 'individual').trim().toLowerCase();
+
+    if (normalizedAccountType === 'both') {
+        return true;
+    }
+
+    if (isOwner) {
+        return normalizedAccountType === 'fleet_drivers' || normalizedAccountType === 'fleet drivers';
+    }
+
+    return normalizedAccountType === 'individual';
+};
 const normalizeServiceCategories = (value, registerFor = 'taxi') => {
     const rawValues = Array.isArray(value)
         ? value
@@ -245,12 +258,9 @@ const StepVehicle = () => {
         }));
     };
     const customVehicleFields = activeVehicleFields.filter((item) => !builtInVehicleFieldKeys.has(String(item?.field_key || '').trim()));
-    const visibleCustomVehicleFields = customVehicleFields.filter((item) => {
-        const accountType = String(item?.account_type || 'individual').trim().toLowerCase();
-        if (accountType === 'both') return true;
-        if (isOwner) return accountType === 'fleet_drivers';
-        return accountType === 'individual';
-    });
+    const visibleCustomVehicleFields = customVehicleFields.filter((item) =>
+        matchesVehicleFieldAccountType(item?.account_type, isOwner),
+    );
 
     const handleContinue = async () => {
         const required = isOwner
