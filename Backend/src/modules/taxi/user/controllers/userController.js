@@ -29,6 +29,11 @@ import { SetPrice } from '../../admin/models/SetPrice.js';
 import { applyDriverWalletAdjustment } from '../../driver/services/walletService.js';
 import { emitToDriver } from '../../services/dispatchService.js';
 import { sendPushNotificationToEntities } from '../../services/pushNotificationService.js';
+import {
+  getUserSubscriptionSummary,
+  listCustomerSubscriptionPlans,
+  purchaseUserSubscription,
+} from '../services/subscriptionService.js';
 
 const VALID_GENDERS = new Set(['male', 'female', 'other', 'prefer-not-to-say', '']);
 
@@ -945,7 +950,7 @@ const buildPagination = ({ page = 1, limit = 10, total = 0 }) => {
   };
 };
 
-const toUserPayload = (user) => ({
+const toUserPayload = (user, options = {}) => ({
   id: user._id,
   name: user.name || '',
   phone: user.phone || '',
@@ -958,6 +963,12 @@ const toUserPayload = (user) => ({
   referralCode: user.referralCode || '',
   referralCount: Number(user.referralCount || 0),
   currentRideId: user.currentRideId || null,
+  subscriptionSummary: options.subscriptionSummary || {
+    activeCount: 0,
+    hasUnlimitedPlan: false,
+    availableRideCredits: 0,
+    activePlans: [],
+  },
 });
 
 const ensureUserCanLogin = (user) => {
@@ -1341,22 +1352,13 @@ export const getCurrentUser = async (req, res) => {
     await user.save();
   }
 
+  const subscriptionSummary = await getUserSubscriptionSummary(user._id);
+
   res.json({
     success: true,
     data: {
       user: {
-        id: user._id,
-        name: user.name || '',
-        phone: user.phone || '',
-        email: user.email || '',
-        gender: user.gender || '',
-        profileImage: user.profileImage || '',
-        referralCode: user.referralCode || '',
-        referralCount: Number(user.referralCount || 0),
-        deletionRequestStatus: user.deletionRequest?.status || 'none',
-        referralCode: user.referralCode || '',
-        referralCount: Number(user.referralCount || 0),
-        currentRideId: user.currentRideId || null,
+        ...toUserPayload(user, { subscriptionSummary }),
         createdAt: user.createdAt || null,
       },
     },
@@ -1421,6 +1423,40 @@ export const updateCurrentUser = async (req, res) => {
     data: {
       user: toUserPayload(user),
     },
+  });
+};
+
+export const getAvailableSubscriptionPlans = async (_req, res) => {
+  const plans = await listCustomerSubscriptionPlans();
+
+  res.json({
+    success: true,
+    data: {
+      results: plans,
+    },
+  });
+};
+
+export const getMySubscriptions = async (req, res) => {
+  const summary = await getUserSubscriptionSummary(req.auth?.sub);
+
+  res.json({
+    success: true,
+    data: summary,
+  });
+};
+
+export const buySubscription = async (req, res) => {
+  const result = await purchaseUserSubscription({
+    userId: req.auth?.sub,
+    planId: req.body?.planId,
+    paymentSource: 'wallet',
+  });
+
+  res.status(201).json({
+    success: true,
+    data: result,
+    message: 'Subscription purchased successfully',
   });
 };
 

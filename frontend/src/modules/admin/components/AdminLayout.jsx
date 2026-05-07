@@ -738,6 +738,7 @@ const AdminLayout = () => {
             label: 'Customer Management',
             subItems: [
               { label: 'User List', path: '/admin/users', permission: 'users.view' },
+              { label: 'Subscription Management', path: '/admin/users/subscriptions', permission: 'users.view' },
               { label: 'Delete Request Users', path: '/admin/users/delete-requests', permission: 'users.view' },
               { label: 'User Bulk Upload', path: '/admin/users/bulk-upload', permission: 'users.view' },
             ],

@@ -14,6 +14,7 @@ import { RideBid } from '../user/models/RideBid.js';
 import { Ride } from '../user/models/Ride.js';
 import { User } from '../user/models/User.js';
 import { UserWallet } from '../user/models/UserWallet.js';
+import { consumeUserSubscriptionRide, resolveApplicableUserSubscription } from '../user/services/subscriptionService.js';
 import { applyPromoToRideInTransaction } from './promoService.js';
 import { getTipSettings } from './appSettingsService.js';
 import { getBidRideSettings } from './transportSettingsService.js';
@@ -806,7 +807,7 @@ export const createRideRecord = async ({
     vehicleTypeId: primaryVehicleTypeId,
   });
   const normalizedPaymentMethod = normalizeRidePaymentMethod(paymentMethod);
-  const effectivePaymentMethod = allowedPaymentMethods.includes(normalizedPaymentMethod)
+  const resolvedRequestedPaymentMethod = allowedPaymentMethods.includes(normalizedPaymentMethod)
     ? normalizedPaymentMethod
     : (allowedPaymentMethods[0] || 'cash');
   const supportsBidding = ['bidding', 'both'].includes(String(primaryVehicle?.dispatch_type || '').trim().toLowerCase());
@@ -849,9 +850,58 @@ export const createRideRecord = async ({
 
   const promoCode = typeof promo_code === 'string' ? promo_code.trim() : '';
   const normalizedScheduledAt = normalizeScheduledAt(scheduledAt);
+  const applicableSubscription = primaryVehicleTypeId
+    ? await resolveApplicableUserSubscription({
+        userId,
+        vehicleTypeId: primaryVehicleTypeId,
+      })
+    : null;
+  const isSubscriptionCovered = Boolean(applicableSubscription?._id);
+  const subscriptionBenefitType = String(applicableSubscription?.benefit_type || '').trim().toLowerCase() === 'unlimited'
+    ? 'unlimited'
+    : 'limited';
+  const subscriptionRideLimit = Math.max(0, Number(applicableSubscription?.ride_limit || 0));
+  const subscriptionRidesUsed = Math.max(0, Number(applicableSubscription?.rides_used || 0));
+  const subscriptionRidesRemaining = subscriptionBenefitType === 'unlimited'
+    ? null
+    : Math.max(0, subscriptionRideLimit - subscriptionRidesUsed);
+  const effectiveDriverPaymentCollection = isSubscriptionCovered
+    ? {
+        provider: 'subscription',
+        providerId: String(applicableSubscription._id),
+        providerOrderId: '',
+        providerPaymentId: '',
+        providerMode: 'subscription_wallet',
+        source: 'user_subscription',
+        status: 'paid',
+        amount: safeFare,
+        currency: 'INR',
+        linkUrl: '',
+        paidAt: new Date(),
+        updatedAt: new Date(),
+      }
+    : undefined;
+  const effectivePaymentMethod = isSubscriptionCovered ? 'online' : resolvedRequestedPaymentMethod;
+  const effectiveSubscriptionUsage = isSubscriptionCovered
+    ? {
+        covered: true,
+        subscriptionId: applicableSubscription._id,
+        planId: applicableSubscription.planId || null,
+        planName: applicableSubscription.name || '',
+        vehicleTypeId: applicableSubscription.vehicle_type_id || primaryVehicleTypeId,
+        benefitType: subscriptionBenefitType,
+        fareCovered: safeFare,
+        ridesUsedBefore: subscriptionRidesUsed,
+        ridesRemainingBefore: subscriptionRidesRemaining,
+      }
+    : undefined;
 
   if (scheduledAt && !normalizedScheduledAt) {
     throw new ApiError(400, 'scheduledAt is invalid');
+  }
+
+  if (isSubscriptionCovered && promoCode) {
+    throw new ApiError(400, 'Promo codes cannot be combined with subscription rides');
   }
 
   if (!promoCode) {
@@ -878,6 +928,8 @@ export const createRideRecord = async ({
       estimatedDistanceMeters: safeEstimatedDistanceMeters,
       estimatedDurationMinutes: safeEstimatedDurationMinutes,
       paymentMethod: effectivePaymentMethod,
+      driverPaymentCollection: effectiveDriverPaymentCollection,
+      subscriptionUsage: effectiveSubscriptionUsage,
       otp: generateRideOtp(),
       service_location_id: resolvedServiceLocationId,
       transport_type: normalizedTransportType,
@@ -929,6 +981,8 @@ export const createRideRecord = async ({
             estimatedDistanceMeters: safeEstimatedDistanceMeters,
             estimatedDurationMinutes: safeEstimatedDurationMinutes,
             paymentMethod: effectivePaymentMethod,
+            driverPaymentCollection: effectiveDriverPaymentCollection,
+            subscriptionUsage: effectiveSubscriptionUsage,
             otp: generateRideOtp(),
             service_location_id: resolvedServiceLocationId,
             transport_type: normalizedTransportType,
@@ -1024,6 +1078,27 @@ export const serializeRideRealtime = (ride) => ({
   estimatedDistanceMeters: ride.estimatedDistanceMeters || 0,
   estimatedDurationMinutes: ride.estimatedDurationMinutes || 0,
   paymentMethod: ride.paymentMethod,
+  subscriptionUsage: ride.subscriptionUsage?.covered
+    ? {
+        covered: true,
+        subscriptionId: ride.subscriptionUsage.subscriptionId ? String(ride.subscriptionUsage.subscriptionId) : '',
+        planId: ride.subscriptionUsage.planId ? String(ride.subscriptionUsage.planId) : '',
+        planName: ride.subscriptionUsage.planName || '',
+        vehicleTypeId: ride.subscriptionUsage.vehicleTypeId ? String(ride.subscriptionUsage.vehicleTypeId) : '',
+        benefitType: ride.subscriptionUsage.benefitType || '',
+        fareCovered: Number(ride.subscriptionUsage.fareCovered || 0),
+        ridesUsedBefore: Number(ride.subscriptionUsage.ridesUsedBefore || 0),
+        ridesRemainingBefore: ride.subscriptionUsage.ridesRemainingBefore === null
+          ? null
+          : Number(ride.subscriptionUsage.ridesRemainingBefore || 0),
+        ridesUsedAfter: ride.subscriptionUsage.ridesUsedAfter === null
+          ? null
+          : Number(ride.subscriptionUsage.ridesUsedAfter || 0),
+        ridesRemainingAfter: ride.subscriptionUsage.ridesRemainingAfter === null
+          ? null
+          : Number(ride.subscriptionUsage.ridesRemainingAfter || 0),
+      }
+    : null,
   driverPaymentCollection: ride.driverPaymentCollection
     ? {
         provider: ride.driverPaymentCollection.provider || '',
@@ -1441,6 +1516,7 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
     ]);
 
     walletUpdate = await settleCompletedRideWallet({ rideId: ride._id });
+    await consumeUserSubscriptionRide({ ride });
     const settledRide = await Ride.findById(ride._id).select('completedAt driverEarnings estimatedDistanceMeters');
 
     await incrementDriverTodaySummaryForCompletedRide({

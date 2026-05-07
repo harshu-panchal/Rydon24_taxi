@@ -13,6 +13,27 @@ const typeLabel = (value) =>
     .map((item) => item.charAt(0).toUpperCase() + item.slice(1))
     .join(' ');
 
+const vehicleFieldOrder = [
+  'locationId',
+  'serviceCategories',
+  'vehicleTypeId',
+  'make',
+  'model',
+  'year',
+  'number',
+  'color',
+  'companyName',
+  'companyAddress',
+  'city',
+  'postalCode',
+  'taxNumber',
+];
+
+const getVehicleFieldPriority = (fieldKey = '') => {
+  const index = vehicleFieldOrder.indexOf(String(fieldKey || '').trim());
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+};
+
 const GlobalDocuments = () => {
   const navigate = useNavigate();
   const [documents, setDocuments] = useState([]);
@@ -96,7 +117,16 @@ const GlobalDocuments = () => {
 
   const paginatedDocuments = filteredDocuments.slice(0, Number(pageSize));
   const paginatedVehicleFields = [...filteredVehicleFields]
-    .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0))
+    .sort((a, b) => {
+      const priorityDifference =
+        getVehicleFieldPriority(a.field_key) - getVehicleFieldPriority(b.field_key);
+
+      if (priorityDifference !== 0) {
+        return priorityDifference;
+      }
+
+      return Number(a.sort_order || 0) - Number(b.sort_order || 0);
+    })
     .slice(0, Number(pageSize));
 
   const renderStatusButton = (item) => (

@@ -114,6 +114,7 @@ const PaymentSettings = lazy(() => import('./modules/user/pages/profile/PaymentS
 const AddressSettings = lazy(() => import('./modules/user/pages/profile/AddressSettings'));
 const BusBookings = lazy(() => import('./modules/user/pages/profile/BusBookings'));
 const BusBookingDetail = lazy(() => import('./modules/user/pages/profile/BusBookingDetail'));
+const UserSubscriptions = lazy(() => import('./modules/user/pages/profile/Subscriptions'));
 // Driver Module - Common
 import DriverLayout from './modules/driver/components/DriverLayout';
 
@@ -176,6 +177,8 @@ const AdminUserDetails = lazy(() => import('./modules/admin/pages/users/UserDeta
 const AdminDeleteRequestUsers = lazy(() => import('./modules/admin/pages/users/DeleteRequestUsers'));
 const AdminUserBulkUpload = lazy(() => import('./modules/admin/pages/users/UserBulkUpload'));
 const AdminUserImportCreate = lazy(() => import('./modules/admin/pages/users/UserImportCreate'));
+const AdminUserSubscriptions = lazy(() => import('./modules/admin/pages/users/UserSubscriptions'));
+const AdminUserSubscriptionCreate = lazy(() => import('./modules/admin/pages/users/UserSubscriptionCreate'));
 
 // DRIVER MANAGEMENT IMPORTS
 const AdminDriverList = lazy(() => import('./modules/admin/pages/drivers/DriverList'));
@@ -922,6 +925,10 @@ function App() {
                 element={<BusBookingDetail />}
               />
               <Route
+                path="/taxi/user/profile/subscriptions"
+                element={<UserSubscriptions />}
+              />
+              <Route
                 path="/taxi/user/profile/notifications"
                 element={<UserNotifications />}
               />
@@ -1098,6 +1105,8 @@ function App() {
                 <Route path="wallet/payment" element={<AdminWalletPayment />} />
                 <Route path="users" element={<AdminUserList />} />
                 <Route path="users/create" element={<AdminUserCreate />} />
+                <Route path="users/subscriptions" element={<AdminUserSubscriptions />} />
+                <Route path="users/subscriptions/create" element={<AdminUserSubscriptionCreate />} />
                 <Route path="users/:id" element={<AdminUserDetails />} />
                 <Route
                   path="users/delete-requests"

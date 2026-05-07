@@ -42,6 +42,9 @@ import {
   verifyPhonePeWalletTopup,
   verifyUserOtpRequest,
   verifyUserPhoneForOtpLogin,
+  getAvailableSubscriptionPlans,
+  getMySubscriptions,
+  buySubscription,
 } from '../controllers/userController.js';
 import {
   searchPoolingRoutes,
@@ -76,6 +79,9 @@ userRouter.post('/otp-login', asyncHandler(verifyUserPhoneForOtpLogin));
 userRouter.post('/fcm-token', authenticateOrResolveUser(['user']), asyncHandler(saveUserFcmToken));
 userRouter.get('/me', authenticateOrResolveUser(['user']), asyncHandler(getCurrentUser));
 userRouter.patch('/me', authenticateOrResolveUser(['user']), asyncHandler(updateCurrentUser));
+userRouter.get('/subscriptions/plans', authenticateOrResolveUser(['user']), asyncHandler(getAvailableSubscriptionPlans));
+userRouter.get('/subscriptions/me', authenticateOrResolveUser(['user']), asyncHandler(getMySubscriptions));
+userRouter.post('/subscriptions/purchase', authenticateOrResolveUser(['user']), asyncHandler(buySubscription));
 userRouter.post('/me/delete-request', authenticateOrResolveUser(['user']), asyncHandler(requestAccountDeletion));
 userRouter.get('/notifications', authenticateOrResolveUser(['user']), asyncHandler(getUserNotifications));
 userRouter.delete('/notifications/:id', authenticateOrResolveUser(['user']), asyncHandler(deleteUserNotification));

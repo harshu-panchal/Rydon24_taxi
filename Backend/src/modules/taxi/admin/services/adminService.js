@@ -35,6 +35,7 @@ import { Driver } from '../../driver/models/Driver.js';
 import { BusDriver } from '../../driver/models/BusDriver.js';
 import { Zone } from '../../driver/models/Zone.js';
 import { Ride } from '../../user/models/Ride.js';
+import { UserSubscription } from '../../user/models/UserSubscription.js';
 import { AppLanguage } from '../models/AppLanguage.js';
 import { RideModule } from '../models/RideModule.js';
 import { SubscriptionPlan } from '../models/SubscriptionPlan.js';
@@ -413,6 +414,34 @@ const normalizeDriverRegisterFor = (value = '', fallback = 'taxi') => {
   if (normalized === 'auto') return 'auto';
   if (normalized === 'car') return 'car';
   return 'taxi';
+};
+
+const normalizeDriverServiceCategories = (value, fallback = 'taxi') => {
+  const rawValues = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(',')
+      : [];
+
+  const normalized = [...new Set(
+    rawValues
+      .map((item) => String(item || '').trim().toLowerCase())
+      .flatMap((item) => item === 'both' ? ['taxi', 'outstation'] : item ? [item] : [])
+      .filter((item) => ['taxi', 'outstation', 'delivery', 'pooling'].includes(item)),
+  )];
+
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  const registerFor = normalizeDriverRegisterFor(fallback);
+  if (registerFor === 'both') {
+    return ['taxi', 'outstation'];
+  }
+
+  return ['taxi', 'outstation', 'delivery', 'pooling'].includes(registerFor)
+    ? [registerFor]
+    : ['taxi'];
 };
 
 const normalizeDeliveryCategory = (value = '') => {
@@ -3589,6 +3618,14 @@ export const getUserById = async (id) => {
     throw new ApiError(404, 'User not found');
   }
 
+  const subscriptions = await UserSubscription.find({ userId: id })
+    .sort({ active: -1, expiresAt: 1, createdAt: -1 })
+    .populate('planId', 'name')
+    .populate('vehicle_type_id', 'name')
+    .lean();
+
+  const activeSubscriptions = subscriptions.filter((item) => item.active !== false && String(item.status || '') === 'active');
+
   const rides = await Ride.find({
     userId: id,
     'feedback.rating': { $gte: 1 },
@@ -3599,6 +3636,28 @@ export const getUserById = async (id) => {
 
   return {
     ...serializeUser(user),
+    subscriptionSummary: {
+      activeCount: activeSubscriptions.length,
+      activePlans: activeSubscriptions.map((item) => ({
+        id: String(item._id),
+        planId: item.planId?._id ? String(item.planId._id) : String(item.planId || ''),
+        name: item.name || item.planId?.name || '',
+        status: item.status || 'active',
+        benefit_type: item.benefit_type || 'limited',
+        ride_limit: Number(item.ride_limit || 0),
+        rides_used: Number(item.rides_used || 0),
+        rides_remaining: String(item.benefit_type || '') === 'unlimited'
+          ? null
+          : Math.max(0, Number(item.ride_limit || 0) - Number(item.rides_used || 0)),
+        vehicle_type: item.vehicle_type_id?._id
+          ? {
+              id: String(item.vehicle_type_id._id),
+              name: item.vehicle_type_id.name || '',
+            }
+          : null,
+        expiresAt: item.expiresAt || null,
+      })),
+    },
     reviews: rides.map((ride) => ({
       _id: ride._id,
       request_id: String(ride._id),
@@ -4466,9 +4525,9 @@ export const permanentlyDeleteDeletedDriver = async (id) => {
   return true;
 };
 
-export const createDriver = async (payload = {}) => {
+export const createDriver = async (payload = {}, currentAdmin = null) => {
   const name = String(payload.name || '').trim();
-  const phone = String(payload.phone || payload.mobile || '').trim();
+  const phone = String(payload.phone || payload.mobile || '').replace(/\D/g, '');
   const password = String(payload.password || '').trim();
   const passwordConfirmation = String(
     payload.password_confirmation || payload.passwordConfirmation || '',
@@ -4484,20 +4543,22 @@ export const createDriver = async (payload = {}) => {
     throw new ApiError(400, 'Password confirmation does not match');
   }
 
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'drivers.view', 'drivers');
+  }
+
   const existing = await Driver.findOne({ phone }).lean();
   if (existing) throw new ApiError(409, 'Driver phone already exists');
 
-  const rawVehicleType = String(
-    payload.vehicle_type || payload.vehicleType || payload.car_type || 'car',
-  ).toLowerCase();
-  const vehicleType = VEHICLE_TYPES.includes(rawVehicleType) ? rawVehicleType : 'car';
-
-  const registerFor = String(
-    payload.transport_type || payload.transportType || payload.register_for || payload.registerFor || vehicleType,
-  ).toLowerCase();
+  const registerFor = normalizeDriverRegisterFor(
+    payload.transport_type || payload.transportType || payload.register_for || payload.registerFor || 'taxi',
+  );
 
   let city = String(payload.city || '').trim();
   const serviceLocationId = payload.service_location_id || payload.area || payload.service_location;
+  if (currentAdmin && serviceLocationId) {
+    assertServiceLocationAccess(currentAdmin, serviceLocationId);
+  }
   if (serviceLocationId) {
     const location = await ServiceLocation.findById(serviceLocationId).lean();
     if (location) {
@@ -4507,6 +4568,46 @@ export const createDriver = async (payload = {}) => {
 
   const vehicleTypeId =
     payload.vehicle_type_id || payload.vehicleTypeId || payload.vehicleType?._id || payload.vehicleType?.id || null;
+  const vehicleRecord =
+    vehicleTypeId && mongoose.isValidObjectId(vehicleTypeId)
+      ? await Vehicle.findById(vehicleTypeId).lean()
+      : null;
+  const normalizedVehicleInput = String(
+    vehicleRecord?.name ||
+      payload.vehicle_type ||
+      payload.vehicleType?.name ||
+      payload.vehicleType ||
+      payload.car_type ||
+      registerFor ||
+      'car',
+  ).trim();
+  const vehicleType = normalizeImportVehicleType(
+    normalizedVehicleInput,
+    vehicleRecord,
+  );
+  const vehicleIconType = vehicleType;
+  const profilePicture = String(payload.profile_picture || payload.profilePicture || '').trim();
+  const status = String(
+    payload.status || (payload.approve === false ? 'pending' : 'approved'),
+  )
+    .trim()
+    .toLowerCase();
+  const approve =
+    payload.approve !== undefined
+      ? Boolean(payload.approve)
+      : !['pending', 'disapproved', 'inactive', 'rejected'].includes(status);
+  const serviceCategories = normalizeDriverServiceCategories(
+    payload.serviceCategories ?? payload.service_categories,
+    registerFor,
+  );
+  const onboardingPayload =
+    payload.onboarding && typeof payload.onboarding === 'object' && !Array.isArray(payload.onboarding)
+      ? payload.onboarding
+      : {};
+  const documents =
+    payload.documents && typeof payload.documents === 'object' && !Array.isArray(payload.documents)
+      ? payload.documents
+      : {};
 
   const driver = await Driver.create({
     name,
@@ -4516,19 +4617,28 @@ export const createDriver = async (payload = {}) => {
     service_location_id:
       serviceLocationId && mongoose.isValidObjectId(serviceLocationId) ? toObjectId(serviceLocationId) : null,
     country: payload.country || null,
-    profile_picture: String(payload.profile_picture || payload.profilePicture || '').trim(),
+    profile_picture: profilePicture,
+    profileImage: profilePicture,
     gender: String(payload.gender || '').trim(),
     password: await hashPassword(password),
     vehicleType,
+    vehicleIconType,
     vehicleTypeId: vehicleTypeId && mongoose.isValidObjectId(vehicleTypeId) ? toObjectId(vehicleTypeId) : null,
     vehicleMake: String(payload.vehicle_make || payload.vehicleMake || payload.car_make || '').trim(),
     vehicleModel: String(payload.vehicle_model || payload.vehicleModel || payload.car_model || '').trim(),
     vehicleColor: String(payload.vehicle_color || payload.vehicleColor || payload.car_color || '').trim(),
     vehicleNumber: String(payload.vehicle_number || payload.vehicleNumber || payload.car_number || '').trim(),
     registerFor,
+    serviceCategories,
     city,
-    approve: payload.approve !== undefined ? Boolean(payload.approve) : true,
-    status: payload.status || (payload.approve === false ? 'pending' : 'approved'),
+    approve,
+    status,
+    documents,
+    onboarding: {
+      ...onboardingPayload,
+      role: 'driver',
+      createdByAdmin: true,
+    },
   });
 
   return serializeDriver(driver.toObject());
@@ -4890,15 +5000,93 @@ export const getReferralDashboard = async () => {
   };
 };
 
-export const listSubscriptionPlans = async () => SubscriptionPlan.find().sort({ createdAt: -1 }).populate('vehicle_type_id').lean();
+export const listSubscriptionPlans = async () =>
+  SubscriptionPlan.find({ audience: 'driver' }).sort({ createdAt: -1 }).populate('vehicle_type_id').lean();
 export const createSubscriptionPlan = async (payload) => {
+  if (!String(payload?.name || '').trim()) {
+    throw new ApiError(400, 'Subscription name is required');
+  }
+
   const plan = await SubscriptionPlan.create({
     ...payload,
+    audience: 'driver',
     amount: Number(payload.amount || 0),
     duration: Number(payload.duration || 0),
+    benefit_type: 'standard',
+    ride_limit: 0,
     active: true,
   });
   return plan.toObject();
+};
+
+export const listCustomerSubscriptionPlans = async () =>
+  SubscriptionPlan.find({ audience: 'user' }).sort({ createdAt: -1 }).populate('vehicle_type_id').lean();
+
+export const createCustomerSubscriptionPlan = async (payload = {}) => {
+  if (!String(payload?.name || '').trim()) {
+    throw new ApiError(400, 'Subscription name is required');
+  }
+  if (!payload?.vehicle_type_id || !mongoose.Types.ObjectId.isValid(payload.vehicle_type_id)) {
+    throw new ApiError(400, 'Valid vehicle type is required');
+  }
+
+  const benefitType = String(payload.benefit_type || '').trim().toLowerCase() === 'unlimited'
+    ? 'unlimited'
+    : 'limited';
+
+  const plan = await SubscriptionPlan.create({
+    ...payload,
+    audience: 'user',
+    amount: Number(payload.amount || 0),
+    duration: Math.max(1, Number(payload.duration || 0)),
+    benefit_type: benefitType,
+    ride_limit: benefitType === 'unlimited' ? 0 : Math.max(1, Number(payload.ride_limit || 0)),
+    active: payload.active !== undefined ? Boolean(payload.active) : true,
+  });
+  return plan.toObject();
+};
+
+export const listUserSubscriptionsByUserId = async (userId) => {
+  const user = await User.findById(userId).lean();
+
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  const items = await UserSubscription.find({ userId })
+    .sort({ active: -1, expiresAt: 1, createdAt: -1 })
+    .populate('planId', 'name description')
+    .populate('vehicle_type_id', 'name')
+    .lean();
+
+  return {
+    results: items.map((item) => ({
+      id: String(item._id),
+      planId: item.planId?._id ? String(item.planId._id) : String(item.planId || ''),
+      name: item.name || item.planId?.name || '',
+      description: item.description || item.planId?.description || '',
+      amount: Number(item.amount || 0),
+      durationDays: Number(item.durationDays || 0),
+      transport_type: item.transport_type || 'taxi',
+      benefit_type: item.benefit_type || 'limited',
+      ride_limit: Number(item.ride_limit || 0),
+      rides_used: Number(item.rides_used || 0),
+      rides_remaining: String(item.benefit_type || '') === 'unlimited'
+        ? null
+        : Math.max(0, Number(item.ride_limit || 0) - Number(item.rides_used || 0)),
+      status: item.status || 'active',
+      active: item.active !== false,
+      vehicle_type: item.vehicle_type_id?._id
+        ? {
+            id: String(item.vehicle_type_id._id),
+            name: item.vehicle_type_id.name || '',
+          }
+        : null,
+      purchasedAt: item.purchasedAt || null,
+      expiresAt: item.expiresAt || null,
+      createdAt: item.createdAt || null,
+    })),
+  };
 };
 
 export const listServiceLocations = async (currentAdmin = null) => {

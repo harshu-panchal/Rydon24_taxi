@@ -524,7 +524,7 @@ export const rejectDriverDeletionRequest = asyncHandler(async (req, res) =>
 );
 
 export const createDriver = asyncHandler(async (req, res) =>
-  ok(res, await adminService.createDriver(req.body)),
+  ok(res, await adminService.createDriver(req.body, req.auth?.admin)),
 );
 export const getDriver = asyncHandler(async (req, res) =>
   ok(res, await adminService.getDriverById(req.params.id, req.auth?.admin)),
@@ -555,6 +555,15 @@ export const getSubscriptionPlans = asyncHandler(async (_req, res) =>
 );
 export const createSubscriptionPlan = asyncHandler(async (req, res) =>
   ok(res, await adminService.createSubscriptionPlan(req.body)),
+);
+export const getCustomerSubscriptionPlans = asyncHandler(async (_req, res) =>
+  ok(res, { results: await adminService.listCustomerSubscriptionPlans() }),
+);
+export const createCustomerSubscriptionPlan = asyncHandler(async (req, res) =>
+  ok(res, await adminService.createCustomerSubscriptionPlan(req.body)),
+);
+export const getUserSubscriptions = asyncHandler(async (req, res) =>
+  ok(res, await adminService.listUserSubscriptionsByUserId(req.params.id)),
 );
 
 export const getSubscriptionSettings = asyncHandler(async (_req, res) =>
@@ -1323,6 +1332,7 @@ export const getDriverNeededDocuments = asyncHandler(async (req, res) =>
   ok(res, {
     results: await adminService.listDriverNeededDocuments({
       templateType: req.query?.template_type || 'document',
+      includeFields: String(req.query?.template_type || 'document').trim().toLowerCase() !== 'vehicle_field',
     }),
   }),
 );

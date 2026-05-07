@@ -26,6 +26,7 @@ import {
   createRentalVehicleType,
   createSetPrice,
   createSubscriptionPlan,
+  createCustomerSubscriptionPlan,
   createUser,
   createZone,
   bulkImportUsers,
@@ -125,7 +126,9 @@ import {
   getServiceStores,
   getSmsSettings,
   getSubscriptionPlans,
+  getCustomerSubscriptionPlans,
   getSubscriptionSettings,
+  getUserSubscriptions,
   updateSubscriptionSettings,
   getTodayEarnings,
   getUserOnboarding,
@@ -243,6 +246,7 @@ adminRouter.patch('/admin/users/delete-requests/:id/reject', rejectUserDeletionR
 adminRouter.get('/admin/users/:id', getUser);
 adminRouter.patch('/admin/users/:id', updateUser);
 adminRouter.delete('/admin/users/:id', deleteUser);
+adminRouter.get('/admin/users/:id/subscriptions', getUserSubscriptions);
 adminRouter.get('/admin/users/:id/requests', getUserRequests);
 adminRouter.get('/admin/users/:id/wallet-history', getUserWalletHistory);
 
@@ -282,6 +286,8 @@ adminRouter.get('/admin/driver-subscriptions/plans/list', getSubscriptionPlans);
 adminRouter.post('/admin/driver-subscriptions/plans/create', createSubscriptionPlan);
 adminRouter.get('/admin/driver-subscriptions/settings', getSubscriptionSettings);
 adminRouter.post('/admin/driver-subscriptions/settings', updateSubscriptionSettings);
+adminRouter.get('/admin/user-subscriptions/plans/list', getCustomerSubscriptionPlans);
+adminRouter.post('/admin/user-subscriptions/plans/create', createCustomerSubscriptionPlan);
 
 adminRouter.get('/countries', getCountries);
 adminRouter.get('/admin/countries', getCountries);
