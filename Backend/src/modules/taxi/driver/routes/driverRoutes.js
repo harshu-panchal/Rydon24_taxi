@@ -56,10 +56,12 @@ import {
   saveOnboardingVehicle,
   registerDriver,
   requestDriverAccountDeletion,
-  startOnboarding,
-  topUpMyWallet,
-  createDriverWalletTopupOrder,
-  verifyDriverWalletTopup,
+    startOnboarding,
+    topUpMyWallet,
+    createDriverWalletTopupOrder,
+    createDriverPhonePeWalletTopupOrder,
+    verifyDriverWalletTopup,
+    verifyDriverPhonePeWalletTopup,
 
   updateCurrentDriver,
   updateDriverVehicle,
@@ -195,16 +197,26 @@ driverRouter.post(
   authenticate(["driver"]),
   asyncHandler(topUpMyWallet),
 );
-driverRouter.post(
-  "/wallet/top-up/razorpay/order",
-  authenticate(["driver"]),
-  asyncHandler(createDriverWalletTopupOrder),
-);
-driverRouter.post(
-  "/wallet/top-up/razorpay/verify",
-  authenticate(["driver"]),
-  asyncHandler(verifyDriverWalletTopup),
-);
+  driverRouter.post(
+    "/wallet/top-up/razorpay/order",
+    authenticate(["driver"]),
+    asyncHandler(createDriverWalletTopupOrder),
+  );
+  driverRouter.post(
+    "/wallet/top-up/phonepe/order",
+    authenticate(["driver"]),
+    asyncHandler(createDriverPhonePeWalletTopupOrder),
+  );
+  driverRouter.post(
+    "/wallet/top-up/razorpay/verify",
+    authenticate(["driver"]),
+    asyncHandler(verifyDriverWalletTopup),
+  );
+  driverRouter.get(
+    "/wallet/top-up/phonepe/status/:merchantTransactionId",
+    authenticate(["driver"]),
+    asyncHandler(verifyDriverPhonePeWalletTopup),
+  );
 driverRouter.post(
   "/wallet/withdrawals",
   authenticate(["driver"]),

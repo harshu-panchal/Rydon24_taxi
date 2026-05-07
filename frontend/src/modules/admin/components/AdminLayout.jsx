@@ -4,6 +4,7 @@ import { socketService } from '../../../shared/api/socket';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import { getSupportConversations, markSupportMessagesRead } from '../../shared/chat/chatApi';
 import { adminService } from '../services/adminService';
+import { hasAdminPermission } from '../constants/adminAccess';
 import toast from 'react-hot-toast';
 import {
   BarChart3,
@@ -81,6 +82,45 @@ const flattenSearchEntries = (items = [], parentLabels = []) =>
 
     return [];
   });
+
+const readAdminProfile = () => {
+  if (typeof window === 'undefined') {
+    return { admin_type: 'superadmin', permissions: ['*'], name: 'Admin' };
+  }
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem('adminInfo') || 'null');
+    return parsed || { admin_type: 'superadmin', permissions: ['*'], name: 'Admin' };
+  } catch {
+    return { admin_type: 'superadmin', permissions: ['*'], name: 'Admin' };
+  }
+};
+
+const filterSidebarItemsByAccess = (items = [], adminProfile = {}) =>
+  items.flatMap((item) => {
+    const selfAllowed = !item.permission || hasAdminPermission(adminProfile, item.permission);
+
+    if (item.subItems) {
+      const filteredSubItems = filterSidebarItemsByAccess(item.subItems, adminProfile);
+      if (!selfAllowed && filteredSubItems.length === 0) {
+        return [];
+      }
+      if (filteredSubItems.length === 0) {
+        return [];
+      }
+      return [{ ...item, subItems: filteredSubItems }];
+    }
+
+    return selfAllowed ? [item] : [];
+  });
+
+const filterSidebarSectionsByAccess = (sections = [], adminProfile = {}) =>
+  sections
+    .map((section) => ({
+      ...section,
+      items: filterSidebarItemsByAccess(section.items || [], adminProfile),
+    }))
+    .filter((section) => section.items.length > 0);
 
 const NOTIFICATION_PAGE_SIZE = 5;
 
@@ -522,8 +562,15 @@ const AdminLayout = () => {
   });
   const userMenuRef = useRef(null);
   const notificationsMenuRef = useRef(null);
+  const [adminProfile, setAdminProfile] = useState(() => readAdminProfile());
 
   const appName = settings.general?.app_name || 'App';
+  useEffect(() => {
+    const syncAdminProfile = () => setAdminProfile(readAdminProfile());
+    window.addEventListener('storage', syncAdminProfile);
+    syncAdminProfile();
+    return () => window.removeEventListener('storage', syncAdminProfile);
+  }, []);
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
@@ -609,71 +656,78 @@ const AdminLayout = () => {
       {
         title: 'Home',
         items: [
-          { icon: Home, label: 'Dashboard', path: '/admin/dashboard' },
-          { icon: IndianRupee, label: 'Admin Earnings', path: '/admin/earnings' },
-          { icon: MessageCircle, label: 'Chat', path: '/admin/chat' },
+          {
+            icon: UserCog,
+            label: 'Admin Management',
+            subItems: [
+              { label: 'Admins', path: '/admin/management/admins', permission: 'subadmins.manage' },
+            ],
+          },
+          { icon: Home, label: 'Dashboard', path: '/admin/dashboard', permission: 'dashboard.view' },
+          { icon: IndianRupee, label: 'Admin Earnings', path: '/admin/earnings', permission: 'earnings.view' },
+          { icon: MessageCircle, label: 'Chat', path: '/admin/chat', permission: 'chat.view' },
           {
             icon: TrendingUp,
             label: 'Promotions Management',
             subItems: [
-              { label: 'Promo Code', path: '/admin/promotions/promo-codes' },
-              { label: 'Push Notifications', path: '/admin/promotions/send-notification' },
-              { label: 'Banner Image', path: '/admin/promotions/banner-image' },
+              { label: 'Promo Code', path: '/admin/promotions/promo-codes', permission: 'promotions.view' },
+              { label: 'Push Notifications', path: '/admin/promotions/send-notification', permission: 'promotions.view' },
+              { label: 'Banner Image', path: '/admin/promotions/banner-image', permission: 'promotions.view' },
             ],
           },
           {
             icon: IndianRupee,
             label: 'Price Management',
             subItems: [
-              { label: 'Service Location', path: '/admin/pricing/service-location' },
-              { label: 'Zone', path: '/admin/pricing/zone' },
-              { label: 'Airport', path: '/admin/pricing/airport' },
-              { label: 'App Modules', path: '/admin/pricing/app-modules' },
-              { label: 'Vehicle Type', path: '/admin/pricing/vehicle-type' },
+              { label: 'Service Location', path: '/admin/pricing/service-location', permission: 'service_locations.view' },
+              { label: 'Zone', path: '/admin/pricing/zone', permission: 'zones.view' },
+              { label: 'Airport', path: '/admin/pricing/airport', permission: 'airports.view' },
+              { label: 'App Modules', path: '/admin/pricing/app-modules', permission: 'settings.view' },
+              { label: 'Vehicle Type', path: '/admin/pricing/vehicle-type', permission: 'vehicle_types.view' },
               {
                 label: 'Rental',
                 subItems: [
-                  { label: 'Service Stores', path: '/admin/pricing/service-stores' },
-                  { label: 'Rental Vehicles', path: '/admin/pricing/rental-vehicles' },
-                  { label: 'Rental Requests', path: '/admin/pricing/rental-requests' },
-                  { label: 'Rental Quote Requests', path: '/admin/pricing/rental-quotes' },
-                  { label: 'Rental Package Types', path: '/admin/pricing/rental-packages' },
-                  { label: 'Package Pricing', path: '/admin/pricing/package-pricing' },
+                  { label: 'Service Stores', path: '/admin/pricing/service-stores', permission: 'service_stores.view' },
+                  { label: 'Rental Vehicles', path: '/admin/pricing/rental-vehicles', permission: 'rental.view' },
+                  { label: 'Rental Requests', path: '/admin/pricing/rental-requests', permission: 'rental.view' },
+                  { label: 'Rental Quote Requests', path: '/admin/pricing/rental-quotes', permission: 'rental.view' },
+                  { label: 'Rental Package Types', path: '/admin/pricing/rental-packages', permission: 'rental.view' },
+                  { label: 'Package Pricing', path: '/admin/pricing/package-pricing', permission: 'rental.view' },
                 ],
               },
-              { label: 'Set Price', path: '/admin/pricing/set-price' },
-              { label: 'Goods Types', path: '/admin/pricing/goods-types' },
+              { label: 'Set Price', path: '/admin/pricing/set-price', permission: 'set_prices.view' },
+              { label: 'Goods Types', path: '/admin/pricing/goods-types', permission: 'goods_types.view' },
             ],
           },
           {
             icon: Bus,
             label: 'Bus Service',
             subItems: [
-              { label: 'Fleet Manager', path: '/admin/bus-service' },
-              { label: 'Bus Bookings', path: '/admin/bus-service/bookings' },
+              { label: 'Fleet Manager', path: '/admin/bus-service', permission: 'bus_service.view' },
+              { label: 'Bus Bookings', path: '/admin/bus-service/bookings', permission: 'bus_service.view' },
             ],
           },
           {
             icon: Share2,
             label: 'Car Pooling',
             subItems: [
-              { label: 'Pooling Vehicles', path: '/admin/pooling/vehicles' },
-              { label: 'Routes & Stops', path: '/admin/pooling/routes' },
-              { label: 'Pooling Bookings', path: '/admin/pooling/bookings' },
+              { label: 'Pooling Vehicles', path: '/admin/pooling/vehicles', permission: 'pooling.view' },
+              { label: 'Routes & Stops', path: '/admin/pooling/routes', permission: 'pooling.view' },
+              { label: 'Pooling Bookings', path: '/admin/pooling/bookings', permission: 'pooling.view' },
             ],
           },
           {
             icon: MapPin,
             label: 'Geofencing',
             subItems: [
-              { label: 'Heat Map', path: '/admin/geo/heatmap' },
-              { label: "God's Eye", path: '/admin/geo/gods-eye' },
-              { label: 'Peak Zone', path: '/admin/geo/peak-zone' },
+              { label: 'Heat Map', path: '/admin/geo/heatmap', permission: 'geofencing.view' },
+              { label: "God's Eye", path: '/admin/geo/gods-eye', permission: 'geofencing.view' },
+              { label: 'Peak Zone', path: '/admin/geo/peak-zone', permission: 'geofencing.view' },
             ],
           },
-          { icon: Car, label: 'Trip Requests', path: '/admin/trips' },
-          { icon: Package, label: 'Delivery Requests', path: '/admin/deliveries' },
-          { icon: Clock, label: 'Ongoing Requests', path: '/admin/ongoing' },
+          { icon: Car, label: 'Trip Requests', path: '/admin/trips', permission: 'trips.view' },
+          { icon: Package, label: 'Delivery Requests', path: '/admin/deliveries', permission: 'deliveries.view' },
+          { icon: Clock, label: 'Ongoing Requests', path: '/admin/ongoing', permission: 'ongoing.view' },
         ],
       },
       {
@@ -683,70 +737,63 @@ const AdminLayout = () => {
             icon: Users,
             label: 'Customer Management',
             subItems: [
-              { label: 'User List', path: '/admin/users' },
-              { label: 'Delete Request Users', path: '/admin/users/delete-requests' },
-              { label: 'User Bulk Upload', path: '/admin/users/bulk-upload' },
+              { label: 'User List', path: '/admin/users', permission: 'users.view' },
+              { label: 'Delete Request Users', path: '/admin/users/delete-requests', permission: 'users.view' },
+              { label: 'User Bulk Upload', path: '/admin/users/bulk-upload', permission: 'users.view' },
             ],
           },
-          { icon: Wallet, label: 'Wallet Payment', path: '/admin/wallet/payment' },
+          { icon: Wallet, label: 'Wallet Payment', path: '/admin/wallet/payment', permission: 'wallet.view' },
           {
             icon: Car,
             label: 'Driver Management',
             subItems: [
-              { label: 'Pending Drivers', path: '/admin/drivers/pending' },
-              { label: 'Approved Drivers', path: '/admin/drivers' },
-              { label: 'Active Drivers', path: '/admin/drivers/active' },
-              { label: 'Subscription', path: '/admin/drivers/subscription' },
-              { label: 'Drivers Ratings', path: '/admin/drivers/ratings' },
+              { label: 'Pending Drivers', path: '/admin/drivers/pending', permission: 'drivers.view' },
+              { label: 'Approved Drivers', path: '/admin/drivers', permission: 'drivers.view' },
+              { label: 'Active Drivers', path: '/admin/drivers/active', permission: 'drivers.view' },
+              { label: 'Subscription', path: '/admin/drivers/subscription', permission: 'drivers.view' },
+              { label: 'Drivers Ratings', path: '/admin/drivers/ratings', permission: 'drivers.view' },
               {
                 label: 'Driver Wallet',
                 subItems: [
-                  { label: 'Withdrawal Requests', path: '/admin/drivers/wallet/withdrawals' },
-                  { label: 'Negative Balance Drivers', path: '/admin/drivers/wallet/negative' },
+                  { label: 'Withdrawal Requests', path: '/admin/drivers/wallet/withdrawals', permission: 'wallet.view' },
+                  { label: 'Negative Balance Drivers', path: '/admin/drivers/wallet/negative', permission: 'wallet.view' },
                 ],
               },
-              { label: 'Delete Request Drivers', path: '/admin/drivers/delete-requests' },
-              { label: 'Driver Needed Documents', path: '/admin/drivers/documents' },
-              { label: 'Driver Bulk Upload', path: '/admin/drivers/bulk-upload' },
-              { label: 'Payment Methods', path: '/admin/drivers/payment-methods' },
+              { label: 'Delete Request Drivers', path: '/admin/drivers/delete-requests', permission: 'drivers.view' },
+              { label: 'Driver Needed Documents', path: '/admin/drivers/documents', permission: 'drivers.view' },
+              { label: 'Driver Bulk Upload', path: '/admin/drivers/bulk-upload', permission: 'drivers.view' },
+              { label: 'Payment Methods', path: '/admin/drivers/payment-methods', permission: 'wallet.view' },
             ],
           },
           {
             icon: Share2,
             label: 'Referral Management',
             subItems: [
-              { label: 'Referral Dashboard', path: '/admin/referrals/dashboard' },
-              { label: 'User Referral Settings', path: '/admin/referrals/user-settings' },
-              { label: 'Driver Referral Settings', path: '/admin/referrals/driver-settings' },
-              { label: 'Referral Translation', path: '/admin/referrals/translation' },
+              { label: 'Referral Dashboard', path: '/admin/referrals/dashboard', permission: 'referrals.view' },
+              { label: 'User Referral Settings', path: '/admin/referrals/user-settings', permission: 'referrals.view' },
+              { label: 'Driver Referral Settings', path: '/admin/referrals/driver-settings', permission: 'referrals.view' },
+              { label: 'Referral Translation', path: '/admin/referrals/translation', permission: 'referrals.view' },
             ],
           },
-          {
-            icon: UserCog,
-            label: 'Admin Management',
-            subItems: [
-              { label: 'Admins', path: '/admin/management/admins' },
-            ],
-          },
-          { icon: Briefcase, label: 'Owner Management', path: '/admin/owners/dashboard' },
+          { icon: Briefcase, label: 'Owner Management', path: '/admin/owners/dashboard', permission: 'owners.view' },
           {
             icon: FileText,
             label: 'Report',
             subItems: [
-              { label: 'User Report', path: '/admin/reports/user' },
-              { label: 'Driver Report', path: '/admin/reports/driver' },
-              { label: 'Driver Duty Report', path: '/admin/reports/driver-duty' },
-              { label: 'Owner Report', path: '/admin/reports/owner' },
-              { label: 'Finance Report', path: '/admin/reports/finance' },
-              { label: 'Fleet Finance Report', path: '/admin/reports/fleet-finance' },
+              { label: 'User Report', path: '/admin/reports/user', permission: 'reports.view' },
+              { label: 'Driver Report', path: '/admin/reports/driver', permission: 'reports.view' },
+              { label: 'Driver Duty Report', path: '/admin/reports/driver-duty', permission: 'reports.view' },
+              { label: 'Owner Report', path: '/admin/reports/owner', permission: 'reports.view' },
+              { label: 'Finance Report', path: '/admin/reports/finance', permission: 'reports.view' },
+              { label: 'Fleet Finance Report', path: '/admin/reports/fleet-finance', permission: 'reports.view' },
             ],
           },
           {
             icon: ShieldCheck,
             label: 'Support Management',
             subItems: [
-              { label: 'Ticket Title', path: '/admin/support/ticket-title' },
-              { label: 'Support Tickets', path: '/admin/support/tickets' },
+              { label: 'Ticket Title', path: '/admin/support/ticket-title', permission: 'support.view' },
+              { label: 'Support Tickets', path: '/admin/support/tickets', permission: 'support.view' },
             ],
           },
         ],
@@ -754,7 +801,7 @@ const AdminLayout = () => {
       {
         title: 'Masters',
         items: [
-          { icon: Globe, label: 'Language', path: '/admin/masters/languages' },
+          { icon: Globe, label: 'Language', path: '/admin/masters/languages', permission: 'settings.view' },
           // { icon: Star, label: 'Preferences', path: '/admin/masters/preferences' },
           // { icon: ShieldCheck, label: 'Roles', path: '/admin/masters/roles' },
         ],
@@ -765,31 +812,34 @@ const AdminLayout = () => {
           {
             icon: Settings,
             label: 'Business Settings',
+            permission: 'settings.view',
             subItems: [
-              { label: 'General Settings', path: '/admin/settings/business/general' },
-              { label: 'Customization Settings', path: '/admin/settings/business/customization' },
-              { label: 'Transport Ride Settings', path: '/admin/settings/business/transport-ride' },
-              { label: 'Bid Ride Settings', path: '/admin/settings/business/bid-ride' },
+              { label: 'General Settings', path: '/admin/settings/business/general', permission: 'settings.view' },
+              { label: 'Customization Settings', path: '/admin/settings/business/customization', permission: 'settings.view' },
+              { label: 'Transport Ride Settings', path: '/admin/settings/business/transport-ride', permission: 'settings.view' },
+              { label: 'Bid Ride Settings', path: '/admin/settings/business/bid-ride', permission: 'settings.view' },
             ],
           },
           {
             icon: Smartphone,
             label: 'App Settings',
+            permission: 'settings.view',
             subItems: [
-              { label: 'Wallet Settings', path: '/admin/settings/app/wallet' },
-              { label: 'Tip Settings', path: '/admin/settings/app/tip' },
-              { label: 'Mobile App Landing/Onboard Screens Settings', path: '/admin/settings/app/onboard' },
+              { label: 'Wallet Settings', path: '/admin/settings/app/wallet', permission: 'settings.view' },
+              { label: 'Tip Settings', path: '/admin/settings/app/tip', permission: 'settings.view' },
+              { label: 'Mobile App Landing/Onboard Screens Settings', path: '/admin/settings/app/onboard', permission: 'settings.view' },
             ],
           },
           {
             icon: Settings2,
             label: 'Third-party Settings',
+            permission: 'settings.view',
             subItems: [
-              { label: 'Payment Gateway Settings', path: '/admin/settings/third-party/payment' },
-              { label: 'SMS Gateway Settings', path: '/admin/settings/third-party/sms' },
-              { label: 'Firebase Settings', path: '/admin/settings/third-party/firebase' },
-              { label: 'Map and Map APIs Settings', path: '/admin/settings/third-party/map-apis' },
-              { label: 'Mail Configuration', path: '/admin/settings/third-party/mail' },
+              { label: 'Payment Gateway Settings', path: '/admin/settings/third-party/payment', permission: 'settings.view' },
+              { label: 'SMS Gateway Settings', path: '/admin/settings/third-party/sms', permission: 'settings.view' },
+              { label: 'Firebase Settings', path: '/admin/settings/third-party/firebase', permission: 'settings.view' },
+              { label: 'Map and Map APIs Settings', path: '/admin/settings/third-party/map-apis', permission: 'settings.view' },
+              { label: 'Mail Configuration', path: '/admin/settings/third-party/mail', permission: 'settings.view' },
               // { label: 'Notification Channel', path: '/admin/settings/third-party/notification-channel' },
             ],
           },
@@ -801,14 +851,15 @@ const AdminLayout = () => {
           {
             icon: Monitor,
             label: 'CMS-Landing Website',
+            permission: 'settings.view',
             subItems: [
-              { label: 'Header-Footer', path: '/admin/settings/cms/header-footer' },
-              { label: 'Home', path: '/admin/settings/cms/home' },
-              { label: 'About Us', path: '/admin/settings/cms/about' },
-              { label: 'Driver', path: '/admin/settings/cms/driver' },
-              { label: 'User', path: '/admin/settings/cms/user' },
-              { label: 'Contact', path: '/admin/settings/cms/contact' },
-              { label: 'Privacy Policy, T&C and DMV', path: '/admin/settings/cms/legal' },
+              { label: 'Header-Footer', path: '/admin/settings/cms/header-footer', permission: 'settings.view' },
+              { label: 'Home', path: '/admin/settings/cms/home', permission: 'settings.view' },
+              { label: 'About Us', path: '/admin/settings/cms/about', permission: 'settings.view' },
+              { label: 'Driver', path: '/admin/settings/cms/driver', permission: 'settings.view' },
+              { label: 'User', path: '/admin/settings/cms/user', permission: 'settings.view' },
+              { label: 'Contact', path: '/admin/settings/cms/contact', permission: 'settings.view' },
+              { label: 'Privacy Policy, T&C and DMV', path: '/admin/settings/cms/legal', permission: 'settings.view' },
             ],
           },
         ],
@@ -826,25 +877,25 @@ const AdminLayout = () => {
             icon: Briefcase,
             label: 'Owner Management',
             subItems: [
-              { label: 'Owner Dashboard', path: '/admin/owners/dashboard' },
-              { label: 'Pending Owners', path: '/admin/owners/pending' },
-              { label: 'Manage Owners', path: '/admin/owners' },
+              { label: 'Owner Dashboard', path: '/admin/owners/dashboard', permission: 'owners.view' },
+              { label: 'Pending Owners', path: '/admin/owners/pending', permission: 'owners.view' },
+              { label: 'Manage Owners', path: '/admin/owners', permission: 'owners.view' },
               {
                 label: 'Owner Wallet',
-                subItems: [{ label: 'Withdrawal Requests', path: '/admin/owners/wallet/withdrawals' }],
+                subItems: [{ label: 'Withdrawal Requests', path: '/admin/owners/wallet/withdrawals', permission: 'wallet.view' }],
               },
               {
                 label: 'Fleet Management',
                 subItems: [
-                  { label: 'Fleet Drivers', path: '/admin/fleet/drivers' },
-                  { label: 'Pending Fleet Drivers', path: '/admin/fleet/blocked' },
-                  { label: 'Fleet Needed Document', path: '/admin/fleet/documents' },
-                  { label: 'Manage Fleet', path: '/admin/fleet/manage' },
+                  { label: 'Fleet Drivers', path: '/admin/fleet/drivers', permission: 'owners.view' },
+                  { label: 'Pending Fleet Drivers', path: '/admin/fleet/blocked', permission: 'owners.view' },
+                  { label: 'Fleet Needed Document', path: '/admin/fleet/documents', permission: 'owners.view' },
+                  { label: 'Manage Fleet', path: '/admin/fleet/manage', permission: 'owners.view' },
                 ],
               },
-              { label: 'Owner Needed Document', path: '/admin/owners/documents' },
-              { label: 'Deleted Owners', path: '/admin/owners/deleted' },
-              { label: 'Bookings', path: '/admin/owners/bookings' },
+              { label: 'Owner Needed Document', path: '/admin/owners/documents', permission: 'owners.view' },
+              { label: 'Deleted Owners', path: '/admin/owners/deleted', permission: 'owners.view' },
+              { label: 'Bookings', path: '/admin/owners/bookings', permission: 'owners.view' },
             ],
           },
         ],
@@ -856,7 +907,10 @@ const AdminLayout = () => {
   const isOwnerRoute = location.pathname.startsWith('/admin/owners') || location.pathname.startsWith('/admin/fleet');
   const isAdminChatRoute = pathMatches(location.pathname, '/admin/chat');
   const mode = isOwnerRoute ? OWNER_MODE : ADMIN_MODE;
-  const sidebarSections = mode === OWNER_MODE ? ownerSections : adminSections;
+  const sidebarSections = useMemo(
+    () => filterSidebarSectionsByAccess(mode === OWNER_MODE ? ownerSections : adminSections, adminProfile),
+    [adminProfile, adminSections, mode, ownerSections],
+  );
   const unreadCountsByPath = useMemo(
     () => ({
       '/admin/chat': chatUnreadCount,
@@ -1589,7 +1643,14 @@ const AdminLayout = () => {
                 <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition-all group-hover:bg-primary group-hover:text-white">
                   <Users size={14} />
                 </div>
-                <span className="text-[11px] font-black text-gray-950">Admin</span>
+                <div className="text-left leading-tight">
+                  <span className="block text-[11px] font-black text-gray-950">
+                    {adminProfile?.name || 'Admin'}
+                  </span>
+                  <span className="block text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">
+                    {adminProfile?.admin_type === 'subadmin' ? adminProfile?.role || 'Subadmin' : 'Superadmin'}
+                  </span>
+                </div>
                 <ChevronDown size={14} className="text-gray-300" />
               </button>
 

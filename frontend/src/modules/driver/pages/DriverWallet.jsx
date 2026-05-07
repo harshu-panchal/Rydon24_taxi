@@ -163,6 +163,7 @@ const DriverWallet = () => {
     const navigate = useNavigate();
     const { settings: appSettings } = useSettings();
     const appName = appSettings.general?.app_name || 'App';
+    const activePaymentGateway = appSettings.paymentGateway || null;
     const [wallet, setWallet] = useState(emptyWallet);
     const [transactions, setTransactions] = useState([]);
     const [withdrawalRequests, setWithdrawalRequests] = useState([]);
@@ -300,6 +301,71 @@ const DriverWallet = () => {
         () => withdrawalRequests.slice(0, 5),
         [withdrawalRequests],
     );
+    const walletTopUpGatewayLabel = activePaymentGateway?.label || 'payment gateway';
+    const supportsWalletTopUp = activePaymentGateway?.supportsWalletTopUp === true;
+    const walletTopUpMode = activePaymentGateway?.walletTopUpMode || '';
+    const canTopUpWallet = supportsWalletTopUp && ['razorpay_checkout', 'phonepe_redirect'].includes(walletTopUpMode);
+
+    useEffect(() => {
+        const merchantTransactionId = new URLSearchParams(window.location.search).get('phonepe_txn');
+        if (!merchantTransactionId || walletTopUpMode !== 'phonepe_redirect') {
+            return;
+        }
+
+        let cancelled = false;
+
+        const clearPhonePeQuery = () => {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('phonepe_txn');
+            window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+        };
+
+        const syncPhonePeTopup = async () => {
+            setError('');
+            setLoading(true);
+
+            try {
+                const response = await api.get(`/drivers/wallet/top-up/phonepe/status/${merchantTransactionId}`);
+                if (cancelled) return;
+
+                const data = response?.data || response || {};
+                if (data.status === 'paid') {
+                    if (data.wallet) setWallet(data.wallet);
+                    if (data.transaction) {
+                        setTransactions((previous) => [
+                            data.transaction,
+                            ...previous.filter((item) => item._id !== data.transaction._id),
+                        ].slice(0, 50));
+                    }
+                    setTopUpSuccess(true);
+                    setShowTopUp(false);
+                    setTopUpAmount('500');
+                    window.setTimeout(() => {
+                        if (!cancelled) setTopUpSuccess(false);
+                    }, 1800);
+                } else if (data.status === 'pending') {
+                    setError('PhonePe payment is still pending. Please refresh in a few seconds.');
+                } else if (data.status === 'failed') {
+                    setError(response?.message || 'PhonePe payment was not completed.');
+                }
+            } catch (requestError) {
+                if (!cancelled) {
+                    setError(requestError?.message || 'Could not verify PhonePe payment.');
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoading(false);
+                    clearPhonePeQuery();
+                }
+            }
+        };
+
+        syncPhonePeTopup();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [walletTopUpMode]);
 
     const loadRazorpayScript = useCallback(() =>
         new Promise((resolve) => {
@@ -338,6 +404,28 @@ const DriverWallet = () => {
         setError('');
 
         try {
+            if (!activePaymentGateway) {
+                throw new Error('No payment gateway is enabled by admin right now.');
+            }
+
+            if (!supportsWalletTopUp || !canTopUpWallet) {
+                throw new Error(`${walletTopUpGatewayLabel} is enabled by admin, but driver wallet top-up is not implemented for it yet.`);
+            }
+
+            if (walletTopUpMode === 'phonepe_redirect') {
+                const sessionResponse = await api.post('/drivers/wallet/top-up/phonepe/order', {
+                    amount,
+                });
+                const session = sessionResponse?.data || sessionResponse || {};
+
+                if (!session?.checkoutUrl) {
+                    throw new Error('Could not initiate PhonePe payment. Please try again.');
+                }
+
+                window.location.assign(session.checkoutUrl);
+                return;
+            }
+
             const scriptLoaded = await loadRazorpayScript();
             if (!scriptLoaded) {
                 throw new Error('Razorpay SDK failed to load. Please check your internet connection.');
@@ -567,13 +655,18 @@ const DriverWallet = () => {
                                 <p>{error}</p>
                             </div>
                         )}
+                        {activePaymentGateway && !canTopUpWallet && (
+                            <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm font-bold text-amber-700">
+                                {walletTopUpGatewayLabel} is active, but driver wallet top-up is not available for it yet.
+                            </div>
+                        )}
 
                         <section>
                             <div className="grid grid-cols-2 gap-3">
                                 <button
                                     type="button"
                                     onClick={() => setShowTopUp(true)}
-                                    disabled={!rules.walletEnabled}
+                                    disabled={!rules.walletEnabled || !canTopUpWallet}
                                     className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-[#009b72] text-sm font-black uppercase tracking-[0.08em] text-white shadow-sm disabled:bg-slate-200 disabled:text-slate-400"
                                 >
                                     Top up <ArrowUpRight size={17} />
@@ -737,7 +830,10 @@ const DriverWallet = () => {
                             <div className="mb-5 flex items-center justify-between">
                                 <div>
                                     <h3 className="text-xl font-black text-slate-950">Top up wallet</h3>
-                                    <p className="text-sm font-bold text-slate-500">Minimum amount: {money(rules.minimumTopUp)}</p>
+                                    <p className="text-sm font-bold text-slate-500">
+                                        Minimum amount: {money(rules.minimumTopUp)}
+                                        {activePaymentGateway ? ` • Via ${walletTopUpGatewayLabel}` : ''}
+                                    </p>
                                 </div>
                                 <button
                                     type="button"

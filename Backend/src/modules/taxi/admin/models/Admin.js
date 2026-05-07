@@ -25,11 +25,46 @@ const adminSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      default: 'admin',
+      default: 'superadmin',
+      trim: true,
+    },
+    admin_type: {
+      type: String,
+      enum: ['superadmin', 'subadmin'],
+      default: 'superadmin',
+      trim: true,
     },
     permissions: {
       type: [String],
       default: [],
+    },
+    service_location_ids: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'TaxiServiceLocation',
+        },
+      ],
+      default: [],
+    },
+    zone_ids: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'TaxiZone',
+        },
+      ],
+      default: [],
+    },
+    active: {
+      type: Boolean,
+      default: true,
+    },
+    status: {
+      type: String,
+      enum: ['active', 'inactive'],
+      default: 'active',
+      trim: true,
     },
     resetPasswordOtp: {
       type: String,
@@ -44,5 +79,7 @@ const adminSchema = new mongoose.Schema(
     timestamps: true,
   },
 );
+
+adminSchema.index({ admin_type: 1, active: 1 });
 
 export const Admin = mongoose.models.TaxiAdmin || mongoose.model('TaxiAdmin', adminSchema);

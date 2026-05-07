@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import mongoose from "mongoose";
 import QRCode from "qrcode";
+import { env } from "../../../../config/env.js";
 import { ApiError } from "../../../../utils/ApiError.js";
 import { normalizePoint, toPoint } from "../../../../utils/geo.js";
 import { Driver } from "../models/Driver.js";
@@ -59,6 +60,7 @@ import {
   updateBusService,
   updateRentalVehicleType,
 } from "../../admin/services/adminService.js";
+import { resolveConfiguredGatewayCredentials } from "../../services/paymentGatewayService.js";
 import { assignPushTokenToEntity } from "../../services/pushTokenService.js";
 import {
   completeDriverOnboarding,
@@ -567,42 +569,7 @@ const buildOwnerBusPartialCancellationQuote = ({
 };
 
 const resolveOwnerRazorpayCredentials = async () => {
-  const envKeyId = String(process.env.RAZORPAY_KEY_ID || "").trim();
-  const envKeySecret = String(process.env.RAZORPAY_KEY_SECRET || "").trim();
-  const envEnabled = String(process.env.RAZORPAY_ENABLED || "").trim();
-
-  if (envEnabled !== "0" && envKeyId && envKeySecret) {
-    return { keyId: envKeyId, keySecret: envKeySecret };
-  }
-
-  const settings = await ensureThirdPartySettings();
-  const razorpay = settings?.payment?.razor_pay || {};
-  const enabled = String(razorpay.enabled ?? "0") === "1";
-  if (!enabled) {
-    settings.payment = settings.payment || {};
-    settings.payment.razor_pay = {
-      ...razorpay,
-      enabled: "1",
-      environment: razorpay.environment || "test",
-    };
-    settings.markModified("payment");
-    await settings.save();
-  }
-
-  const environment = String(razorpay.environment || "test").toLowerCase();
-  const isLive = environment === "live";
-  const keyId = String(isLive ? razorpay.live_api_key : razorpay.test_api_key || "");
-  const keySecret = String(isLive ? razorpay.live_secret_key : razorpay.test_secret_key || "");
-
-  if (!keyId || !keySecret) {
-    throw new ApiError(500, "Razorpay credentials are not configured");
-  }
-
-  if (keyId.toLowerCase().includes("demo") || keySecret.toLowerCase().includes("demo")) {
-    throw new ApiError(500, "Razorpay keys are demo placeholders. Configure real keys in Admin > Payment Gateways");
-  }
-
-  return { keyId, keySecret };
+  return resolveConfiguredGatewayCredentials("razor_pay");
 };
 
 const ownerRazorpayRequest = async ({ method, path, body, keyId, keySecret }) => {
@@ -1129,19 +1096,8 @@ const normalizePaymentAmount = (value) => {
   return Math.round(amount * 100);
 };
 
-const getRazorpayEnvCredentials = () => {
-  const keyId = String(process.env.RAZORPAY_KEY_ID || "").trim();
-  const keySecret = String(process.env.RAZORPAY_KEY_SECRET || "").trim();
-
-  if (!keyId || !keySecret) {
-    throw new ApiError(500, "Razorpay credentials are not configured in backend .env");
-  }
-
-  return { keyId, keySecret };
-};
-
 const razorpayRequest = async ({ method, path, body }) => {
-  const { keyId, keySecret } = getRazorpayEnvCredentials();
+  const { keyId, keySecret } = await resolveConfiguredGatewayCredentials("razor_pay");
   const credentials = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
   const response = await fetch(`https://api.razorpay.com/v1${path}`, {
     method,
@@ -3774,55 +3730,75 @@ export const createDriverPaymentQr = async (req, res) => {
 };
 
 const resolveRazorpayCredentials = async () => {
-  const envKeyId = String(process.env.RAZORPAY_KEY_ID || "").trim();
-  const envKeySecret = String(process.env.RAZORPAY_KEY_SECRET || "").trim();
-  const envEnabled = String(process.env.RAZORPAY_ENABLED || "").trim();
+  return resolveConfiguredGatewayCredentials("razor_pay");
+};
 
-  // Prefer backend .env credentials when present unless they are explicitly disabled.
-  if (envEnabled !== "0" && envKeyId && envKeySecret) {
-    return { keyId: envKeyId, keySecret: envKeySecret };
-  }
+const resolvePhonePeCredentials = async () => {
+  return resolveConfiguredGatewayCredentials("phone_pay");
+};
 
-  const settings = await ensureThirdPartySettings();
-  const razorpay = settings?.payment?.razor_pay || {};
+const getFrontendBaseUrl = () => {
+  const configuredOrigin = String(env.corsOrigin || "")
+    .split(",")
+    .map((value) => value.trim())
+    .find((value) => value && value !== "*");
 
-  const enabled = String(razorpay.enabled ?? "0") === "1";
-  if (!enabled) {
-    settings.payment = settings.payment || {};
-    settings.payment.razor_pay = {
-      ...razorpay,
-      enabled: "1",
-      environment: razorpay.environment || "test",
-    };
-    settings.markModified("payment");
-    await settings.save();
-  }
+  return (configuredOrigin || "http://localhost:5173").replace(/\/+$/, "");
+};
 
-  const environment = String(razorpay.environment || "test").toLowerCase();
-  const isLive = environment === "live";
+const getPhonePeBaseUrl = (environment = "test") =>
+  String(environment).trim().toLowerCase() === "production"
+    ? "https://api.phonepe.com/apis/hermes"
+    : "https://api-preprod.phonepe.com/apis/pg-sandbox";
 
-  const keyId = String(
-    isLive ? razorpay.live_api_key : razorpay.test_api_key || "",
-  );
-  const keySecret = String(
-    isLive ? razorpay.live_secret_key : razorpay.test_secret_key || "",
-  );
+const buildPhonePeChecksum = ({ payload = "", path = "", saltKey = "", saltIndex = "1" }) => {
+  const digest = crypto
+    .createHash("sha256")
+    .update(`${payload}${path}${saltKey}`)
+    .digest("hex");
 
-  if (!keyId || !keySecret) {
-    throw new ApiError(500, "Razorpay credentials are not configured");
-  }
+  return `${digest}###${saltIndex}`;
+};
 
-  if (
-    keyId.toLowerCase().includes("demo") ||
-    keySecret.toLowerCase().includes("demo")
-  ) {
+const phonePeRequest = async ({
+  method,
+  path,
+  body,
+  merchantId,
+  saltKey,
+  saltIndex,
+  environment,
+}) => {
+  const normalizedMethod = String(method || "GET").trim().toUpperCase();
+  const encodedPayload =
+    body && normalizedMethod !== "GET"
+      ? Buffer.from(JSON.stringify(body)).toString("base64")
+      : "";
+  const response = await fetch(`${getPhonePeBaseUrl(environment)}${path}`, {
+    method: normalizedMethod,
+    headers: {
+      "Content-Type": "application/json",
+      "X-VERIFY": buildPhonePeChecksum({
+        payload: encodedPayload,
+        path,
+        saltKey,
+        saltIndex,
+      }),
+      "X-MERCHANT-ID": merchantId,
+      accept: "application/json",
+    },
+    body: encodedPayload ? JSON.stringify({ request: encodedPayload }) : undefined,
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || payload?.success === false) {
     throw new ApiError(
-      500,
-      "Razorpay keys are demo placeholders. Configure real keys in Admin > Payment Gateways",
+      response.status || 502,
+      payload?.message || payload?.code || "PhonePe request failed",
     );
   }
 
-  return { keyId, keySecret };
+  return payload;
 };
 
 const fetchRazorpay = async ({ method, path, body, keyId, keySecret }) => {
@@ -3889,6 +3865,68 @@ export const createDriverWalletTopupOrder = async (req, res) => {
       orderId: order.id,
       amount: order.amount,
       currency: order.currency || "INR",
+    },
+  });
+};
+
+export const createDriverPhonePeWalletTopupOrder = async (req, res) => {
+  const settings = await getWalletSettings();
+  const minTopUp = Number(settings.minimum_amount_added_to_wallet || 0);
+  const amount = Number(req.body.amount);
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new ApiError(400, "Invalid top-up amount");
+  }
+
+  if (amount < minTopUp) {
+    throw new ApiError(400, `Minimum top-up amount is Rs ${minTopUp}`);
+  }
+
+  const { merchantId, saltKey, saltIndex, environment } = await resolvePhonePeCredentials();
+  const driverId = String(req.auth?.sub || "");
+  const compactDriverId = driverId.replace(/[^a-zA-Z0-9]/g, "").slice(-8) || "drv";
+  const merchantTransactionId = `DWAL${Date.now()}${compactDriverId}`.slice(0, 34);
+  const frontendBaseUrl = getFrontendBaseUrl();
+  const backendBaseUrl = `${req.protocol}://${req.get("host")}`;
+  const redirectUrl = `${frontendBaseUrl}/taxi/driver/wallet?phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
+  const callbackUrl = `${backendBaseUrl}/api/v1/common/payment-gateway/phonepe/callback`;
+  const driver = driverId ? await Driver.findById(driverId).select("phone").lean() : null;
+  const payload = await phonePeRequest({
+    method: "POST",
+    path: "/pg/v1/pay",
+    body: {
+      merchantId,
+      merchantTransactionId,
+      merchantUserId: compactDriverId,
+      amount: Math.round(amount * 100),
+      redirectUrl,
+      redirectMode: "GET",
+      callbackUrl,
+      mobileNumber: String(driver?.phone || "").replace(/\D/g, "").slice(-10) || undefined,
+      paymentInstrument: {
+        type: "PAY_PAGE",
+      },
+    },
+    merchantId,
+    saltKey,
+    saltIndex,
+    environment,
+  });
+
+  const checkoutUrl = payload?.data?.instrumentResponse?.redirectInfo?.url || "";
+  if (!checkoutUrl) {
+    throw new ApiError(502, "PhonePe payment URL was not returned");
+  }
+
+  res.status(201).json({
+    success: true,
+    data: {
+      gateway: "phonepe",
+      merchantTransactionId,
+      amount: Math.round(amount * 100),
+      currency: "INR",
+      checkoutUrl,
+      method: payload?.data?.instrumentResponse?.redirectInfo?.method || "GET",
     },
   });
 };
@@ -3967,6 +4005,97 @@ export const verifyDriverWalletTopup = async (req, res) => {
   res.json({
     success: true,
     data: payload,
+  });
+};
+
+export const verifyDriverPhonePeWalletTopup = async (req, res) => {
+  const merchantTransactionId = toCleanString(
+    req.params?.merchantTransactionId || req.query?.merchantTransactionId || req.query?.transactionId,
+  );
+
+  if (!merchantTransactionId) {
+    throw new ApiError(400, "merchantTransactionId is required");
+  }
+
+  const { merchantId, saltKey, saltIndex, environment } = await resolvePhonePeCredentials();
+  const payload = await phonePeRequest({
+    method: "GET",
+    path: `/pg/v1/status/${encodeURIComponent(merchantId)}/${encodeURIComponent(merchantTransactionId)}`,
+    merchantId,
+    saltKey,
+    saltIndex,
+    environment,
+  });
+
+  const paymentState = String(payload?.data?.state || payload?.data?.paymentState || "").trim().toUpperCase();
+  const paymentId = toCleanString(payload?.data?.transactionId || merchantTransactionId);
+  const amount = Math.round(Number(payload?.data?.amount || 0)) / 100;
+  const driverId = req.auth?.sub;
+
+  if (paymentState === "COMPLETED") {
+    const alreadyCredited = await WalletTransaction.findOne({
+      driverId,
+      $or: [
+        { "metadata.providerPaymentId": paymentId },
+        { "metadata.providerOrderId": merchantTransactionId },
+      ],
+    })
+      .select("_id")
+      .lean();
+
+    let result = null;
+    if (!alreadyCredited) {
+      result = await topUpDriverWallet({
+        driverId,
+        amount,
+        metadata: {
+          source: "phonepe",
+          provider: "phonepe",
+          providerOrderId: merchantTransactionId,
+          providerPaymentId: paymentId,
+        },
+      });
+    }
+
+    const driver = await Driver.findById(driverId);
+    res.json({
+      success: true,
+      data: {
+        status: "paid",
+        gateway: "phonepe",
+        merchantTransactionId,
+        transactionId: paymentId,
+        wallet: result?.wallet || await serializeDriverWallet(driver),
+        transaction: result?.transaction || null,
+      },
+    });
+    return;
+  }
+
+  if (paymentState === "PENDING") {
+    res.json({
+      success: true,
+      data: {
+        status: "pending",
+        gateway: "phonepe",
+        merchantTransactionId,
+        transactionId: paymentId,
+      },
+      message: payload?.message || "PhonePe payment is still pending",
+    });
+    return;
+  }
+
+  res.json({
+    success: true,
+    data: {
+      status: "failed",
+      gateway: "phonepe",
+      merchantTransactionId,
+      transactionId: paymentId,
+      code: payload?.code || payload?.data?.responseCode || "",
+    },
+    message: payload?.message || "PhonePe payment was not completed",
   });
 };
 

@@ -7,6 +7,10 @@ import { Driver } from '../driver/models/Driver.js';
 import { BusDriver } from '../driver/models/BusDriver.js';
 import { User } from '../user/models/User.js';
 import { verifyAccessToken } from '../services/tokenService.js';
+import {
+  normalizeAdminPermissions,
+  normalizeAdminType,
+} from '../admin/services/adminAccessService.js';
 
 const roleModelMap = {
   admin: Admin,
@@ -136,6 +140,30 @@ export const authenticate = (allowedRoles = [], options = {}) => async (req, _re
     }
 
     attachResolvedAuth(req, payload);
+    req.auth.entity = entity;
+
+    if (normalizedRole === 'admin') {
+      req.auth.admin = {
+        id: String(entity._id),
+        email: entity.email || '',
+        name: entity.name || '',
+        role: entity.role || '',
+        admin_type: normalizeAdminType(entity.admin_type || entity.role),
+        permissions: normalizeAdminPermissions(entity.permissions || []),
+        service_location_ids: Array.isArray(entity.service_location_ids)
+          ? entity.service_location_ids.map((item) => String(item))
+          : [],
+        zone_ids: Array.isArray(entity.zone_ids)
+          ? entity.zone_ids.map((item) => String(item))
+          : [],
+        active: entity.active !== false,
+        status: entity.status || 'active',
+      };
+
+      if (req.auth.admin.active === false || String(req.auth.admin.status).toLowerCase() === 'inactive') {
+        throw new ApiError(403, 'Admin account is inactive');
+      }
+    }
 
     next();
   } catch (error) {

@@ -5,7 +5,7 @@ import { PoolingBooking } from '../../admin/models/PoolingBooking.js';
 import { PoolingSeatReservation } from '../../admin/models/PoolingSeatReservation.js';
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { ApiError } from '../../../../utils/ApiError.js';
-import { ensureThirdPartySettings } from '../../admin/services/adminService.js';
+import { resolveConfiguredGatewayCredentials } from '../../services/paymentGatewayService.js';
 
 const ok = (res, data, message) => res.status(200).json({ success: true, data, message });
 const created = (res, data, message) => res.status(201).json({ success: true, data, message });
@@ -32,30 +32,7 @@ const normalizeTravelDate = (value) => {
 const getCurrentUserId = (req) => String(req.auth?.sub || req.user?._id || '').trim();
 
 const resolveRazorpayCredentials = async () => {
-  const envKeyId = String(process.env.RAZORPAY_KEY_ID || '').trim();
-  const envKeySecret = String(process.env.RAZORPAY_KEY_SECRET || '').trim();
-  const envEnabled = String(process.env.RAZORPAY_ENABLED || '').trim();
-
-  if (envEnabled !== '0' && envKeyId && envKeySecret) {
-    return { keyId: envKeyId, keySecret: envKeySecret };
-  }
-
-  const settings = await ensureThirdPartySettings();
-  const razorpay = settings?.payment?.razor_pay || {};
-  const environment = String(razorpay.environment || 'test').toLowerCase();
-  const isLive = environment === 'live';
-  const keyId = String(isLive ? razorpay.live_api_key : razorpay.test_api_key || '').trim();
-  const keySecret = String(isLive ? razorpay.live_secret_key : razorpay.test_secret_key || '').trim();
-
-  if (!keyId || !keySecret) {
-    throw new ApiError(500, 'Razorpay credentials are not configured');
-  }
-
-  if (keyId.toLowerCase().includes('demo') || keySecret.toLowerCase().includes('demo')) {
-    throw new ApiError(500, 'Razorpay keys are demo placeholders. Configure real keys in Admin > Payment Gateways');
-  }
-
-  return { keyId, keySecret };
+  return resolveConfiguredGatewayCredentials('razor_pay');
 };
 
 const razorpayRequest = async ({ method, path, body, keyId, keySecret }) => {

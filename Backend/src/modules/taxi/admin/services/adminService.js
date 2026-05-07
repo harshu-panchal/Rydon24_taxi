@@ -60,6 +60,15 @@ import {
   notifyUserAccountDeleted,
 } from '../../services/dispatchService.js';
 import { sendEmail } from '../../services/mailService.js';
+import { getActivePaymentGateway, normalizePaymentSettingsPayload } from '../../services/paymentGatewayService.js';
+import { signAccessToken } from '../../services/tokenService.js';
+import {
+  ADMIN_PERMISSIONS,
+  SUPERADMIN_PERMISSION,
+  hasAdminPermission,
+  normalizeAdminPermissions,
+  normalizeAdminType,
+} from './adminAccessService.js';
 
 const PUBLIC_VEHICLE_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
 let publicVehicleCatalogCache = {
@@ -78,7 +87,6 @@ const deepMerge = (target, source) => {
   }
   return result;
 };
-import { signAccessToken } from '../../services/tokenService.js';
 
 const buildPaginator = (items, page = 1, limit = 50) => {
   const safePage = Number(page) || 1;
@@ -117,6 +125,186 @@ const normalizeBoolean = (value) => {
   if (typeof value === 'boolean') return value;
   if (value === 1 || value === '1' || value === 'true') return true;
   return false;
+};
+
+const normalizeObjectIdList = (values = []) =>
+  [...new Set((Array.isArray(values) ? values : []).map((value) => String(value || '').trim()).filter(Boolean))]
+    .map(toObjectId)
+    .filter(Boolean);
+
+const getAdminScope = (admin = {}) => ({
+  adminType: normalizeAdminType(admin.admin_type || admin.role),
+  serviceLocationIds: normalizeObjectIdList(admin.service_location_ids),
+  zoneIds: normalizeObjectIdList(admin.zone_ids),
+});
+
+const isSuperAdmin = (admin = {}) => getAdminScope(admin).adminType === 'superadmin';
+
+const buildNoAccessQuery = (field) => ({ [field]: { $in: [] } });
+
+const getScopedZoneIds = async (admin = {}) => {
+  const { adminType, zoneIds, serviceLocationIds } = getAdminScope(admin);
+
+  if (adminType === 'superadmin') {
+    return [];
+  }
+
+  if (zoneIds.length > 0) {
+    return zoneIds;
+  }
+
+  if (serviceLocationIds.length === 0) {
+    return [];
+  }
+
+  const zoneIdsFromLocations = await Zone.find({
+    service_location_id: { $in: serviceLocationIds },
+  }).distinct('_id');
+
+  return zoneIdsFromLocations.map((value) => toObjectId(value)).filter(Boolean);
+};
+
+const buildServiceLocationScopeQuery = (admin = {}, field = 'service_location_id') => {
+  const { adminType, serviceLocationIds } = getAdminScope(admin);
+
+  if (adminType === 'superadmin') {
+    return {};
+  }
+
+  if (serviceLocationIds.length === 0) {
+    return buildNoAccessQuery(field);
+  }
+
+  return { [field]: { $in: serviceLocationIds } };
+};
+
+const buildZoneScopeQuery = async (admin = {}, field = 'zone_id') => {
+  const { adminType } = getAdminScope(admin);
+
+  if (adminType === 'superadmin') {
+    return {};
+  }
+
+  const scopedZoneIds = await getScopedZoneIds(admin);
+
+  if (scopedZoneIds.length === 0) {
+    return buildNoAccessQuery(field);
+  }
+
+  return { [field]: { $in: scopedZoneIds } };
+};
+
+const assertAdminPermission = (admin, permission, label = 'resource') => {
+  if (!hasAdminPermission(admin, permission)) {
+    throw new ApiError(403, `You do not have permission to access ${label}`);
+  }
+};
+
+const assertServiceLocationAccess = (admin = {}, serviceLocationId) => {
+  if (isSuperAdmin(admin)) {
+    return;
+  }
+
+  const normalizedId = String(serviceLocationId || '').trim();
+  const { serviceLocationIds } = getAdminScope(admin);
+
+  if (!normalizedId || !serviceLocationIds.some((item) => String(item) === normalizedId)) {
+    throw new ApiError(403, 'Service location is outside your assigned scope');
+  }
+};
+
+const assertZoneAccess = async (admin = {}, zoneId) => {
+  if (isSuperAdmin(admin)) {
+    return;
+  }
+
+  const normalizedId = String(zoneId || '').trim();
+  if (!normalizedId) {
+    throw new ApiError(403, 'Zone is outside your assigned scope');
+  }
+
+  const { zoneIds, serviceLocationIds } = getAdminScope(admin);
+
+  if (zoneIds.length > 0) {
+    if (!zoneIds.some((item) => String(item) === normalizedId)) {
+      throw new ApiError(403, 'Zone is outside your assigned scope');
+    }
+    return;
+  }
+
+  const zone = await Zone.findById(normalizedId).select('service_location_id').lean();
+  if (!zone || !serviceLocationIds.some((item) => String(item) === String(zone.service_location_id || ''))) {
+    throw new ApiError(403, 'Zone is outside your assigned scope');
+  }
+};
+
+const serializeAdminSummary = (admin, serviceLocationMap = new Map(), zoneMap = new Map()) => {
+  const serviceLocationIds = normalizeObjectIdList(admin.service_location_ids).map(String);
+  const zoneIds = normalizeObjectIdList(admin.zone_ids).map(String);
+
+  return {
+    _id: admin._id,
+    id: admin._id,
+    name: admin.name || '',
+    email: admin.email || '',
+    phone: admin.phone || '',
+    role: admin.role || '',
+    admin_type: normalizeAdminType(admin.admin_type || admin.role),
+    permissions: normalizeAdminPermissions(admin.permissions || []),
+    service_location_ids: serviceLocationIds,
+    zone_ids: zoneIds,
+    service_locations: serviceLocationIds
+      .map((id) => serviceLocationMap.get(id))
+      .filter(Boolean)
+      .map((item) => ({
+        id: String(item._id || item.id || ''),
+        name: item.service_location_name || item.name || '',
+        country: item.country || '',
+      })),
+    zones: zoneIds
+      .map((id) => zoneMap.get(id))
+      .filter(Boolean)
+      .map((item) => ({
+        id: String(item._id || item.id || ''),
+        name: item.name || '',
+        service_location_id: String(item.service_location_id || ''),
+      })),
+    active: admin.active !== false,
+    status: admin.status || (admin.active === false ? 'inactive' : 'active'),
+    createdAt: admin.createdAt || null,
+    updatedAt: admin.updatedAt || null,
+  };
+};
+
+const enrichAdminSummaries = async (admins = []) => {
+  const serviceLocationIds = [
+    ...new Set(
+      admins.flatMap((admin) => normalizeObjectIdList(admin.service_location_ids).map(String)),
+    ),
+  ];
+  const zoneIds = [
+    ...new Set(
+      admins.flatMap((admin) => normalizeObjectIdList(admin.zone_ids).map(String)),
+    ),
+  ];
+
+  const [serviceLocations, zones] = await Promise.all([
+    serviceLocationIds.length > 0
+      ? ServiceLocation.find({ _id: { $in: serviceLocationIds } })
+          .select('_id name service_location_name country')
+          .lean()
+      : [],
+    zoneIds.length > 0
+      ? Zone.find({ _id: { $in: zoneIds } })
+          .select('_id name service_location_id')
+          .lean()
+      : [],
+  ]);
+
+  const serviceLocationMap = new Map(serviceLocations.map((item) => [String(item._id), item]));
+  const zoneMap = new Map(zones.map((item) => [String(item._id), item]));
+
+  return admins.map((admin) => serializeAdminSummary(admin, serviceLocationMap, zoneMap));
 };
 
 const normalizeDriverAccountType = (value) => {
@@ -2232,7 +2420,11 @@ const syncDefaultAdminRecord = async () => {
         name: 'Super Admin',
         email: DEFAULT_ADMIN_EMAIL,
         phone: '9999999999',
+        role: 'superadmin',
+        admin_type: 'superadmin',
         permissions: ['*'],
+        active: true,
+        status: 'active',
         ...(nextPassword ? { password: nextPassword } : {}),
         updatedAt: now,
       },
@@ -2649,15 +2841,178 @@ export const loginAdmin = async ({ email, password }) => {
     throw new ApiError(401, 'Invalid admin credentials');
   }
 
+  if (admin.active === false || String(admin.status || '').toLowerCase() === 'inactive') {
+    throw new ApiError(403, 'Admin account is inactive');
+  }
+
+  const [serializedAdmin] = await enrichAdminSummaries([admin]);
+
   return {
     token: signAccessToken({ sub: String(admin._id), role: 'admin' }),
-    admin: {
-      id: String(admin._id),
-      name: admin.name,
-      email: admin.email,
-      role: admin.role,
-    },
+    admin: serializedAdmin,
   };
+};
+
+export const listAdminPermissions = async () =>
+  ADMIN_PERMISSIONS.map((key) => ({ key, label: key }));
+
+export const listAdmins = async (currentAdmin) => {
+  assertAdminPermission(currentAdmin, 'subadmins.manage', 'subadmins');
+
+  const admins = await Admin.find()
+    .select('-resetPasswordOtp -resetPasswordExpires')
+    .sort({ createdAt: -1 })
+    .lean();
+
+  return enrichAdminSummaries(admins);
+};
+
+const validateSubadminPayload = async (payload = {}, existingAdminId = null) => {
+  const adminType = normalizeAdminType(payload.admin_type || payload.role);
+  const name = String(payload.name || '').trim();
+  const email = String(payload.email || '').trim().toLowerCase();
+  const phone = String(payload.phone || '').trim();
+  const role = String(payload.role || (adminType === 'superadmin' ? 'superadmin' : 'subadmin')).trim();
+  const permissions = normalizeAdminPermissions(
+    adminType === 'superadmin' ? [SUPERADMIN_PERMISSION] : payload.permissions || [],
+  );
+  const serviceLocationIds = normalizeObjectIdList(payload.service_location_ids);
+  const zoneIds = normalizeObjectIdList(payload.zone_ids);
+  const active = payload.active === undefined ? true : normalizeBoolean(payload.active);
+  const status = String(payload.status || (active ? 'active' : 'inactive')).trim().toLowerCase() === 'inactive'
+    ? 'inactive'
+    : 'active';
+
+  if (!name) {
+    throw new ApiError(400, 'Admin name is required');
+  }
+
+  if (!email) {
+    throw new ApiError(400, 'Admin email is required');
+  }
+
+  const duplicate = await Admin.findOne({
+    email,
+    ...(existingAdminId ? { _id: { $ne: existingAdminId } } : {}),
+  }).lean();
+
+  if (duplicate) {
+    throw new ApiError(409, 'Admin email already exists');
+  }
+
+  if (adminType === 'subadmin' && permissions.length === 0) {
+    throw new ApiError(400, 'Select at least one permission for the subadmin');
+  }
+
+  if (adminType === 'subadmin' && serviceLocationIds.length === 0) {
+    throw new ApiError(400, 'Assign at least one service location to the subadmin');
+  }
+
+  if (serviceLocationIds.length > 0) {
+    const count = await ServiceLocation.countDocuments({ _id: { $in: serviceLocationIds } });
+    if (count !== serviceLocationIds.length) {
+      throw new ApiError(400, 'One or more selected service locations are invalid');
+    }
+  }
+
+  if (zoneIds.length > 0) {
+    const zones = await Zone.find({ _id: { $in: zoneIds } }).select('_id service_location_id').lean();
+    if (zones.length !== zoneIds.length) {
+      throw new ApiError(400, 'One or more selected zones are invalid');
+    }
+
+    if (
+      adminType === 'subadmin' &&
+      zones.some((zone) => !serviceLocationIds.some((id) => String(id) === String(zone.service_location_id || '')))
+    ) {
+      throw new ApiError(400, 'Assigned zones must belong to the selected service locations');
+    }
+  }
+
+  return {
+    admin_type: adminType,
+    name,
+    email,
+    phone,
+    role,
+    permissions,
+    service_location_ids: adminType === 'superadmin' ? [] : serviceLocationIds,
+    zone_ids: adminType === 'superadmin' ? [] : zoneIds,
+    active,
+    status,
+  };
+};
+
+export const createAdminAccount = async (currentAdmin, payload = {}) => {
+  assertAdminPermission(currentAdmin, 'subadmins.manage', 'subadmins');
+
+  const password = String(payload.password || '').trim();
+  const passwordConfirmation = String(payload.password_confirmation || payload.passwordConfirmation || '').trim();
+
+  if (!password || password.length < 5) {
+    throw new ApiError(400, 'Password must be at least 5 characters');
+  }
+
+  if (!passwordConfirmation || password !== passwordConfirmation) {
+    throw new ApiError(400, 'Passwords do not match');
+  }
+
+  const validated = await validateSubadminPayload(payload);
+  const created = await Admin.create({
+    ...validated,
+    password: await hashPassword(password),
+  });
+
+  const [serializedAdmin] = await enrichAdminSummaries([created]);
+  return serializedAdmin;
+};
+
+export const updateAdminAccount = async (currentAdmin, id, payload = {}) => {
+  assertAdminPermission(currentAdmin, 'subadmins.manage', 'subadmins');
+
+  const admin = await Admin.findById(id).select('+password');
+  if (!admin) {
+    throw new ApiError(404, 'Admin account not found');
+  }
+
+  if (String(admin._id) === String(currentAdmin?.id || '')) {
+    throw new ApiError(400, 'Use your profile flow to update your own admin account');
+  }
+
+  const validated = await validateSubadminPayload(payload, admin._id);
+  Object.assign(admin, validated);
+
+  if (payload.password) {
+    const password = String(payload.password || '').trim();
+    const passwordConfirmation = String(payload.password_confirmation || payload.passwordConfirmation || '').trim();
+    if (password.length < 5) {
+      throw new ApiError(400, 'Password must be at least 5 characters');
+    }
+    if (password !== passwordConfirmation) {
+      throw new ApiError(400, 'Passwords do not match');
+    }
+    admin.password = await hashPassword(password);
+  }
+
+  await admin.save();
+  const [serializedAdmin] = await enrichAdminSummaries([admin]);
+  return serializedAdmin;
+};
+
+export const deleteAdminAccount = async (currentAdmin, id) => {
+  assertAdminPermission(currentAdmin, 'subadmins.manage', 'subadmins');
+
+  const admin = await Admin.findById(id).lean();
+  if (!admin) {
+    throw new ApiError(404, 'Admin account not found');
+  }
+
+  if (String(admin._id) === String(currentAdmin?.id || '')) {
+    throw new ApiError(400, 'You cannot delete your own admin account');
+  }
+
+  await Admin.deleteOne({ _id: admin._id });
+  return { deleted: true };
 };
 
 export const forgotPassword = async (email) => {
@@ -3358,12 +3713,16 @@ export const adjustUserWallet = async (id, payload = {}) => {
   return { balance: Number(nextBalance.toFixed(2)) };
 };
 
-export const listDrivers = async ({ page = 1, limit = 50, status, search, approve, isOnline }) => {
+export const listDrivers = async ({ page = 1, limit = 50, status, search, approve, isOnline } = {}, currentAdmin = null) => {
   const safePage = Number(page) || 1;
   const safeLimit = Number(limit) || 50;
   const start = (safePage - 1) * safeLimit;
 
   const query = { deletedAt: null };
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'drivers.view', 'drivers');
+    Object.assign(query, buildServiceLocationScopeQuery(currentAdmin));
+  }
 
   if (status) {
     query.status = status;
@@ -4175,7 +4534,16 @@ export const createDriver = async (payload = {}) => {
   return serializeDriver(driver.toObject());
 };
 
-export const updateDriver = async (id, payload) => {
+export const updateDriver = async (id, payload, currentAdmin = null) => {
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'drivers.view', 'drivers');
+    const existingDriver = await Driver.findById(id).select('service_location_id').lean();
+    if (!existingDriver) {
+      throw new ApiError(404, 'Driver not found');
+    }
+    assertServiceLocationAccess(currentAdmin, existingDriver.service_location_id);
+  }
+
   const update = {};
 
   if (payload.name !== undefined) {
@@ -4231,6 +4599,9 @@ export const updateDriver = async (id, payload) => {
 
   const serviceLocationValue = payload.service_location_id ?? payload.area ?? payload.service_location;
   if (serviceLocationValue !== undefined) {
+    if (currentAdmin && serviceLocationValue) {
+      assertServiceLocationAccess(currentAdmin, serviceLocationValue);
+    }
     update.service_location_id =
       serviceLocationValue && mongoose.isValidObjectId(serviceLocationValue)
         ? toObjectId(serviceLocationValue)
@@ -4289,10 +4660,14 @@ export const deleteDriver = async (id) => {
   return true;
 };
 
-export const getDriverById = async (id) => {
+export const getDriverById = async (id, currentAdmin = null) => {
   const driver = await Driver.findById(id).lean();
   if (!driver) {
     throw new ApiError(404, 'Driver not found');
+  }
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'drivers.view', 'drivers');
+    assertServiceLocationAccess(currentAdmin, driver.service_location_id);
   }
   return serializeDriver(driver);
 };
@@ -4526,9 +4901,13 @@ export const createSubscriptionPlan = async (payload) => {
   return plan.toObject();
 };
 
-export const listServiceLocations = async () => {
+export const listServiceLocations = async (currentAdmin = null) => {
   await ensureServiceLocationsSeeded();
-  return ServiceLocation.find().sort({ createdAt: -1 }).lean();
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'service_locations.view', 'service locations');
+  }
+  const query = currentAdmin ? buildServiceLocationScopeQuery(currentAdmin) : {};
+  return ServiceLocation.find(query).sort({ createdAt: -1 }).lean();
 };
 
 export const listCountries = async () => {
@@ -4560,7 +4939,13 @@ export const listCountries = async () => {
   );
 };
 
-export const createServiceLocation = async (payload) => {
+export const createServiceLocation = async (payload, currentAdmin = null) => {
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'service_locations.view', 'service locations');
+    if (!isSuperAdmin(currentAdmin)) {
+      throw new ApiError(403, 'Only the superadmin can create service locations');
+    }
+  }
 
   if (!payload.name?.trim()) {
     throw new ApiError(400, 'Service location name is required');
@@ -4593,11 +4978,15 @@ export const createServiceLocation = async (payload) => {
   return location;
 };
 
-export const updateServiceLocation = async (id, payload) => {
+export const updateServiceLocation = async (id, payload, currentAdmin = null) => {
   await ensureServiceLocationsSeeded();
   const persistedLocation = await ServiceLocation.findById(id);
   if (!persistedLocation) {
     throw new ApiError(404, 'Service location not found');
+  }
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'service_locations.view', 'service locations');
+    assertServiceLocationAccess(currentAdmin, persistedLocation._id);
   }
   Object.assign(persistedLocation, normalizeServiceLocationPayload(payload, persistedLocation.toObject()));
   await persistedLocation.save();
@@ -4623,8 +5012,12 @@ export const updateServiceLocation = async (id, payload) => {
   return location;
 };
 
-export const deleteServiceLocation = async (id) => {
+export const deleteServiceLocation = async (id, currentAdmin = null) => {
   await ensureServiceLocationsSeeded();
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'service_locations.view', 'service locations');
+    assertServiceLocationAccess(currentAdmin, id);
+  }
   const deleted = await ServiceLocation.findByIdAndDelete(id);
   if (!deleted) {
     throw new ApiError(404, 'Service location not found');
@@ -5267,9 +5660,28 @@ export const deleteVehicleType = async (id) => {
   return true;
 };
 
-export const listSetPrices = async (queryArgs = {}) => {
+export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
   const scope = String(queryArgs.scope || '').trim();
   const query = scope ? { pricing_scope: scope } : {};
+
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'set_prices.view', 'set prices');
+    const scopedZoneIds = await getScopedZoneIds(currentAdmin);
+    const { serviceLocationIds } = getAdminScope(currentAdmin);
+
+    if (!isSuperAdmin(currentAdmin)) {
+      query.$or = [];
+      if (scopedZoneIds.length > 0) {
+        query.$or.push({ zone_id: { $in: scopedZoneIds } });
+      }
+      if (serviceLocationIds.length > 0) {
+        query.$or.push({ service_location_id: { $in: serviceLocationIds } });
+      }
+      if (query.$or.length === 0) {
+        query._id = { $in: [] };
+      }
+    }
+  }
 
   const items = await SetPrice.find(query)
     .populate('vehicle_type')
@@ -5409,7 +5821,17 @@ export const listSetPrices = async (queryArgs = {}) => {
   };
 };
 
-export const createSetPrice = async (payload) => {
+export const createSetPrice = async (payload, currentAdmin = null) => {
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'set_prices.view', 'set prices');
+    if (payload.service_location_id) {
+      assertServiceLocationAccess(currentAdmin, payload.service_location_id?._id || payload.service_location_id?.id || payload.service_location_id);
+    }
+    if (payload.zone_id) {
+      await assertZoneAccess(currentAdmin, payload.zone_id?._id || payload.zone_id?.id || payload.zone_id);
+    }
+  }
+
   const payment_type = Array.isArray(payload.payment_type)
     ? payload.payment_type
     : typeof payload.payment_type === 'string'
@@ -5481,9 +5903,17 @@ export const createSetPrice = async (payload) => {
   return setPrice.toObject();
 };
 
-export const updateSetPrice = async (id, payload) => {
+export const updateSetPrice = async (id, payload, currentAdmin = null) => {
   const setPrice = await SetPrice.findById(id);
   if (!setPrice) throw new ApiError(404, 'Set Price not found');
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'set_prices.view', 'set prices');
+    if (setPrice.zone_id) {
+      await assertZoneAccess(currentAdmin, setPrice.zone_id);
+    } else {
+      assertServiceLocationAccess(currentAdmin, setPrice.service_location_id);
+    }
+  }
 
   const fields = [
     'zone_id', 'vehicle_type', 'service_location_id', 'transport_type',
@@ -5512,6 +5942,15 @@ export const updateSetPrice = async (id, payload) => {
     if (field === 'service_location_id') value = payload.service_location_id?._id || payload.service_location_id?.id || payload.service_location_id || payload.zone?._id || payload.zone?.service_location_id;
     if (field === 'package_type_id') value = payload.package_type_id?._id || payload.package_type_id?.id || payload.package_type_id;
     if (field === 'transport_type' && value !== undefined) value = normalizeVehicleTransportType(value);
+
+    if (currentAdmin && value !== undefined) {
+      if (field === 'zone_id' && value) {
+        assertZoneAccess(currentAdmin, value);
+      }
+      if (field === 'service_location_id' && value) {
+        assertServiceLocationAccess(currentAdmin, value);
+      }
+    }
 
     if (value === undefined) {
       if (field === 'admin_commision') value = payload.customer_commission;
@@ -5546,17 +5985,30 @@ export const updateSetPrice = async (id, payload) => {
   return setPrice.toObject();
 };
 
-export const deleteSetPrice = async (id) => {
+export const deleteSetPrice = async (id, currentAdmin = null) => {
+  if (currentAdmin) {
+    const setPrice = await SetPrice.findById(id).select('service_location_id zone_id').lean();
+    if (!setPrice) throw new ApiError(404, 'Set Price not found');
+    assertAdminPermission(currentAdmin, 'set_prices.view', 'set prices');
+    if (setPrice.zone_id) {
+      await assertZoneAccess(currentAdmin, setPrice.zone_id);
+    } else {
+      assertServiceLocationAccess(currentAdmin, setPrice.service_location_id);
+    }
+  }
   const deleted = await SetPrice.findByIdAndDelete(id);
   if (!deleted) throw new ApiError(404, 'Set Price not found');
   return true;
 };
 
-export const listOwners = async (queryArgs = {}) => {
+export const listOwners = async (queryArgs = {}, currentAdmin = null) => {
   await ensureFleetOwnersSeeded();
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'owners.view', 'owners');
+  }
   const search = String(queryArgs.search || '').trim();
 
-  const query = {};
+  const query = currentAdmin ? buildServiceLocationScopeQuery(currentAdmin) : {};
   if (search) {
     const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     query.$or = [{ name: regex }, { mobile: regex }, { email: regex }, { company_name: regex }];
@@ -5687,7 +6139,7 @@ export const approveOwnerSignupFromDriver = async (driverId) => {
   return serializeOwner(populatedOwner);
 };
 
-export const getOwnerById = async (id) => {
+export const getOwnerById = async (id, currentAdmin = null) => {
     await ensureFleetOwnersSeeded();
 
     const ownerId = String(id || '').trim();
@@ -5703,6 +6155,10 @@ export const getOwnerById = async (id) => {
       .lean();
 
     if (!owner) throw new ApiError(404, 'Owner not found');
+    if (currentAdmin) {
+      assertAdminPermission(currentAdmin, 'owners.view', 'owners');
+      assertServiceLocationAccess(currentAdmin, owner.service_location_id?._id || owner.service_location_id);
+    }
     return serializeOwner(owner);
   };
 
@@ -6519,8 +6975,12 @@ export const getDashboardData = async () => {
 
   export const listWithdrawals = async () => WithdrawalRequest.find().populate('driver_id owner_id').sort({ createdAt: -1 }).lean();
 
-  export const listZones = async () => {
-    const zones = await Zone.find()
+  export const listZones = async (currentAdmin = null) => {
+    if (currentAdmin) {
+      assertAdminPermission(currentAdmin, 'zones.view', 'zones');
+    }
+    const query = currentAdmin ? buildServiceLocationScopeQuery(currentAdmin) : {};
+    const zones = await Zone.find(query)
       .populate('service_location_id', 'name service_location_name country timezone')
       .sort({ createdAt: -1 })
       .lean();
@@ -6528,8 +6988,12 @@ export const getDashboardData = async () => {
     return zones.map(serializeZone);
   };
 
-  export const listServiceStores = async () => {
-    const stores = await ServiceStore.find()
+  export const listServiceStores = async (currentAdmin = null) => {
+    if (currentAdmin) {
+      assertAdminPermission(currentAdmin, 'service_stores.view', 'service stores');
+    }
+    const query = currentAdmin ? buildServiceLocationScopeQuery(currentAdmin) : {};
+    const stores = await ServiceStore.find(query)
       .populate({
         path: 'zone_id',
         select: 'name service_location_id',
@@ -6562,7 +7026,7 @@ export const getDashboardData = async () => {
     );
   };
 
-  export const createServiceStore = async (payload) => {
+  export const createServiceStore = async (payload, currentAdmin = null) => {
     const name = String(payload.name || '').trim();
     if (!name) {
       throw new ApiError(400, 'Service store name is required');
@@ -6575,6 +7039,10 @@ export const getDashboardData = async () => {
     const zone = await Zone.findById(payload.zone_id).select('_id service_location_id').lean();
     if (!zone) {
       throw new ApiError(404, 'Zone not found');
+    }
+    if (currentAdmin) {
+      assertAdminPermission(currentAdmin, 'service_stores.view', 'service stores');
+      await assertZoneAccess(currentAdmin, zone._id);
     }
 
     const point = normalizePointLocationPayload(payload);
@@ -6606,10 +7074,14 @@ export const getDashboardData = async () => {
     });
   };
 
-  export const updateServiceStore = async (id, payload) => {
+  export const updateServiceStore = async (id, payload, currentAdmin = null) => {
     const store = await ServiceStore.findById(id);
     if (!store) {
       throw new ApiError(404, 'Service store not found');
+    }
+    if (currentAdmin) {
+      assertAdminPermission(currentAdmin, 'service_stores.view', 'service stores');
+      assertServiceLocationAccess(currentAdmin, store.service_location_id);
     }
 
     if (payload.name !== undefined) {
@@ -6628,6 +7100,9 @@ export const getDashboardData = async () => {
       const zone = await Zone.findById(payload.zone_id).select('_id service_location_id').lean();
       if (!zone) {
         throw new ApiError(404, 'Zone not found');
+      }
+      if (currentAdmin) {
+        await assertZoneAccess(currentAdmin, zone._id);
       }
 
       store.zone_id = zone._id;
@@ -6675,7 +7150,15 @@ export const getDashboardData = async () => {
     });
   };
 
-  export const deleteServiceStore = async (id) => {
+  export const deleteServiceStore = async (id, currentAdmin = null) => {
+    if (currentAdmin) {
+      const existingStore = await ServiceStore.findById(id).select('service_location_id').lean();
+      if (!existingStore) {
+        throw new ApiError(404, 'Service store not found');
+      }
+      assertAdminPermission(currentAdmin, 'service_stores.view', 'service stores');
+      assertServiceLocationAccess(currentAdmin, existingStore.service_location_id);
+    }
     const deleted = await ServiceStore.findByIdAndDelete(id);
     if (!deleted) {
       throw new ApiError(404, 'Service store not found');
@@ -6684,9 +7167,13 @@ export const getDashboardData = async () => {
     return true;
   };
 
-  export const createZone = async (payload) => {
+  export const createZone = async (payload, currentAdmin = null) => {
     if (!payload.name?.trim()) {
       throw new ApiError(400, 'Zone name is required');
+    }
+    if (currentAdmin) {
+      assertAdminPermission(currentAdmin, 'zones.view', 'zones');
+      assertServiceLocationAccess(currentAdmin, payload.service_location_id);
     }
 
     const normalizedGeometry = normalizeZoneGeometryPayload(payload);
@@ -6717,14 +7204,21 @@ export const getDashboardData = async () => {
     return serializeZone(populatedZone);
   };
 
-  export const updateZone = async (id, payload) => {
+  export const updateZone = async (id, payload, currentAdmin = null) => {
     const zone = await Zone.findById(id);
     if (!zone) throw new ApiError(404, 'Zone not found');
+    if (currentAdmin) {
+      assertAdminPermission(currentAdmin, 'zones.view', 'zones');
+      await assertZoneAccess(currentAdmin, zone._id);
+    }
 
     if (payload.name !== undefined) {
       zone.name = String(payload.name).trim();
     }
     if (payload.service_location_id !== undefined) {
+      if (currentAdmin && payload.service_location_id) {
+        assertServiceLocationAccess(currentAdmin, payload.service_location_id);
+      }
       zone.service_location_id = payload.service_location_id ? toObjectId(payload.service_location_id) : null;
     }
     if (payload.unit !== undefined) {
@@ -6777,15 +7271,23 @@ export const getDashboardData = async () => {
     return serializeZone(populatedZone);
   };
 
-  export const deleteZone = async (id) => {
+  export const deleteZone = async (id, currentAdmin = null) => {
+    if (currentAdmin) {
+      assertAdminPermission(currentAdmin, 'zones.view', 'zones');
+      await assertZoneAccess(currentAdmin, id);
+    }
     const deleted = await Zone.findByIdAndDelete(id);
     if (!deleted) throw new ApiError(404, 'Zone not found');
     return true;
   };
 
-  export const toggleZoneStatus = async (id) => {
+  export const toggleZoneStatus = async (id, currentAdmin = null) => {
     const zone = await Zone.findById(id);
     if (!zone) throw new ApiError(404, 'Zone not found');
+    if (currentAdmin) {
+      assertAdminPermission(currentAdmin, 'zones.view', 'zones');
+      await assertZoneAccess(currentAdmin, zone._id);
+    }
     zone.active = !zone.active;
     zone.status = zone.active ? 'active' : 'inactive';
     await zone.save();
@@ -6798,8 +7300,12 @@ export const getDashboardData = async () => {
   };
 
 
-  export const listAirports = async () => {
-    const items = await Airport.find()
+  export const listAirports = async (currentAdmin = null) => {
+    if (currentAdmin) {
+      assertAdminPermission(currentAdmin, 'airports.view', 'airports');
+    }
+    const query = currentAdmin ? buildServiceLocationScopeQuery(currentAdmin) : {};
+    const items = await Airport.find(query)
       .populate('service_location_id', 'name service_location_name country')
       .populate('zone_id', 'name')
       .sort({ createdAt: -1 })
@@ -6808,13 +7314,20 @@ export const getDashboardData = async () => {
     return items.map(serializeAirport);
   };
 
-  export const createAirport = async (payload) => {
+  export const createAirport = async (payload, currentAdmin = null) => {
     if (!payload.name?.trim()) {
       throw new ApiError(400, 'Airport name is required');
     }
 
     if (!payload.service_location_id) {
       throw new ApiError(400, 'Service location is required');
+    }
+    if (currentAdmin) {
+      assertAdminPermission(currentAdmin, 'airports.view', 'airports');
+      assertServiceLocationAccess(currentAdmin, payload.service_location_id);
+      if (payload.zone_id) {
+        await assertZoneAccess(currentAdmin, payload.zone_id);
+      }
     }
 
     const latitude = toNullableNumber(payload.latitude);
@@ -6859,9 +7372,13 @@ export const getDashboardData = async () => {
     return serializeAirport(populatedItem);
   };
 
-  export const updateAirport = async (id, payload) => {
+  export const updateAirport = async (id, payload, currentAdmin = null) => {
     const item = await Airport.findById(id);
     if (!item) throw new ApiError(404, 'Airport not found');
+    if (currentAdmin) {
+      assertAdminPermission(currentAdmin, 'airports.view', 'airports');
+      assertServiceLocationAccess(currentAdmin, item.service_location_id);
+    }
 
     if (payload.name !== undefined) {
       item.name = String(payload.name || '').trim();
@@ -6870,9 +7387,15 @@ export const getDashboardData = async () => {
       item.code = String(payload.code || '').trim().toUpperCase();
     }
     if (payload.service_location_id !== undefined) {
+      if (currentAdmin && payload.service_location_id) {
+        assertServiceLocationAccess(currentAdmin, payload.service_location_id);
+      }
       item.service_location_id = payload.service_location_id ? toObjectId(payload.service_location_id) : null;
     }
     if (payload.zone_id !== undefined) {
+      if (currentAdmin && payload.zone_id) {
+        await assertZoneAccess(currentAdmin, payload.zone_id);
+      }
       item.zone_id = payload.zone_id ? toObjectId(payload.zone_id) : null;
     }
     if (payload.terminal !== undefined) {
@@ -6928,7 +7451,13 @@ export const getDashboardData = async () => {
     return serializeAirport(populatedItem);
   };
 
-  export const deleteAirport = async (id) => {
+  export const deleteAirport = async (id, currentAdmin = null) => {
+    if (currentAdmin) {
+      const existingAirport = await Airport.findById(id).select('service_location_id').lean();
+      if (!existingAirport) throw new ApiError(404, 'Airport not found');
+      assertAdminPermission(currentAdmin, 'airports.view', 'airports');
+      assertServiceLocationAccess(currentAdmin, existingAirport.service_location_id);
+    }
     const item = await Airport.findByIdAndDelete(id);
     if (!item) throw new ApiError(404, 'Airport not found');
     return true;
@@ -8185,15 +8714,20 @@ export const listOwnerDocumentUploadFields = async ({ activeOnly = true } = {}) 
 
   export const getPaymentSettings = async () => {
     const settings = await ensureThirdPartySettings();
-    return { settings: settings.payment || {} };
+    const activeGateway = await getActivePaymentGateway();
+    return { settings: settings.payment || {}, active_gateway: activeGateway };
   };
 
   export const updatePaymentSettings = async (payload) => {
     const settings = await ensureThirdPartySettings();
-    settings.payment = deepMerge(settings.payment || {}, payload);
+    settings.payment = normalizePaymentSettingsPayload(
+      settings.payment || {},
+      deepMerge(settings.payment || {}, payload),
+    );
     settings.markModified('payment');
     await settings.save();
-    return { settings: settings.payment };
+    const activeGateway = await getActivePaymentGateway();
+    return { settings: settings.payment, active_gateway: activeGateway };
   };
 
   export const getSMSSettings = async () => {

@@ -10,7 +10,7 @@ import { Driver } from '../../driver/models/Driver.js';
 import { comparePassword, hashPassword, signAccessToken } from '../services/authService.js';
 import { env } from '../../../../config/env.js';
 import { uploadDataUrlToCloudinary } from '../../../../utils/cloudinaryUpload.js';
-import { ensureThirdPartySettings } from '../../admin/services/adminService.js';
+import { resolveConfiguredGatewayCredentials } from '../../services/paymentGatewayService.js';
 import { getTransportRideSettings } from '../../services/transportSettingsService.js';
 import {
   consumeUserSignupSession,
@@ -106,45 +106,76 @@ const buildUserWalletPayload = (wallet) => {
 };
 
 const resolveRazorpayCredentials = async () => {
-  const envKeyId = String(process.env.RAZORPAY_KEY_ID || '').trim();
-  const envKeySecret = String(process.env.RAZORPAY_KEY_SECRET || '').trim();
-  const envEnabled = String(process.env.RAZORPAY_ENABLED || '').trim();
+  return resolveConfiguredGatewayCredentials('razor_pay');
+};
 
-  // Prefer backend .env credentials when present unless they are explicitly disabled.
-  if (envEnabled !== '0' && envKeyId && envKeySecret) {
-    return { keyId: envKeyId, keySecret: envKeySecret };
+const resolvePhonePeCredentials = async () => {
+  return resolveConfiguredGatewayCredentials('phone_pay');
+};
+
+const getFrontendBaseUrl = () => {
+  const configuredOrigin = String(env.corsOrigin || '')
+    .split(',')
+    .map((value) => value.trim())
+    .find((value) => value && value !== '*');
+
+  return (configuredOrigin || 'http://localhost:5173').replace(/\/+$/, '');
+};
+
+const getPhonePeBaseUrl = (environment = 'test') => (
+  String(environment).trim().toLowerCase() === 'production'
+    ? 'https://api.phonepe.com/apis/hermes'
+    : 'https://api-preprod.phonepe.com/apis/pg-sandbox'
+);
+
+const buildPhonePeChecksum = ({ payload = '', path = '', saltKey = '', saltIndex = '1' }) => {
+  const digest = crypto
+    .createHash('sha256')
+    .update(`${payload}${path}${saltKey}`)
+    .digest('hex');
+
+  return `${digest}###${saltIndex}`;
+};
+
+const phonePeRequest = async ({
+  method,
+  path,
+  body,
+  merchantId,
+  saltKey,
+  saltIndex,
+  environment,
+}) => {
+  const normalizedMethod = String(method || 'GET').trim().toUpperCase();
+  const encodedPayload =
+    body && normalizedMethod !== 'GET'
+      ? Buffer.from(JSON.stringify(body)).toString('base64')
+      : '';
+  const response = await fetch(`${getPhonePeBaseUrl(environment)}${path}`, {
+    method: normalizedMethod,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-VERIFY': buildPhonePeChecksum({
+        payload: encodedPayload,
+        path,
+        saltKey,
+        saltIndex,
+      }),
+      'X-MERCHANT-ID': merchantId,
+      accept: 'application/json',
+    },
+    body: encodedPayload ? JSON.stringify({ request: encodedPayload }) : undefined,
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || payload?.success === false) {
+    throw new ApiError(
+      response.status || 502,
+      payload?.message || payload?.code || 'PhonePe request failed',
+    );
   }
 
-  const settings = await ensureThirdPartySettings();
-  const razorpay = settings?.payment?.razor_pay || {};
-
-  const enabled = String(razorpay.enabled ?? '0') === '1';
-  if (!enabled) {
-    settings.payment = settings.payment || {};
-    settings.payment.razor_pay = {
-      ...razorpay,
-      enabled: '1',
-      environment: razorpay.environment || 'test',
-    };
-    settings.markModified('payment');
-    await settings.save();
-  }
-
-  const environment = String(razorpay.environment || 'test').toLowerCase();
-  const isLive = environment === 'live';
-
-  const keyId = String(isLive ? razorpay.live_api_key : razorpay.test_api_key || '');
-  const keySecret = String(isLive ? razorpay.live_secret_key : razorpay.test_secret_key || '');
-
-  if (!keyId || !keySecret) {
-    throw new ApiError(500, 'Razorpay credentials are not configured');
-  }
-
-  if (keyId.toLowerCase().includes('demo') || keySecret.toLowerCase().includes('demo')) {
-    throw new ApiError(500, 'Razorpay keys are demo placeholders. Configure real keys in Admin > Payment Gateways');
-  }
-
-  return { keyId, keySecret };
+  return payload;
 };
 
 const razorpayRequest = async ({ method, path, body, keyId, keySecret }) => {
@@ -1774,6 +1805,57 @@ export const createRentalAdvancePaymentOrder = async (req, res) => {
   });
 };
 
+export const createPhonePeWalletTopupOrder = async (req, res) => {
+  const amount = normalizeMoneyAmount(req.body?.amount);
+  const { merchantId, saltKey, saltIndex, environment } = await resolvePhonePeCredentials();
+  const userId = String(req.auth?.sub || '');
+  const compactUserId = userId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
+  const merchantTransactionId = `UWAL${Date.now()}${compactUserId}`.slice(0, 34);
+  const frontendBaseUrl = getFrontendBaseUrl();
+  const backendBaseUrl = `${req.protocol}://${req.get('host')}`;
+  const redirectUrl = `${frontendBaseUrl}/taxi/user/wallet?phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
+  const callbackUrl = `${backendBaseUrl}/api/v1/common/payment-gateway/phonepe/callback`;
+  const user = userId ? await User.findById(userId).select('phone').lean() : null;
+  const payload = await phonePeRequest({
+    method: 'POST',
+    path: '/pg/v1/pay',
+    body: {
+      merchantId,
+      merchantTransactionId,
+      merchantUserId: compactUserId,
+      amount: Math.round(amount * 100),
+      redirectUrl,
+      redirectMode: 'GET',
+      callbackUrl,
+      mobileNumber: normalizePhone(user?.phone || '') || undefined,
+      paymentInstrument: {
+        type: 'PAY_PAGE',
+      },
+    },
+    merchantId,
+    saltKey,
+    saltIndex,
+    environment,
+  });
+
+  const checkoutUrl = payload?.data?.instrumentResponse?.redirectInfo?.url || '';
+  if (!checkoutUrl) {
+    throw new ApiError(502, 'PhonePe payment URL was not returned');
+  }
+
+  res.status(201).json({
+    success: true,
+    data: {
+      gateway: 'phonepe',
+      merchantTransactionId,
+      amount: Math.round(amount * 100),
+      currency: 'INR',
+      checkoutUrl,
+      method: payload?.data?.instrumentResponse?.redirectInfo?.method || 'GET',
+    },
+  });
+};
+
 export const payRentalAdvanceWithWallet = async (req, res) => {
   const amount = normalizeMoneyAmount(req.body?.amount);
   const bookingReference =
@@ -1905,6 +1987,107 @@ export const verifyRazorpayWalletTopup = async (req, res) => {
   res.status(201).json({
     success: true,
     data: buildUserWalletPayload(wallet),
+  });
+};
+
+export const verifyPhonePeWalletTopup = async (req, res) => {
+  const merchantTransactionId = toCleanString(
+    req.params?.merchantTransactionId || req.query?.merchantTransactionId || req.query?.transactionId,
+  );
+
+  if (!merchantTransactionId) {
+    throw new ApiError(400, 'merchantTransactionId is required');
+  }
+
+  const { merchantId, saltKey, saltIndex, environment } = await resolvePhonePeCredentials();
+  const payload = await phonePeRequest({
+    method: 'GET',
+    path: `/pg/v1/status/${encodeURIComponent(merchantId)}/${encodeURIComponent(merchantTransactionId)}`,
+    merchantId,
+    saltKey,
+    saltIndex,
+    environment,
+  });
+
+  const paymentState = String(payload?.data?.state || payload?.data?.paymentState || '').trim().toUpperCase();
+  const paymentId = toCleanString(payload?.data?.transactionId || merchantTransactionId);
+  const amount = Math.round(Number(payload?.data?.amount || 0)) / 100;
+  const userId = req.auth?.sub;
+
+  if (paymentState === 'COMPLETED') {
+    await ensureUserWallet(userId);
+
+    const alreadyCredited = await UserWallet.findOne({
+      userId,
+      $or: [
+        { 'transactions.providerPaymentId': paymentId },
+        { 'transactions.providerOrderId': merchantTransactionId },
+      ],
+    })
+      .select('_id')
+      .lean();
+
+    if (!alreadyCredited) {
+      const tx = {
+        kind: 'credit',
+        amount,
+        title: 'Wallet Refilled',
+        provider: 'phonepe',
+        providerOrderId: merchantTransactionId,
+        providerPaymentId: paymentId,
+      };
+
+      await UserWallet.updateOne(
+        { userId },
+        {
+          $inc: { balance: amount },
+          $push: { transactions: { $each: [tx], $slice: -50 } },
+        },
+      );
+    }
+
+    const wallet = await UserWallet.findOne({ userId })
+      .select('balance refundWallet transactions')
+      .slice('transactions', -10)
+      .lean();
+
+    res.json({
+      success: true,
+      data: {
+        status: 'paid',
+        gateway: 'phonepe',
+        merchantTransactionId,
+        transactionId: paymentId,
+        wallet: buildUserWalletPayload(wallet),
+      },
+    });
+    return;
+  }
+
+  if (paymentState === 'PENDING') {
+    res.json({
+      success: true,
+      data: {
+        status: 'pending',
+        gateway: 'phonepe',
+        merchantTransactionId,
+        transactionId: paymentId,
+      },
+      message: payload?.message || 'PhonePe payment is still pending',
+    });
+    return;
+  }
+
+  res.json({
+    success: true,
+    data: {
+      status: 'failed',
+      gateway: 'phonepe',
+      merchantTransactionId,
+      transactionId: paymentId,
+      code: payload?.code || payload?.data?.responseCode || '',
+    },
+    message: payload?.message || 'PhonePe payment was not completed',
   });
 };
 

@@ -2,6 +2,7 @@ import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { uploadDataUrlToCloudinary } from '../../../../utils/cloudinaryUpload.js';
 import { env } from '../../../../config/env.js';
 import { getReferralSettings, getReferralTranslationContent } from '../../admin/services/adminService.js';
+import { getPublicActivePaymentGateway } from '../../services/paymentGatewayService.js';
 
 /**
  * Common controller for shared utilities like file uploads
@@ -46,5 +47,21 @@ export const getReferralSettingsContent = asyncHandler(async (req, res) => {
     return res.json({
         success: true,
         data,
+    });
+});
+
+export const getPaymentGatewayConfig = asyncHandler(async (_req, res) => {
+    const data = await getPublicActivePaymentGateway();
+
+    return res.json({
+        success: true,
+        data,
+    });
+});
+
+export const acknowledgePhonePeCallback = asyncHandler(async (_req, res) => {
+    return res.json({
+        success: true,
+        message: 'Callback received',
     });
 });

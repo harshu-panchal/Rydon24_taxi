@@ -1,9 +1,6 @@
 import { asyncHandler } from "../../../../utils/asyncHandler.js";
 import * as adminService from "../services/adminService.js";
 import ExcelJS from 'exceljs';
-import { Driver } from '../../driver/models/Driver.js';
-import { Owner } from '../models/Owner.js';
-import { ServiceLocation } from '../models/ServiceLocation.js';
 import { BusBooking } from '../../user/models/BusBooking.js';
 import { BusService } from '../models/BusService.js';
 import { BusSeatHold } from '../../user/models/BusSeatHold.js';
@@ -341,6 +338,22 @@ export const verifyResetOtp = asyncHandler(async (req, res) =>
 export const resetPassword = asyncHandler(async (req, res) =>
   ok(res, await adminService.resetPassword(req.body)),
 );
+export const getAdmins = asyncHandler(async (req, res) =>
+  ok(res, { results: await adminService.listAdmins(req.auth?.admin) }),
+);
+export const getAdminPermissions = asyncHandler(async (_req, res) =>
+  ok(res, { results: await adminService.listAdminPermissions() }),
+);
+export const createAdminAccount = asyncHandler(async (req, res) =>
+  ok(res, await adminService.createAdminAccount(req.auth?.admin, req.body)),
+);
+export const updateAdminAccount = asyncHandler(async (req, res) =>
+  ok(res, await adminService.updateAdminAccount(req.auth?.admin, req.params.id, req.body)),
+);
+export const deleteAdminAccount = asyncHandler(async (req, res) => {
+  await adminService.deleteAdminAccount(req.auth?.admin, req.params.id);
+  ok(res, { deleted: true });
+});
 
 export const getUsers = asyncHandler(async (req, res) =>
   ok(res, await adminService.listUsers(req.query)),
@@ -413,130 +426,7 @@ export const adjustUserWallet = asyncHandler(async (req, res) =>
 );
 
 export const getDrivers = asyncHandler(async (req, res) => {
-  const safePage = Number(req.query.page) || 1;
-  const safeLimit = Number(req.query.limit) || 50;
-  const start = (safePage - 1) * safeLimit;
-  const query = { deletedAt: null };
-
-  if (req.query.status) {
-    query.status = req.query.status;
-  }
-
-  if (req.query.approve !== undefined) {
-    query.approve =
-      req.query.approve === 'true' ||
-      req.query.approve === true ||
-      req.query.approve === 1;
-  }
-
-  if (req.query.isOnline !== undefined) {
-    query.isOnline =
-      req.query.isOnline === 'true' ||
-      req.query.isOnline === true ||
-      req.query.isOnline === 1;
-  }
-
-  if (req.query.search) {
-    const regex = new RegExp(
-      String(req.query.search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
-      'i',
-    );
-    query.$or = [
-      { name: regex },
-      { phone: regex },
-      { email: regex },
-      { vehicleNumber: regex },
-    ];
-  }
-
-  const total = await Driver.countDocuments(query);
-  const drivers = await Driver.find(query)
-    .select(
-      '_id name phone email owner_id service_location_id city registerFor vehicleType vehicleNumber vehicleColor rating ratingCount isOnline onlineSelfie approve status createdAt updatedAt',
-    )
-    .sort({ createdAt: -1 })
-    .skip(start)
-    .limit(safeLimit)
-    .lean();
-
-  const ownerIds = [
-    ...new Set(drivers.map((driver) => String(driver.owner_id || '')).filter(Boolean)),
-  ];
-  const serviceLocationIds = [
-    ...new Set(
-      drivers.map((driver) => String(driver.service_location_id || '')).filter(Boolean),
-    ),
-  ];
-
-  const [owners, serviceLocations] = await Promise.all([
-    ownerIds.length
-      ? Owner.find({ _id: { $in: ownerIds } })
-          .select('_id company_name owner_name name email mobile')
-          .lean()
-      : [],
-    serviceLocationIds.length
-      ? ServiceLocation.find({ _id: { $in: serviceLocationIds } })
-          .select('_id service_location_name name country')
-          .lean()
-      : [],
-  ]);
-
-  const ownerMap = new Map(owners.map((owner) => [String(owner._id), owner]));
-  const serviceLocationMap = new Map(
-    serviceLocations.map((location) => [String(location._id), location]),
-  );
-
-  const results = drivers.map((driver) => {
-    const owner = driver.owner_id ? ownerMap.get(String(driver.owner_id)) || null : null;
-    const serviceLocation = driver.service_location_id
-      ? serviceLocationMap.get(String(driver.service_location_id)) || null
-      : null;
-
-    return {
-      _id: driver._id,
-      id: driver._id,
-      name: driver.name || '',
-      phone: driver.phone || '',
-      mobile: driver.phone || '',
-      email: driver.email || '',
-      owner_id: owner,
-      service_location_id: serviceLocation,
-      city: driver.city || '',
-      service_location_name:
-        serviceLocation?.service_location_name ||
-        serviceLocation?.name ||
-        driver.city ||
-        '',
-      transport_type: driver.registerFor || driver.vehicleType || '',
-      register_for: driver.registerFor || '',
-      vehicle_type: driver.vehicleType || '',
-      vehicle_number: driver.vehicleNumber || '',
-      vehicle_color: driver.vehicleColor || '',
-      rating: Number(driver.ratingCount || 0) > 0 ? Number(driver.rating || 0) : 0,
-      rating_count: Number(driver.ratingCount || 0),
-      isOnline: Boolean(driver.isOnline),
-      online_selfie_image: driver.onlineSelfie?.imageUrl || '',
-      online_selfie_captured_at: driver.onlineSelfie?.capturedAt || null,
-      online_selfie_for_date: driver.onlineSelfie?.forDate || '',
-      approve: Boolean(driver.approve),
-      status: driver.status || (driver.approve ? 'approved' : 'pending'),
-      active:
-        driver.approve !== false &&
-        String(driver.status || '').toLowerCase() !== 'inactive',
-      createdAt: driver.createdAt,
-      updatedAt: driver.updatedAt,
-    };
-  });
-
-  ok(res, {
-    results,
-    paginator: {
-      current_page: safePage,
-      per_page: safeLimit,
-      total,
-      last_page: Math.max(1, Math.ceil(total / safeLimit)),
-    },
-  });
+  ok(res, await adminService.listDrivers(req.query, req.auth?.admin));
 });
 
 export const getDriverRatings = asyncHandler(async (req, res) =>
@@ -637,13 +527,13 @@ export const createDriver = asyncHandler(async (req, res) =>
   ok(res, await adminService.createDriver(req.body)),
 );
 export const getDriver = asyncHandler(async (req, res) =>
-  ok(res, await adminService.getDriverById(req.params.id)),
+  ok(res, await adminService.getDriverById(req.params.id, req.auth?.admin)),
 );
 export const getDriverProfile = asyncHandler(async (req, res) =>
   ok(res, await adminService.getDriverProfile(req.params.id)),
 );
 export const updateDriver = asyncHandler(async (req, res) =>
-  ok(res, await adminService.updateDriver(req.params.id, req.body)),
+  ok(res, await adminService.updateDriver(req.params.id, req.body, req.auth?.admin)),
 );
 export const updateDriverPassword = asyncHandler(async (req, res) =>
   ok(
@@ -686,33 +576,33 @@ export const getReferralDashboard = asyncHandler(async (_req, res) =>
   ok(res, await adminService.getReferralDashboard()),
 );
 
-export const getServiceLocations = asyncHandler(async (_req, res) =>
-  ok(res, await adminService.listServiceLocations()),
+export const getServiceLocations = asyncHandler(async (req, res) =>
+  ok(res, await adminService.listServiceLocations(req.auth?.admin)),
 );
-export const getServiceStores = asyncHandler(async (_req, res) =>
-  ok(res, { results: await adminService.listServiceStores() }),
+export const getServiceStores = asyncHandler(async (req, res) =>
+  ok(res, { results: await adminService.listServiceStores(req.auth?.admin) }),
 );
 export const getCountries = asyncHandler(async (_req, res) =>
   ok(res, { results: await adminService.listCountries() }),
 );
 export const createServiceLocation = asyncHandler(async (req, res) =>
-  ok(res, await adminService.createServiceLocation(req.body)),
+  ok(res, await adminService.createServiceLocation(req.body, req.auth?.admin)),
 );
 export const createServiceStore = asyncHandler(async (req, res) =>
-  ok(res, await adminService.createServiceStore(req.body)),
+  ok(res, await adminService.createServiceStore(req.body, req.auth?.admin)),
 );
 export const updateServiceLocation = asyncHandler(async (req, res) =>
-  ok(res, await adminService.updateServiceLocation(req.params.id, req.body)),
+  ok(res, await adminService.updateServiceLocation(req.params.id, req.body, req.auth?.admin)),
 );
 export const updateServiceStore = asyncHandler(async (req, res) =>
-  ok(res, await adminService.updateServiceStore(req.params.id, req.body)),
+  ok(res, await adminService.updateServiceStore(req.params.id, req.body, req.auth?.admin)),
 );
 export const deleteServiceLocation = asyncHandler(async (req, res) => {
-  await adminService.deleteServiceLocation(req.params.id);
+  await adminService.deleteServiceLocation(req.params.id, req.auth?.admin);
   ok(res, { deleted: true });
 });
 export const deleteServiceStore = asyncHandler(async (req, res) => {
-  await adminService.deleteServiceStore(req.params.id);
+  await adminService.deleteServiceStore(req.params.id, req.auth?.admin);
   ok(res, { deleted: true });
 });
 export const getNearbyServiceLocations = asyncHandler(async (req, res) =>
@@ -765,10 +655,10 @@ export const deleteVehicleType = asyncHandler(async (req, res) => {
 });
 
 export const getOwners = asyncHandler(async (req, res) =>
-  ok(res, { results: await adminService.listOwners(req.query) }),
+  ok(res, { results: await adminService.listOwners(req.query, req.auth?.admin) }),
 );
 export const getOwner = asyncHandler(async (req, res) =>
-  ok(res, await adminService.getOwnerById(req.params.id)),
+  ok(res, await adminService.getOwnerById(req.params.id, req.auth?.admin)),
 );
 export const createOwner = asyncHandler(async (req, res) =>
   ok(res, await adminService.createOwner(req.body)),
@@ -837,49 +727,49 @@ export const getWithdrawals = asyncHandler(async (_req, res) =>
   ok(res, { results: await adminService.listWithdrawals() }),
 );
 
-export const getZones = asyncHandler(async (_req, res) =>
-  ok(res, { results: await adminService.listZones() }),
+export const getZones = asyncHandler(async (req, res) =>
+  ok(res, { results: await adminService.listZones(req.auth?.admin) }),
 );
 export const createZone = asyncHandler(async (req, res) =>
-  ok(res, await adminService.createZone(req.body)),
+  ok(res, await adminService.createZone(req.body, req.auth?.admin)),
 );
 export const updateZone = asyncHandler(async (req, res) =>
-  ok(res, await adminService.updateZone(req.params.id, req.body)),
+  ok(res, await adminService.updateZone(req.params.id, req.body, req.auth?.admin)),
 );
 export const deleteZone = asyncHandler(async (req, res) => {
-  await adminService.deleteZone(req.params.id);
+  await adminService.deleteZone(req.params.id, req.auth?.admin);
   ok(res, { deleted: true });
 });
 export const toggleZoneStatus = asyncHandler(async (req, res) =>
-  ok(res, await adminService.toggleZoneStatus(req.params.id)),
+  ok(res, await adminService.toggleZoneStatus(req.params.id, req.auth?.admin)),
 );
 
 export const getSetPrices = asyncHandler(async (req, res) => {
-  const data = await adminService.listSetPrices(req.query || {});
+  const data = await adminService.listSetPrices(req.query || {}, req.auth?.admin);
   res.json({ success: true, ...data });
 });
 export const createSetPrice = asyncHandler(async (req, res) =>
-  ok(res, await adminService.createSetPrice(req.body)),
+  ok(res, await adminService.createSetPrice(req.body, req.auth?.admin)),
 );
 export const updateSetPrice = asyncHandler(async (req, res) =>
-  ok(res, await adminService.updateSetPrice(req.params.id, req.body)),
+  ok(res, await adminService.updateSetPrice(req.params.id, req.body, req.auth?.admin)),
 );
 export const deleteSetPrice = asyncHandler(async (req, res) => {
-  await adminService.deleteSetPrice(req.params.id);
+  await adminService.deleteSetPrice(req.params.id, req.auth?.admin);
   ok(res, { deleted: true });
 });
 
-export const getAirports = asyncHandler(async (_req, res) =>
-  ok(res, { airports: await adminService.listAirports() }),
+export const getAirports = asyncHandler(async (req, res) =>
+  ok(res, { airports: await adminService.listAirports(req.auth?.admin) }),
 );
 export const createAirport = asyncHandler(async (req, res) =>
-  ok(res, await adminService.createAirport(req.body)),
+  ok(res, await adminService.createAirport(req.body, req.auth?.admin)),
 );
 export const updateAirport = asyncHandler(async (req, res) =>
-  ok(res, await adminService.updateAirport(req.params.id, req.body)),
+  ok(res, await adminService.updateAirport(req.params.id, req.body, req.auth?.admin)),
 );
 export const deleteAirport = asyncHandler(async (req, res) => {
-  await adminService.deleteAirport(req.params.id);
+  await adminService.deleteAirport(req.params.id, req.auth?.admin);
   ok(res, { deleted: true });
 });
 

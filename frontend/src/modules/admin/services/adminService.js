@@ -8,6 +8,11 @@ export const adminService = {
   forgotPassword: (email) => api.post('/admin/forgot-password', { email }),
   verifyResetOtp: (data) => api.post('/admin/verify-reset-otp', data),
   resetPassword: (data) => api.post('/admin/reset-password', data),
+  getAdmins: () => api.get('/admin/admin-management/admins'),
+  createAdminAccount: (data) => api.post('/admin/admin-management/admins', data),
+  updateAdminAccount: (id, data) => api.patch(`/admin/admin-management/admins/${id}`, data),
+  deleteAdminAccount: (id) => api.delete(`/admin/admin-management/admins/${id}`),
+  getAdminPermissions: () => api.get('/admin/permissions'),
 
   /**
    * User Management

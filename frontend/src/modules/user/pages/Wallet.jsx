@@ -9,6 +9,7 @@ const Wallet = () => {
   const navigate = useNavigate();
   const { settings } = useSettings();
   const appName = settings.general?.app_name || 'App';
+  const activePaymentGateway = settings.paymentGateway || null;
 
   const [showAddMoney, setShowAddMoney] = React.useState(false);
   const [amount, setAmount] = React.useState('');
@@ -38,6 +39,10 @@ const Wallet = () => {
   };
 
   const balanceText = useMemo(() => splitMoney(formatInr(wallet.balance)), [wallet.balance]);
+  const walletTopUpGatewayLabel = activePaymentGateway?.label || 'payment gateway';
+  const supportsWalletTopUp = activePaymentGateway?.supportsWalletTopUp === true;
+  const walletTopUpMode = activePaymentGateway?.walletTopUpMode || '';
+  const canTopUpWallet = supportsWalletTopUp && ['razorpay_checkout', 'phonepe_redirect'].includes(walletTopUpMode);
 
   const refreshWallet = async () => {
     setWalletError('');
@@ -62,6 +67,65 @@ const Wallet = () => {
     refreshWallet();
   }, []);
 
+  useEffect(() => {
+    const merchantTransactionId = new URLSearchParams(window.location.search).get('phonepe_txn');
+    if (!merchantTransactionId || walletTopUpMode !== 'phonepe_redirect') {
+      return;
+    }
+
+    let cancelled = false;
+
+    const clearPhonePeQuery = () => {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('phonepe_txn');
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    };
+
+    const syncPhonePeTopup = async () => {
+      setWalletError('');
+      setWalletLoading(true);
+
+      try {
+        const response = await userAuthService.verifyPhonePeWalletTopup(merchantTransactionId);
+        if (cancelled) return;
+
+        const data = response?.data || {};
+        if (data.status === 'paid' && data.wallet) {
+          setWallet({
+            balance: Number(data.wallet.balance || 0),
+            currency: data.wallet.currency || 'INR',
+            recentTransactions: Array.isArray(data.wallet.recentTransactions) ? data.wallet.recentTransactions : [],
+          });
+          setIsSuccess(true);
+          setShowAddMoney(false);
+          setAmount('');
+          window.setTimeout(() => {
+            if (!cancelled) setIsSuccess(false);
+          }, 1400);
+        } else if (data.status === 'pending') {
+          setWalletError('PhonePe payment is still pending. Please refresh in a few seconds.');
+        } else if (data.status === 'failed') {
+          setWalletError(response?.message || 'PhonePe payment was not completed.');
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setWalletError(err?.message || 'Could not verify PhonePe payment.');
+        }
+      } finally {
+        if (!cancelled) {
+          setWalletLoading(false);
+          clearPhonePeQuery();
+        }
+      }
+    };
+
+    syncPhonePeTopup();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [walletTopUpMode]);
+
   const loadRazorpayScript = () =>
     new Promise((resolve) => {
       if (window.Razorpay) {
@@ -85,6 +149,26 @@ const Wallet = () => {
     setWalletError('');
 
     try {
+      if (!activePaymentGateway) {
+        throw new Error('No payment gateway is enabled by admin right now.');
+      }
+
+      if (!supportsWalletTopUp || !canTopUpWallet) {
+        throw new Error(`${walletTopUpGatewayLabel} is enabled by admin, but wallet top-up is not implemented for it yet.`);
+      }
+
+      if (walletTopUpMode === 'phonepe_redirect') {
+        const sessionResponse = await userAuthService.createPhonePeWalletTopupOrder(amountValue);
+        const session = sessionResponse?.data || {};
+
+        if (!session.checkoutUrl) {
+          throw new Error('Unable to start PhonePe payment');
+        }
+
+        window.location.assign(session.checkoutUrl);
+        return;
+      }
+
       const scriptLoaded = await loadRazorpayScript();
       if (!scriptLoaded) {
         throw new Error('Razorpay SDK failed to load');
@@ -178,9 +262,11 @@ const Wallet = () => {
                 <Plus size={20} className="rotate-45" />
               </button>
 
-              <div className="text-center space-y-2">
+                <div className="text-center space-y-2">
                 <h3 className="text-xl font-bold text-slate-900">Add Money</h3>
-                <p className="text-[10px] font-bold text-slate-400 tracking-wider uppercase">Select amount to top-up</p>
+                <p className="text-[10px] font-bold text-slate-400 tracking-wider uppercase">
+                  {activePaymentGateway ? `Top-up via ${walletTopUpGatewayLabel}` : 'Select amount to top-up'}
+                </p>
               </div>
 
               {isSuccess ? (
@@ -266,13 +352,22 @@ const Wallet = () => {
                 )}
               </h2>
               {walletError && <p className="text-xs font-bold text-rose-400 mt-2">{walletError}</p>}
+              {activePaymentGateway && !canTopUpWallet && (
+                <p className="text-xs font-bold text-amber-300 mt-2">
+                  {walletTopUpGatewayLabel} is active, but wallet top-up is not available for it yet.
+                </p>
+              )}
             </div>
 
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => setShowAddMoney(true)}
-                className="flex-1 bg-white text-slate-900 h-12 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
+                onClick={() => {
+                  setWalletError('');
+                  setShowAddMoney(true);
+                }}
+                disabled={!canTopUpWallet}
+                className="flex-1 bg-white text-slate-900 h-12 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none disabled:cursor-not-allowed"
               >
                 <Plus size={16} strokeWidth={2.5} />
                 Add Money

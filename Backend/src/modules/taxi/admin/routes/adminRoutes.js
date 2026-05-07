@@ -4,6 +4,7 @@ import {
   approveOwner,
   approveOwnerSignupFromDriver,
   createAirport,
+  createAdminAccount,
   createAdminBusBooking,
   createBusService,
   createAppModule,
@@ -159,6 +160,7 @@ import {
   adjustOwnerWallet,
   updateAppModule,
   updateAirport,
+  updateAdminAccount,
   updateBusService,
   updateDriver,
   updateDriverNeededDocument,
@@ -194,7 +196,10 @@ import {
   createFleetVehicle,
   cancelAdminBusBookingSeats,
   deleteAirport,
+  deleteAdminAccount,
   deleteVehicleType,
+  getAdminPermissions,
+  getAdmins,
   getTransportTypes,
   deleteFleetVehicle,
 } from '../controllers/adminController.js';
@@ -218,6 +223,13 @@ adminRouter.post('/admin/login', loginAdmin);
 adminRouter.post('/admin/forgot-password', forgotPassword);
 adminRouter.post('/admin/verify-reset-otp', verifyResetOtp);
 adminRouter.post('/admin/reset-password', resetPassword);
+adminRouter.use('/admin', authenticate(['admin']));
+
+adminRouter.get('/admin/permissions', getAdminPermissions);
+adminRouter.get('/admin/admin-management/admins', getAdmins);
+adminRouter.post('/admin/admin-management/admins', createAdminAccount);
+adminRouter.patch('/admin/admin-management/admins/:id', updateAdminAccount);
+adminRouter.delete('/admin/admin-management/admins/:id', deleteAdminAccount);
 
 adminRouter.get('/admin/users', getUsers);
 adminRouter.post('/admin/users/bulk-import', bulkImportUsers);

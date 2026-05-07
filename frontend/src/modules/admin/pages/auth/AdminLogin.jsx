@@ -5,14 +5,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { adminService } from '../../services/adminService';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 
-const STATIC_ADMIN_EMAIL = 'admin@gmail.com';
-const STATIC_ADMIN_PASSWORD = '12345';
-
 const AdminLogin = () => {
   const { settings } = useSettings();
   const [view, setView] = useState('login'); // 'login' | 'forgot-email' | 'verify-otp' | 'reset-password'
-  const [email, setEmail] = useState(STATIC_ADMIN_EMAIL);
-  const [password, setPassword] = useState(STATIC_ADMIN_PASSWORD);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -24,6 +21,7 @@ const AdminLogin = () => {
 
   const appLogo = settings.general?.logo || settings.customization?.logo;
   const appName = settings.general?.app_name || 'App';
+  const brandAccent = settings.customization?.admin_theme_color || '#F97316';
 
   const resetMessages = () => {
     setError('');
@@ -37,8 +35,8 @@ const AdminLogin = () => {
 
     try {
       const response = await adminService.login({ email, password });
-      localStorage.setItem('adminToken', response.data?.token || '');
-      localStorage.setItem('adminInfo', JSON.stringify(response.data?.admin || {}));
+      localStorage.setItem('adminToken', response?.data?.token || '');
+      localStorage.setItem('adminInfo', JSON.stringify(response?.data?.admin || {}));
       setTimeout(() => navigate('/admin/dashboard'), 300);
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Unable to complete admin login.');
@@ -100,10 +98,10 @@ const AdminLogin = () => {
 
   const renderLoginForm = () => (
     <form onSubmit={handleLogin} className="space-y-2.5 md:space-y-4">
-      <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-left">
-        <p className="text-[11px] font-black uppercase tracking-[1.5px] text-blue-700">Static Admin Login</p>
-        <p className="mt-1 text-[12px] sm:text-[13px] font-semibold text-blue-900">
-          Email: {STATIC_ADMIN_EMAIL} | Password: {STATIC_ADMIN_PASSWORD}
+      <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-left">
+        <p className="text-[11px] font-black uppercase tracking-[1.5px] text-emerald-700">Database-backed Access</p>
+        <p className="mt-1 text-[12px] sm:text-[13px] font-semibold leading-relaxed text-emerald-900">
+          Sign in with your superadmin or subadmin email and password. Admin accounts are loaded from the database.
         </p>
       </div>
 
@@ -119,6 +117,7 @@ const AdminLogin = () => {
             disabled={isLoading}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            autoComplete="username"
             className="w-full pl-14 sm:pl-16 pr-5 sm:pr-6 py-3 md:py-4 bg-gray-50 border-2 border-transparent focus:border-primary/20 focus:bg-white rounded-3xl text-[15px] md:text-[16px] transition-all font-semibold placeholder:text-gray-300 outline-none"
           />
         </div>
@@ -133,6 +132,7 @@ const AdminLogin = () => {
             disabled={isLoading}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
             className="w-full pl-14 sm:pl-16 pr-5 sm:pr-6 py-3 md:py-4 bg-gray-50 border-2 border-transparent focus:border-primary/20 focus:bg-white rounded-3xl text-[15px] md:text-[16px] transition-all font-semibold placeholder:text-gray-300 outline-none"
           />
         </div>
@@ -283,7 +283,7 @@ const AdminLogin = () => {
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center px-3 py-2 sm:py-3 md:py-4 font-sans overflow-hidden relative">
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px] animate-pulse" />
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full blur-[120px] animate-pulse" style={{ backgroundColor: `${brandAccent}1A` }} />
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[120px] animate-pulse delay-700" />
 
       <motion.div
@@ -317,6 +317,9 @@ const AdminLogin = () => {
             <ShieldCheck size={16} className="text-primary" />
             <span className="text-gray-500 font-bold text-[11px] uppercase tracking-[2px]">{appName} Access Terminal</span>
           </div>
+          <p className="mt-3 max-w-xs text-center text-[12px] font-semibold leading-relaxed text-slate-400">
+            Dynamic admin login for superadmin and scoped subadmin accounts.
+          </p>
         </div>
 
         <AnimatePresence mode="wait">

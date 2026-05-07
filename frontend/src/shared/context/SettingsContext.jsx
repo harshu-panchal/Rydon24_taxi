@@ -19,6 +19,7 @@ const DEFAULT_SETTINGS_CONTEXT = {
     transportRide: {
       enable_bus_service: '0',
     },
+    paymentGateway: null,
   },
   loading: true,
   refreshSettings: () => {},
@@ -136,10 +137,11 @@ export const SettingsProvider = ({ children }) => {
 
   const fetchSettings = async () => {
     try {
-      const [genRes, cusRes, transportRideRes] = await Promise.allSettled([
+      const [genRes, cusRes, transportRideRes, paymentGatewayRes] = await Promise.allSettled([
         api.get('/admin/general-settings/general'),
         api.get('/admin/general-settings/customize'),
         api.get('/admin/general-settings/transport-ride'),
+        api.get('/common/payment-gateway'),
       ]);
 
       setSettings({
@@ -149,6 +151,10 @@ export const SettingsProvider = ({ children }) => {
           transportRideRes.status === 'fulfilled'
             ? (transportRideRes.value.data?.settings || {})
             : { enable_bus_service: '0' },
+        paymentGateway:
+          paymentGatewayRes.status === 'fulfilled'
+            ? (paymentGatewayRes.value.data?.activeGateway || null)
+            : null,
       });
     } catch (err) {
       console.error('Failed to fetch settings:', err);

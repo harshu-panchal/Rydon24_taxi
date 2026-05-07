@@ -15,12 +15,14 @@ const PaymentGateways = () => {
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState({});
   const [submitting, setSubmitting] = useState({});
+  const [activeGateway, setActiveGateway] = useState(null);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       const res = await adminService.getPaymentSettings();
       setSettings(res.data?.settings || {});
+      setActiveGateway(res.data?.active_gateway || null);
     } catch (err) {
       console.error('Fetch error:', err);
       toast.error('Failed to load data');
@@ -36,30 +38,35 @@ const PaymentGateways = () => {
   const handleSave = async (slug, data) => {
     try {
       setSubmitting(prev => ({ ...prev, [slug]: true }));
-      await adminService.updatePaymentSettings(data);
+      const response = await adminService.updatePaymentSettings(data);
+      setSettings(response?.data?.settings || {});
+      setActiveGateway(response?.data?.active_gateway || null);
       toast.success(`Configuration for ${slug} updated`);
     } catch (err) {
-      toast.error('Failed to save configuration');
+      toast.error(err?.response?.data?.message || 'Failed to save configuration');
     } finally {
       setSubmitting(prev => ({ ...prev, [slug]: false }));
     }
   };
 
-  const handleToggle = async (slug, key, currentValue) => {
+  const handleToggle = async (gateway, currentValue) => {
     try {
+      setSubmitting(prev => ({ ...prev, [gateway.slug]: true }));
       const newValue = currentValue === "1" ? "0" : "1";
-      const [parent, child] = key.split('.');
-      await adminService.updatePaymentSettings({ [parent]: { [child]: newValue } });
-      
-      setSettings(prev => {
-        const next = { ...prev };
-        if (!next[parent]) next[parent] = {};
-        next[parent][child] = newValue;
-        return next;
+      const response = await adminService.updatePaymentSettings({
+        [gateway.slug]: {
+          ...(settings[gateway.slug] || {}),
+          enabled: newValue,
+        },
       });
-      toast.success(`${slug} ${newValue === "1" ? 'enabled' : 'disabled'}`);
+
+      setSettings(response?.data?.settings || {});
+      setActiveGateway(response?.data?.active_gateway || null);
+      toast.success(`${gateway.name} ${newValue === "1" ? 'enabled' : 'disabled'}`);
     } catch (err) {
-      toast.error('Failed to toggle status');
+      toast.error(err?.response?.data?.message || 'Failed to toggle status');
+    } finally {
+      setSubmitting(prev => ({ ...prev, [gateway.slug]: false }));
     }
   };
 
@@ -97,7 +104,7 @@ const PaymentGateways = () => {
       ]
     },
     { 
-      name: 'PHONE PAY', 
+      name: 'PHONEPE', 
       slug: 'phone_pay', 
       logo: 'https://www.phonepe.com/webstatic/8101/static/m/83f6ed9f4a0a996dc7a69b7.svg', 
       enableKey: 'phone_pay.enabled', 
@@ -158,6 +165,7 @@ const PaymentGateways = () => {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
         {gatewayGroups.map((gw) => {
           const isEnabled = getSettingValue(gw.enableKey) === "1";
+          const isSubmitting = Boolean(submitting[gw.slug]);
           
           return (
             <div key={gw.slug} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-full transform transition-all duration-200 hover:shadow-md">
@@ -186,7 +194,8 @@ const PaymentGateways = () => {
                   <input 
                     type="checkbox" 
                     checked={isEnabled} 
-                    onChange={() => handleToggle(gw.name, gw.enableKey, getSettingValue(gw.enableKey))}
+                    onChange={() => handleToggle(gw, getSettingValue(gw.enableKey))}
+                    disabled={isSubmitting}
                     className="sr-only peer" 
                   />
                   <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
@@ -195,6 +204,19 @@ const PaymentGateways = () => {
 
               {/* Card Body */}
               <div className="p-6 flex-1">
+                <div className="mb-5 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                  <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Runtime status</p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">
+                    {isEnabled
+                      ? `${gw.name} is the live gateway for the app right now.`
+                      : activeGateway?.slug === gw.slug
+                        ? `${gw.name} was last marked active.`
+                        : 'This gateway is currently inactive.'}
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    Only one payment gateway can stay enabled at a time, and enabling requires valid credentials for that gateway.
+                  </p>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   {gw.fields.map((field) => (
                     <div key={field.key} className={field.key.includes('environment') ? 'md:col-span-2' : ''}>
@@ -233,10 +255,10 @@ const PaymentGateways = () => {
                 </div>
                 <button 
                   onClick={() => handleSave(gw.name, { [gw.slug]: settings[gw.slug] })}
-                  disabled={submitting[gw.name]}
+                  disabled={isSubmitting}
                   className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                 >
-                  {submitting[gw.name] ? (
+                  {isSubmitting ? (
                     <><Loader2 size={16} className="animate-spin" /> Updating...</>
                   ) : (
                     'Update Integration'

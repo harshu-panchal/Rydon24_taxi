@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { normalizePoint } from '../../../../utils/geo.js';
-import { ensureThirdPartySettings } from '../../admin/services/adminService.js';
+import { resolveConfiguredGatewayCredentials } from '../../services/paymentGatewayService.js';
 import { Driver } from '../../driver/models/Driver.js';
 import { WalletTransaction } from '../../driver/models/WalletTransaction.js';
 import { applyDriverWalletAdjustment, serializeDriverWallet } from '../../driver/services/walletService.js';
@@ -271,36 +271,7 @@ const finalizeRideCompletion = async ({
 };
 
 const resolveRazorpayCredentials = async () => {
-  const envKeyId = String(process.env.RAZORPAY_KEY_ID || '').trim();
-  const envKeySecret = String(process.env.RAZORPAY_KEY_SECRET || '').trim();
-  const envEnabled = String(process.env.RAZORPAY_ENABLED || '').trim();
-
-  if (envEnabled !== '0' && envKeyId && envKeySecret) {
-    return { keyId: envKeyId, keySecret: envKeySecret };
-  }
-
-  const settings = await ensureThirdPartySettings();
-  const razorpay = settings?.payment?.razor_pay || {};
-  const enabled = String(razorpay.enabled ?? '0') === '1';
-
-  if (!enabled) {
-    throw new ApiError(403, 'Razorpay gateway is disabled');
-  }
-
-  const environment = String(razorpay.environment || 'test').toLowerCase();
-  const isLive = environment === 'live';
-  const keyId = String(isLive ? razorpay.live_api_key : razorpay.test_api_key || '');
-  const keySecret = String(isLive ? razorpay.live_secret_key : razorpay.test_secret_key || '');
-
-  if (!keyId || !keySecret) {
-    throw new ApiError(500, 'Razorpay credentials are not configured');
-  }
-
-  if (keyId.toLowerCase().includes('demo') || keySecret.toLowerCase().includes('demo')) {
-    throw new ApiError(500, 'Razorpay keys are demo placeholders. Configure real keys in Admin > Payment Gateways');
-  }
-
-  return { keyId, keySecret };
+  return resolveConfiguredGatewayCredentials('razor_pay');
 };
 
 const razorpayRequest = async ({ method, path, body, keyId, keySecret }) => {

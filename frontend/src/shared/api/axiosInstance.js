@@ -21,6 +21,7 @@ const isDedupedGet = (url = '') => {
     /^\/rides\/active\/me$/.test(requestPath) ||
     /^\/deliveries\/active\/me$/.test(requestPath) ||
     /^\/admin\/general-settings\/[^/]+$/.test(requestPath) ||
+    /^\/common\/payment-gateway$/.test(requestPath) ||
     /^\/admin\/(countries|service-locations|notification-channels)$/.test(requestPath) ||
     /^\/(countries|common\/ride_modules)$/.test(requestPath);
 };

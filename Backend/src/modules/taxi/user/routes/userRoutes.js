@@ -9,6 +9,7 @@ import {
   createRentalBookingRequest,
   createRentalQuoteRequest,
   createRazorpayWalletTopupOrder,
+  createPhonePeWalletTopupOrder,
   getBusSeatLayout,
   getBusRouteSuggestions,
   getMyBusBookingById,
@@ -38,6 +39,7 @@ import {
   verifyBusBookingPayment,
   verifyRentalAdvancePayment,
   verifyRazorpayWalletTopup,
+  verifyPhonePeWalletTopup,
   verifyUserOtpRequest,
   verifyUserPhoneForOtpLogin,
 } from '../controllers/userController.js';
@@ -85,6 +87,8 @@ userRouter.post('/wallet/transfer', authenticateOrResolveUser(['user']), asyncHa
 userRouter.post('/wallet/transfer/driver', authenticateOrResolveUser(['user']), asyncHandler(transferUserWalletToDriver));
 userRouter.post('/wallet/razorpay/order', authenticateOrResolveUser(['user']), asyncHandler(createRazorpayWalletTopupOrder));
 userRouter.post('/wallet/razorpay/verify', authenticateOrResolveUser(['user']), asyncHandler(verifyRazorpayWalletTopup));
+userRouter.post('/wallet/phonepe/order', authenticateOrResolveUser(['user']), asyncHandler(createPhonePeWalletTopupOrder));
+userRouter.get('/wallet/phonepe/status/:merchantTransactionId', authenticateOrResolveUser(['user']), asyncHandler(verifyPhonePeWalletTopup));
 userRouter.post('/rental-advance/razorpay/order', authenticateOrResolveUser(['user']), asyncHandler(createRentalAdvancePaymentOrder));
 userRouter.post('/rental-advance/razorpay/verify', authenticateOrResolveUser(['user']), asyncHandler(verifyRentalAdvancePayment));
 userRouter.post('/rental-advance/wallet', authenticateOrResolveUser(['user']), asyncHandler(payRentalAdvanceWithWallet));

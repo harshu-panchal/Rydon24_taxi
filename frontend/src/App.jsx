@@ -1234,6 +1234,10 @@ function App() {
                   path="management/admins/create"
                   element={<AdminAdminCreate />}
                 />
+                <Route
+                  path="management/admins/edit/:id"
+                  element={<AdminAdminCreate />}
+                />
 
                 {/* Owner Management */}
                 <Route
