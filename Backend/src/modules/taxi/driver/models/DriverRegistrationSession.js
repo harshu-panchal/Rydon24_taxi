@@ -65,6 +65,10 @@ const driverRegistrationSessionSchema = new mongoose.Schema(
       city: { type: String, default: '' },
       postalCode: { type: String, default: '' },
       taxNumber: { type: String, default: '' },
+      customFields: {
+        type: mongoose.Schema.Types.Mixed,
+        default: {},
+      },
     },
     documents: {
       type: mongoose.Schema.Types.Mixed,

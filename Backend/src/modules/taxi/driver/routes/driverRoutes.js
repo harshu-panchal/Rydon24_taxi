@@ -30,6 +30,7 @@ import {
   getDriverPaymentQrStatus,
   getDriverApprovalStatus,
   getDriverDocumentTemplates,
+  getDriverVehicleFieldTemplates,
   getDriverEmergencyContacts,
   getDriverIncentives,
   getDriverNotifications,
@@ -355,6 +356,10 @@ driverRouter.get("/service-locations", asyncHandler(getServiceLocations));
 driverRouter.get(
   "/document-templates",
   asyncHandler(getDriverDocumentTemplates),
+);
+driverRouter.get(
+  "/vehicle-field-templates",
+  asyncHandler(getDriverVehicleFieldTemplates),
 );
 driverRouter.post("/onboarding/send-otp", asyncHandler(startOnboarding));
 driverRouter.post("/onboarding/verify-otp", asyncHandler(verifyOnboardingOtp));

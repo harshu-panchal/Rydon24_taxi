@@ -133,12 +133,58 @@ const normalizeDriverAccountType = (value) => {
   return 'individual';
 };
 
+const normalizeDriverTemplateType = (value) => {
+  const normalized = String(value || 'document').trim().toLowerCase();
+  return normalized === 'vehicle_field' ? 'vehicle_field' : 'document';
+};
+
+const normalizeDriverVehicleFieldType = (value) => {
+  const normalized = String(value || 'text').trim().toLowerCase();
+  return ['text', 'number', 'textarea', 'select', 'multi_select', 'location_select', 'vehicle_type_select'].includes(normalized)
+    ? normalized
+    : 'text';
+};
+
+const DRIVER_VEHICLE_FIELD_DEFINITIONS = {
+  locationId: { label: 'Operating City', field_type: 'location_select', field_group: 'common', account_type: 'both', sort_order: 10 },
+  serviceCategories: { label: 'Service Category', field_type: 'multi_select', field_group: 'driver', account_type: 'individual', sort_order: 20, options: ['taxi', 'outstation', 'delivery', 'pooling'] },
+  vehicleTypeId: { label: 'Vehicle Type', field_type: 'vehicle_type_select', field_group: 'driver', account_type: 'individual', sort_order: 30 },
+  make: { label: 'Brand / Make', field_type: 'text', field_group: 'driver', account_type: 'individual', sort_order: 40, placeholder: 'e.g. Maruti Suzuki' },
+  model: { label: 'Model', field_type: 'text', field_group: 'driver', account_type: 'individual', sort_order: 50, placeholder: 'Swift, Bolt' },
+  year: { label: 'Year', field_type: 'number', field_group: 'driver', account_type: 'individual', sort_order: 60, placeholder: String(new Date().getFullYear()) },
+  number: { label: 'Plate Number', field_type: 'text', field_group: 'driver', account_type: 'individual', sort_order: 70, placeholder: 'DL1RT1234' },
+  color: { label: 'Exterior Color', field_type: 'text', field_group: 'driver', account_type: 'individual', sort_order: 80, placeholder: 'e.g. White, Black' },
+  companyName: { label: 'Company Name', field_type: 'text', field_group: 'owner', account_type: 'fleet_drivers', sort_order: 30, placeholder: 'Legal Company Name' },
+  companyAddress: { label: 'Company Address', field_type: 'text', field_group: 'owner', account_type: 'fleet_drivers', sort_order: 40, placeholder: 'Business Address' },
+  city: { label: 'City', field_type: 'text', field_group: 'owner', account_type: 'fleet_drivers', sort_order: 50, placeholder: 'City' },
+  postalCode: { label: 'Postal Code', field_type: 'number', field_group: 'owner', account_type: 'fleet_drivers', sort_order: 60, placeholder: 'Pincode' },
+  taxNumber: { label: 'Tax Number (GST/VAT)', field_type: 'text', field_group: 'owner', account_type: 'fleet_drivers', sort_order: 70, placeholder: 'Tax Identification' },
+};
+
 const slugify = (value = '') =>
   String(value || '')
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '') || `document-${Date.now()}`;
+
+const buildDefaultDriverVehicleFieldConfigs = () =>
+  Object.entries(DRIVER_VEHICLE_FIELD_DEFINITIONS).map(([field_key, meta]) => ({
+    template_type: 'vehicle_field',
+    field_key,
+    name: meta.label,
+    slug: `vehicle-field-${slugify(field_key)}`,
+    account_type: meta.account_type || 'individual',
+    field_type: meta.field_type || 'text',
+    field_group: meta.field_group || '',
+    placeholder: meta.placeholder || '',
+    help_text: '',
+    sort_order: Number(meta.sort_order || 0) / 10 || 0,
+    options: Array.isArray(meta.options) ? meta.options : [],
+    is_editable: true,
+    is_required: true,
+    active: true,
+  }));
 
 const toDocumentKey = (value = '') => {
   const normalized = String(value || '')
@@ -1596,9 +1642,37 @@ const buildDriverDocumentFields = (item) => {
   ].filter((field) => Boolean(field.key));
 };
 
+const serializeDriverVehicleField = (item) => {
+  const definition = DRIVER_VEHICLE_FIELD_DEFINITIONS[item.field_key] || {};
+  const isBuiltin = Boolean(DRIVER_VEHICLE_FIELD_DEFINITIONS[item.field_key]);
+
+  return {
+    _id: item._id,
+    id: item._id,
+    template_type: 'vehicle_field',
+    name: item.name || definition.label || '',
+    account_type: item.account_type || definition.account_type || 'individual',
+    field_key: item.field_key || '',
+    field_type: item.field_type || definition.field_type || 'text',
+    field_group: item.field_group || definition.field_group || '',
+    is_builtin: isBuiltin,
+    placeholder: item.placeholder || definition.placeholder || '',
+    help_text: item.help_text || '',
+    sort_order: Number(item.sort_order || definition.sort_order || 0),
+    options: Array.isArray(item.options) ? item.options : Array.isArray(definition.options) ? definition.options : [],
+    is_editable: Boolean(item.is_editable),
+    is_required: Boolean(item.is_required),
+    active: item.active !== false,
+    status: item.active === false ? 'inactive' : 'active',
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+  };
+};
+
 const serializeDriverNeededDocument = (item) => ({
   _id: item._id,
   id: item._id,
+  template_type: normalizeDriverTemplateType(item.template_type),
   name: item.name || '',
   account_type: item.account_type || 'individual',
   image_type: item.image_type || 'front_back',
@@ -3184,6 +3258,15 @@ export const getUserById = async (id) => {
         : null,
     })),
   };
+};
+
+const ensureDefaultDriverVehicleFields = async () => {
+  const count = await DriverNeededDocument.countDocuments({ template_type: 'vehicle_field' });
+  if (count > 0) {
+    return;
+  }
+
+  await DriverNeededDocument.insertMany(buildDefaultDriverVehicleFieldConfigs(), { ordered: false });
 };
 
 export const listUserRequests = async (id) => {
@@ -7496,24 +7579,52 @@ export const updateBusService = async (id, payload = {}, options = {}) => {
     };
   };
 
-  export const listDriverNeededDocuments = async ({ activeOnly = false, includeFields = false } = {}) => {
+  export const listDriverNeededDocuments = async ({ activeOnly = false, includeFields = false, templateType = 'document' } = {}) => {
     await cleanupLegacySeededDriverNeededDocuments();
+    await ensureDefaultDriverVehicleFields();
 
-    const query = activeOnly ? { active: true } : {};
+    const normalizedTemplateType = String(templateType || 'document').trim().toLowerCase();
+    const query = {
+      ...(activeOnly ? { active: true } : {}),
+      ...(normalizedTemplateType === 'all'
+        ? {}
+        : normalizedTemplateType === 'vehicle_field'
+          ? { template_type: 'vehicle_field' }
+          : {
+              $or: [
+                { template_type: 'document' },
+                { template_type: { $exists: false } },
+                { template_type: null },
+                { template_type: '' },
+              ],
+            }),
+    };
     const items = await DriverNeededDocument.find(query).sort({ createdAt: -1 }).lean();
-    return items.map(includeFields ? serializeDriverNeededDocumentTemplate : serializeDriverNeededDocument);
+    return items.map((item) => {
+      if (normalizeDriverTemplateType(item.template_type) === 'vehicle_field') {
+        return serializeDriverVehicleField(item);
+      }
+
+      return includeFields ? serializeDriverNeededDocumentTemplate(item) : serializeDriverNeededDocument(item);
+    });
   };
 
   export const getDriverNeededDocumentById = async (id) => {
     await cleanupLegacySeededDriverNeededDocuments();
+    await ensureDefaultDriverVehicleFields();
 
     const item = await DriverNeededDocument.findById(id).lean();
     if (!item) {
       throw new ApiError(404, 'Driver needed document not found');
     }
 
-    return serializeDriverNeededDocument(item);
+    return normalizeDriverTemplateType(item.template_type) === 'vehicle_field'
+      ? serializeDriverVehicleField(item)
+      : serializeDriverNeededDocument(item);
   };
+
+export const listDriverVehicleFieldTemplates = async ({ activeOnly = true } = {}) =>
+  listDriverNeededDocuments({ activeOnly, templateType: 'vehicle_field' });
 
 export const listDriverDocumentUploadFields = async ({ activeOnly = true } = {}) => {
   const items = await listDriverNeededDocuments({ activeOnly, includeFields: true });
@@ -7552,16 +7663,65 @@ export const listOwnerDocumentUploadFields = async ({ activeOnly = true } = {}) 
     }
 
     await cleanupLegacySeededDriverNeededDocuments();
+    await ensureDefaultDriverVehicleFields();
+
+    const templateType = normalizeDriverTemplateType(payload.template_type);
 
     const name = String(payload.name).trim();
-    const slug = slugify(payload.slug || name);
+    const slug = slugify(payload.slug || (templateType === 'vehicle_field' ? `vehicle-field-${payload.field_key || name}` : name));
     const existing = await DriverNeededDocument.findOne({ slug });
     if (existing) {
-      throw new ApiError(409, 'A driver document with this name already exists');
+      throw new ApiError(409, `A driver ${templateType === 'vehicle_field' ? 'field' : 'document'} with this name already exists`);
+    }
+
+    if (templateType === 'vehicle_field') {
+      const fieldKey = String(payload.field_key || '').trim();
+      const definition = DRIVER_VEHICLE_FIELD_DEFINITIONS[fieldKey];
+      const normalizedFieldType = normalizeDriverVehicleFieldType(payload.field_type || definition?.field_type || 'text');
+      const normalizedFieldKey = fieldKey || `custom_${slugify(name).replace(/-/g, '_')}`;
+
+      if (!normalizedFieldKey) {
+        throw new ApiError(400, 'A valid vehicle field key is required');
+      }
+
+      const duplicateField = await DriverNeededDocument.findOne({
+        template_type: 'vehicle_field',
+        field_key: normalizedFieldKey,
+      }).lean();
+      if (duplicateField) {
+        throw new ApiError(409, 'A vehicle field with this key already exists');
+      }
+
+      const item = await DriverNeededDocument.create({
+        template_type: 'vehicle_field',
+        name,
+        slug,
+        account_type: normalizeDriverAccountType(payload.account_type || definition?.account_type),
+        image_type: 'image',
+        has_expiry_date: false,
+        has_identify_number: false,
+        identify_number_key: '',
+        is_editable: payload.is_editable !== undefined ? normalizeBoolean(payload.is_editable) : true,
+        is_required: payload.is_required !== undefined ? normalizeBoolean(payload.is_required) : true,
+        active: payload.active !== undefined ? normalizeBoolean(payload.active) : true,
+        field_key: normalizedFieldKey,
+        field_type: normalizedFieldType,
+        field_group: String(payload.field_group || definition?.field_group || '').trim(),
+        placeholder: String(payload.placeholder || definition?.placeholder || '').trim(),
+        help_text: String(payload.help_text || '').trim(),
+        sort_order: Number(payload.sort_order ?? definition?.sort_order ?? 0),
+        options: Array.isArray(payload.options) ? payload.options.map((item) => String(item || '').trim()).filter(Boolean) : (definition?.options || []),
+        key: '',
+        front_key: '',
+        back_key: '',
+      });
+
+      return serializeDriverVehicleField(item.toObject());
     }
 
     const keys = buildDriverNeededDocumentKeys(payload);
     const item = await DriverNeededDocument.create({
+      template_type: 'document',
       name,
       slug,
       account_type: normalizeDriverAccountType(payload.account_type),
@@ -7584,6 +7744,56 @@ export const listOwnerDocumentUploadFields = async ({ activeOnly = true } = {}) 
     const item = await DriverNeededDocument.findById(id);
     if (!item) {
       throw new ApiError(404, 'Driver needed document not found');
+    }
+
+    const templateType = normalizeDriverTemplateType(item.template_type || payload.template_type);
+
+    if (templateType === 'vehicle_field') {
+      if (payload.name !== undefined) {
+        item.name = String(payload.name || '').trim();
+      }
+      if (payload.account_type !== undefined) {
+        item.account_type = normalizeDriverAccountType(payload.account_type);
+      }
+      if (payload.field_key !== undefined) {
+        const fieldKey = String(payload.field_key || '').trim();
+        if (!fieldKey) {
+          throw new ApiError(400, 'A valid vehicle field key is required');
+        }
+        item.field_key = fieldKey;
+      }
+      if (payload.field_type !== undefined) {
+        item.field_type = normalizeDriverVehicleFieldType(payload.field_type);
+      }
+      if (payload.field_group !== undefined) {
+        item.field_group = String(payload.field_group || '').trim();
+      }
+      if (payload.placeholder !== undefined) {
+        item.placeholder = String(payload.placeholder || '').trim();
+      }
+      if (payload.help_text !== undefined) {
+        item.help_text = String(payload.help_text || '').trim();
+      }
+      if (payload.sort_order !== undefined) {
+        item.sort_order = Number(payload.sort_order || 0);
+      }
+      if (payload.options !== undefined) {
+        item.options = Array.isArray(payload.options)
+          ? payload.options.map((entry) => String(entry || '').trim()).filter(Boolean)
+          : [];
+      }
+      if (payload.is_editable !== undefined) {
+        item.is_editable = normalizeBoolean(payload.is_editable);
+      }
+      if (payload.is_required !== undefined) {
+        item.is_required = normalizeBoolean(payload.is_required);
+      }
+      if (payload.active !== undefined) {
+        item.active = normalizeBoolean(payload.active);
+      }
+
+      await item.save();
+      return serializeDriverVehicleField(item.toObject());
     }
 
     if (payload.name !== undefined) {

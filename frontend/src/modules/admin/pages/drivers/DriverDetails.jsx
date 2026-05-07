@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Download,
   Eye,
+  PencilLine,
   Mail,
   MapPin,
   Phone,
@@ -113,6 +114,28 @@ const humanizeDocumentKey = (value = '') =>
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .replace(/[_-]+/g, ' ')
     .trim();
+
+const formatServiceCategories = (value) => {
+  const rawValues = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(',')
+      : [];
+
+  const normalized = [...new Set(
+    rawValues
+      .map((item) => String(item || '').trim().toLowerCase())
+      .filter(Boolean),
+  )];
+
+  if (!normalized.length) {
+    return 'Not set';
+  }
+
+  return normalized
+    .map((item) => item.charAt(0).toUpperCase() + item.slice(1))
+    .join(', ');
+};
 
 const getDocumentFileNames = (doc = {}, imageUrls = []) => {
   const rawNames = [];
@@ -292,6 +315,58 @@ const DriverDetails = () => {
   const requests = profile?.requests || [];
   const withdrawals = profile?.withdrawals || [];
   const backRoute = location.state?.from || '/admin/drivers';
+  const onboardingVehicle = profile?.onboarding?.vehicle || {};
+  const vehicleFieldSummary = useMemo(() => ([
+    {
+      label: 'Operating City',
+      value:
+        onboardingVehicle.locationName ||
+        profile?.service_location?.name ||
+        profile?.service_location?.service_location_name ||
+        profile?.city ||
+        'Not set',
+    },
+    {
+      label: 'Service Categories',
+      value: formatServiceCategories(
+        onboardingVehicle.serviceCategories ||
+        profile?.service_categories ||
+        profile?.serviceCategories ||
+        profile?.registerFor ||
+        profile?.register_for ||
+        profile?.transport_type,
+      ),
+    },
+    {
+      label: 'Vehicle Type',
+      value:
+        onboardingVehicle.vehicleType ||
+        profile?.vehicle?.type ||
+        profile?.vehicle_type ||
+        profile?.car_type ||
+        'Not set',
+    },
+    {
+      label: 'Brand / Make',
+      value: onboardingVehicle.make || profile?.vehicle?.make || profile?.vehicle_make || profile?.car_make || 'Not set',
+    },
+    {
+      label: 'Model',
+      value: onboardingVehicle.model || profile?.vehicle?.model || profile?.vehicle_model || profile?.car_model || 'Not set',
+    },
+    {
+      label: 'Year',
+      value: onboardingVehicle.year || profile?.vehicle?.year || profile?.vehicle_year || profile?.car_year || 'Not set',
+    },
+    {
+      label: 'Plate Number',
+      value: onboardingVehicle.number || profile?.vehicle?.number || profile?.vehicle_number || profile?.car_number || 'Not set',
+    },
+    {
+      label: 'Exterior Color',
+      value: onboardingVehicle.color || profile?.vehicle?.color || profile?.vehicle_color || profile?.car_color || 'Not set',
+    },
+  ]), [onboardingVehicle, profile]);
   const documents = useMemo(() => {
     const candidateSources = [
       profile?.documents,
@@ -723,8 +798,37 @@ const DriverDetails = () => {
           )}
 
           {activeTab === 'Documents' && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="overflow-x-auto">
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900">Vehicle Onboarding Details</h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                      These values mirror the fields collected from the driver on the vehicle setup step.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/admin/drivers/edit/${id}`, { state: { from: location.pathname + location.search } })}
+                    className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                  >
+                    <PencilLine size={15} />
+                    Edit Driver Fields
+                  </button>
+                </div>
+
+                <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  {vehicleFieldSummary.map((item) => (
+                    <div key={item.label} className="rounded-xl border border-gray-100 bg-gray-50/70 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{item.label}</p>
+                      <p className="mt-2 text-sm font-semibold text-gray-900">{item.value || 'Not set'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div className="overflow-x-auto">
                 <table className="w-full text-left">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100 text-xs text-gray-500">
@@ -956,6 +1060,7 @@ const DriverDetails = () => {
                     )}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           )}

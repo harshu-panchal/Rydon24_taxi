@@ -17,6 +17,13 @@ import {
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTaxiTransportTypes } from '../../../../shared/hooks/useTaxiTransportTypes';
 
+const serviceCategoryOptions = [
+  { value: 'taxi', label: 'Taxi' },
+  { value: 'outstation', label: 'Outstation' },
+  { value: 'delivery', label: 'Delivery' },
+  { value: 'pooling', label: 'Pooling' },
+];
+
 const normalizeTransportTypeForSelect = (value, options = []) => {
   const normalizedValue = String(value || '').trim().toLowerCase();
   if (!normalizedValue) return '';
@@ -36,6 +43,35 @@ const normalizeTransportTypeForSelect = (value, options = []) => {
 
   return normalizedValue;
 };
+
+const normalizeServiceCategories = (value, fallback = 'taxi') => {
+  const rawValues = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(',')
+      : [];
+
+  const normalized = [...new Set(
+    rawValues
+      .map((item) => String(item || '').trim().toLowerCase())
+      .flatMap((item) => item === 'both' ? ['taxi', 'outstation'] : item ? [item] : [])
+      .filter((item) => serviceCategoryOptions.some((option) => option.value === item)),
+  )];
+
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  const fallbackValue = String(fallback || 'taxi').trim().toLowerCase();
+  if (fallbackValue === 'both') {
+    return ['taxi', 'outstation'];
+  }
+
+  return serviceCategoryOptions.some((option) => option.value === fallbackValue) ? [fallbackValue] : ['taxi'];
+};
+
+const getVehicleTypeId = (item = {}) => String(item?._id || item?.id || '');
+const getVehicleTypeLabel = (item = {}) => item?.vehicle_type || item?.name || item?.type || 'Vehicle';
 
 const EditDriver = () => {
   const navigate = useNavigate();
@@ -62,9 +98,11 @@ const EditDriver = () => {
     password: '',
     confirmPassword: '',
     transportType: 'taxi',
+    serviceCategories: ['taxi'],
     vehicleType: '',
     vehicleMake: '',
     vehicleModel: '',
+    vehicleYear: '',
     vehicleColor: '',
     vehicleNumber: ''
   });
@@ -130,9 +168,17 @@ const EditDriver = () => {
             password: '',
             confirmPassword: '',
             transportType: d.transport_type || d.register_for || d.registerFor || onboardingVehicle.registerFor || 'taxi',
+            serviceCategories: normalizeServiceCategories(
+              d.service_categories ||
+              d.serviceCategories ||
+              d.onboarding?.serviceCategories ||
+              onboardingVehicle.serviceCategories,
+              d.transport_type || d.register_for || d.registerFor || onboardingVehicle.registerFor || 'taxi',
+            ),
             vehicleType: savedVehicleTypeId || savedVehicleTypeLabel || '',
             vehicleMake: d.car_make || d.vehicle_make || d.vehicleMake || onboardingVehicle.make || '',
             vehicleModel: d.car_model || d.vehicle_model || d.vehicleModel || onboardingVehicle.model || '',
+            vehicleYear: d.car_year || d.vehicle_year || d.vehicleYear || onboardingVehicle.year || '',
             vehicleColor: d.car_color || d.vehicle_color || d.vehicleColor || onboardingVehicle.color || '',
             vehicleNumber: d.car_number || d.vehicle_number || d.vehicleNumber || onboardingVehicle.number || '',
             companyName: onboardingVehicle.companyName || '',
@@ -164,7 +210,7 @@ const EditDriver = () => {
     const fetchVehiclesForArea = async () => {
       if (!formData.area || !formData.transportType) return;
       try {
-        const typeFilter = (formData.transportType.toLowerCase() === 'delivery') ? 'delivery' : 'taxi';
+        const typeFilter = formData.transportType.toLowerCase() === 'delivery' ? 'delivery' : 'taxi';
         const res = await fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/types/${formData.area}?transport_type=${typeFilter}`);
         const data = await res.json();
         if (data.success) {
@@ -220,6 +266,20 @@ const EditDriver = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const toggleServiceCategory = (value) => {
+    setFormData((prev) => {
+      const exists = prev.serviceCategories.includes(value);
+      const nextServiceCategories = exists
+        ? prev.serviceCategories.filter((item) => item !== value)
+        : [...prev.serviceCategories, value];
+
+      return {
+        ...prev,
+        serviceCategories: nextServiceCategories,
+      };
+    });
+  };
+
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -237,19 +297,49 @@ const EditDriver = () => {
     setError('');
     
     try {
+      const selectedVehicleType = vehicleTypes.find((item) => String(getVehicleTypeId(item)) === String(formData.vehicleType));
+      const selectedVehicleTypeLabel = selectedVehicleType
+        ? getVehicleTypeLabel(selectedVehicleType)
+        : vehicleTypeFallbackOption?.label || formData.vehicleType;
       const payload = {
         name: formData.name,
         email: formData.email,
         mobile: formData.mobile,
         gender: formData.gender.toLowerCase(),
         transport_type: formData.transportType.toLowerCase(),
+        register_for: formData.transportType.toLowerCase(),
+        registerFor: formData.transportType.toLowerCase(),
+        service_categories: formData.serviceCategories,
+        serviceCategories: formData.serviceCategories,
         car_make: formData.vehicleMake,
         car_model: formData.vehicleModel,
+        car_year: formData.vehicleYear,
         car_color: formData.vehicleColor,
         car_number: formData.vehicleNumber,
         car_type: formData.vehicleType,
+        vehicle_type_id: formData.vehicleType,
+        vehicle_type: selectedVehicleTypeLabel,
         service_location_id: formData.area,
-        country: formData.country
+        country: formData.country,
+        onboarding: {
+          vehicle: {
+            registerFor: formData.transportType.toLowerCase(),
+            serviceCategories: formData.serviceCategories,
+            locationId: formData.area,
+            vehicleTypeId: formData.vehicleType,
+            vehicleType: selectedVehicleTypeLabel,
+            make: formData.vehicleMake,
+            model: formData.vehicleModel,
+            year: formData.vehicleYear,
+            number: formData.vehicleNumber,
+            color: formData.vehicleColor,
+            companyName: formData.companyName,
+            companyAddress: formData.companyAddress,
+            city: formData.city,
+            postalCode: formData.postalCode,
+            taxNumber: formData.taxNumber,
+          },
+        },
       };
 
       const response = await fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/drivers/${id}`, {
@@ -483,6 +573,32 @@ const EditDriver = () => {
                 </select>
               </div>
 
+              <div className="md:col-span-2">
+                <label className={labelClass}>Service Categories</label>
+                <div className="flex flex-wrap gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  {serviceCategoryOptions.map((option) => {
+                    const selected = formData.serviceCategories.includes(option.value);
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => toggleServiceCategory(option.value)}
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                          selected
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-100'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  Matches the service selection used during driver onboarding.
+                </p>
+              </div>
+
               <div>
                 <label className={labelClass}>Vehicle Type *</label>
                 <select 
@@ -494,11 +610,11 @@ const EditDriver = () => {
                 >
                   <option value="">Select Vehicle Type</option>
                   {vehicleTypeFallbackOption &&
-                  !vehicleTypes.some((vt) => String(vt._id) === String(vehicleTypeFallbackOption.value)) ? (
+                  !vehicleTypes.some((vt) => String(getVehicleTypeId(vt)) === String(vehicleTypeFallbackOption.value)) ? (
                     <option value={vehicleTypeFallbackOption.value}>{vehicleTypeFallbackOption.label}</option>
                   ) : null}
                   {vehicleTypes.map(vt => (
-                    <option key={vt._id} value={vt._id}>{vt.vehicle_type || vt.name}</option>
+                    <option key={getVehicleTypeId(vt)} value={getVehicleTypeId(vt)}>{getVehicleTypeLabel(vt)}</option>
                   ))}
                 </select>
               </div>
@@ -525,6 +641,25 @@ const EditDriver = () => {
                   placeholder="e.g. Swift Dzire"
                   value={formData.vehicleModel}
                   onChange={handleChange}
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>Vehicle Year *</label>
+                <input 
+                  type="text" 
+                  name="vehicleYear"
+                  required
+                  maxLength={4}
+                  placeholder="e.g. 2024"
+                  value={formData.vehicleYear}
+                  onChange={(event) => handleChange({
+                    target: {
+                      name: 'vehicleYear',
+                      value: event.target.value.replace(/\D/g, '').slice(0, 4),
+                    },
+                  })}
                   className={inputClass}
                 />
               </div>

@@ -1429,8 +1429,12 @@ export const deleteRentalPackageType = asyncHandler(async (req, res) => {
 export const getOwnerNeededDocuments = asyncHandler(async (_req, res) =>
   ok(res, { results: await adminService.listOwnerNeededDocuments() }),
 );
-export const getDriverNeededDocuments = asyncHandler(async (_req, res) =>
-  ok(res, { results: await adminService.listDriverNeededDocuments() }),
+export const getDriverNeededDocuments = asyncHandler(async (req, res) =>
+  ok(res, {
+    results: await adminService.listDriverNeededDocuments({
+      templateType: req.query?.template_type || 'document',
+    }),
+  }),
 );
 export const getDriverNeededDocument = asyncHandler(async (req, res) =>
   ok(res, await adminService.getDriverNeededDocumentById(req.params.id)),

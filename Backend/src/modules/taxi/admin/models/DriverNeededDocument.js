@@ -2,6 +2,13 @@ import mongoose from 'mongoose';
 
 const driverNeededDocumentSchema = new mongoose.Schema(
   {
+    template_type: {
+      type: String,
+      enum: ['document', 'vehicle_field'],
+      default: 'document',
+      index: true,
+      trim: true,
+    },
     name: {
       type: String,
       required: true,
@@ -65,6 +72,40 @@ const driverNeededDocumentSchema = new mongoose.Schema(
     active: {
       type: Boolean,
       default: true,
+    },
+    field_key: {
+      type: String,
+      default: '',
+      trim: true,
+      index: true,
+    },
+    field_type: {
+      type: String,
+      default: 'text',
+      trim: true,
+    },
+    field_group: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    placeholder: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    help_text: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    sort_order: {
+      type: Number,
+      default: 0,
+    },
+    options: {
+      type: [String],
+      default: [],
     },
   },
   { timestamps: true },

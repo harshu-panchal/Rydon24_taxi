@@ -3,75 +3,70 @@ import { ChevronRight, PencilLine, Plus, Search, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
 
-let driverNeededDocumentsInFlight = null;
+const inputClass =
+  'w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-gray-800 outline-none transition-colors focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500';
 
-const fetchDriverNeededDocumentsOnce = async () => {
-  if (!driverNeededDocumentsInFlight) {
-    driverNeededDocumentsInFlight = adminService
-      .getDriverNeededDocuments()
-      .finally(() => {
-        driverNeededDocumentsInFlight = null;
-      });
-  }
-
-  return driverNeededDocumentsInFlight;
-};
+const typeLabel = (value) =>
+  String(value || '')
+    .split('_')
+    .filter(Boolean)
+    .map((item) => item.charAt(0).toUpperCase() + item.slice(1))
+    .join(' ');
 
 const GlobalDocuments = () => {
   const navigate = useNavigate();
   const [documents, setDocuments] = useState([]);
+  const [vehicleFields, setVehicleFields] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [pageSize, setPageSize] = useState(10);
   const [error, setError] = useState('');
 
-  const loadDocuments = async ({ dedupe = false } = {}) => {
+  const loadItems = async () => {
     setIsLoading(true);
     setError('');
 
     try {
-      const response = dedupe
-        ? await fetchDriverNeededDocumentsOnce()
-        : await adminService.getDriverNeededDocuments();
-      const results = response?.data?.data?.results || response?.data?.results || [];
-      setDocuments(Array.isArray(results) ? results : []);
+      const [documentResponse, fieldResponse] = await Promise.all([
+        adminService.getDriverNeededDocuments('document'),
+        adminService.getDriverNeededDocuments('vehicle_field'),
+      ]);
+
+      const nextDocuments = documentResponse?.data?.data?.results || documentResponse?.data?.results || [];
+      const nextVehicleFields = fieldResponse?.data?.data?.results || fieldResponse?.data?.results || [];
+
+      setDocuments(Array.isArray(nextDocuments) ? nextDocuments : []);
+      setVehicleFields(Array.isArray(nextVehicleFields) ? nextVehicleFields : []);
     } catch (err) {
-      setError(err?.message || 'Unable to load driver needed documents');
+      setError(err?.message || 'Unable to load onboarding configuration');
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadDocuments({ dedupe: true });
+    loadItems();
   }, []);
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this driver needed document?')) {
+  const handleDelete = async (id, entityLabel) => {
+    if (!window.confirm(`Delete this ${entityLabel}?`)) {
       return;
     }
 
     try {
       await adminService.deleteDriverNeededDocument(id);
-      await loadDocuments();
+      await loadItems();
     } catch (err) {
-      alert(err?.message || 'Unable to delete document');
+      alert(err?.message || `Unable to delete ${entityLabel}`);
     }
   };
 
-  const handleToggleStatus = async (document) => {
+  const handleToggleStatus = async (item) => {
     try {
-      await adminService.updateDriverNeededDocument(document.id || document._id, {
-        active: !document.active,
+      await adminService.updateDriverNeededDocument(item.id || item._id, {
+        active: !item.active,
       });
-
-      setDocuments((current) =>
-        current.map((item) =>
-          String(item.id || item._id) === String(document.id || document._id)
-            ? { ...item, active: !document.active }
-            : item,
-        ),
-      );
+      await loadItems();
     } catch (err) {
       alert(err?.message || 'Unable to update status');
     }
@@ -79,47 +74,101 @@ const GlobalDocuments = () => {
 
   const filteredDocuments = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
+    if (!query) return documents;
 
-    if (!query) {
-      return documents;
-    }
-
-    return documents.filter((document) =>
-      [document.name, document.account_type, document.image_type]
+    return documents.filter((item) =>
+      [item.name, item.account_type, item.image_type]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query)),
     );
   }, [documents, searchTerm]);
 
+  const filteredVehicleFields = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return vehicleFields;
+
+    return vehicleFields.filter((item) =>
+      [item.name, item.field_key, item.field_type, item.account_type, item.field_group]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query)),
+    );
+  }, [vehicleFields, searchTerm]);
+
   const paginatedDocuments = filteredDocuments.slice(0, Number(pageSize));
+  const paginatedVehicleFields = [...filteredVehicleFields]
+    .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0))
+    .slice(0, Number(pageSize));
+
+  const renderStatusButton = (item) => (
+    <button
+      type="button"
+      onClick={() => handleToggleStatus(item)}
+      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+        item.active
+          ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+      }`}
+    >
+      {item.active ? 'Active' : 'Inactive'}
+    </button>
+  );
+
+  const renderActions = (item, templateType) => (
+    <div className="flex items-center justify-end gap-2">
+      <button
+        type="button"
+        onClick={() => navigate(`/admin/drivers/documents/edit/${item.id || item._id}?type=${templateType}`)}
+        className="rounded-lg border border-gray-200 p-2 text-amber-600 transition-colors hover:bg-amber-50"
+      >
+        <PencilLine size={16} />
+      </button>
+      <button
+        type="button"
+        onClick={() => handleDelete(item.id || item._id, templateType === 'vehicle_field' ? 'vehicle field' : 'document')}
+        className="rounded-lg border border-gray-200 p-2 text-rose-600 transition-colors hover:bg-rose-50"
+      >
+        <Trash2 size={16} />
+      </button>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 p-6 lg:p-8">
       <div className="mb-6">
-        <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
+        <div className="mb-2 flex items-center gap-1.5 text-xs text-gray-400">
           <span>Masters</span>
           <ChevronRight size={12} />
-          <span className="text-gray-700">Driver Needed Documents</span>
+          <span className="text-gray-700">Driver Onboarding Config</span>
         </div>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Driver Needed Documents</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Create and manage driver onboarding document requirements from one place.
+            <h1 className="text-xl font-semibold text-gray-900">Driver Onboarding Config</h1>
+            <p className="mt-1 text-sm text-gray-500">
+              Manage both driver document templates and the dynamic fields shown on the vehicle onboarding step.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => navigate('/admin/drivers/documents/create')}
-            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
-          >
-            <Plus size={16} />
-            Add Driver Needed Documents
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/admin/drivers/documents/create?type=document')}
+              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
+            >
+              <Plus size={16} />
+              Add Document
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/admin/drivers/documents/create?type=vehicle_field')}
+              className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-4 py-2 text-sm font-medium text-indigo-700 transition-colors hover:bg-indigo-50"
+            >
+              <Plus size={16} />
+              Add Vehicle Field
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3 text-sm text-gray-500">
             <span>Show</span>
@@ -141,106 +190,116 @@ const GlobalDocuments = () => {
               type="text"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Filter documents..."
-              className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-gray-800 outline-none transition-colors focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              placeholder="Filter documents or fields..."
+              className={inputClass}
             />
           </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Name</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Account Type</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Image Type</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
-                <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {isLoading ? (
+      {error ? (
+        <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="space-y-6">
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+          <div className="border-b border-gray-100 px-6 py-4">
+            <h2 className="text-base font-semibold text-gray-900">Driver Needed Documents</h2>
+            <p className="mt-1 text-sm text-gray-500">Templates used by the documents step of onboarding.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-gray-50">
                 <tr>
-                  <td colSpan="5" className="px-6 py-16 text-center text-sm text-gray-500">
-                    Loading documents...
-                  </td>
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Name</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Account Type</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Image Type</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
+                  <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Action</th>
                 </tr>
-              ) : error ? (
-                <tr>
-                  <td colSpan="5" className="px-6 py-16 text-center text-sm text-rose-500">
-                    {error}
-                  </td>
-                </tr>
-              ) : paginatedDocuments.length === 0 ? (
-                <tr>
-                  <td colSpan="5" className="px-6 py-16 text-center text-sm text-gray-500">
-                    No driver documents configured yet.
-                  </td>
-                </tr>
-              ) : (
-                paginatedDocuments.map((document) => (
-                  <tr key={document.id || document._id} className="hover:bg-gray-50/70">
-                    <td className="px-6 py-4">
-                      <p className="text-sm font-semibold text-gray-900">{document.name}</p>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-700 capitalize">{document.account_type || 'individual'}</td>
-                    <td className="px-6 py-4 text-sm text-gray-700">
-                      {String(document.image_type || 'image').replace('_', ' & ')}
-                    </td>
-                    <td className="px-6 py-4">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleStatus(document)}
-                        className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                          document.active
-                            ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                      >
-                        {document.active ? 'Active' : 'Inactive'}
-                      </button>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/admin/drivers/documents/edit/${document.id || document._id}`)}
-                          className="rounded-lg border border-gray-200 p-2 text-amber-600 transition-colors hover:bg-amber-50"
-                        >
-                          <PencilLine size={16} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(document.id || document._id)}
-                          className="rounded-lg border border-gray-200 p-2 text-rose-600 transition-colors hover:bg-rose-50"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan="5" className="px-6 py-16 text-center text-sm text-gray-500">Loading document templates...</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : paginatedDocuments.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="px-6 py-16 text-center text-sm text-gray-500">No document templates found.</td>
+                  </tr>
+                ) : (
+                  paginatedDocuments.map((item) => (
+                    <tr key={item.id || item._id} className="hover:bg-gray-50/70">
+                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">{item.name}</td>
+                      <td className="px-6 py-4 text-sm text-gray-700">{typeLabel(item.account_type)}</td>
+                      <td className="px-6 py-4 text-sm text-gray-700">{typeLabel(item.image_type)}</td>
+                      <td className="px-6 py-4">{renderStatusButton(item)}</td>
+                      <td className="px-6 py-4">{renderActions(item, 'document')}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        <div className="flex items-center justify-between border-t border-gray-100 px-6 py-4 text-sm text-gray-500">
-          <span>
-            Showing 1 to {paginatedDocuments.length} of {filteredDocuments.length} entries
-          </span>
-          <div className="flex items-center gap-2">
-            <button type="button" disabled className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-400">
-              Prev
-            </button>
-            <button type="button" className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs text-white">
-              1
-            </button>
-            <button type="button" disabled className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-400">
-              Next
-            </button>
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+          <div className="border-b border-gray-100 px-6 py-4">
+            <h2 className="text-base font-semibold text-gray-900">Vehicle Step Fields</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              These control which fields appear on `/taxi/driver/step-vehicle`, their labels, placeholders, order, and required state.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Label</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Field Key</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Field Type</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Account Type</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Order</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Required</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
+                  <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan="8" className="px-6 py-16 text-center text-sm text-gray-500">Loading vehicle fields...</td>
+                  </tr>
+                ) : paginatedVehicleFields.length === 0 ? (
+                  <tr>
+                    <td colSpan="8" className="px-6 py-16 text-center text-sm text-gray-500">No vehicle fields found.</td>
+                  </tr>
+                ) : (
+                  paginatedVehicleFields.map((item, index) => (
+                    <tr key={item.id || item._id} className="hover:bg-gray-50/70">
+                      <td className="px-6 py-4">
+                        <div className="text-sm font-semibold text-gray-900">{item.name}</div>
+                        {item.placeholder ? <div className="mt-1 text-xs text-gray-500">{item.placeholder}</div> : null}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-700">{item.field_key}</td>
+                      <td className="px-6 py-4 text-sm text-gray-700">{typeLabel(item.field_type)}</td>
+                      <td className="px-6 py-4 text-sm text-gray-700">{typeLabel(item.account_type)}</td>
+                      <td className="px-6 py-4 text-sm text-gray-700">{index + 1}</td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                          item.is_required ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {item.is_required ? 'Required' : 'Optional'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">{renderStatusButton(item)}</td>
+                      <td className="px-6 py-4">{renderActions(item, 'vehicle_field')}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

@@ -12,6 +12,7 @@ import { AdminBusinessSetting } from '../../admin/models/AdminBusinessSetting.js
 import {
   listDriverDocumentUploadFields,
   listDriverNeededDocuments,
+  listDriverVehicleFieldTemplates,
   listOwnerDocumentUploadFields,
   listOwnerNeededDocuments,
 } from '../../admin/services/adminService.js';
@@ -207,6 +208,32 @@ const matchesDocumentRole = (accountType, role) => {
   }
 
   return normalizedAccountType === 'individual';
+};
+
+const matchesVehicleFieldRole = (accountType, role) => {
+  const normalizedAccountType = String(accountType || 'individual').trim().toLowerCase();
+  const normalizedRole = normalizeRole(role);
+
+  if (normalizedAccountType === 'both') {
+    return true;
+  }
+
+  if (normalizedRole === 'owner') {
+    return normalizedAccountType === 'fleet_drivers';
+  }
+
+  return normalizedAccountType === 'individual';
+};
+
+const getRequiredVehicleFieldMap = async (role) => {
+  const configs = await listDriverVehicleFieldTemplates({ activeOnly: true });
+
+  return configs
+    .filter((item) => item.active !== false && matchesVehicleFieldRole(item.account_type, role))
+    .reduce((acc, item) => {
+      acc[String(item.field_key || '').trim()] = item;
+      return acc;
+    }, {});
 };
 
 const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000));
@@ -640,6 +667,7 @@ export const saveDriverVehicle = async ({
   city,
   postalCode,
   taxNumber,
+  customFields = {},
 }) => {
   const session = await getSession(registrationId, phone);
 
@@ -657,34 +685,90 @@ export const saveDriverVehicle = async ({
   }
 
   const isOwner = String(session.role || '').toLowerCase() === 'owner';
+  const requiredFieldMap = await getRequiredVehicleFieldMap(session.role);
   const normalizedYear = String(year || '').trim();
   const normalizedNumber = String(number || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   const normalizedPostalCode = String(postalCode || '').replace(/\D/g, '');
-
-  if (isOwner) {
-    if (!companyName || !companyAddress || !city || !normalizedPostalCode || !taxNumber) {
-      throw new ApiError(400, 'Company details are incomplete');
+  const normalizedCustomFields = Object.entries(customFields || {}).reduce((acc, [key, value]) => {
+    const normalizedKey = String(key || '').trim();
+    if (!normalizedKey) {
+      return acc;
     }
 
-    if (!/^\d{6}$/.test(normalizedPostalCode)) {
+    if (Array.isArray(value)) {
+      acc[normalizedKey] = value.map((item) => String(item || '').trim()).filter(Boolean);
+      return acc;
+    }
+
+    acc[normalizedKey] = String(value || '').trim();
+    return acc;
+  }, {});
+  const hasValue = (value) =>
+    Array.isArray(value) ? value.length > 0 : Boolean(String(value || '').trim());
+  const requireField = (fieldKey, value, fallbackMessage) => {
+    const config = requiredFieldMap[fieldKey];
+    if (config?.is_required && !hasValue(value)) {
+      throw new ApiError(400, `${config.name || fallbackMessage} is required`);
+    }
+  };
+
+  requireField('locationId', locationId, 'Operating city');
+
+  if (isOwner) {
+    requireField('companyName', companyName, 'Company name');
+    requireField('companyAddress', companyAddress, 'Company address');
+    requireField('city', city, 'City');
+    requireField('postalCode', normalizedPostalCode, 'Postal code');
+    requireField('taxNumber', taxNumber, 'Tax number');
+
+    if (normalizedPostalCode && !/^\d{6}$/.test(normalizedPostalCode)) {
       throw new ApiError(400, 'Postal code must be a 6 digit number');
     }
   } else {
     const vehicleYear = Number(normalizedYear);
     const currentYear = new Date().getFullYear();
 
-    if (!vehicleTypeId || !make || !model || !normalizedYear || !normalizedNumber || !color) {
-      throw new ApiError(400, 'Vehicle details are incomplete');
-    }
+    requireField('serviceCategories', normalizedServiceCategories, 'Service category');
+    requireField('vehicleTypeId', vehicleTypeId, 'Vehicle type');
+    requireField('make', make, 'Brand / Make');
+    requireField('model', model, 'Model');
+    requireField('year', normalizedYear, 'Year');
+    requireField('number', normalizedNumber, 'Plate number');
+    requireField('color', color, 'Exterior color');
 
-    if (!/^\d{4}$/.test(normalizedYear) || vehicleYear < 1980 || vehicleYear > currentYear) {
+    if (normalizedYear && (!/^\d{4}$/.test(normalizedYear) || vehicleYear < 1980 || vehicleYear > currentYear)) {
       throw new ApiError(400, `Vehicle year must be between 1980 and ${currentYear}`);
     }
 
-    if (!VEHICLE_NUMBER_REGEX.test(normalizedNumber)) {
+    if (normalizedNumber && !VEHICLE_NUMBER_REGEX.test(normalizedNumber)) {
       throw new ApiError(400, 'Vehicle number must be in this format: PP09KK1234');
     }
   }
+
+  Object.values(requiredFieldMap)
+    .filter((config) => {
+      const key = String(config.field_key || '').trim();
+      return key && ![
+        'locationId',
+        'serviceCategories',
+        'vehicleTypeId',
+        'make',
+        'model',
+        'year',
+        'number',
+        'color',
+        'companyName',
+        'companyAddress',
+        'city',
+        'postalCode',
+        'taxNumber',
+      ].includes(key);
+    })
+    .forEach((config) => {
+      if (config.is_required && !hasValue(normalizedCustomFields[config.field_key])) {
+        throw new ApiError(400, `${config.name || config.field_key} is required`);
+      }
+    });
 
   session.vehicle = {
     registerFor: normalizedRegisterFor,
@@ -721,6 +805,7 @@ export const saveDriverVehicle = async ({
     city: String(city || selectedLocation).trim(),
     postalCode: normalizedPostalCode,
     taxNumber: String(taxNumber || '').trim().toUpperCase(),
+    customFields: normalizedCustomFields,
   };
   session.status = 'vehicle_saved';
   await session.save();
@@ -911,6 +996,9 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
         location: serviceLocationCoordinates ? toPoint(serviceLocationCoordinates, 'location') : null,
         zoneId: zone?._id || null,
         documents: normalizedDocuments,
+        onboardingVehicle: {
+          ...session.vehicle,
+        },
       },
       area_snapshot: resolvedServiceLocation || null,
     });
@@ -994,6 +1082,7 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
         number: session.vehicle.number,
         color: session.vehicle.color,
         city: session.vehicle.city,
+        customFields: session.vehicle.customFields || {},
       },
     },
   });

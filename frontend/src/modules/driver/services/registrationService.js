@@ -321,6 +321,13 @@ export const getDriverDocumentTemplates = (role = "driver") =>
     },
   });
 
+export const getDriverVehicleFieldTemplates = (role = "driver") =>
+  api.get("/drivers/vehicle-field-templates", {
+    params: {
+      role,
+    },
+  });
+
 export const updateDriverDocument = (documentKey, document) =>
   api.patch(
     `/drivers/documents/${encodeURIComponent(documentKey)}`,
