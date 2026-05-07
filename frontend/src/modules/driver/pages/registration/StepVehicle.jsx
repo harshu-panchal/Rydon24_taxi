@@ -610,11 +610,15 @@ const StepVehicle = () => {
                             </div>
                         ) : (
                             <div className="space-y-5 animate-in fade-in slide-in-from-top-4 duration-500">
-                                {formData.locationId && shouldShowField('vehicleTypeId', true) && (
+                                {shouldShowField('vehicleTypeId', true) && (
                                     <div className="space-y-4 pt-1">
                                          <div className="space-y-1 px-1">
                                             <h2 className="text-base font-semibold tracking-[-0.03em] text-slate-950">{vehicleTypeField.name}</h2>
-                                            <p className="text-sm text-slate-500">{vehicleTypeField.help_text || 'Select the type of vehicle you drive.'}</p>
+                                            <p className="text-sm text-slate-500">
+                                                {formData.locationId
+                                                    ? (vehicleTypeField.help_text || 'Select the type of vehicle you drive.')
+                                                    : 'Select a vehicle type now. Choosing your city later will refine availability if needed.'}
+                                            </p>
                                         </div>
                                          <div className="grid grid-cols-2 gap-3">
                                              {vehicleTypesLoading ? (
@@ -623,10 +627,11 @@ const StepVehicle = () => {
                                                  ))
                                              ) : (
                                                  vehicleTypes.map((type) => (
-                                                     <div
+                                                     <button
                                                          key={type._id || type.id}
+                                                         type="button"
                                                          onClick={() => setFormData(p => ({ ...p, vehicleTypeId: type._id || type.id }))}
-                                                         className={`relative h-32 rounded-3xl border transition-all flex flex-col group overflow-hidden cursor-pointer ${
+                                                         className={`relative h-32 rounded-3xl border transition-all flex flex-col group overflow-hidden cursor-pointer touch-manipulation text-left ${
                                                              formData.vehicleTypeId === (type._id || type.id)
                                                              ? 'border-slate-900 bg-slate-900/[0.02] ring-1 ring-slate-900/5' 
                                                              : 'border-slate-100 bg-[#FCFCFB] hover:border-slate-200'
@@ -650,7 +655,7 @@ const StepVehicle = () => {
                                                          }`}>
                                                              <span className="text-[11px] tracking-tight uppercase">{type.name || type.vehicle_type_name}</span>
                                                          </div>
-                                                     </div>
+                                                     </button>
                                                  ))
                                              )}
                                          </div>
