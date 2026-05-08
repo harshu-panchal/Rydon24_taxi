@@ -1640,14 +1640,15 @@ const buildBiometricTemplateHash = (template = "") =>
 
 const serializeBiometricProfile = (profile = {}) => {
   const fingers = Array.isArray(profile?.fingers) ? profile.fingers : [];
+  const normalizedRequiredFingerCount = Number(profile?.requiredFingerCount);
   return {
     id: String(profile?._id || ""),
     status: profile?.status || "not_started",
     consentAccepted: profile?.consentAccepted === true,
     consentAcceptedAt: profile?.consentAcceptedAt || null,
     consentNotes: profile?.consentNotes || "",
-    enrollmentMode: profile?.enrollmentMode || "thumbs_only",
-    requiredFingerCount: Number(profile?.requiredFingerCount || 2),
+    enrollmentMode: profile?.enrollmentMode || "optional",
+    requiredFingerCount: Number.isInteger(normalizedRequiredFingerCount) && normalizedRequiredFingerCount >= 0 ? normalizedRequiredFingerCount : 0,
     enrolledFingerCount: fingers.length,
     enrolledFingerCodes: fingers.map((item) => String(item?.fingerCode || "")).filter(Boolean),
     notes: profile?.notes || "",
@@ -1804,8 +1805,8 @@ const serializeServiceCenterBooking = (item = {}, biometricProfile = null) => ({
         consentAccepted: false,
         consentAcceptedAt: null,
         consentNotes: "",
-        enrollmentMode: "thumbs_only",
-        requiredFingerCount: 2,
+        enrollmentMode: "optional",
+        requiredFingerCount: 0,
         enrolledFingerCount: 0,
         enrolledFingerCodes: [],
         notes: "",
@@ -3345,8 +3346,8 @@ export const updateServiceCenterBookingBiometrics = async (req, res) => {
 
   if (req.body?.requiredFingerCount !== undefined) {
     const requiredFingerCount = Number(req.body.requiredFingerCount);
-    if (!Number.isInteger(requiredFingerCount) || requiredFingerCount < 1 || requiredFingerCount > 10) {
-      throw new ApiError(400, "requiredFingerCount must be between 1 and 10");
+    if (!Number.isInteger(requiredFingerCount) || requiredFingerCount < 0 || requiredFingerCount > 10) {
+      throw new ApiError(400, "requiredFingerCount must be between 0 and 10");
     }
     profile.requiredFingerCount = requiredFingerCount;
   }
@@ -3457,7 +3458,9 @@ export const captureServiceCenterBookingFingerprint = async (req, res) => {
     profile.fingers.push(nextFinger);
   }
 
-  profile.status = profile.fingers.length >= Number(profile.requiredFingerCount || 2) ? "completed" : "in_progress";
+  const requiredFingerCount = Number(profile.requiredFingerCount);
+  const normalizedRequiredFingerCount = Number.isInteger(requiredFingerCount) && requiredFingerCount >= 0 ? requiredFingerCount : 0;
+  profile.status = profile.fingers.length >= normalizedRequiredFingerCount ? "completed" : "in_progress";
   if (access.staff?._id) {
     profile.capturedByStaffId = access.staff._id;
   }

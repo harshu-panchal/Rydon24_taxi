@@ -102,10 +102,23 @@ const biometricSourceOptions = [
 const buildBiometricDraft = (booking) => ({
   consentAccepted: Boolean(booking?.biometrics?.consentAccepted),
   consentNotes: String(booking?.biometrics?.consentNotes || ''),
-  enrollmentMode: String(booking?.biometrics?.enrollmentMode || 'thumbs_only'),
-  requiredFingerCount: String(booking?.biometrics?.requiredFingerCount || 2),
+  enrollmentMode: String(booking?.biometrics?.enrollmentMode || 'optional'),
+  requiredFingerCount:
+    booking?.biometrics?.requiredFingerCount === undefined || booking?.biometrics?.requiredFingerCount === null
+      ? ''
+      : String(booking.biometrics.requiredFingerCount),
   notes: String(booking?.biometrics?.notes || ''),
 });
+
+const getBiometricTargetCount = (biometrics = {}, draft = null) => {
+  if (draft) {
+    const draftCount = Number(draft.requiredFingerCount);
+    return Number.isInteger(draftCount) && draftCount >= 0 ? draftCount : 0;
+  }
+
+  const savedCount = Number(biometrics?.requiredFingerCount);
+  return Number.isInteger(savedCount) && savedCount >= 0 ? savedCount : 0;
+};
 
 const getBiometricSourceLabel = (source = '') =>
   biometricSourceOptions.find((item) => item.value === source)?.label || 'Manual';
@@ -850,9 +863,12 @@ const ServiceCenterDashboard = () => {
       return null;
     }
 
-    const requiredFingerCount = Number(biometricDraft.requiredFingerCount);
-    if (!Number.isInteger(requiredFingerCount) || requiredFingerCount < 1 || requiredFingerCount > 10) {
-      setError('Required finger count must be between 1 and 10');
+    const normalizedRequiredFingerCount =
+      biometricDraft.requiredFingerCount === '' || biometricDraft.requiredFingerCount === null
+        ? 0
+        : Number(biometricDraft.requiredFingerCount);
+    if (!Number.isInteger(normalizedRequiredFingerCount) || normalizedRequiredFingerCount < 0 || normalizedRequiredFingerCount > 10) {
+      setError('Target finger count must be between 0 and 10');
       return;
     }
 
@@ -864,7 +880,7 @@ const ServiceCenterDashboard = () => {
         consentAccepted: biometricDraft.consentAccepted,
         consentNotes: biometricDraft.consentNotes,
         enrollmentMode: biometricDraft.enrollmentMode,
-        requiredFingerCount,
+        requiredFingerCount: normalizedRequiredFingerCount,
         notes: biometricDraft.notes,
       });
       const updated = unwrap(response)?.booking || unwrap(response);
@@ -1351,6 +1367,11 @@ const ServiceCenterDashboard = () => {
                {selectedBooking ? (() => {
                  const inspection = selectedBooking.rentalInspection || {};
                  const biometrics = selectedBooking.biometrics || {};
+                 const targetFingerCount = getBiometricTargetCount(biometrics, biometricDraft);
+                 const biometricBadge =
+                   targetFingerCount > 0
+                     ? `${biometrics.enrolledFingerCount || 0}/${targetFingerCount} enrolled`
+                     : `${biometrics.enrolledFingerCount || 0} enrolled · optional`;
                  const beforeInspection = inspection.beforeHandover || {};
                  const afterInspection = inspection.afterReturn || {};
                  const beforeConditionImages = Array.isArray(inspection.beforeConditionImages) ? inspection.beforeConditionImages : [];
@@ -1457,7 +1478,7 @@ const ServiceCenterDashboard = () => {
                           <CollapsibleSection
                             title="Customer Biometrics"
                             icon={ShieldCheck}
-                            badge={`${biometrics.enrolledFingerCount || 0}/${biometrics.requiredFingerCount || 2} enrolled`}
+                            badge={biometricBadge}
                           >
                             <div className="space-y-4">
                               <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -1544,7 +1565,7 @@ const ServiceCenterDashboard = () => {
                                     />
                                     <div>
                                       <p className="text-sm font-bold text-slate-900">Customer consent collected</p>
-                                      <p className="mt-1 text-xs text-slate-500">Required before any fingerprint capture is stored in the backend.</p>
+                                      <p className="mt-1 text-xs text-slate-500">Only needed if you plan to capture or verify fingerprints for this booking.</p>
                                     </div>
                                   </div>
                                 </label>
@@ -1580,15 +1601,19 @@ const ServiceCenterDashboard = () => {
                                   </select>
                                 </div>
                                 <div>
-                                  <label className={labelClass}>Required Finger Count</label>
+                                  <label className={labelClass}>Target Finger Count (Optional)</label>
                                   <input
                                     type="number"
-                                    min={1}
+                                    min={0}
                                     max={10}
                                     value={biometricDraft.requiredFingerCount}
                                     onChange={(event) => setBiometricDraft((current) => ({ ...current, requiredFingerCount: event.target.value }))}
                                     className={inputClass}
+                                    placeholder="0"
                                   />
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    Leave this blank or set it to 0 if no fingerprint enrollment is needed for this booking.
+                                  </p>
                                 </div>
                               </div>
 
