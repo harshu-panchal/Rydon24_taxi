@@ -7,7 +7,7 @@ const LinksPage = () => {
   const links = [
     {
       id: 'user',
-      title: 'Rydon24 - Ride & Parcel',
+      title: 'Rydon24 - User app',
       subtitle: 'Book rides, send parcels, and more.',
       description: 'Get where you need to go with ease. Request a ride or send packages across the city in minutes.',
       url: 'https://play.google.com/store/apps/details?id=com.rydon24.user',
