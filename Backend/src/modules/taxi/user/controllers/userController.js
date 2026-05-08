@@ -977,6 +977,32 @@ const ensureUserCanLogin = (user) => {
   }
 };
 
+const canRestoreUserForSignup = (user) => Boolean(user?.deletedAt);
+
+const buildReactivatedUserPayload = async ({ req, name, phone, email, countryCode, gender, profileImage, referrer }) => ({
+  name,
+  phone,
+  countryCode,
+  email,
+  gender,
+  profileImage,
+  password: await hashPassword(String(req.body.password || '').trim() || crypto.randomBytes(24).toString('hex')),
+  isVerified: true,
+  referredBy: referrer?._id || null,
+  deletedAt: null,
+  deletion_reason: '',
+  active: true,
+  isActive: true,
+  deletionRequest: {
+    status: 'none',
+    reason: '',
+    requestedAt: null,
+    reviewedAt: null,
+    reviewedBy: null,
+    adminNote: '',
+  },
+});
+
 const createUserSession = (user) => ({
   token: signAccessToken({ sub: String(user._id), role: 'user' }),
   user: toUserPayload(user),
@@ -1103,26 +1129,30 @@ export const registerUser = async (req, res) => {
 
   const existingUser = await User.findOne({ phone });
 
-  if (existingUser) {
-    throw new ApiError(409, 'Phone number is already registered');
-  }
-
   const referrer = referralCode ? await findUserByReferralCode(referralCode) : null;
 
   if (referralCode && !referrer) {
     throw new ApiError(400, 'Invalid referral code');
   }
 
-  const user = await User.create({
+  if (existingUser && !canRestoreUserForSignup(existingUser)) {
+    throw new ApiError(409, 'Phone number is already registered');
+  }
+
+  const userPayload = await buildReactivatedUserPayload({
+    req,
     name,
     phone,
-    countryCode,
     email,
+    countryCode,
     gender,
     profileImage,
-    referredBy: referrer?._id || null,
-    password: await hashPassword(String(req.body.password || '').trim() || crypto.randomBytes(24).toString('hex')),
+    referrer,
   });
+
+  const user = existingUser
+    ? await User.findByIdAndUpdate(existingUser._id, { $set: userPayload }, { new: true, runValidators: true })
+    : await User.create(userPayload);
 
   if (!String(user.referralCode || '').trim()) {
     user.referralCode = generateUserReferralCode(user);
@@ -1212,27 +1242,30 @@ export const signupUser = async (req, res) => {
 
   const existingUser = await User.findOne({ phone });
 
-  if (existingUser) {
-    throw new ApiError(409, 'Phone number is already registered');
-  }
-
   const referrer = referralCode ? await findUserByReferralCode(referralCode) : null;
 
   if (referralCode && !referrer) {
     throw new ApiError(400, 'Invalid referral code');
   }
 
-  const user = await User.create({
+  if (existingUser && !canRestoreUserForSignup(existingUser)) {
+    throw new ApiError(409, 'Phone number is already registered');
+  }
+
+  const userPayload = await buildReactivatedUserPayload({
+    req,
     name,
     phone,
     email,
     countryCode,
     gender,
     profileImage,
-    password: await hashPassword(String(req.body.password || '').trim() || crypto.randomBytes(24).toString('hex')),
-    isVerified: true,
-    referredBy: referrer?._id || null,
+    referrer,
   });
+
+  const user = existingUser
+    ? await User.findByIdAndUpdate(existingUser._id, { $set: userPayload }, { new: true, runValidators: true })
+    : await User.create(userPayload);
 
   if (!String(user.referralCode || '').trim()) {
     user.referralCode = generateUserReferralCode(user);

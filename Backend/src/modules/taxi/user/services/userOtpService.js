@@ -62,6 +62,8 @@ const ensureUserCanLogin = (user) => {
   }
 };
 
+const isReusableSignupUser = (user) => Boolean(user?.deletedAt);
+
 const toUserPayload = (user) => ({
   id: user._id,
   name: user.name || '',
@@ -104,7 +106,7 @@ export const startUserOtp = async ({ phone }) => {
 
   const user = await User.findOne({ phone: normalizedPhone }).lean();
 
-  if (user) {
+  if (user && !isReusableSignupUser(user)) {
     ensureUserCanLogin(user);
   }
 
@@ -141,7 +143,7 @@ export const startUserOtp = async ({ phone }) => {
 
   return {
     message: smsDispatch.mode === 'live' ? 'OTP sent successfully' : 'OTP generated successfully',
-    exists: Boolean(user),
+    exists: Boolean(user && !isReusableSignupUser(user)),
     session: publicOtpSession(session, debugOtp),
   };
 };
@@ -166,6 +168,18 @@ export const verifyUserOtp = async ({ phone, otp }) => {
   const user = await User.findOne({ phone: session.phone });
 
   if (user) {
+    if (isReusableSignupUser(user)) {
+      session.otpVerifiedAt = new Date();
+      session.expiresAt = new Date(Date.now() + VERIFIED_SESSION_TTL_MS);
+      await session.save();
+
+      return {
+        exists: false,
+        phone: session.phone,
+        session: publicOtpSession(session),
+      };
+    }
+
     ensureUserCanLogin(user);
     await UserAuthSession.deleteOne({ _id: session._id });
     return {

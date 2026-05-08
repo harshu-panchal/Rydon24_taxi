@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import AuthLayout from '../../components/AuthLayout';
 import { User, Mail, Camera, Smartphone, ImagePlus, LifeBuoy } from 'lucide-react';
-import { userAuthService } from '../../services/authService';
+import { clearLocalUserSession, userAuthService } from '../../services/authService';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const fieldShellClassName =
@@ -118,6 +118,7 @@ const Signup = () => {
     setError('');
 
     try {
+      clearLocalUserSession();
       await userAuthService.startOtp(formData.phone);
 
       navigate('/taxi/user/verify-otp', {
