@@ -1325,7 +1325,7 @@ export const verifyUserPhoneForOtpLogin = async (req, res) => {
 
   const user = await User.findOne({ phone }).lean();
 
-  if (!user) {
+  if (!user || user.deletedAt) {
     res.json({
       success: true,
       data: {

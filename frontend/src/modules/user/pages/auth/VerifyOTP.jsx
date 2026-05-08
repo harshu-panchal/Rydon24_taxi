@@ -138,22 +138,6 @@ const VerifyOTP = () => {
         return;
       }
 
-      const loginResponse = await userAuthService.verifyOtpLogin(phone);
-      const loginPayload = unwrap(loginResponse);
-
-      if (loginPayload.exists && loginPayload.token) {
-        localStorage.setItem('token', loginPayload.token || '');
-        localStorage.setItem('userToken', loginPayload.token || '');
-        localStorage.setItem('role', 'user');
-        localStorage.setItem('userInfo', JSON.stringify(loginPayload.user || {}));
-        syncPushTokens();
-        sessionStorage.removeItem(PENDING_OTP_PHONE_KEY);
-        sessionStorage.removeItem(PENDING_SIGNUP_PHONE_KEY);
-        sessionStorage.removeItem(PENDING_SIGNUP_REFERRAL_CODE_KEY);
-        setTimeout(() => navigate('/taxi/user', { replace: true }), 1200);
-        return;
-      }
-
       sessionStorage.setItem(PENDING_OTP_PHONE_KEY, String(phone || ''));
       sessionStorage.setItem(PENDING_SIGNUP_PHONE_KEY, String(phone || ''));
       if (referralCode) {
