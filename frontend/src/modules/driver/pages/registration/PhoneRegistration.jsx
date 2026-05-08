@@ -291,7 +291,7 @@ const PhoneRegistration = () => {
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-amber-600/60 mb-1.5">Mobile Number</label>
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
                                             <span className="shrink-0 text-[20px] font-black text-slate-400">+91</span>
                                             <input 
                                                 ref={phoneInputRef}
@@ -308,7 +308,7 @@ const PhoneRegistration = () => {
                                                 }}
                                                 onFocus={() => phoneCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
                                                 placeholder="00000 00000"
-                                                className="w-full border-none bg-transparent p-0 text-[20px] font-black text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200 tracking-[0.05em]"
+                                                className="min-w-0 flex-1 border-none bg-transparent p-0 text-[18px] font-black text-slate-900 outline-none focus:ring-0 placeholder:text-[17px] placeholder:text-slate-200 tracking-[0.02em] sm:text-[20px] sm:placeholder:text-[20px] sm:tracking-[0.05em]"
                                             />
                                         </div>
                                     </div>

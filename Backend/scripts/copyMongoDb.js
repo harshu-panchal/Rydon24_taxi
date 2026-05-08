@@ -12,6 +12,9 @@ const SOURCE_URI = String(process.env.MONGODB_URI || '').trim();
 const SOURCE_DB = String(process.env.MONGODB_DB_NAME || 'appzeto_taxi').trim() || 'appzeto_taxi';
 const TARGET_URI = String(process.argv[2] || '').trim();
 const TARGET_DB = String(process.argv[3] || SOURCE_DB).trim() || SOURCE_DB;
+const REQUESTED_COLLECTIONS = process.argv.slice(4)
+  .map((name) => String(name || '').trim())
+  .filter(Boolean);
 const BATCH_SIZE = 500;
 
 if (!SOURCE_URI) {
@@ -19,7 +22,7 @@ if (!SOURCE_URI) {
 }
 
 if (!TARGET_URI) {
-  throw new Error('Usage: node scripts/copyMongoDb.js <targetMongoUri> [targetDbName]');
+  throw new Error('Usage: node scripts/copyMongoDb.js <targetMongoUri> [targetDbName] [collectionName ...]');
 }
 
 const connect = async (uri, dbName) =>
@@ -42,7 +45,15 @@ const copyIndexes = async (sourceCollection, targetCollection) => {
     }
 
     const { key, name, ns, v, background, ...options } = index;
-    await targetCollection.createIndex(key, { ...options, name });
+    try {
+      await targetCollection.createIndex(key, { ...options, name });
+    } catch (error) {
+      if (error?.code === 85 || error?.code === 86) {
+        console.warn(`   Skipping existing/conflicting index ${name}`);
+        continue;
+      }
+      throw error;
+    }
   }
 };
 
@@ -106,9 +117,20 @@ const main = async () => {
     const targetDb = targetConnection.db;
 
     const collections = await sourceDb.listCollections().toArray();
-    const collectionNames = collections
+    const availableCollectionNames = collections
       .map((collection) => collection.name)
       .filter((name) => !shouldSkipCollection(name));
+    const collectionNames = REQUESTED_COLLECTIONS.length > 0
+      ? REQUESTED_COLLECTIONS.filter((name) => availableCollectionNames.includes(name))
+      : availableCollectionNames;
+
+    const missingCollections = REQUESTED_COLLECTIONS.filter(
+      (name) => !availableCollectionNames.includes(name),
+    );
+
+    if (missingCollections.length > 0) {
+      console.warn(`Skipping missing collections: ${missingCollections.join(', ')}`);
+    }
 
     console.log(`Found ${collectionNames.length} collections to copy.`);
 
