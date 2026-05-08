@@ -51,6 +51,7 @@ const ContactPage = lazy(() => import('./modules/shared/pages/ContactPage'));
 const FaqPage = lazy(() => import('./modules/shared/pages/FaqPage'));
 const ServicesPage = lazy(() => import('./modules/shared/pages/ServicesPage'));
 const BlogPage = lazy(() => import('./modules/shared/pages/BlogPage'));
+const LinksPage = lazy(() => import('./modules/shared/pages/LinksPage'));
 
 // Phase 1 — Parcel flow completions
 const ParcelSearchingDriver = lazy(() => import('./modules/user/pages/parcel/ParcelSearchingDriver'));
@@ -351,7 +352,7 @@ const AdminSectionPlaceholder = () => {
 // A wrapper to handle conditional layouts (Mobile for User/Driver, Full for Admin)
 const MainLayout = ({ children }) => {
   const location = useLocation();
-  const staticPages = ['/', '/about', '/contact', '/faq', '/services', '/privacy', '/terms', '/refund', '/cancellation', '/blog'];
+  const staticPages = ['/', '/about', '/contact', '/faq', '/services', '/privacy', '/terms', '/refund', '/cancellation', '/blog', '/links'];
   const isStaticPath = staticPages.includes(location.pathname);
   const isAdminPath =
     location.pathname.startsWith('/admin') ||
@@ -662,6 +663,7 @@ function App() {
               <Route path="/faq" element={<FaqPage />} />
               <Route path="/services" element={<ServicesPage />} />
               <Route path="/blog" element={<BlogPage />} />
+              <Route path="/links" element={<LinksPage />} />
               <Route path="/terms" element={<LegalPage />} />
               <Route path="/privacy" element={<LegalPage />} />
               <Route path="/refund" element={<LegalPage />} />
