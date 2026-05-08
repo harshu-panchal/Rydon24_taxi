@@ -22,6 +22,8 @@ import {
   getIntercityPackageCatalog,
   clearAllUserNotifications,
   getMyActiveRentalBooking,
+  listPublicServiceLocations,
+  listPublicServiceStores,
   listMyRentalBookings,
   loginUser,
   registerUser,
@@ -34,6 +36,7 @@ import {
   topupUserWallet,
   transferUserWalletToDriver,
   transferUserWallet,
+  updateMyActiveRentalLocation,
   updateCurrentUser,
   uploadUserProfileImage,
   verifyBusBookingPayment,
@@ -64,11 +67,14 @@ userRouter.get('/intercity-packages', asyncHandler(getIntercityPackageCatalog));
 userRouter.get('/goods-types', asyncHandler(getGoodsTypes));
 userRouter.get('/vehicle-types', asyncHandler(getPublicVehicleTypeCatalog));
 userRouter.get('/rental-vehicles', asyncHandler(getPublicRentalVehicleCatalog));
+userRouter.get('/service-locations', asyncHandler(listPublicServiceLocations));
+userRouter.get('/service-stores', asyncHandler(listPublicServiceStores));
 userRouter.post('/rental-quote-requests', asyncHandler(createRentalQuoteRequest));
 userRouter.post('/rental-bookings', authenticateOrResolveUser(['user']), asyncHandler(createRentalBookingRequest));
 userRouter.get('/rental-bookings', authenticateOrResolveUser(['user']), asyncHandler(listMyRentalBookings));
 userRouter.get('/rental-bookings/active', authenticateOrResolveUser(['user']), asyncHandler(getMyActiveRentalBooking));
 userRouter.post('/rental-bookings/:id/end', authenticateOrResolveUser(['user']), asyncHandler(endMyActiveRentalRide));
+userRouter.post('/rental-bookings/:id/location', authenticateOrResolveUser(['user']), asyncHandler(updateMyActiveRentalLocation));
 userRouter.post('/register', asyncHandler(registerUser));
 userRouter.post('/signup', asyncHandler(signupUser));
 userRouter.post('/login', asyncHandler(loginUser));

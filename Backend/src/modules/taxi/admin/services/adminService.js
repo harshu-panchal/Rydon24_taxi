@@ -60,6 +60,7 @@ import {
   emitToDriver,
   notifyUserAccountDeleted,
 } from '../../services/dispatchService.js';
+import { buildRentalTrackingSnapshot, listActiveRentalTrackingBookings } from '../../services/rentalTrackingService.js';
 import { sendEmail } from '../../services/mailService.js';
 import { getActivePaymentGateway, normalizePaymentSettingsPayload } from '../../services/paymentGatewayService.js';
 import { signAccessToken } from '../../services/tokenService.js';
@@ -1247,6 +1248,7 @@ const serializeRentalQuoteRequest = (item = {}) => ({
   reviewedAt: item.reviewedAt || null,
   createdAt: item.createdAt || null,
   updatedAt: item.updatedAt || null,
+  rentalTracking: buildRentalTrackingSnapshot(item),
 });
 
 const serializeRentalBookingRequest = (item = {}) => ({
@@ -1277,6 +1279,7 @@ const serializeRentalBookingRequest = (item = {}) => ({
     label: item.selectedPackage?.label || '',
     durationHours: Number(item.selectedPackage?.durationHours || 0),
     price: Number(item.selectedPackage?.price || 0),
+    extraHourPrice: Number(item.selectedPackage?.extraHourPrice || 0),
   },
   serviceLocation: {
     locationId: item.serviceLocation?.locationId || '',
@@ -1365,36 +1368,63 @@ const toNullableNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const resolveRentalSelectedPackagePricing = (item = {}) => {
+  const selectedPackage = item.selectedPackage || {};
+  const normalizedPackageId = String(selectedPackage.packageId || '').trim();
+  const vehiclePricing = Array.isArray(item.vehicleTypeId?.pricing) ? item.vehicleTypeId.pricing : [];
+  const matchedPackage = vehiclePricing.find((entry) => String(entry?.id || entry?.packageId || '').trim() === normalizedPackageId);
+
+  const includedHours = Math.max(
+    Number(selectedPackage.durationHours || 0),
+    Number(matchedPackage?.durationHours || 0),
+    1,
+  );
+  const basePrice = Math.max(
+    Number(selectedPackage.price || 0),
+    Number(matchedPackage?.price || 0),
+    0,
+  );
+  const extraHourPrice = Math.max(
+    Number(selectedPackage.extraHourPrice || 0),
+    Number(matchedPackage?.extraHourPrice || 0),
+    0,
+  );
+
+  return {
+    includedHours,
+    basePrice,
+    extraHourPrice,
+  };
+};
+
 const computeRentalRideMetrics = (item = {}, endedAt = null) => {
   const startDate = item.assignedAt || item.pickupDateTime || item.createdAt;
   const startMs = startDate ? new Date(startDate).getTime() : NaN;
   const endMs = endedAt ? new Date(endedAt).getTime() : Date.now();
-
-  const safeRequestedHours = Math.max(
-    Number(item.requestedHours || 0),
-    Number(item.selectedPackage?.durationHours || 0),
-    1,
-  );
-  const hourlyRate = Number(item.totalCost || item.selectedPackage?.price || 0) / safeRequestedHours;
+  const { includedHours, basePrice, extraHourPrice } = resolveRentalSelectedPackagePricing(item);
+  const hourlyRate = includedHours > 0 ? basePrice / includedHours : 0;
 
   if (!Number.isFinite(startMs)) {
     return {
       hourlyRate: Math.max(0, hourlyRate),
+      includedHours,
+      basePrice,
+      extraHourRate: extraHourPrice,
       elapsedMinutes: 0,
       elapsedHours: 0,
-      currentCharge: Math.max(0, Number(item.payableNow || 0)),
-      remainingDue: Math.max(0, Number(item.totalCost || 0) - Number(item.payableNow || 0)),
+      currentCharge: Math.max(basePrice, Number(item.payableNow || 0)),
+      remainingDue: Math.max(0, Math.max(basePrice, Number(item.payableNow || 0)) - Number(item.payableNow || 0)),
     };
   }
 
   const elapsedMs = Math.max(0, endMs - startMs);
   const elapsedMinutes = Math.max(0, Math.ceil(elapsedMs / 60000));
   const elapsedHours = elapsedMs / 3600000;
-  const uncappedCharge = Math.max(Number(item.payableNow || 0), hourlyRate * elapsedHours);
-  const currentCharge = Math.min(
-    Number(item.totalCost || 0),
-    Math.round((uncappedCharge + Number.EPSILON) * 100) / 100,
-  );
+  const elapsedChargeWithinPackage = elapsedHours <= includedHours
+    ? basePrice
+    : basePrice + Math.ceil(Math.max(0, elapsedHours - includedHours)) * extraHourPrice;
+  const uncappedCharge = Math.max(Number(item.payableNow || 0), elapsedChargeWithinPackage);
+  const currentCharge = Math.round((uncappedCharge + Number.EPSILON) * 100) / 100;
   const remainingDue = Math.max(
     0,
     Math.round((currentCharge - Number(item.payableNow || 0) + Number.EPSILON) * 100) / 100,
@@ -1402,6 +1432,9 @@ const computeRentalRideMetrics = (item = {}, endedAt = null) => {
 
   return {
     hourlyRate: Math.max(0, Math.round((hourlyRate + Number.EPSILON) * 100) / 100),
+    includedHours,
+    basePrice: Math.round((basePrice + Number.EPSILON) * 100) / 100,
+    extraHourRate: Math.round((extraHourPrice + Number.EPSILON) * 100) / 100,
     elapsedMinutes,
     elapsedHours: Math.round((elapsedHours + Number.EPSILON) * 100) / 100,
     currentCharge,
@@ -7942,10 +7975,10 @@ export const updateBusService = async (id, payload = {}, options = {}) => {
     return serializeRentalQuoteRequest(populated);
   };
 
-  export const listRentalBookingRequests = async () => {
+export const listRentalBookingRequests = async () => {
     const items = await RentalBookingRequest.find()
       .populate('userId', 'name phone email')
-      .populate('vehicleTypeId', 'name vehicleCategory image')
+      .populate('vehicleTypeId', 'name vehicleCategory image pricing')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -7961,7 +7994,7 @@ export const updateBusService = async (id, payload = {}, options = {}) => {
   export const getRentalBookingRequestById = async (id) => {
     const item = await RentalBookingRequest.findById(id)
       .populate('userId', 'name phone email')
-      .populate('vehicleTypeId', 'name vehicleCategory image')
+      .populate('vehicleTypeId', 'name vehicleCategory image pricing')
       .lean();
 
     if (!item) {
@@ -7976,6 +8009,48 @@ export const updateBusService = async (id, payload = {}, options = {}) => {
       ),
     };
   };
+
+export const getRentalTrackingDashboard = async () => {
+  const results = await listActiveRentalTrackingBookings();
+  const normalizeTrackingValue = (value = '') => String(value || '').trim().toLowerCase();
+  const stats = results.reduce(
+    (summary, item) => {
+      summary.total += 1;
+
+      const trackingStatus = normalizeTrackingValue(item?.rentalTracking?.trackingStatus);
+      const zoneStatus = normalizeTrackingValue(item?.rentalTracking?.zoneStatus);
+      const alertCount = Array.isArray(item?.rentalTracking?.alerts) ? item.rentalTracking.alerts.length : 0;
+
+      if (trackingStatus === 'active') {
+        summary.live += 1;
+      }
+      if (trackingStatus === 'location_off' || trackingStatus === 'tracking_stopped') {
+        summary.locationOff += 1;
+      }
+      if (zoneStatus === 'outside') {
+        summary.outsideZone += 1;
+      }
+      if (alertCount > 0) {
+        summary.alerts += 1;
+      }
+
+      return summary;
+    },
+    {
+      total: 0,
+      live: 0,
+      locationOff: 0,
+      outsideZone: 0,
+      alerts: 0,
+    },
+  );
+
+  return {
+    results,
+    stats,
+    refreshedAt: new Date().toISOString(),
+  };
+};
 
   export const updateRentalBookingRequest = async (id, payload = {}, adminId = null) => {
     const item = await RentalBookingRequest.findById(id);

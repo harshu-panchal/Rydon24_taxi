@@ -1293,6 +1293,9 @@ export const updateRentalQuoteRequest = asyncHandler(async (req, res) =>
 export const getRentalBookingRequests = asyncHandler(async (_req, res) =>
   ok(res, { results: await adminService.listRentalBookingRequests() }),
 );
+export const getRentalTrackingDashboard = asyncHandler(async (_req, res) =>
+  ok(res, await adminService.getRentalTrackingDashboard()),
+);
 export const updateRentalBookingRequest = asyncHandler(async (req, res) =>
   ok(res, await adminService.updateRentalBookingRequest(req.params.id, req.body, req.auth?.sub)),
 );

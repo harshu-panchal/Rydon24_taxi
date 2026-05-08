@@ -226,6 +226,7 @@ export const adminService = {
   updateRentalVehicleType: (id, data) => api.patch(`/admin/types/rental-vehicles/${id}`, data),
   deleteRentalVehicleType: (id) => api.delete(`/admin/types/rental-vehicles/${id}`),
   getRentalBookingRequests: () => api.get('/admin/rental-booking-requests'),
+  getRentalTrackingDashboard: () => api.get('/admin/rental-tracking'),
   updateRentalBookingRequest: (id, data) => api.patch(`/admin/rental-booking-requests/${id}`, data),
   getRentalQuoteRequests: () => api.get('/admin/rental-quote-requests'),
   updateRentalQuoteRequest: (id, data) => api.patch(`/admin/rental-quote-requests/${id}`, data),

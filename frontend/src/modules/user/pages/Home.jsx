@@ -110,6 +110,82 @@ const getScheduledCountdownLabel = (value, now = Date.now()) => {
   return `Starts in ${minutes}m`;
 };
 
+const normalizeRentalCurrentRideSnapshot = (ride = {}, previousRide = {}) => {
+  if (!ride) {
+    return null;
+  }
+
+  const assignedVehicle = ride.assignedVehicle || previousRide.assignedVehicle || {};
+  const selectedPackage = ride.selectedPackage || previousRide.selectedPackage || null;
+  const rideMetrics = ride.rideMetrics || previousRide.rideMetrics || {};
+  const serviceLocation = ride.serviceLocation || previousRide.serviceLocation || null;
+  const bookingReference = ride.bookingReference || previousRide.bookingReference || '';
+  const vehicleName =
+    assignedVehicle?.name ||
+    ride.vehicleName ||
+    previousRide.vehicleName ||
+    previousRide?.vehicle?.name ||
+    'Assigned Vehicle';
+  const vehicleImage =
+    assignedVehicle?.image ||
+    ride.vehicleImage ||
+    previousRide.vehicleImage ||
+    previousRide?.vehicle?.image ||
+    '';
+  const vehicleCategory =
+    assignedVehicle?.vehicleCategory ||
+    ride.vehicleCategory ||
+    previousRide.vehicleCategory ||
+    previousRide?.driver?.vehicle ||
+    'Rental';
+
+  return {
+    ...previousRide,
+    ...ride,
+    rideId: ride.id || ride.rideId || previousRide.rideId || '',
+    bookingReference,
+    fare: rideMetrics?.currentCharge ?? ride.fare ?? previousRide.fare ?? ride.payableNow ?? 0,
+    totalCost: ride.totalCost ?? previousRide.totalCost ?? 0,
+    advancePaid: ride.payableNow ?? ride.advancePaid ?? previousRide.advancePaid ?? 0,
+    status: ride.status || previousRide.status || 'assigned',
+    liveStatus: ride.status || ride.liveStatus || previousRide.liveStatus || 'assigned',
+    serviceType: 'rental',
+    vehicleName,
+    vehicleImage,
+    vehicleCategory,
+    vehicle: {
+      ...(previousRide.vehicle || {}),
+      name: vehicleName,
+      image: vehicleImage,
+      vehicleIconUrl: vehicleImage,
+    },
+    driver: {
+      ...(previousRide.driver || {}),
+      name: vehicleName,
+      vehicle: vehicleCategory,
+      vehicleType: vehicleCategory,
+      vehicleIconUrl: vehicleImage,
+    },
+    vehicleIconUrl: vehicleImage || previousRide.vehicleIconUrl || '',
+    assignedAt: ride.assignedAt || previousRide.assignedAt || ride.createdAt || null,
+    completionRequestedAt: ride.completionRequestedAt || previousRide.completionRequestedAt || null,
+    hourlyRate: rideMetrics?.hourlyRate ?? ride.hourlyRate ?? previousRide.hourlyRate ?? 0,
+    includedHours: rideMetrics?.includedHours ?? ride.includedHours ?? previousRide.includedHours ?? selectedPackage?.durationHours ?? 0,
+    basePrice: rideMetrics?.basePrice ?? ride.basePrice ?? previousRide.basePrice ?? selectedPackage?.price ?? ride.totalCost ?? 0,
+    extraHourRate: rideMetrics?.extraHourRate ?? ride.extraHourRate ?? previousRide.extraHourRate ?? selectedPackage?.extraHourPrice ?? 0,
+    elapsedMinutes: rideMetrics?.elapsedMinutes ?? ride.elapsedMinutes ?? previousRide.elapsedMinutes ?? 0,
+    remainingDue: rideMetrics?.remainingDue ?? ride.remainingDue ?? previousRide.remainingDue ?? 0,
+    requestedHours: ride.requestedHours ?? previousRide.requestedHours ?? selectedPackage?.durationHours ?? 0,
+    selectedPackage,
+    paymentMethodLabel: ride.paymentMethodLabel || previousRide.paymentMethodLabel || '',
+    serviceLocation,
+    assignedVehicle,
+    finalCharge: ride.finalCharge ?? previousRide.finalCharge ?? 0,
+    finalElapsedMinutes: ride.finalElapsedMinutes ?? previousRide.finalElapsedMinutes ?? 0,
+    updatedAt: ride.updatedAt || previousRide.updatedAt || Date.now(),
+  };
+};
+
 const Home = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -125,6 +201,17 @@ const Home = () => {
   const [showDeferredSections, setShowDeferredSections] = useState(false);
   const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
   const currentRideRef = useRef(currentRide);
+
+  const persistCurrentRide = (ride) => {
+    const normalizedRide = isActiveCurrentRide(ride) ? ride : null;
+    setCurrentRide(normalizedRide);
+
+    if (normalizedRide) {
+      saveCurrentRide(normalizedRide);
+    } else {
+      clearCurrentRide();
+    }
+  };
 
   useEffect(() => {
     currentRideRef.current = currentRide;
@@ -144,7 +231,7 @@ const Home = () => {
         status: payload?.status || 'end_requested',
         liveStatus: payload?.status || 'end_requested',
       };
-      saveCurrentRide(nextRideState);
+      persistCurrentRide(nextRideState);
       navigate(`${routePrefix}/rental/confirmed`, {
         state: nextRideState,
       });
@@ -206,6 +293,11 @@ const Home = () => {
   useEffect(() => {
     const refreshCurrentRide = () => {
       const ride = getCurrentRide();
+      if (String(ride?.serviceType || '').toLowerCase() === 'rental') {
+        const normalizedRentalRide = normalizeRentalCurrentRideSnapshot(ride, currentRideRef.current || {});
+        setCurrentRide(isActiveCurrentRide(normalizedRentalRide) ? normalizedRentalRide : null);
+        return;
+      }
       setCurrentRide(isActiveCurrentRide(ride) ? ride : null);
     };
 
@@ -272,7 +364,7 @@ const Home = () => {
             vehicleIconType: rideData.vehicleIconType,
           };
           if (cancelled) return;
-          saveCurrentRide(normalizedRide);
+          persistCurrentRide(normalizedRide);
           currentRideRef.current = normalizedRide;
           return;
         }
@@ -293,41 +385,15 @@ const Home = () => {
           }
 
           if (cancelled) return;
-          const nextRentalRide = {
-            rideId: rentalRide.id,
-            bookingReference: rentalRide.bookingReference,
+          const previousRentalRide = currentRideRef.current && String(currentRideRef.current.serviceType || '').toLowerCase() === 'rental'
+            ? currentRideRef.current
+            : {};
+          const nextRentalRide = normalizeRentalCurrentRideSnapshot({
+            ...rentalRide,
             pickup: rentalRide.serviceLocation?.name || rentalRide.serviceLocation?.address || 'Rental pickup',
             drop: rentalRide.assignedVehicle?.name || rentalRide.vehicleName || 'Assigned vehicle',
-            fare: rentalRide.rideMetrics?.currentCharge || rentalRide.payableNow || 0,
-            totalCost: rentalRide.totalCost || 0,
-            advancePaid: rentalRide.payableNow || 0,
-            status: rentalRide.status,
-            liveStatus: rentalRide.status,
-            serviceType: 'rental',
-            vehicle: {
-              name: rentalRide.vehicleName,
-              image: rentalRide.assignedVehicle?.image || rentalRide.vehicleImage,
-            },
-            driver: {
-              name: rentalRide.assignedVehicle?.name || rentalRide.vehicleName || 'Rental Vehicle',
-              vehicle: rentalRide.assignedVehicle?.vehicleCategory || rentalRide.vehicleCategory || 'Rental',
-              vehicleType: rentalRide.assignedVehicle?.vehicleCategory || rentalRide.vehicleCategory || 'Rental',
-              vehicleIconUrl: rentalRide.assignedVehicle?.image || rentalRide.vehicleImage,
-            },
-            vehicleIconUrl: rentalRide.assignedVehicle?.image || rentalRide.vehicleImage,
-            assignedAt: rentalRide.assignedAt || rentalRide.createdAt,
-            completionRequestedAt: rentalRide.completionRequestedAt,
-            hourlyRate: rentalRide.rideMetrics?.hourlyRate || 0,
-            elapsedMinutes: rentalRide.rideMetrics?.elapsedMinutes || 0,
-            remainingDue: rentalRide.rideMetrics?.remainingDue || 0,
-            requestedHours: rentalRide.requestedHours || rentalRide.selectedPackage?.durationHours || 0,
-            paymentMethodLabel: rentalRide.paymentMethodLabel,
-            serviceLocation: rentalRide.serviceLocation,
-            assignedVehicle: rentalRide.assignedVehicle,
-            finalCharge: rentalRide.finalCharge || 0,
-            finalElapsedMinutes: rentalRide.finalElapsedMinutes || 0,
-          };
-          saveCurrentRide(nextRentalRide);
+          }, previousRentalRide);
+          persistCurrentRide(nextRentalRide);
           currentRideRef.current = nextRentalRide;
           return;
         }
@@ -340,7 +406,7 @@ const Home = () => {
       }
 
         if (cancelled) return;
-        clearCurrentRide();
+        persistCurrentRide(null);
         currentRideRef.current = null;
       } finally {
         syncInFlight = false;
@@ -413,17 +479,36 @@ const Home = () => {
       : Math.max(1, Math.floor((clockNow - new Date(currentRide.assignedAt).getTime()) / 1000))
     : Number(currentRide?.elapsedMinutes || 0) * 60;
 
-  const rentalElapsedHours = rentalElapsedSeconds / 3600;
+  const computeRentalLiveCharge = (ride = {}, elapsedSeconds = 0) => {
+    const basePrice = Math.max(
+      Number(ride?.basePrice || 0),
+      Number(ride?.selectedPackage?.price || 0),
+      Number(ride?.advancePaid || 0),
+      0,
+    );
+    const includedHours = Math.max(
+      Number(ride?.includedHours || 0),
+      Number(ride?.selectedPackage?.durationHours || 0),
+      Number(ride?.requestedHours || 0) > 0 && Number(ride?.extraHourRate || 0) <= 0 ? Number(ride.requestedHours) : 0,
+      1,
+    );
+    const extraHourRate = Math.max(
+      Number(ride?.extraHourRate || 0),
+      Number(ride?.selectedPackage?.extraHourPrice || 0),
+      0,
+    );
+    const elapsedHours = Math.max(0, elapsedSeconds / 3600);
+    const packageCharge = elapsedHours <= includedHours
+      ? basePrice
+      : basePrice + Math.ceil(Math.max(0, elapsedHours - includedHours)) * extraHourRate;
+
+    return Math.max(Number(ride?.advancePaid || 0), packageCharge);
+  };
+
   const rentalCurrentCharge = serviceType === 'rental'
     ? String(currentRide?.status || '').toLowerCase() === 'end_requested' && Number(currentRide?.finalCharge || 0) > 0
       ? Number(currentRide.finalCharge || 0)
-      : Math.min(
-          Number(currentRide?.totalCost || 0),
-          Math.max(
-            Number(currentRide?.advancePaid || 0),
-            Number(currentRide?.hourlyRate || 0) * rentalElapsedHours,
-          ),
-        )
+      : computeRentalLiveCharge(currentRide, rentalElapsedSeconds)
     : Number(currentRide?.fare || 0);
 
   const formatRentalTime = (totalSeconds) => {

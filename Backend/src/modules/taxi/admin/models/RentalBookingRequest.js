@@ -1,5 +1,77 @@
 import mongoose from 'mongoose';
 
+const rentalTrackingHistorySchema = new mongoose.Schema(
+  {
+    coordinates: {
+      type: [Number],
+      default: [],
+    },
+    capturedAt: {
+      type: Date,
+      default: null,
+    },
+    heading: {
+      type: Number,
+      default: null,
+    },
+    speed: {
+      type: Number,
+      default: null,
+    },
+    accuracyMeters: {
+      type: Number,
+      default: null,
+    },
+    zoneStatus: {
+      type: String,
+      default: 'unknown',
+      trim: true,
+    },
+  },
+  { _id: false },
+);
+
+const rentalTrackingAlertSchema = new mongoose.Schema(
+  {
+    code: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    severity: {
+      type: String,
+      default: 'warning',
+      trim: true,
+    },
+    message: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    active: {
+      type: Boolean,
+      default: true,
+    },
+    createdAt: {
+      type: Date,
+      default: null,
+    },
+    updatedAt: {
+      type: Date,
+      default: null,
+    },
+    resolvedAt: {
+      type: Date,
+      default: null,
+    },
+    metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+  },
+  { _id: false },
+);
+
 const rentalBookingRequestSchema = new mongoose.Schema(
   {
     userId: {
@@ -50,6 +122,11 @@ const rentalBookingRequestSchema = new mongoose.Schema(
         min: 0,
       },
       price: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      extraHourPrice: {
         type: Number,
         default: 0,
         min: 0,
@@ -375,6 +452,75 @@ const rentalBookingRequestSchema = new mongoose.Schema(
       ref: 'Admin',
       default: null,
     },
+    rentalTracking: {
+      trackingStatus: {
+        type: String,
+        enum: ['inactive', 'active', 'location_off', 'tracking_stopped'],
+        default: 'inactive',
+      },
+      zoneStatus: {
+        type: String,
+        enum: ['inside', 'outside', 'unknown'],
+        default: 'unknown',
+      },
+      currentLocation: {
+        type: {
+          type: String,
+          enum: ['Point'],
+          default: 'Point',
+        },
+        coordinates: {
+          type: [Number],
+          default: [],
+        },
+      },
+      lastLocationAt: {
+        type: Date,
+        default: null,
+      },
+      lastClientTimestamp: {
+        type: Date,
+        default: null,
+      },
+      lastHeading: {
+        type: Number,
+        default: null,
+      },
+      lastSpeed: {
+        type: Number,
+        default: null,
+      },
+      lastAccuracyMeters: {
+        type: Number,
+        default: null,
+      },
+      matchedZoneName: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      distanceFromHubMeters: {
+        type: Number,
+        default: null,
+      },
+      geofenceRadiusMeters: {
+        type: Number,
+        default: null,
+      },
+      hubName: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      history: {
+        type: [rentalTrackingHistorySchema],
+        default: [],
+      },
+      alerts: {
+        type: [rentalTrackingAlertSchema],
+        default: [],
+      },
+    },
   },
   { timestamps: true },
 );
@@ -382,6 +528,7 @@ const rentalBookingRequestSchema = new mongoose.Schema(
 rentalBookingRequestSchema.index({ status: 1, createdAt: -1 });
 rentalBookingRequestSchema.index({ userId: 1, createdAt: -1 });
 rentalBookingRequestSchema.index({ vehicleTypeId: 1, createdAt: -1 });
+rentalBookingRequestSchema.index({ 'rentalTracking.currentLocation': '2dsphere' });
 
 export const RentalBookingRequest =
   mongoose.models.TaxiRentalBookingRequest ||

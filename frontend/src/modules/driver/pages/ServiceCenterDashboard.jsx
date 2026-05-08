@@ -27,16 +27,20 @@ import {
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { uploadService } from '../../../shared/services/uploadService';
 import {
+  captureServiceCenterBookingFingerprint,
   clearDriverAuthState,
   createServiceCenterStaff,
   deleteServiceCenterStaff,
   deleteServiceCenterVehicle,
   getCurrentDriver,
+  getServiceCenterBookingBiometrics,
   getServiceCenterBookings,
   getServiceCenterStaff,
   getServiceCenterVehicles,
+  updateServiceCenterBookingBiometrics,
   updateServiceCenterStaff,
   updateServiceCenterBooking,
+  verifyServiceCenterBookingFingerprint,
 } from '../services/registrationService';
 
 const unwrap = (response) => response?.data?.data || response?.data || response || {};
@@ -62,6 +66,106 @@ const afterReturnItems = [
   { key: 'tyresChecked', label: 'Tyres rechecked' },
   { key: 'damageReviewed', label: 'Damage reviewed' },
 ];
+
+const biometricFingerOptions = [
+  { code: 'LEFT_THUMB', label: 'Left Thumb' },
+  { code: 'LEFT_INDEX', label: 'Left Index' },
+  { code: 'LEFT_MIDDLE', label: 'Left Middle' },
+  { code: 'LEFT_RING', label: 'Left Ring' },
+  { code: 'LEFT_LITTLE', label: 'Left Little' },
+  { code: 'RIGHT_THUMB', label: 'Right Thumb' },
+  { code: 'RIGHT_INDEX', label: 'Right Index' },
+  { code: 'RIGHT_MIDDLE', label: 'Right Middle' },
+  { code: 'RIGHT_RING', label: 'Right Ring' },
+  { code: 'RIGHT_LITTLE', label: 'Right Little' },
+];
+
+const enrollmentModeOptions = [
+  { value: 'thumbs_only', label: 'Thumbs Only' },
+  { value: 'optional', label: 'Optional Mix' },
+  { value: 'all_ten', label: 'All 10 Fingers' },
+];
+
+const biometricSourceOptions = [
+  {
+    value: 'phone_sensor',
+    label: 'Phone Sensor',
+    helper: 'Use the handset fingerprint flow exposed by the Flutter WebView bridge.',
+  },
+  {
+    value: 'usb_scanner',
+    label: 'USB Scanner',
+    helper: 'Use the external fingerprint device connected to the phone over USB.',
+  },
+];
+
+const buildBiometricDraft = (booking) => ({
+  consentAccepted: Boolean(booking?.biometrics?.consentAccepted),
+  consentNotes: String(booking?.biometrics?.consentNotes || ''),
+  enrollmentMode: String(booking?.biometrics?.enrollmentMode || 'thumbs_only'),
+  requiredFingerCount: String(booking?.biometrics?.requiredFingerCount || 2),
+  notes: String(booking?.biometrics?.notes || ''),
+});
+
+const getBiometricSourceLabel = (source = '') =>
+  biometricSourceOptions.find((item) => item.value === source)?.label || 'Manual';
+
+const getBiometricBridgeStatus = (preferredSource = 'usb_scanner') => {
+  if (typeof window === 'undefined') return 'unknown';
+  if (window?.FingerprintBridge?.captureFinger) {
+    if (typeof window.FingerprintBridge.getAvailability === 'function') {
+      try {
+        const availability = window.FingerprintBridge.getAvailability();
+        if (availability && availability[preferredSource] === true) {
+          return 'device-ready';
+        }
+      } catch {
+        // Fall through to the generic bridge-ready state below.
+      }
+    }
+    return 'device-ready';
+  }
+  if (window?.flutter_inappwebview?.callHandler) return 'flutter-handler';
+  return 'demo-mode';
+};
+
+const getBiometricBridgeBadge = (status, preferredSource = 'usb_scanner') => {
+  if (status === 'device-ready') return `${getBiometricSourceLabel(preferredSource)} bridge ready`;
+  if (status === 'flutter-handler') return `Flutter bridge ready for ${getBiometricSourceLabel(preferredSource)}`;
+  if (status === 'unknown') return 'Bridge status unavailable';
+  return `${getBiometricSourceLabel(preferredSource)} demo fallback`;
+};
+
+const getBiometricSourceActionLabel = (source = 'usb_scanner') =>
+  source === 'phone_sensor' ? 'Phone sensor' : 'USB scanner';
+
+const getBiometricModeStorageKey = (bookingId = '') =>
+  `service-center-biometric-source:${String(bookingId || 'global')}`;
+
+const readStoredBiometricSource = (bookingId = '') => {
+  if (typeof window === 'undefined') {
+    return 'usb_scanner';
+  }
+
+  const saved = window.localStorage.getItem(getBiometricModeStorageKey(bookingId))
+    || window.localStorage.getItem(getBiometricModeStorageKey('global'))
+    || '';
+
+  return biometricSourceOptions.some((item) => item.value === saved) ? saved : 'usb_scanner';
+};
+
+const persistBiometricSource = (bookingId, source) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const normalizedSource = biometricSourceOptions.some((item) => item.value === source) ? source : 'usb_scanner';
+  window.localStorage.setItem(getBiometricModeStorageKey('global'), normalizedSource);
+  if (bookingId) {
+    window.localStorage.setItem(getBiometricModeStorageKey(bookingId), normalizedSource);
+  }
+};
+
 
 const canCompleteBooking = (booking) => {
   const inspection = booking?.rentalInspection || {};
@@ -251,6 +355,9 @@ const ServiceCenterDashboard = () => {
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [biometricDraft, setBiometricDraft] = useState(buildBiometricDraft());
+  const [biometricAction, setBiometricAction] = useState('');
+  const [biometricSource, setBiometricSource] = useState(() => readStoredBiometricSource());
   const bookingsPerPage = 8;
 
   const role = String(profile?.onboarding?.role || '').toLowerCase();
@@ -289,6 +396,14 @@ const ServiceCenterDashboard = () => {
       } else {
         setStaff([]);
       }
+    } catch (err) {
+      const status = Number(err?.status || err?.response?.status || 0);
+      if (status === 401 || status === 403) {
+        clearDriverAuthState();
+        navigate('/taxi/driver/login', { replace: true });
+        return;
+      }
+      setError(err?.message || 'Could not load service center dashboard.');
     } finally {
       setLoading(false);
     }
@@ -438,6 +553,8 @@ const ServiceCenterDashboard = () => {
         status: 'pending',
         serviceCenterNote: '',
       });
+      setBiometricDraft(buildBiometricDraft());
+      setBiometricSource(readStoredBiometricSource());
       return;
     }
 
@@ -446,6 +563,8 @@ const ServiceCenterDashboard = () => {
       status: String(selectedBooking.status || 'pending'),
       serviceCenterNote: String(selectedBooking.serviceCenterNote || ''),
     });
+    setBiometricDraft(buildBiometricDraft(selectedBooking));
+    setBiometricSource(readStoredBiometricSource(selectedBooking.id || selectedBooking._id));
   }, [selectedBooking]);
 
   const headerContent = useMemo(() => {
@@ -620,6 +739,7 @@ const ServiceCenterDashboard = () => {
               rentalInspection: patch?.rentalInspection
                 ? mergeRentalInspection(item.rentalInspection, patch.rentalInspection)
                 : item.rentalInspection,
+              biometrics: patch?.biometrics || item.biometrics,
             }
           : item,
       ),
@@ -712,6 +832,224 @@ const ServiceCenterDashboard = () => {
       setError(err?.message || 'Unable to update booking');
     } finally {
       setUpdatingBookingId('');
+    }
+  };
+
+  const refreshBookingBiometrics = async (bookingId) => {
+    const response = await getServiceCenterBookingBiometrics(bookingId);
+    const payload = unwrap(response);
+    if (payload?.booking) {
+      patchBookingLocal(bookingId, payload.booking);
+      return payload.booking;
+    }
+    return null;
+  };
+
+  const saveBiometricDraft = async () => {
+    if (!selectedBooking) {
+      return null;
+    }
+
+    const requiredFingerCount = Number(biometricDraft.requiredFingerCount);
+    if (!Number.isInteger(requiredFingerCount) || requiredFingerCount < 1 || requiredFingerCount > 10) {
+      setError('Required finger count must be between 1 and 10');
+      return;
+    }
+
+    setBiometricAction('settings');
+    setError('');
+
+    try {
+      const response = await updateServiceCenterBookingBiometrics(selectedBooking.id || selectedBooking._id, {
+        consentAccepted: biometricDraft.consentAccepted,
+        consentNotes: biometricDraft.consentNotes,
+        enrollmentMode: biometricDraft.enrollmentMode,
+        requiredFingerCount,
+        notes: biometricDraft.notes,
+      });
+      const updated = unwrap(response)?.booking || unwrap(response);
+      if (updated?.id || updated?._id) {
+        patchBookingLocal(selectedBooking.id || selectedBooking._id, updated);
+        setBiometricDraft(buildBiometricDraft(updated));
+        return updated;
+      }
+      return null;
+    } catch (err) {
+      setError(err?.message || 'Unable to save biometric enrollment settings');
+      throw err;
+    } finally {
+      setBiometricAction('');
+    }
+  };
+
+  const invokeFingerprintBridge = async (action, payload = {}, preferredSource = biometricSource) => {
+    const bridgePayload = {
+      ...payload,
+      preferredSource,
+      biometricSource: preferredSource,
+      runtime: window?.flutter_inappwebview?.callHandler ? 'flutter-webview' : 'browser',
+    };
+
+    if (window?.FingerprintBridge && typeof window.FingerprintBridge[action] === 'function') {
+      return window.FingerprintBridge[action](bridgePayload);
+    }
+
+    if (window?.flutter_inappwebview?.callHandler) {
+      const handlerNames = [
+        `fingerprint:${preferredSource}:${action}`,
+        `fingerprint:${action}`,
+      ];
+
+      let lastError = null;
+      for (const handlerName of handlerNames) {
+        try {
+          const result = await window.flutter_inappwebview.callHandler(handlerName, bridgePayload);
+          if (result !== undefined && result !== null && result !== '') {
+            return result;
+          }
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      if (lastError) {
+        throw lastError;
+      }
+    }
+
+    if (action === 'captureFinger') {
+      const templateData = window.prompt(
+        `No ${getBiometricSourceActionLabel(preferredSource).toLowerCase()} bridge is connected yet.\nPaste a demo template/token for ${payload?.fingerLabel || payload?.fingerCode || 'finger'} to continue testing the website flow.`,
+      );
+      if (!templateData) {
+        throw new Error('Fingerprint capture was cancelled');
+      }
+      return {
+        templateData,
+        templateFormat: 'demo-template',
+        qualityScore: 82,
+        captureSource: preferredSource === 'phone_sensor' ? 'phone_sensor' : 'manual',
+        deviceLabel: preferredSource === 'phone_sensor' ? 'Phone Demo' : 'Browser Demo',
+        scannerSerial: preferredSource === 'phone_sensor' ? 'PHONE-DEMO' : 'WEB-DEMO',
+        sampleCount: 1,
+      };
+    }
+
+    if (action === 'verifyFinger') {
+      const status = window.prompt(
+        `No ${getBiometricSourceActionLabel(preferredSource).toLowerCase()} verifier bridge is connected yet.\nType one of: matched, failed, low_quality`,
+        'matched',
+      );
+      if (!status) {
+        throw new Error('Fingerprint verification was cancelled');
+      }
+      return {
+        verificationStatus: status,
+        matchScore: status === 'matched' ? 92 : 41,
+        captureSource: preferredSource,
+      };
+    }
+
+    return null;
+  };
+
+  const handleCaptureFinger = async (finger) => {
+    if (!selectedBooking) {
+      return;
+    }
+
+    if (!biometricDraft.consentAccepted && !selectedBooking?.biometrics?.consentAccepted) {
+      setError('Save customer consent before capturing fingerprints');
+      return;
+    }
+
+    setBiometricAction(`capture:${finger.code}`);
+    setError('');
+
+    try {
+      if (!selectedBooking?.biometrics?.id) {
+        await saveBiometricDraft();
+      }
+
+      const bridgeResult = await invokeFingerprintBridge('captureFinger', {
+        fingerCode: finger.code,
+        fingerLabel: finger.label,
+        bookingId: selectedBooking.id || selectedBooking._id,
+      }, biometricSource);
+
+      const templateData = String(
+        bridgeResult?.templateData ||
+        bridgeResult?.template ||
+        bridgeResult?.payload ||
+        '',
+      ).trim();
+
+      if (!templateData) {
+        throw new Error(
+          biometricSource === 'phone_sensor'
+            ? 'Phone sensor capture needs the Flutter bridge to return templateData. Android local-auth alone only confirms identity, so use the USB scanner for enrollment unless your APK bridge exposes raw template data.'
+            : 'Fingerprint capture did not return template data.',
+        );
+      }
+
+      const response = await captureServiceCenterBookingFingerprint(selectedBooking.id || selectedBooking._id, {
+        fingerCode: finger.code,
+        templateData,
+        templateFormat: bridgeResult?.templateFormat || 'vendor-template',
+        qualityScore: bridgeResult?.qualityScore,
+        captureSource: bridgeResult?.captureSource || biometricSource || 'manual',
+        deviceLabel: bridgeResult?.deviceLabel || bridgeResult?.deviceName || '',
+        scannerSerial: bridgeResult?.scannerSerial || bridgeResult?.deviceId || '',
+        sampleCount: bridgeResult?.sampleCount || 1,
+        notes: bridgeResult?.notes || '',
+      });
+
+      const updated = unwrap(response)?.booking || unwrap(response);
+      if (updated?.id || updated?._id) {
+        patchBookingLocal(selectedBooking.id || selectedBooking._id, updated);
+        setBiometricDraft(buildBiometricDraft(updated));
+      } else {
+        await refreshBookingBiometrics(selectedBooking.id || selectedBooking._id);
+      }
+    } catch (err) {
+      setError(err?.message || `Unable to capture ${finger.label}`);
+    } finally {
+      setBiometricAction('');
+    }
+  };
+
+  const handleVerifyFinger = async (finger) => {
+    if (!selectedBooking) {
+      return;
+    }
+
+    setBiometricAction(`verify:${finger.code}`);
+    setError('');
+
+    try {
+      const bridgeResult = await invokeFingerprintBridge('verifyFinger', {
+        fingerCode: finger.code,
+        fingerLabel: finger.label,
+        bookingId: selectedBooking.id || selectedBooking._id,
+      }, biometricSource);
+
+      const response = await verifyServiceCenterBookingFingerprint(selectedBooking.id || selectedBooking._id, {
+        fingerCode: finger.code,
+        verificationStatus: bridgeResult?.verificationStatus || bridgeResult?.status || 'matched',
+        matchScore: bridgeResult?.matchScore,
+        notes: bridgeResult?.notes || '',
+      });
+
+      const updated = unwrap(response)?.booking || unwrap(response);
+      if (updated?.id || updated?._id) {
+        patchBookingLocal(selectedBooking.id || selectedBooking._id, updated);
+      } else {
+        await refreshBookingBiometrics(selectedBooking.id || selectedBooking._id);
+      }
+    } catch (err) {
+      setError(err?.message || `Unable to verify ${finger.label}`);
+    } finally {
+      setBiometricAction('');
     }
   };
 
@@ -1012,10 +1350,16 @@ const ServiceCenterDashboard = () => {
             <div className="mt-6 space-y-4">
                {selectedBooking ? (() => {
                  const inspection = selectedBooking.rentalInspection || {};
+                 const biometrics = selectedBooking.biometrics || {};
                  const beforeInspection = inspection.beforeHandover || {};
                  const afterInspection = inspection.afterReturn || {};
                  const beforeConditionImages = Array.isArray(inspection.beforeConditionImages) ? inspection.beforeConditionImages : [];
                  const afterConditionImages = Array.isArray(inspection.afterConditionImages) ? inspection.afterConditionImages : [];
+                 const enrolledFingerSet = new Set(Array.isArray(biometrics.enrolledFingerCodes) ? biometrics.enrolledFingerCodes : []);
+                 const fingerDetailMap = new Map(
+                   (Array.isArray(biometrics.fingers) ? biometrics.fingers : []).map((item) => [item.fingerCode, item]),
+                 );
+                 const bridgeStatus = getBiometricBridgeStatus(biometricSource);
                  const customerDocumentCards = getCustomerDocumentCards(selectedBooking);
                  const getPossessionTime = () => {
                    const start = new Date(selectedBooking.pickupDateTime);
@@ -1107,6 +1451,255 @@ const ServiceCenterDashboard = () => {
                                     </div>
                                   ))}
                                </div>
+                            </div>
+                          </CollapsibleSection>
+
+                          <CollapsibleSection
+                            title="Customer Biometrics"
+                            icon={ShieldCheck}
+                            badge={`${biometrics.enrolledFingerCount || 0}/${biometrics.requiredFingerCount || 2} enrolled`}
+                          >
+                            <div className="space-y-4">
+                              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                                      Capture Source
+                                    </p>
+                                    <p className="mt-1 text-sm font-bold text-slate-900">
+                                      {getBiometricSourceLabel(biometricSource)}
+                                    </p>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      This selection is passed into the Flutter WebView handler so the APK can switch between the phone sensor and the USB-connected scanner.
+                                    </p>
+                                  </div>
+                                  <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-600">
+                                    {biometricSource === 'phone_sensor' ? 'WebView Phone Flow' : 'External Scanner Flow'}
+                                  </span>
+                                </div>
+
+                                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                  {biometricSourceOptions.map((option) => {
+                                    const active = biometricSource === option.value;
+                                    return (
+                                      <button
+                                        key={option.value}
+                                        type="button"
+                                        onClick={() => {
+                                          setBiometricSource(option.value);
+                                          persistBiometricSource(selectedBooking.id || selectedBooking._id, option.value);
+                                        }}
+                                        className={`rounded-2xl border p-4 text-left transition ${
+                                          active
+                                            ? 'border-emerald-300 bg-emerald-50 shadow-sm'
+                                            : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between gap-3">
+                                          <p className="text-sm font-bold text-slate-900">{option.label}</p>
+                                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                            active ? 'bg-emerald-600 text-white' : 'bg-white text-slate-500'
+                                          }`}>
+                                            {active ? 'Selected' : 'Available'}
+                                          </span>
+                                        </div>
+                                        <p className="mt-2 text-xs text-slate-500">{option.helper}</p>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+
+                                {biometricSource === 'phone_sensor' ? (
+                                  <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                                    Phone fingerprint on Android usually verifies the user but does not expose a raw fingerprint template. In the Flutter APK, the phone mode will only enroll if your native bridge returns `templateData`; otherwise use it for verification and use the USB scanner for enrollment.
+                                  </p>
+                                ) : null}
+                              </div>
+
+                              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
+                                      Bridge Status
+                                    </p>
+                                    <p className="mt-1 text-sm font-bold text-slate-900">{getBiometricBridgeBadge(bridgeStatus, biometricSource)}</p>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      The website flow is ready now. Flutter can answer either `fingerprint:{'{source}'}:{'{action}'}` or the existing `fingerprint:{'{action}'}` handler names inside the WebView bridge.
+                                    </p>
+                                  </div>
+                                  <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700 shadow-sm">
+                                    {String(biometrics.status || 'not_started').replace(/_/g, ' ')}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <label className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                  <div className="flex items-start gap-3">
+                                    <input
+                                      type="checkbox"
+                                      checked={biometricDraft.consentAccepted}
+                                      onChange={(event) => setBiometricDraft((current) => ({ ...current, consentAccepted: event.target.checked }))}
+                                      className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                    <div>
+                                      <p className="text-sm font-bold text-slate-900">Customer consent collected</p>
+                                      <p className="mt-1 text-xs text-slate-500">Required before any fingerprint capture is stored in the backend.</p>
+                                    </div>
+                                  </div>
+                                </label>
+
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Last verification</p>
+                                  <p className="mt-1 text-sm font-bold text-slate-900">
+                                    {biometrics.verificationSummary?.lastVerificationStatus
+                                      ? `${biometrics.verificationSummary.lastVerificationStatus} via ${biometrics.verificationSummary.lastVerifiedFingerCode || 'finger'}`
+                                      : 'No verification yet'}
+                                  </p>
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    {biometrics.verificationSummary?.lastVerifiedAt
+                                      ? formatDateTime(biometrics.verificationSummary.lastVerifiedAt)
+                                      : 'Verification records will appear here after a scan.'}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <div>
+                                  <label className={labelClass}>Enrollment Mode</label>
+                                  <select
+                                    value={biometricDraft.enrollmentMode}
+                                    onChange={(event) => setBiometricDraft((current) => ({ ...current, enrollmentMode: event.target.value }))}
+                                    className={inputClass}
+                                  >
+                                    {enrollmentModeOptions.map((option) => (
+                                      <option key={option.value} value={option.value}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className={labelClass}>Required Finger Count</label>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={10}
+                                    value={biometricDraft.requiredFingerCount}
+                                    onChange={(event) => setBiometricDraft((current) => ({ ...current, requiredFingerCount: event.target.value }))}
+                                    className={inputClass}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="space-y-3">
+                                <div>
+                                  <label className={labelClass}>Consent Notes</label>
+                                  <textarea
+                                    rows={2}
+                                    value={biometricDraft.consentNotes}
+                                    onChange={(event) => setBiometricDraft((current) => ({ ...current, consentNotes: event.target.value }))}
+                                    className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                                    placeholder="Add operator notes, consent wording, or language confirmation..."
+                                  />
+                                </div>
+                                <div>
+                                  <label className={labelClass}>Enrollment Notes</label>
+                                  <textarea
+                                    rows={2}
+                                    value={biometricDraft.notes}
+                                    onChange={(event) => setBiometricDraft((current) => ({ ...current, notes: event.target.value }))}
+                                    className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                                    placeholder="Example: customer gave thumbs now, remaining fingers later at return desk."
+                                  />
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={saveBiometricDraft}
+                                disabled={biometricAction === 'settings'}
+                                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                              >
+                                {biometricAction === 'settings' ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+                                Save Enrollment Setup
+                              </button>
+
+                              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                {biometricFingerOptions.map((finger) => {
+                                  const enrolled = enrolledFingerSet.has(finger.code);
+                                  const fingerInfo = fingerDetailMap.get(finger.code);
+                                  const captureBusy = biometricAction === `capture:${finger.code}`;
+                                  const verifyBusy = biometricAction === `verify:${finger.code}`;
+
+                                  return (
+                                    <div key={finger.code} className={`rounded-2xl border p-4 ${enrolled ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200 bg-slate-50'}`}>
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                          <p className="text-sm font-bold text-slate-900">{finger.label}</p>
+                                          <p className="mt-1 text-xs text-slate-500">
+                                            {enrolled
+                                              ? `Captured ${formatDateTime(fingerInfo?.capturedAt)}`
+                                              : 'Not captured yet'}
+                                          </p>
+                                          {fingerInfo?.captureSource ? (
+                                            <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                                              Source {getBiometricSourceLabel(fingerInfo.captureSource)}
+                                            </p>
+                                          ) : null}
+                                          {fingerInfo?.qualityScore ? (
+                                            <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                                              Quality {fingerInfo.qualityScore}
+                                            </p>
+                                          ) : null}
+                                        </div>
+                                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${enrolled ? 'bg-emerald-600 text-white' : 'bg-white text-slate-500'}`}>
+                                          {enrolled ? 'Enrolled' : 'Pending'}
+                                        </span>
+                                      </div>
+
+                                      <div className="mt-4 grid grid-cols-2 gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleCaptureFinger(finger)}
+                                          disabled={Boolean(biometricAction && biometricAction !== `capture:${finger.code}` && biometricAction !== `verify:${finger.code}`)}
+                                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                                        >
+                                          {captureBusy ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+                                          {enrolled ? 'Rescan' : 'Capture'}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleVerifyFinger(finger)}
+                                          disabled={!enrolled || Boolean(biometricAction && biometricAction !== `verify:${finger.code}`)}
+                                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                                        >
+                                          {verifyBusy ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                                          Verify
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              {Array.isArray(biometrics.auditLogs) && biometrics.auditLogs.length > 0 ? (
+                                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Recent Activity</p>
+                                  <div className="mt-3 space-y-2">
+                                    {biometrics.auditLogs.slice(0, 5).map((log, index) => (
+                                      <div key={`${log.createdAt || index}-${log.action || index}`} className="rounded-xl bg-slate-50 px-3 py-2">
+                                        <p className="text-xs font-bold text-slate-900">
+                                          {(log.action || 'updated').replace(/_/g, ' ')} {log.fingerCode ? `• ${log.fingerCode}` : ''}
+                                        </p>
+                                        <p className="mt-1 text-[11px] text-slate-500">
+                                          {log.notes || 'No notes'} • {formatDateTime(log.createdAt)}
+                                        </p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
                             </div>
                           </CollapsibleSection>
 

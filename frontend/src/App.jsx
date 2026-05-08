@@ -10,6 +10,7 @@ import AppAutoUpdater from './modules/shared/components/AppAutoUpdater';
 import { addRealtimeNotification } from './modules/user/utils/realtimeNotificationStore';
 import { clearLocalUserSession, getLocalUserToken } from './modules/user/services/authService';
 import { clearCurrentRide } from './modules/user/services/currentRideService';
+import RentalLocationTracker from './modules/user/components/RentalLocationTracker';
 import userBusService from './modules/user/services/busService';
 import { userService } from './modules/user/services/userService';
 import { syncUpcomingRideReminders } from './modules/user/utils/upcomingRideReminderService';
@@ -223,6 +224,8 @@ const AdminDriverIncentive = lazy(() => import('./modules/admin/pages/price-mana
 const AdminSurgePricing = lazy(() => import('./modules/admin/pages/price-management/SurgePricing'));
 const AdminVehicleType = lazy(() => import('./modules/admin/pages/price-management/VehicleType'));
 const AdminRentalVehicleTypes = lazy(() => import('./modules/admin/pages/price-management/RentalVehicleTypes'));
+const AdminRentalTracking = lazy(() => import('./modules/admin/pages/price-management/RentalTracking'));
+const AdminRentalTrackingDetail = lazy(() => import('./modules/admin/pages/price-management/RentalTrackingDetail'));
 const AdminRentalBookingRequests = lazy(() => import('./modules/admin/pages/price-management/RentalBookingRequests'));
 const AdminRentalQuoteRequests = lazy(() => import('./modules/admin/pages/price-management/RentalQuoteRequests'));
 const AdminRentalPackageTypes = lazy(() => import('./modules/admin/pages/price-management/RentalPackageTypes'));
@@ -643,6 +646,7 @@ function App() {
   return (
     <Router>
       <SettingsProvider>
+        <RentalLocationTracker />
         <AppAutoUpdater />
         <ScrollToTop />
         <UserAccountInvalidationListener />
@@ -1405,6 +1409,14 @@ function App() {
                   <Route
                     path="rental-vehicles/view/:id"
                     element={<AdminRentalVehicleTypes mode="view" />}
+                  />
+                  <Route
+                    path="rental-tracking"
+                    element={<AdminRentalTracking />}
+                  />
+                  <Route
+                    path="rental-tracking/:id"
+                    element={<AdminRentalTrackingDetail />}
                   />
                   <Route
                     path="rental-requests"

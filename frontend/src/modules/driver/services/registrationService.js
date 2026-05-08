@@ -59,14 +59,14 @@ export const persistDriverAuthSession = ({ token = "", role = "driver" } = {}) =
   if (token) {
     writeSessionValue("token", token);
     writeSessionValue("driverToken", token);
+    localStorage.setItem("token", token);
+    localStorage.setItem("driverToken", token);
   }
 
   writeSessionValue("role", normalizedRole);
   writeSessionValue("driverRole", normalizedRole);
   localStorage.setItem("role", normalizedRole);
   localStorage.setItem("driverRole", normalizedRole);
-  localStorage.removeItem("token");
-  localStorage.removeItem("driverToken");
 };
 
 export const getStoredDriverRole = () =>
@@ -151,6 +151,16 @@ const readLocalDriverToken = () => {
   const fallback = readSessionValue("token");
   if (["driver", "owner", "bus_driver", "service_center", "service_center_staff"].includes(getTokenPayload(fallback)?.role)) {
     return fallback;
+  }
+
+  const persistedDriverToken = String(localStorage.getItem("driverToken") || "");
+  if (["driver", "owner", "bus_driver", "service_center", "service_center_staff"].includes(getTokenPayload(persistedDriverToken)?.role)) {
+    return persistedDriverToken;
+  }
+
+  const persistedGenericToken = String(localStorage.getItem("token") || "");
+  if (["driver", "owner", "bus_driver", "service_center", "service_center_staff"].includes(getTokenPayload(persistedGenericToken)?.role)) {
+    return persistedGenericToken;
   }
 
   return "";
@@ -320,6 +330,18 @@ export const deleteServiceCenterStaff = (staffId) =>
 
 export const getServiceCenterBookings = () =>
   api.get("/drivers/service-center/bookings", withDriverAuth());
+
+export const getServiceCenterBookingBiometrics = (bookingId) =>
+  api.get(`/drivers/service-center/bookings/${bookingId}/biometrics`, withDriverAuth());
+
+export const updateServiceCenterBookingBiometrics = (bookingId, payload) =>
+  api.patch(`/drivers/service-center/bookings/${bookingId}/biometrics`, payload, withDriverAuth());
+
+export const captureServiceCenterBookingFingerprint = (bookingId, payload) =>
+  api.post(`/drivers/service-center/bookings/${bookingId}/biometrics/fingers`, payload, withDriverAuth());
+
+export const verifyServiceCenterBookingFingerprint = (bookingId, payload) =>
+  api.post(`/drivers/service-center/bookings/${bookingId}/biometrics/verify`, payload, withDriverAuth());
 
 export const updateServiceCenterBooking = (bookingId, payload) =>
   api.patch(`/drivers/service-center/bookings/${bookingId}`, payload, withDriverAuth());

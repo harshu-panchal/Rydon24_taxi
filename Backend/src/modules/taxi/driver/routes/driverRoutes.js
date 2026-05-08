@@ -11,6 +11,7 @@ import {
   updateServiceCenterStaffMember,
   createDriverWithdrawalRequest,
   createServiceCenterVehicle,
+  captureServiceCenterBookingFingerprint,
   createOwnerFleetDriver,
   updateOwnerFleetDriver,
   updateOwnerFleetVehicle,
@@ -37,6 +38,7 @@ import {
   cancelDriverScheduledRide,
   getDriverScheduledRides,
   getServiceCenterBookings,
+  getServiceCenterBookingBiometrics,
   getServiceCenterStaffMembers,
   getServiceCenterVehicles,
   listOwnerBusServices,
@@ -66,7 +68,9 @@ import {
   updateCurrentDriver,
   updateDriverVehicle,
   updateOwnerBusService,
+  updateServiceCenterBookingBiometrics,
   updateServiceCenterBooking,
+  verifyServiceCenterBookingFingerprint,
   verifyOnboardingOtp,
   verifyDriverLoginOtpRequest,
   addOwnerVehicle,
@@ -338,6 +342,26 @@ driverRouter.get(
   "/service-center/bookings",
   authenticate(["service_center", "service_center_staff"]),
   asyncHandler(getServiceCenterBookings),
+);
+driverRouter.get(
+  "/service-center/bookings/:bookingId/biometrics",
+  authenticate(["service_center", "service_center_staff"]),
+  asyncHandler(getServiceCenterBookingBiometrics),
+);
+driverRouter.patch(
+  "/service-center/bookings/:bookingId/biometrics",
+  authenticate(["service_center", "service_center_staff"]),
+  asyncHandler(updateServiceCenterBookingBiometrics),
+);
+driverRouter.post(
+  "/service-center/bookings/:bookingId/biometrics/fingers",
+  authenticate(["service_center", "service_center_staff"]),
+  asyncHandler(captureServiceCenterBookingFingerprint),
+);
+driverRouter.post(
+  "/service-center/bookings/:bookingId/biometrics/verify",
+  authenticate(["service_center", "service_center_staff"]),
+  asyncHandler(verifyServiceCenterBookingFingerprint),
 );
 driverRouter.patch(
   "/service-center/bookings/:bookingId",

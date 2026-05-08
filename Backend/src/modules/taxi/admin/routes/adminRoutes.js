@@ -113,6 +113,7 @@ import {
   getPaymentSettings,
   getPoolingRoutes,
   getRentalBookingRequests,
+  getRentalTrackingDashboard,
   getRentalQuoteRequests,
   getPreferences,
   getRentalVehicleTypes,
@@ -341,6 +342,7 @@ adminRouter.patch('/admin/pooling-bookings/:id/status', updatePoolingBookingStat
 
 adminRouter.post('/admin/upload-image', uploadImage);
 adminRouter.get('/admin/rental-booking-requests', getRentalBookingRequests);
+adminRouter.get('/admin/rental-tracking', getRentalTrackingDashboard);
 adminRouter.patch('/admin/rental-booking-requests/:id', updateRentalBookingRequest);
 adminRouter.get('/admin/rental-quote-requests', getRentalQuoteRequests);
 adminRouter.patch('/admin/rental-quote-requests/:id', updateRentalQuoteRequest);

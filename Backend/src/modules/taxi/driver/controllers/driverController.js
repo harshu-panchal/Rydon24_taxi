@@ -20,6 +20,7 @@ import { ServiceCenterStaff } from "../../admin/models/ServiceCenterStaff.js";
 import { Vehicle } from "../../admin/models/Vehicle.js";
 import { RentalVehicleType } from "../../admin/models/RentalVehicleType.js";
 import { RentalBookingRequest } from "../../admin/models/RentalBookingRequest.js";
+import { CustomerBiometricProfile } from "../../admin/models/CustomerBiometricProfile.js";
 import { AdminBusinessSetting } from "../../admin/models/AdminBusinessSetting.js";
 import { Notification } from "../../admin/promotions/models/Notification.js";
 import { FleetVehicle } from "../../admin/models/FleetVehicle.js";
@@ -94,11 +95,27 @@ const IST_OFFSET_MS = 330 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BUS_DAY_OPTIONS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const BUS_DRIVER_SCHEDULE_DAY_OPTIONS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const BIOMETRIC_FINGER_CODES = [
+  "LEFT_THUMB",
+  "LEFT_INDEX",
+  "LEFT_MIDDLE",
+  "LEFT_RING",
+  "LEFT_LITTLE",
+  "RIGHT_THUMB",
+  "RIGHT_INDEX",
+  "RIGHT_MIDDLE",
+  "RIGHT_RING",
+  "RIGHT_LITTLE",
+];
+const BIOMETRIC_CAPTURE_SOURCES = ["phone_sensor", "usb_scanner", "bluetooth_scanner", "manual", "unknown"];
+const BIOMETRIC_ENROLLMENT_MODES = ["thumbs_only", "optional", "all_ten"];
+const BIOMETRIC_STATUSES = ["not_started", "in_progress", "completed", "verified"];
 
 const toIstDayKey = (value = new Date()) =>
   new Date(new Date(value).getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
 
 const toCleanString = (value = "") => String(value || "").trim();
+const normalizeBoolean = (value) => value === true || value === "true" || value === 1 || value === "1";
 const normalizeBusPassengerPhone = (value = "") =>
   String(value || "")
     .replace(/\D/g, "")
@@ -1587,7 +1604,95 @@ const serializeServiceCenterStaff = (staff = {}, bookingCount = 0) => ({
   updatedAt: staff.updatedAt || null,
 });
 
-const serializeServiceCenterBooking = (item = {}) => ({
+const getBiometricFingerDisplayName = (fingerCode = "") =>
+  String(fingerCode || "")
+    .trim()
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+const getBiometricFingerHand = (fingerCode = "") => {
+  const normalized = String(fingerCode || "").trim().toUpperCase();
+  if (normalized.startsWith("LEFT_")) return "left";
+  if (normalized.startsWith("RIGHT_")) return "right";
+  return "unknown";
+};
+
+const getBiometricEncryptionKey = () =>
+  crypto.createHash("sha256").update(String(env.jwtSecret || "appzeto-biometric-secret")).digest();
+
+const encryptBiometricTemplate = (template = "") => {
+  const raw = String(template || "");
+  if (!raw) {
+    return "";
+  }
+
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", getBiometricEncryptionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(raw, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${iv.toString("base64")}:${tag.toString("base64")}:${encrypted.toString("base64")}`;
+};
+
+const buildBiometricTemplateHash = (template = "") =>
+  crypto.createHash("sha256").update(String(template || "")).digest("hex");
+
+const serializeBiometricProfile = (profile = {}) => {
+  const fingers = Array.isArray(profile?.fingers) ? profile.fingers : [];
+  return {
+    id: String(profile?._id || ""),
+    status: profile?.status || "not_started",
+    consentAccepted: profile?.consentAccepted === true,
+    consentAcceptedAt: profile?.consentAcceptedAt || null,
+    consentNotes: profile?.consentNotes || "",
+    enrollmentMode: profile?.enrollmentMode || "thumbs_only",
+    requiredFingerCount: Number(profile?.requiredFingerCount || 2),
+    enrolledFingerCount: fingers.length,
+    enrolledFingerCodes: fingers.map((item) => String(item?.fingerCode || "")).filter(Boolean),
+    notes: profile?.notes || "",
+    verificationSummary: {
+      lastVerifiedAt: profile?.verificationSummary?.lastVerifiedAt || null,
+      lastVerificationStatus: profile?.verificationSummary?.lastVerificationStatus || "",
+      lastVerifiedFingerCode: profile?.verificationSummary?.lastVerifiedFingerCode || "",
+      lastMatchScore: Number(profile?.verificationSummary?.lastMatchScore || 0) || null,
+    },
+    updatedAt: profile?.updatedAt || null,
+    createdAt: profile?.createdAt || null,
+    fingers: fingers.map((item) => ({
+      fingerCode: String(item?.fingerCode || "").toUpperCase(),
+      displayName: item?.displayName || getBiometricFingerDisplayName(item?.fingerCode),
+      hand: item?.hand || getBiometricFingerHand(item?.fingerCode),
+      templateFormat: item?.templateFormat || "vendor-template",
+      qualityScore: Number(item?.qualityScore || 0) || null,
+      captureSource: item?.captureSource || "unknown",
+      deviceLabel: item?.deviceLabel || "",
+      scannerSerial: item?.scannerSerial || "",
+      sampleCount: Number(item?.sampleCount || 1),
+      notes: item?.notes || "",
+      capturedAt: item?.capturedAt || null,
+      lastVerifiedAt: item?.lastVerifiedAt || null,
+      verificationCount: Number(item?.verificationCount || 0),
+      templateStored: Boolean(item?.templateEncrypted),
+      templateHashPreview: item?.templateHash ? String(item.templateHash).slice(0, 10) : "",
+    })),
+    auditLogs: (Array.isArray(profile?.auditLogs) ? profile.auditLogs : [])
+      .slice(-10)
+      .reverse()
+      .map((log) => ({
+        action: log?.action || "",
+        fingerCode: log?.fingerCode || "",
+        actorId: log?.actorId ? String(log.actorId) : "",
+        actorRole: log?.actorRole || "",
+        notes: log?.notes || "",
+        matchScore: Number(log?.matchScore || 0) || null,
+        verificationStatus: log?.verificationStatus || "",
+        createdAt: log?.createdAt || null,
+      })),
+  };
+};
+
+const serializeServiceCenterBooking = (item = {}, biometricProfile = null) => ({
   id: String(item._id || item.id || ""),
   _id: item._id,
   bookingReference: item.bookingReference || "",
@@ -1691,11 +1796,49 @@ const serializeServiceCenterBooking = (item = {}) => ({
   },
   serviceCenterNote: item.serviceCenterNote || "",
   status: item.status || "pending",
+  biometrics: biometricProfile
+    ? serializeBiometricProfile(biometricProfile)
+    : {
+        id: "",
+        status: "not_started",
+        consentAccepted: false,
+        consentAcceptedAt: null,
+        consentNotes: "",
+        enrollmentMode: "thumbs_only",
+        requiredFingerCount: 2,
+        enrolledFingerCount: 0,
+        enrolledFingerCodes: [],
+        notes: "",
+        verificationSummary: {
+          lastVerifiedAt: null,
+          lastVerificationStatus: "",
+          lastVerifiedFingerCode: "",
+          lastMatchScore: null,
+        },
+        updatedAt: null,
+        createdAt: null,
+        fingers: [],
+        auditLogs: [],
+      },
   assignedAt: item.assignedAt || null,
   completedAt: item.completedAt || null,
   createdAt: item.createdAt || null,
   updatedAt: item.updatedAt || null,
 });
+
+const mapBiometricProfilesByBookingId = (profiles = []) =>
+  new Map(
+    (Array.isArray(profiles) ? profiles : [])
+      .filter((item) => item?.bookingId)
+      .map((item) => [String(item.bookingId), item]),
+  );
+
+const buildSerializedServiceCenterBookings = (bookings = [], biometricProfiles = []) => {
+  const profileMap = mapBiometricProfilesByBookingId(biometricProfiles);
+  return (Array.isArray(bookings) ? bookings : []).map((item) =>
+    serializeServiceCenterBooking(item, profileMap.get(String(item?._id || item?.id || "")) || null),
+  );
+};
 
 const resolveAuthenticatedServiceCenter = async (req) => {
   if (String(req.auth?.role || "").toLowerCase() !== "service_center") {
@@ -3043,6 +3186,75 @@ export const deleteServiceCenterStaffMember = async (req, res) => {
   });
 };
 
+const ensureServiceCenterBookingAccess = async (req, bookingId = "") => {
+  const access = await resolveAuthenticatedServiceCenterAccess(req);
+  const center = access?.center;
+
+  if (!center?._id) {
+    throw new ApiError(403, "Service center access is required");
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+    throw new ApiError(400, "Valid booking id is required");
+  }
+
+  const booking = await RentalBookingRequest.findById(bookingId)
+    .populate("userId", "name phone email")
+    .populate("vehicleTypeId", "name vehicleCategory image coverImage galleryImages amenities");
+
+  if (!booking) {
+    throw new ApiError(404, "Rental booking request not found");
+  }
+
+  const centerIds = Array.isArray(booking.serviceCenterIds)
+    ? booking.serviceCenterIds.map((item) => String(item))
+    : [];
+
+  if (!centerIds.includes(String(center._id))) {
+    throw new ApiError(403, "This booking is not assigned to your service center");
+  }
+
+  if (access.staff?._id && String(booking.assignedStaffId || "") !== String(access.staff._id)) {
+    throw new ApiError(403, "Staff can only manage biometrics for bookings assigned to them");
+  }
+
+  return { access, center, booking };
+};
+
+const ensureBiometricProfileForBooking = async ({ booking, center, access }) => {
+  let profile = await CustomerBiometricProfile.findOne({ bookingId: booking._id });
+
+  if (!profile) {
+    profile = await CustomerBiometricProfile.create({
+      bookingId: booking._id,
+      userId: booking.userId?._id || booking.userId || null,
+      serviceCenterId: center._id,
+      capturedByStaffId: access.staff?._id || null,
+      status: "not_started",
+    });
+  }
+
+  return profile;
+};
+
+const appendBiometricAuditLog = (profile, log = {}) => {
+  profile.auditLogs = Array.isArray(profile.auditLogs) ? profile.auditLogs : [];
+  profile.auditLogs.push({
+    action: log.action || "updated",
+    fingerCode: String(log.fingerCode || "").trim().toUpperCase(),
+    actorId: log.actorId || null,
+    actorRole: log.actorRole || "",
+    notes: log.notes || "",
+    matchScore: Number(log.matchScore || 0) || null,
+    verificationStatus: log.verificationStatus || "",
+    createdAt: new Date(),
+  });
+
+  if (profile.auditLogs.length > 50) {
+    profile.auditLogs = profile.auditLogs.slice(-50);
+  }
+};
+
 export const getServiceCenterBookings = async (req, res) => {
   const access = await resolveAuthenticatedServiceCenterAccess(req);
   const center = access?.center;
@@ -3070,6 +3282,11 @@ export const getServiceCenterBookings = async (req, res) => {
         .sort({ name: 1 })
         .lean()
     : [];
+  const biometricProfiles = await CustomerBiometricProfile.find({
+    bookingId: {
+      $in: bookings.map((item) => item._id).filter(Boolean),
+    },
+  }).lean();
 
   res.json({
     success: true,
@@ -3079,40 +3296,259 @@ export const getServiceCenterBookings = async (req, res) => {
         canManageVehicles: access.canManageVehicles,
         canAssignBookings: access.canAssignBookings,
       },
-      results: bookings.map(serializeServiceCenterBooking),
+      results: buildSerializedServiceCenterBookings(bookings, biometricProfiles),
       staff: staffItems.map((item) => serializeServiceCenterStaff(item, 0)),
     },
   });
 };
 
+export const getServiceCenterBookingBiometrics = async (req, res) => {
+  const { booking, center, access } = await ensureServiceCenterBookingAccess(
+    req,
+    String(req.params?.bookingId || "").trim(),
+  );
+
+  const profile = await ensureBiometricProfileForBooking({ booking, center, access });
+
+  res.json({
+    success: true,
+    data: {
+      booking: serializeServiceCenterBooking(booking.toObject(), profile.toObject()),
+      biometrics: serializeBiometricProfile(profile.toObject()),
+    },
+  });
+};
+
+export const updateServiceCenterBookingBiometrics = async (req, res) => {
+  const { booking, center, access } = await ensureServiceCenterBookingAccess(
+    req,
+    String(req.params?.bookingId || "").trim(),
+  );
+  const profile = await ensureBiometricProfileForBooking({ booking, center, access });
+
+  if (req.body?.consentAccepted !== undefined) {
+    profile.consentAccepted = normalizeBoolean(req.body.consentAccepted);
+    profile.consentAcceptedAt = profile.consentAccepted ? new Date() : null;
+  }
+
+  if (req.body?.consentNotes !== undefined) {
+    profile.consentNotes = String(req.body.consentNotes || "").trim();
+  }
+
+  if (req.body?.enrollmentMode !== undefined) {
+    const enrollmentMode = String(req.body.enrollmentMode || "").trim().toLowerCase();
+    if (!BIOMETRIC_ENROLLMENT_MODES.includes(enrollmentMode)) {
+      throw new ApiError(400, "Invalid enrollment mode");
+    }
+    profile.enrollmentMode = enrollmentMode;
+  }
+
+  if (req.body?.requiredFingerCount !== undefined) {
+    const requiredFingerCount = Number(req.body.requiredFingerCount);
+    if (!Number.isInteger(requiredFingerCount) || requiredFingerCount < 1 || requiredFingerCount > 10) {
+      throw new ApiError(400, "requiredFingerCount must be between 1 and 10");
+    }
+    profile.requiredFingerCount = requiredFingerCount;
+  }
+
+  if (req.body?.notes !== undefined) {
+    profile.notes = String(req.body.notes || "").trim();
+  }
+
+  if (req.body?.status !== undefined) {
+    const nextStatus = String(req.body.status || "").trim().toLowerCase();
+    if (!BIOMETRIC_STATUSES.includes(nextStatus)) {
+      throw new ApiError(400, "Invalid biometric status");
+    }
+    profile.status = nextStatus;
+  }
+
+  if (access.staff?._id) {
+    profile.capturedByStaffId = access.staff._id;
+  }
+
+  appendBiometricAuditLog(profile, {
+    action: "profile_updated",
+    actorId: access.staff?._id || center._id,
+    actorRole: access.role,
+    notes: "Biometric enrollment settings updated",
+  });
+
+  await profile.save();
+
+  res.json({
+    success: true,
+    data: {
+      booking: serializeServiceCenterBooking(booking.toObject(), profile.toObject()),
+      biometrics: serializeBiometricProfile(profile.toObject()),
+    },
+  });
+};
+
+export const captureServiceCenterBookingFingerprint = async (req, res) => {
+  const { booking, center, access } = await ensureServiceCenterBookingAccess(
+    req,
+    String(req.params?.bookingId || "").trim(),
+  );
+  const profile = await ensureBiometricProfileForBooking({ booking, center, access });
+
+  if (!profile.consentAccepted) {
+    throw new ApiError(400, "Customer consent is required before capturing fingerprints");
+  }
+
+  const fingerCode = String(req.body?.fingerCode || "").trim().toUpperCase();
+  const templateData = String(req.body?.templateData || "").trim();
+  const templateFormat = String(req.body?.templateFormat || "vendor-template").trim();
+  const qualityScore = req.body?.qualityScore === undefined || req.body?.qualityScore === null
+    ? null
+    : Number(req.body.qualityScore);
+  const captureSource = String(req.body?.captureSource || "unknown").trim().toLowerCase();
+  const deviceLabel = String(req.body?.deviceLabel || "").trim();
+  const scannerSerial = String(req.body?.scannerSerial || "").trim();
+  const sampleCount = Number(req.body?.sampleCount || 1);
+  const notes = String(req.body?.notes || "").trim();
+
+  if (!BIOMETRIC_FINGER_CODES.includes(fingerCode)) {
+    throw new ApiError(400, "Valid fingerCode is required");
+  }
+
+  if (!templateData) {
+    throw new ApiError(400, "templateData is required");
+  }
+
+  if (!BIOMETRIC_CAPTURE_SOURCES.includes(captureSource)) {
+    throw new ApiError(400, "Invalid capture source");
+  }
+
+  if (qualityScore !== null && (!Number.isFinite(qualityScore) || qualityScore < 0)) {
+    throw new ApiError(400, "qualityScore must be a positive number");
+  }
+
+  if (!Number.isInteger(sampleCount) || sampleCount < 1 || sampleCount > 10) {
+    throw new ApiError(400, "sampleCount must be between 1 and 10");
+  }
+
+  profile.fingers = Array.isArray(profile.fingers) ? profile.fingers : [];
+  const existingIndex = profile.fingers.findIndex(
+    (item) => String(item?.fingerCode || "").trim().toUpperCase() === fingerCode,
+  );
+
+  const nextFinger = {
+    fingerCode,
+    displayName: getBiometricFingerDisplayName(fingerCode),
+    hand: getBiometricFingerHand(fingerCode),
+    templateFormat,
+    templateEncrypted: encryptBiometricTemplate(templateData),
+    templateHash: buildBiometricTemplateHash(templateData),
+    qualityScore,
+    captureSource,
+    deviceLabel,
+    scannerSerial,
+    sampleCount,
+    notes,
+    capturedAt: new Date(),
+    lastVerifiedAt: existingIndex >= 0 ? profile.fingers[existingIndex]?.lastVerifiedAt || null : null,
+    verificationCount: existingIndex >= 0 ? Number(profile.fingers[existingIndex]?.verificationCount || 0) : 0,
+  };
+
+  if (existingIndex >= 0) {
+    profile.fingers.splice(existingIndex, 1, nextFinger);
+  } else {
+    profile.fingers.push(nextFinger);
+  }
+
+  profile.status = profile.fingers.length >= Number(profile.requiredFingerCount || 2) ? "completed" : "in_progress";
+  if (access.staff?._id) {
+    profile.capturedByStaffId = access.staff._id;
+  }
+
+  appendBiometricAuditLog(profile, {
+    action: "finger_captured",
+    fingerCode,
+    actorId: access.staff?._id || center._id,
+    actorRole: access.role,
+    notes: notes || `Fingerprint captured for ${getBiometricFingerDisplayName(fingerCode)}`,
+  });
+
+  await profile.save();
+
+  res.status(201).json({
+    success: true,
+    data: {
+      booking: serializeServiceCenterBooking(booking.toObject(), profile.toObject()),
+      biometrics: serializeBiometricProfile(profile.toObject()),
+    },
+  });
+};
+
+export const verifyServiceCenterBookingFingerprint = async (req, res) => {
+  const { booking, center, access } = await ensureServiceCenterBookingAccess(
+    req,
+    String(req.params?.bookingId || "").trim(),
+  );
+  const profile = await ensureBiometricProfileForBooking({ booking, center, access });
+
+  const fingerCode = String(req.body?.fingerCode || "").trim().toUpperCase();
+  const verificationStatus = String(req.body?.verificationStatus || req.body?.status || "")
+    .trim()
+    .toLowerCase();
+  const notes = String(req.body?.notes || "").trim();
+  const matchScore = req.body?.matchScore === undefined || req.body?.matchScore === null
+    ? null
+    : Number(req.body.matchScore);
+
+  if (!BIOMETRIC_FINGER_CODES.includes(fingerCode)) {
+    throw new ApiError(400, "Valid fingerCode is required");
+  }
+
+  if (!["matched", "failed", "low_quality"].includes(verificationStatus)) {
+    throw new ApiError(400, "verificationStatus must be matched, failed, or low_quality");
+  }
+
+  const fingerIndex = Array.isArray(profile.fingers)
+    ? profile.fingers.findIndex((item) => String(item?.fingerCode || "").trim().toUpperCase() === fingerCode)
+    : -1;
+
+  if (fingerIndex < 0) {
+    throw new ApiError(404, "This finger has not been enrolled for the booking");
+  }
+
+  const now = new Date();
+  profile.fingers[fingerIndex].lastVerifiedAt = now;
+  profile.fingers[fingerIndex].verificationCount =
+    Number(profile.fingers[fingerIndex].verificationCount || 0) + 1;
+  profile.verificationSummary = {
+    lastVerifiedAt: now,
+    lastVerificationStatus: verificationStatus,
+    lastVerifiedFingerCode: fingerCode,
+    lastMatchScore: matchScore,
+  };
+  profile.status = verificationStatus === "matched" ? "verified" : profile.status || "completed";
+
+  appendBiometricAuditLog(profile, {
+    action: "finger_verified",
+    fingerCode,
+    actorId: access.staff?._id || center._id,
+    actorRole: access.role,
+    notes,
+    matchScore,
+    verificationStatus,
+  });
+
+  await profile.save();
+
+  res.json({
+    success: true,
+    data: {
+      booking: serializeServiceCenterBooking(booking.toObject(), profile.toObject()),
+      biometrics: serializeBiometricProfile(profile.toObject()),
+    },
+  });
+};
+
 export const updateServiceCenterBooking = async (req, res) => {
-  const access = await resolveAuthenticatedServiceCenterAccess(req);
-  const center = access?.center;
-
-  if (!center?._id) {
-    throw new ApiError(403, "Service center access is required");
-  }
-
   const bookingId = String(req.params?.bookingId || "").trim();
-  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
-    throw new ApiError(400, "Valid booking id is required");
-  }
-
-  const booking = await RentalBookingRequest.findById(bookingId)
-    .populate("userId", "name phone email")
-    .populate("vehicleTypeId", "name vehicleCategory image coverImage galleryImages amenities");
-
-  if (!booking) {
-    throw new ApiError(404, "Rental booking request not found");
-  }
-
-  const centerIds = Array.isArray(booking.serviceCenterIds)
-    ? booking.serviceCenterIds.map((item) => String(item))
-    : [];
-
-  if (!centerIds.includes(String(center._id))) {
-    throw new ApiError(403, "This booking is not assigned to your service center");
-  }
+  const { access, center, booking } = await ensureServiceCenterBookingAccess(req, bookingId);
 
   if (req.body?.assignedStaffId !== undefined) {
     const assignedStaffId = String(req.body.assignedStaffId || "").trim();
@@ -3301,12 +3737,13 @@ export const updateServiceCenterBooking = async (req, res) => {
 
   const populated = await RentalBookingRequest.findById(booking._id)
     .populate("userId", "name phone email")
-    .populate("vehicleTypeId", "name vehicleCategory image")
+    .populate("vehicleTypeId", "name vehicleCategory image coverImage galleryImages amenities")
     .lean();
+  const biometricProfile = await CustomerBiometricProfile.findOne({ bookingId: booking._id }).lean();
 
   res.json({
     success: true,
-    data: serializeServiceCenterBooking(populated),
+    data: serializeServiceCenterBooking(populated, biometricProfile),
   });
 };
 

@@ -29,6 +29,9 @@ import { SetPrice } from '../../admin/models/SetPrice.js';
 import { applyDriverWalletAdjustment } from '../../driver/services/walletService.js';
 import { emitToDriver } from '../../services/dispatchService.js';
 import { sendPushNotificationToEntities } from '../../services/pushNotificationService.js';
+import { buildRentalTrackingSnapshot, updateUserRentalTracking } from '../../services/rentalTrackingService.js';
+import { listDriverServiceLocations } from '../../driver/services/serviceLocationService.js';
+import { listServiceStores } from '../../admin/services/adminService.js';
 import {
   getUserSubscriptionSummary,
   listCustomerSubscriptionPlans,
@@ -116,6 +119,46 @@ const resolveRazorpayCredentials = async () => {
 
 const resolvePhonePeCredentials = async () => {
   return resolveConfiguredGatewayCredentials('phone_pay');
+};
+
+const isActiveEntity = (item = {}) =>
+  item?.active !== false && String(item?.status || 'active').toLowerCase() === 'active';
+
+export const listPublicServiceLocations = async (_req, res) => {
+  const results = await listDriverServiceLocations();
+
+  res.json({
+    success: true,
+    data: {
+      results,
+    },
+  });
+};
+
+export const listPublicServiceStores = async (_req, res) => {
+  const results = (await listServiceStores())
+    .filter(isActiveEntity)
+    .map((store) => ({
+      _id: store._id,
+      id: store.id || store._id,
+      name: store.name || '',
+      address: store.address || '',
+      owner_name: store.owner_name || '',
+      owner_phone: store.owner_phone || '',
+      service_location_id: store.service_location_id,
+      zone_id: store.zone_id,
+      latitude: Number(store.latitude ?? null),
+      longitude: Number(store.longitude ?? null),
+      status: store.status || 'active',
+      active: store.active !== false,
+    }));
+
+  res.json({
+    success: true,
+    data: {
+      results,
+    },
+  });
 };
 
 const getFrontendBaseUrl = () => {
@@ -825,6 +868,7 @@ const serializeRentalBookingRequest = (item = {}) => ({
     label: item.selectedPackage?.label || '',
     durationHours: Number(item.selectedPackage?.durationHours || 0),
     price: Number(item.selectedPackage?.price || 0),
+    extraHourPrice: Number(item.selectedPackage?.extraHourPrice || 0),
   },
   serviceLocation: {
     locationId: item.serviceLocation?.locationId || '',
@@ -884,39 +928,73 @@ const serializeRentalBookingRequest = (item = {}) => ({
   finalElapsedMinutes: Number(item.finalElapsedMinutes || 0),
   createdAt: item.createdAt || null,
   updatedAt: item.updatedAt || null,
+  rentalTracking: buildRentalTrackingSnapshot(item),
 });
+
+const resolveRentalSelectedPackagePricing = (item = {}) => {
+  const selectedPackage = item.selectedPackage || {};
+  const normalizedPackageId = String(selectedPackage.packageId || '').trim();
+  const vehiclePricing = Array.isArray(item.vehicleTypeId?.pricing) ? item.vehicleTypeId.pricing : [];
+  const matchedPackage = vehiclePricing.find((entry) => String(entry?.id || entry?.packageId || '').trim() === normalizedPackageId);
+
+  const includedHours = Math.max(
+    Number(selectedPackage.durationHours || 0),
+    Number(matchedPackage?.durationHours || 0),
+    1,
+  );
+  const basePrice = Math.max(
+    Number(selectedPackage.price || 0),
+    Number(matchedPackage?.price || 0),
+    0,
+  );
+  const extraHourPrice = Math.max(
+    Number(selectedPackage.extraHourPrice || 0),
+    Number(matchedPackage?.extraHourPrice || 0),
+    0,
+  );
+
+  return {
+    includedHours,
+    basePrice,
+    extraHourPrice,
+  };
+};
 
 const computeRentalRideMetrics = (item = {}, endedAt = null) => {
   const startDate = item.assignedAt || item.pickupDateTime || item.createdAt;
   const startMs = startDate ? new Date(startDate).getTime() : NaN;
   const endMs = endedAt ? new Date(endedAt).getTime() : Date.now();
-
-  const safeRequestedHours = Math.max(
-    Number(item.requestedHours || 0),
-    Number(item.selectedPackage?.durationHours || 0),
-    1,
-  );
-  const hourlyRate = Number(item.totalCost || item.selectedPackage?.price || 0) / safeRequestedHours;
+  const { includedHours, basePrice, extraHourPrice } = resolveRentalSelectedPackagePricing(item);
+  const hourlyRate = includedHours > 0 ? basePrice / includedHours : 0;
 
   if (!Number.isFinite(startMs)) {
     return {
       hourlyRate: Math.max(0, hourlyRate),
+      includedHours,
+      basePrice,
+      extraHourRate: extraHourPrice,
       elapsedMinutes: 0,
       elapsedHours: 0,
-      currentCharge: Math.max(0, Number(item.payableNow || 0)),
-      remainingDue: Math.max(0, Number(item.totalCost || 0) - Number(item.payableNow || 0)),
+      currentCharge: Math.max(basePrice, Number(item.payableNow || 0)),
+      remainingDue: Math.max(0, Math.max(basePrice, Number(item.payableNow || 0)) - Number(item.payableNow || 0)),
     };
   }
 
   const elapsedMs = Math.max(0, endMs - startMs);
   const elapsedMinutes = Math.max(0, Math.ceil(elapsedMs / 60000));
   const elapsedHours = elapsedMs / 3600000;
-  const uncappedCharge = Math.max(Number(item.payableNow || 0), hourlyRate * elapsedHours);
-  const currentCharge = Math.min(Number(item.totalCost || 0), Math.round((uncappedCharge + Number.EPSILON) * 100) / 100);
+  const elapsedChargeWithinPackage = elapsedHours <= includedHours
+    ? basePrice
+    : basePrice + Math.ceil(Math.max(0, elapsedHours - includedHours)) * extraHourPrice;
+  const uncappedCharge = Math.max(Number(item.payableNow || 0), elapsedChargeWithinPackage);
+  const currentCharge = Math.round((uncappedCharge + Number.EPSILON) * 100) / 100;
   const remainingDue = Math.max(0, Math.round((currentCharge - Number(item.payableNow || 0) + Number.EPSILON) * 100) / 100);
 
   return {
     hourlyRate: Math.max(0, Math.round((hourlyRate + Number.EPSILON) * 100) / 100),
+    includedHours,
+    basePrice: Math.round((basePrice + Number.EPSILON) * 100) / 100,
+    extraHourRate: Math.round((extraHourPrice + Number.EPSILON) * 100) / 100,
     elapsedMinutes,
     elapsedHours: Math.round((elapsedHours + Number.EPSILON) * 100) / 100,
     currentCharge,
@@ -3060,6 +3138,7 @@ export const createRentalBookingRequest = async (req, res) => {
       label: toCleanString(selectedPackage.label),
       durationHours: Math.max(0, Number(selectedPackage.durationHours || 0)),
       price: Math.max(0, Number(selectedPackage.price || 0)),
+      extraHourPrice: Math.max(0, Number(selectedPackage.extraHourPrice || 0)),
     },
     serviceLocation: {
       locationId: toCleanString(serviceLocation.id || serviceLocation._id || serviceLocation.locationId || ''),
@@ -3159,6 +3238,7 @@ export const getMyActiveRentalBooking = async (req, res) => {
     userId,
     status: { $in: ['assigned', 'confirmed', 'end_requested'] },
   })
+    .populate('vehicleTypeId', 'pricing')
     .sort({ updatedAt: -1, createdAt: -1 })
     .lean();
 
@@ -3266,6 +3346,31 @@ export const endMyActiveRentalRide = async (req, res) => {
       },
     },
     message: 'Rental ride end request sent for admin review',
+  });
+};
+
+export const updateMyActiveRentalLocation = async (req, res) => {
+  const userId = resolveAuthenticatedUserObjectId(req);
+
+  if (!userId) {
+    throw new ApiError(401, 'Authenticated user id is invalid');
+  }
+
+  const payload = await updateUserRentalTracking({
+    bookingId: String(req.params?.id || '').trim(),
+    userId,
+    status: req.body?.status,
+    coordinates: req.body?.coordinates,
+    heading: req.body?.heading,
+    speed: req.body?.speed,
+    accuracyMeters: req.body?.accuracyMeters,
+    capturedAt: req.body?.capturedAt,
+  });
+
+  return res.status(200).json({
+    success: true,
+    data: payload,
+    message: 'Rental tracking updated successfully',
   });
 };
 

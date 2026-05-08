@@ -41,16 +41,20 @@ export const userService = {
     const response = await api.get('/users/rental-bookings/active');
     return response;
   },
+  updateRentalLocation: async (bookingId, payload) => {
+    const response = await api.post(`/users/rental-bookings/${bookingId}/location`, payload);
+    return response;
+  },
   endRentalRide: async (bookingId) => {
     const response = await api.post(`/users/rental-bookings/${bookingId}/end`);
     return response;
   },
   getServiceLocations: async () => {
-    const response = await api.get('/admin/service-locations');
+    const response = await api.get('/users/service-locations');
     return response;
   },
   getServiceStores: async () => {
-    const response = await api.get('/admin/service-stores');
+    const response = await api.get('/users/service-stores');
     return response;
   },
   searchPoolingRoutes: async (params) => {

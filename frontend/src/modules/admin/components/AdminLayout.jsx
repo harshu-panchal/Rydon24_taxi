@@ -689,6 +689,7 @@ const AdminLayout = () => {
                 subItems: [
                   { label: 'Service Stores', path: '/admin/pricing/service-stores', permission: 'service_stores.view' },
                   { label: 'Rental Vehicles', path: '/admin/pricing/rental-vehicles', permission: 'rental.view' },
+                  { label: 'Track Vehicles', path: '/admin/pricing/rental-tracking', permission: 'rental.view' },
                   { label: 'Rental Requests', path: '/admin/pricing/rental-requests', permission: 'rental.view' },
                   { label: 'Rental Quote Requests', path: '/admin/pricing/rental-quotes', permission: 'rental.view' },
                   { label: 'Rental Package Types', path: '/admin/pricing/rental-packages', permission: 'rental.view' },
