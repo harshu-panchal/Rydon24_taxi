@@ -19,6 +19,15 @@ const DEFAULT_SETTINGS_CONTEXT = {
     transportRide: {
       enable_bus_service: '0',
     },
+    bidRide: {
+      bidding_low_percentage: '10',
+      bidding_high_percentage: '20',
+      bidding_amount_increase_or_decrease: '10',
+      user_bidding_low_percentage: '10',
+      user_bidding_high_percentage: '20',
+      user_bidding_amount_increase_or_decrease: '10',
+      user_fare_increase_wait_minutes: '2',
+    },
     paymentGateway: null,
   },
   loading: true,
@@ -137,10 +146,11 @@ export const SettingsProvider = ({ children }) => {
 
   const fetchSettings = async () => {
     try {
-      const [genRes, cusRes, transportRideRes, paymentGatewayRes] = await Promise.allSettled([
+      const [genRes, cusRes, transportRideRes, bidRideRes, paymentGatewayRes] = await Promise.allSettled([
         api.get('/admin/general-settings/general'),
         api.get('/admin/general-settings/customize'),
         api.get('/admin/general-settings/transport-ride'),
+        api.get('/admin/general-settings/bid-ride'),
         api.get('/common/payment-gateway'),
       ]);
 
@@ -151,6 +161,10 @@ export const SettingsProvider = ({ children }) => {
           transportRideRes.status === 'fulfilled'
             ? (transportRideRes.value.data?.settings || {})
             : { enable_bus_service: '0' },
+        bidRide:
+          bidRideRes.status === 'fulfilled'
+            ? (bidRideRes.value.data?.settings || DEFAULT_SETTINGS_CONTEXT.settings.bidRide)
+            : DEFAULT_SETTINGS_CONTEXT.settings.bidRide,
         paymentGateway:
           paymentGatewayRes.status === 'fulfilled'
             ? (paymentGatewayRes.value.data?.activeGateway || null)

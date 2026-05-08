@@ -255,6 +255,11 @@ const SetPrices = ({ mode }) => {
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          enable_ride_sharing: false,
+          enable_shared_ride: 0,
+          price_per_seat: 0,
+          shared_price_per_distance: 0,
+          shared_cancel_fee: 0,
           pricing_scope: 'ride',
           transport_type: normalizeTransportType(formData.transport_type),
           payment_type: normalizePaymentTypes(formData.payment_type).length ? normalizePaymentTypes(formData.payment_type) : ['cash']
@@ -688,35 +693,6 @@ const SetPrices = ({ mode }) => {
                               <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                            </div>
                         </div>
-                     </div>
-                  </div>
-
-                  {/* Section: Shared Ride */}
-                  <div className="space-y-6 pt-6 border-t border-gray-100">
-                     <h2 className="text-base font-bold text-[#1E293B] uppercase tracking-wider">Shared Ride</h2>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
-                        <div className="flex items-center gap-2 pt-2 ml-1">
-                           <input type="checkbox" className="w-4 h-4 rounded border-gray-300 pointer-events-auto" checked={formData.enable_ride_sharing} onChange={e => setFormData(p=>({...p, enable_ride_sharing: e.target.checked, enable_shared_ride: e.target.checked ? 1 : 0}))} />
-                           <span className="text-[13px] font-semibold text-gray-700">Enable Ride Sharing</span>
-                        </div>
-                        {formData.enable_ride_sharing && (
-                           <div>
-                              <label className={labelClass}>Base Price per Seat <span className="text-rose-500">*</span></label>
-                              <input type="number" required={formData.enable_ride_sharing} className={inputClass} placeholder="Enter Base Price per Seat" value={formData.price_per_seat} onChange={e => setFormData(p=>({...p, price_per_seat: e.target.value}))} />
-                           </div>
-                        )}
-                        {formData.enable_ride_sharing && (
-                           <div>
-                              <label className={labelClass}>Price per Distance Per Shared Seat <span className="text-rose-500">*</span></label>
-                              <input type="number" required={formData.enable_ride_sharing} className={inputClass} placeholder="0" value={formData.shared_price_per_distance} onChange={e => setFormData(p=>({...p, shared_price_per_distance: e.target.value}))} />
-                           </div>
-                        )}
-                        {formData.enable_ride_sharing && (
-                           <div>
-                              <label className={labelClass}>Cancellation Fee per shared seat <span className="text-rose-500">*</span></label>
-                              <input type="number" required={formData.enable_ride_sharing} className={inputClass} placeholder="0" value={formData.shared_cancel_fee} onChange={e => setFormData(p=>({...p, shared_cancel_fee: e.target.value}))} />
-                           </div>
-                        )}
                      </div>
                   </div>
 

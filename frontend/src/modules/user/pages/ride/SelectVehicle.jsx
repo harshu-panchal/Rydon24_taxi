@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, X, Banknote, CreditCard, ChevronDown, Clock3, LoaderCircle, Eye } from 'lucide-react';
+import { ArrowLeft, X, Banknote, CreditCard, ChevronDown, Clock3, LoaderCircle, Eye, TicketPercent, CheckCircle2 } from 'lucide-react';
 import { GoogleMap, MarkerF, OverlayView, PolylineF } from '@react-google-maps/api';
 import api from '../../../../shared/api/axiosInstance';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../../admin/utils/googleMaps';
+import { userService } from '../../services/userService';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 import BikeIcon from '../../../../assets/icons/bike.png';
 import AutoIcon from '../../../../assets/icons/auto.png';
 import CarIcon from '../../../../assets/icons/car.png';
@@ -684,6 +686,55 @@ const formatDistanceLabel = (distanceMeters) => {
 
 const formatCurrency = (amount) => `₹${Math.round(Number(amount) || 0)}`;
 
+const formatPromoSummary = (promo) => {
+  const percent = Math.max(0, Number(promo?.discount_percentage || 0));
+  const maxDiscount = Math.max(0, Number(promo?.maximum_discount_amount || 0));
+  const minimumTripAmount = Math.max(0, Number(promo?.minimum_trip_amount || 0));
+
+  const parts = [];
+  if (percent > 0) {
+    parts.push(`${percent}% off`);
+  }
+  if (maxDiscount > 0) {
+    parts.push(`up to ${formatCurrency(maxDiscount)}`);
+  }
+  if (minimumTripAmount > 0) {
+    parts.push(`min ${formatCurrency(minimumTripAmount)}`);
+  }
+
+  return parts.join(' • ') || 'Promo available';
+};
+
+const toConfiguredPositiveInteger = (value, fallback) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? Math.round(numeric) : fallback;
+};
+
+const clampPercentage = (value, fallback = 0) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+
+  return Math.max(0, Math.min(100, numeric));
+};
+
+const alignBidAmountToStep = ({ baseFare, amount, stepAmount, direction = 'up' }) => {
+  const safeBaseFare = Math.max(0, Math.round(Number(baseFare || 0)));
+  const safeStepAmount = toConfiguredPositiveInteger(stepAmount, 10);
+  const safeAmount = Math.max(0, Math.round(Number(amount || 0)));
+  const delta = safeAmount - safeBaseFare;
+
+  if (delta === 0) {
+    return safeBaseFare;
+  }
+
+  const absoluteDelta = Math.abs(delta);
+  const rawSteps = absoluteDelta / safeStepAmount;
+  const normalizedSteps = direction === 'down' ? Math.floor(rawSteps) : Math.ceil(rawSteps);
+  return Math.max(0, safeBaseFare + (Math.sign(delta) * normalizedSteps * safeStepAmount));
+};
+
 const getBidFareBounds = (vehicle, stepCount) => {
   const baseFare = Math.max(0, Math.round(Number(vehicle?.price) || 0));
   const maxSteps = Math.max(0, Number(vehicle?.maxBidSteps) || 0);
@@ -837,8 +888,16 @@ const SelectVehicle = () => {
   const [selected, setSelected] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showCouponModal, setShowCouponModal] = useState(false);
   const [showBidModal, setShowBidModal] = useState(false);
   const [previewVehicleId, setPreviewVehicleId] = useState('');
+  const [availablePromos, setAvailablePromos] = useState([]);
+  const [isLoadingPromos, setIsLoadingPromos] = useState(false);
+  const [promoCodeInput, setPromoCodeInput] = useState('');
+  const [promoFeedback, setPromoFeedback] = useState('');
+  const [promoError, setPromoError] = useState('');
+  const [applyingPromoCode, setApplyingPromoCode] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState(null);
   const [rideMode, setRideMode] = useState(() => (location.state?.rideMode === 'schedule' ? 'schedule' : 'now'));
   const [scheduledAt, setScheduledAt] = useState(() => (
     location.state?.scheduledAt ? String(location.state.scheduledAt).slice(0, 16) : getMinScheduledDateTime()
@@ -870,6 +929,7 @@ const SelectVehicle = () => {
   const availabilityHistoryRef = useRef({});
   const scheduledAtInputRef = useRef(null);
   const navigate = useNavigate();
+  const { settings } = useSettings();
   const pickup = routeState.pickup || 'Pipaliyahana, Indore';
   const drop = routeState.drop || 'Vijay Nagar, Indore';
   const pickupCoords = useMemo(() => routeState.pickupCoords || [75.9048, 22.7039], [routeState.pickupCoords]);
@@ -1134,6 +1194,19 @@ const SelectVehicle = () => {
     () => pricedVehicles.find((vehicle) => vehicle.id === previewVehicleId) || null,
     [previewVehicleId, pricedVehicles],
   );
+  const resolvedTransportType = useMemo(
+    () => resolveRideTransportType(
+      routeState.transport_type,
+      routeState.transportType,
+      selectedVehicle?.transportType,
+    ),
+    [routeState.transportType, routeState.transport_type, selectedVehicle?.transportType],
+  );
+  const appliedPromoDiscount = Math.max(0, Number(appliedPromo?.breakdown?.discount_amount || 0));
+  const discountedSelectedFare = Math.max(
+    0,
+    Number(appliedPromo?.breakdown?.fare_after_discount ?? selectedVehicle?.price ?? 0),
+  );
   const selectedAvailability = selectedVehicle ? (availabilityByVehicleId[selectedVehicle.id] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
   const previewAvailability = previewVehicle ? (availabilityByVehicleId[previewVehicle.id] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
   const canProceed = Boolean(selectedVehicle) && !isFarePending && (rideMode === 'schedule' || Boolean(selectedAvailability.totalDrivers));
@@ -1147,10 +1220,40 @@ const SelectVehicle = () => {
     routeState.transport_type === 'intercity' ||
     routeState.transportType === 'intercity',
   );
-  const selectedBidStepAmount = Number(selectedVehicle?.bidStepAmount || 10);
-  const selectedBidSteps = Number(selectedVehicle?.maxBidSteps || 5);
+  const bidRideSettings = settings?.bidRide || {};
+  const selectedBidStepAmount = shouldUseDriverBidding
+    ? toConfiguredPositiveInteger(
+        bidRideSettings.bidding_amount_increase_or_decrease,
+        Number(selectedVehicle?.bidStepAmount || 10),
+      )
+    : Number(selectedVehicle?.bidStepAmount || 10);
+  const bidLowPercentage = clampPercentage(bidRideSettings.user_bidding_low_percentage, 10);
+  const bidHighPercentage = clampPercentage(bidRideSettings.user_bidding_high_percentage, 20);
+  const normalizedBidLowPercentage = Math.min(bidLowPercentage, bidHighPercentage);
+  const normalizedBidHighPercentage = Math.max(bidLowPercentage, bidHighPercentage);
+  const selectedBidFloorFare = shouldUseDriverBidding
+    ? alignBidAmountToStep({
+        baseFare: Number(selectedVehicle?.price || 0),
+        amount: Number(selectedVehicle?.price || 0) * (1 + (normalizedBidLowPercentage / 100)),
+        stepAmount: selectedBidStepAmount,
+        direction: 'up',
+      })
+    : Number(selectedVehicle?.price || 0);
+  const selectedBidCeilingMaxFare = shouldUseDriverBidding
+    ? alignBidAmountToStep({
+        baseFare: Number(selectedVehicle?.price || 0),
+        amount: Number(selectedVehicle?.price || 0) * (1 + (normalizedBidHighPercentage / 100)),
+        stepAmount: selectedBidStepAmount,
+        direction: 'up',
+      })
+    : Number(selectedVehicle?.price || 0);
+  const selectedBidSteps = shouldUseDriverBidding
+    ? Math.max(0, Math.round((selectedBidCeilingMaxFare - selectedBidFloorFare) / selectedBidStepAmount))
+    : Number(selectedVehicle?.maxBidSteps || 5);
   const selectedBidIncrement = (selectedVehicle?.supportsBidding ? bidStepCount : 0) * selectedBidStepAmount;
-  const selectedBidCeiling = Number(selectedVehicle?.price || 0) + selectedBidIncrement;
+  const selectedBidCeiling = shouldUseDriverBidding
+    ? selectedBidFloorFare + selectedBidIncrement
+    : Number(selectedVehicle?.price || 0) + selectedBidIncrement;
   const allowedPaymentMethods = useMemo(
     () => normalizeAllowedPaymentMethods(selectedAvailability?.allowedPaymentMethods),
     [selectedAvailability?.allowedPaymentMethods],
@@ -1172,13 +1275,166 @@ const SelectVehicle = () => {
     }
   }, [paymentMethod, paymentOptions]);
 
+  const clearAppliedPromo = (nextFeedback = '') => {
+    setAppliedPromo(null);
+    setApplyingPromoCode('');
+    setPromoError('');
+    setPromoFeedback(nextFeedback);
+  };
+
+  const applyPromoCode = async (rawCode) => {
+    const code = String(rawCode || '').trim().toUpperCase();
+
+    if (!serviceLocationId) {
+      setPromoError('Pickup zone is missing for this ride.');
+      setPromoFeedback('');
+      return false;
+    }
+
+    if (!selectedVehicle) {
+      setPromoError('Select a vehicle before applying a coupon.');
+      setPromoFeedback('');
+      return false;
+    }
+
+    if (!code) {
+      setPromoError('Enter a coupon code.');
+      setPromoFeedback('');
+      return false;
+    }
+
+    setApplyingPromoCode(code);
+    setPromoError('');
+    setPromoFeedback('');
+
+    try {
+      const response = await userService.validatePromo({
+        code,
+        fare: Number(selectedVehicle.price || 0),
+        service_location_id: serviceLocationId,
+        transport_type: resolvedTransportType,
+      });
+      const payload = unwrap(response);
+
+      if (!payload?.eligible) {
+        setAppliedPromo(null);
+        setPromoError(payload?.message || 'This coupon is not valid for this ride.');
+        return false;
+      }
+
+      setAppliedPromo(payload);
+      setPromoCodeInput(code);
+      setPromoFeedback(`${code} applied. You save ${formatCurrency(payload?.breakdown?.discount_amount || 0)}.`);
+      return true;
+    } catch (error) {
+      setAppliedPromo(null);
+      setPromoError(error?.response?.data?.message || error?.message || 'Could not apply this coupon right now.');
+      return false;
+    } finally {
+      setApplyingPromoCode('');
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+
+    const loadPromos = async () => {
+      if (!serviceLocationId) {
+        if (active) {
+          setAvailablePromos([]);
+          clearAppliedPromo('');
+        }
+        return;
+      }
+
+      setIsLoadingPromos(true);
+
+      try {
+        const response = await userService.getAvailablePromos({
+          service_location_id: serviceLocationId,
+          transport_type: resolvedTransportType,
+          limit: 20,
+        });
+
+        if (!active) {
+          return;
+        }
+
+        const promos = Array.isArray(unwrap(response)) ? unwrap(response) : [];
+        setAvailablePromos(promos);
+
+        if (appliedPromo?.promo?.code) {
+          const stillAvailable = promos.some((promo) => String(promo?.code || '').toUpperCase() === String(appliedPromo.promo.code || '').toUpperCase());
+          if (!stillAvailable) {
+            clearAppliedPromo('Coupon removed because it does not apply in this zone.');
+          }
+        }
+      } catch (_error) {
+        if (active) {
+          setAvailablePromos([]);
+        }
+      } finally {
+        if (active) {
+          setIsLoadingPromos(false);
+        }
+      }
+    };
+
+    loadPromos();
+
+    return () => {
+      active = false;
+    };
+  }, [resolvedTransportType, serviceLocationId]);
+
+  useEffect(() => {
+    if (!appliedPromo?.promo?.code || !selectedVehicle) {
+      return;
+    }
+
+    let active = true;
+
+    const refreshAppliedPromo = async () => {
+      try {
+        const response = await userService.validatePromo({
+          code: appliedPromo.promo.code,
+          fare: Number(selectedVehicle.price || 0),
+          service_location_id: serviceLocationId,
+          transport_type: resolvedTransportType,
+        });
+        const payload = unwrap(response);
+
+        if (!active) {
+          return;
+        }
+
+        if (!payload?.eligible) {
+          clearAppliedPromo(payload?.message || 'Coupon removed because it is no longer valid for this fare.');
+          return;
+        }
+
+        setAppliedPromo(payload);
+      } catch (error) {
+        if (active) {
+          clearAppliedPromo(error?.response?.data?.message || 'Coupon removed because validation failed.');
+        }
+      }
+    };
+
+    refreshAppliedPromo();
+
+    return () => {
+      active = false;
+    };
+  }, [appliedPromo?.promo?.code, resolvedTransportType, selectedVehicle?.price, serviceLocationId]);
+
   useEffect(() => {
     const timer = setTimeout(handleScroll, 200);
     return () => clearTimeout(timer);
   }, [displayedVehicles, tripMetrics]);
 
   useEffect(() => {
-    setBidStepCount(2);
+    setBidStepCount(0);
   }, [selected]);
 
   useEffect(() => {
@@ -1340,11 +1596,9 @@ const SelectVehicle = () => {
     }
 
     setShowBidModal(false);
-    const resolvedTransportType = resolveRideTransportType(
-      routeState.transport_type,
-      routeState.transportType,
-      selectedVehicle.transportType,
-    );
+    const baseFare = Number(selectedVehicle.price || 0);
+    const finalFare = appliedPromo?.breakdown?.fare_after_discount ?? baseFare;
+
     navigate(`${routePrefix}/ride/searching`, {
       state: {
         pickup,
@@ -1359,8 +1613,11 @@ const SelectVehicle = () => {
         vehicleIconType: selectedVehicle.iconType,
         vehicleIconUrl: selectedVehicle.vehicleIconUrl || selectedVehicle.icon,
         paymentMethod,
-        fare: selectedVehicle.price,
-        baseFare: selectedVehicle.price,
+        fare: finalFare,
+        baseFare,
+        promo_code: appliedPromo?.promo?.code || '',
+        promo: appliedPromo?.promo || null,
+        promoBreakdown: appliedPromo?.breakdown || null,
         bookingMode: selectedVehicle.supportsBidding ? 'bidding' : 'normal',
         pricingNegotiationMode: selectedVehicle.supportsBidding
           ? shouldUseDriverBidding
@@ -1368,7 +1625,9 @@ const SelectVehicle = () => {
             : 'user_increment_only'
           : 'none',
         bidStepAmount: selectedBidStepAmount,
-        userMaxBidFare: selectedVehicle.supportsBidding && shouldUseDriverBidding ? selectedBidCeiling : selectedVehicle.price,
+        bidFloorFare: selectedBidFloorFare,
+        bidCeilingMaxFare: selectedBidCeilingMaxFare,
+        userMaxBidFare: selectedVehicle.supportsBidding && shouldUseDriverBidding ? selectedBidCeiling : finalFare,
         bidIncrement: selectedVehicle.supportsBidding && shouldUseDriverBidding ? selectedBidIncrement : 0,
         estimatedDistanceMeters: tripMetrics.distanceMeters,
         estimatedDurationMinutes: tripMetrics.durationMinutes,
@@ -1657,10 +1916,13 @@ const SelectVehicle = () => {
             </button>
             <button
               type="button"
-              className="flex items-center justify-center gap-2 border-r border-slate-200 px-3 py-2.5 text-[12px] font-medium text-slate-400"
+              onClick={() => setShowCouponModal(true)}
+              className={`flex items-center justify-center gap-2 border-r border-slate-200 px-3 py-2.5 text-[12px] font-medium ${
+                appliedPromo ? 'text-emerald-700' : 'text-slate-700'
+              }`}
             >
-              <span className="inline-flex h-4 w-4 items-center justify-center rounded-sm bg-green-100 text-[10px] text-green-700">%</span>
-              <span>Coupon</span>
+              <TicketPercent size={14} strokeWidth={2.3} className={appliedPromo ? 'text-emerald-600' : 'text-slate-500'} />
+              <span>{appliedPromo?.promo?.code || (availablePromos.length ? `Coupon ${availablePromos.length}` : 'Coupon')}</span>
             </button>
             <button
               type="button"
@@ -1670,6 +1932,36 @@ const SelectVehicle = () => {
               <span>Myself</span>
             </button>
           </div>
+
+          {(appliedPromo || promoError || promoFeedback) && (
+            <div className={`mt-2 rounded-[12px] border px-3 py-2 ${
+              promoError ? 'border-rose-100 bg-rose-50/70' : 'border-emerald-100 bg-emerald-50/70'
+            }`}>
+              {appliedPromo && !promoError ? (
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-[11px] font-semibold text-emerald-700">
+                      {appliedPromo.promo?.code} applied for this zone
+                    </p>
+                    <p className="mt-0.5 text-[10px] font-medium text-emerald-700/80">
+                      Save {formatCurrency(appliedPromoDiscount)}. Fare now {formatCurrency(discountedSelectedFare)}.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => clearAppliedPromo('Coupon removed.')}
+                    className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-emerald-700"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <p className={`text-[10px] font-medium ${promoError ? 'text-rose-600' : 'text-emerald-700'}`}>
+                  {promoError || promoFeedback}
+                </p>
+              )}
+            </div>
+          )}
 
           <motion.button
             whileHover={canProceed ? { scale: 1.01 } : {}}
@@ -1816,7 +2108,7 @@ const SelectVehicle = () => {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-500">Bid Range</p>
-                    <p className="mt-1 text-[13px] font-bold text-slate-900">Adjust the fare ceiling before sending the request.</p>
+                    <p className="mt-1 text-[13px] font-bold text-slate-900">Adjust the fare ceiling inside the admin-configured bidding range.</p>
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Max fare</p>
@@ -1835,8 +2127,8 @@ const SelectVehicle = () => {
                 />
 
                 <div className="mt-3 flex items-center justify-between text-[11px] font-bold text-slate-500">
-                  <span>Base {formatCurrency(selectedVehicle.price)}</span>
-                  <span>Increment {formatCurrency(selectedBidIncrement)}</span>
+                  <span>Floor {formatCurrency(selectedBidFloorFare)}</span>
+                  <span>Ceiling {formatCurrency(selectedBidCeilingMaxFare)}</span>
                 </div>
               </div>
 
@@ -1861,6 +2153,117 @@ const SelectVehicle = () => {
         )}
 
         <AnimatePresence>
+        {showCouponModal && (
+          <React.Fragment key="coupon-modal">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowCouponModal(false)}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] max-w-lg mx-auto"
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 26, stiffness: 320 }}
+              className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white rounded-t-[28px] px-5 pt-4 pb-8 z-[101]"
+            >
+              <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-5" />
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 mb-1">Coupons</p>
+              <h3 className="text-[18px] font-bold text-slate-900">Apply for this zone</h3>
+              <p className="mt-1 text-[12px] font-bold text-slate-500">
+                Only coupons created for this service location show here.
+              </p>
+
+              <div className="mt-5 flex gap-2">
+                <input
+                  type="text"
+                  value={promoCodeInput}
+                  onChange={(event) => {
+                    setPromoCodeInput(event.target.value.toUpperCase());
+                    setPromoError('');
+                    setPromoFeedback('');
+                  }}
+                  placeholder="Enter coupon code"
+                  className="min-w-0 flex-1 rounded-[16px] border border-slate-200 px-4 py-3 text-[13px] font-semibold text-slate-900 outline-none transition focus:border-emerald-300"
+                />
+                <button
+                  type="button"
+                  disabled={Boolean(applyingPromoCode) || !selectedVehicle}
+                  onClick={async () => {
+                    const applied = await applyPromoCode(promoCodeInput);
+                    if (applied) {
+                      setShowCouponModal(false);
+                    }
+                  }}
+                  className="rounded-[16px] bg-slate-950 px-4 py-3 text-[12px] font-black uppercase tracking-[0.14em] text-white disabled:opacity-60"
+                >
+                  {applyingPromoCode ? 'Applying' : 'Apply'}
+                </button>
+              </div>
+
+              {(promoError || promoFeedback) && (
+                <p className={`mt-3 text-[11px] font-semibold ${promoError ? 'text-rose-500' : 'text-emerald-600'}`}>
+                  {promoError || promoFeedback}
+                </p>
+              )}
+
+              <div className="mt-5 max-h-[46vh] space-y-2 overflow-y-auto pr-1">
+                {isLoadingPromos ? (
+                  <div className="flex items-center gap-2 rounded-[18px] border border-slate-100 bg-slate-50 px-4 py-4">
+                    <LoaderCircle size={16} className="animate-spin text-slate-500" />
+                    <span className="text-[12px] font-semibold text-slate-600">Loading available coupons</span>
+                  </div>
+                ) : availablePromos.length ? (
+                  availablePromos.map((promo) => {
+                    const isApplied = String(appliedPromo?.promo?.code || '').toUpperCase() === String(promo?.code || '').toUpperCase();
+
+                    return (
+                      <div
+                        key={promo?._id || promo?.code}
+                        className={`rounded-[18px] border px-4 py-4 ${
+                          isApplied ? 'border-emerald-200 bg-emerald-50/70' : 'border-slate-100 bg-slate-50/70'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-[14px] font-black text-slate-900">{promo?.code}</p>
+                              {isApplied && <CheckCircle2 size={14} className="text-emerald-600" strokeWidth={2.6} />}
+                            </div>
+                            <p className="mt-1 text-[11px] font-medium text-slate-600">{formatPromoSummary(promo)}</p>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={Boolean(applyingPromoCode)}
+                            onClick={async () => {
+                              const applied = await applyPromoCode(promo?.code);
+                              if (applied) {
+                                setShowCouponModal(false);
+                              }
+                            }}
+                            className={`shrink-0 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] ${
+                              isApplied ? 'bg-emerald-600 text-white' : 'bg-white text-slate-800 border border-slate-200'
+                            } disabled:opacity-60`}
+                          >
+                            {applyingPromoCode === String(promo?.code || '').toUpperCase() ? 'Applying' : isApplied ? 'Applied' : 'Use'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="rounded-[18px] border border-slate-100 bg-slate-50 px-4 py-4">
+                    <p className="text-[12px] font-semibold text-slate-600">
+                      No coupons are active for this zone right now.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </React.Fragment>
+        )}
         {showPaymentModal && (
           <React.Fragment key="payment-modal">
             <motion.div

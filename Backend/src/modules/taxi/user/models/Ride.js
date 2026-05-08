@@ -257,7 +257,17 @@ const rideSchema = new mongoose.Schema(
       default: 10,
       min: 1,
     },
+    bidFloorFare: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     userMaxBidFare: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    bidCeilingMaxFare: {
       type: Number,
       default: 0,
       min: 0,

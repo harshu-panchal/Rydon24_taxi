@@ -537,30 +537,116 @@ const normalizeBidStepAmount = (value) => {
   return Number.isFinite(amount) && amount > 0 ? Math.round(amount) : DEFAULT_BID_STEP_AMOUNT;
 };
 
+const clampPercentage = (value, fallback = 0) => {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return fallback;
+  }
+
+  return Math.max(0, Math.min(100, numericValue));
+};
+
 const toPositiveNumber = (value, fallback) => {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : fallback;
 };
 
-const normalizeBidFareCeiling = ({ baseFare, requestedFare, bidStepAmount }) => {
+const alignBidAmountToStep = ({ baseFare, amount, bidStepAmount, direction = 'up' }) => {
   const safeBaseFare = Math.max(0, Math.round(Number(baseFare || 0)));
   const safeStep = normalizeBidStepAmount(bidStepAmount);
-  const safeRequestedFare = Number.isFinite(Number(requestedFare))
-    ? Math.max(safeBaseFare, Math.round(Number(requestedFare)))
-    : safeBaseFare + (DEFAULT_MAX_BID_STEPS * safeStep);
-  const increments = Math.max(0, Math.round((safeRequestedFare - safeBaseFare) / safeStep));
+  const safeAmount = Math.max(0, Math.round(Number(amount || 0)));
+  const delta = safeAmount - safeBaseFare;
 
-  return safeBaseFare + (increments * safeStep);
+  if (delta === 0) {
+    return safeBaseFare;
+  }
+
+  const absoluteDelta = Math.abs(delta);
+  const rawSteps = absoluteDelta / safeStep;
+  const normalizedSteps = direction === 'down'
+    ? Math.floor(rawSteps)
+    : direction === 'nearest'
+      ? Math.round(rawSteps)
+      : Math.ceil(rawSteps);
+
+  const signedDelta = Math.sign(delta) * Math.max(0, normalizedSteps) * safeStep;
+  return Math.max(0, safeBaseFare + signedDelta);
+};
+
+const resolveBidRideRange = ({ baseFare, bidStepAmount, settings = {} }) => {
+  const safeBaseFare = Math.max(0, Math.round(Number(baseFare || 0)));
+  const safeStep = normalizeBidStepAmount(bidStepAmount);
+  const driverLowPercentage = clampPercentage(settings?.bidding_low_percentage, 10);
+  const driverHighPercentage = clampPercentage(settings?.bidding_high_percentage, 20);
+  const userLowPercentage = clampPercentage(settings?.user_bidding_low_percentage, 10);
+  const userHighPercentage = clampPercentage(settings?.user_bidding_high_percentage, 20);
+
+  const normalizedUserLowPercentage = Math.min(userLowPercentage, userHighPercentage);
+  const normalizedUserHighPercentage = Math.max(userLowPercentage, userHighPercentage);
+  const normalizedDriverLowPercentage = Math.min(driverLowPercentage, driverHighPercentage);
+  const normalizedDriverHighPercentage = Math.max(driverLowPercentage, driverHighPercentage);
+
+  const driverBidFloorFare = alignBidAmountToStep({
+    baseFare: safeBaseFare,
+    amount: safeBaseFare * (1 - (normalizedDriverLowPercentage / 100)),
+    bidStepAmount: safeStep,
+    direction: 'down',
+  });
+  const driverBidCeilingFare = alignBidAmountToStep({
+    baseFare: safeBaseFare,
+    amount: safeBaseFare * (1 + (normalizedDriverHighPercentage / 100)),
+    bidStepAmount: safeStep,
+    direction: 'up',
+  });
+  const userBidFloorFare = alignBidAmountToStep({
+    baseFare: safeBaseFare,
+    amount: safeBaseFare * (1 + (normalizedUserLowPercentage / 100)),
+    bidStepAmount: safeStep,
+    direction: 'up',
+  });
+  const userBidCeilingFare = alignBidAmountToStep({
+    baseFare: safeBaseFare,
+    amount: safeBaseFare * (1 + (normalizedUserHighPercentage / 100)),
+    bidStepAmount: safeStep,
+    direction: 'up',
+  });
+
+  return {
+    safeBaseFare,
+    safeStep,
+    driverBidFloorFare: Math.min(driverBidFloorFare, safeBaseFare),
+    driverBidCeilingFare: Math.max(driverBidCeilingFare, safeBaseFare),
+    userBidFloorFare: Math.max(userBidFloorFare, safeBaseFare),
+    userBidCeilingFare: Math.max(userBidCeilingFare, safeBaseFare),
+  };
+};
+
+const clampBidAmountWithinRange = ({ amount, minFare, maxFare, baseFare, bidStepAmount }) => {
+  const safeBaseFare = Math.max(0, Math.round(Number(baseFare || 0)));
+  const safeMinFare = Math.max(0, Math.round(Number(minFare ?? safeBaseFare)));
+  const safeMaxFare = Math.max(safeMinFare, Math.round(Number(maxFare ?? safeMinFare)));
+  const safeRequestedFare = Number.isFinite(Number(amount))
+    ? Math.round(Number(amount))
+    : safeMinFare;
+  const clampedFare = Math.min(safeMaxFare, Math.max(safeMinFare, safeRequestedFare));
+
+  return alignBidAmountToStep({
+    baseFare: safeBaseFare,
+    amount: clampedFare,
+    bidStepAmount,
+    direction: 'nearest',
+  });
 };
 
 const normalizeRideBidAmount = ({ ride, bidFare }) => {
   const safeBidFare = Math.round(Number(bidFare || 0));
   const baseFare = Math.max(0, Math.round(Number(ride?.baseFare || ride?.fare || 0)));
   const bidStepAmount = normalizeBidStepAmount(ride?.bidStepAmount);
-  const userMaxBidFare = Math.max(baseFare, Math.round(Number(ride?.userMaxBidFare || baseFare)));
+  const bidFloorFare = Math.max(0, Math.round(Number(ride?.bidFloorFare ?? baseFare)));
+  const userMaxBidFare = Math.max(bidFloorFare, Math.round(Number(ride?.userMaxBidFare || baseFare)));
 
-  if (!Number.isFinite(safeBidFare) || safeBidFare < baseFare) {
-    throw new ApiError(400, 'Bid fare must be at least the base fare');
+  if (!Number.isFinite(safeBidFare) || safeBidFare < bidFloorFare) {
+    throw new ApiError(400, 'Bid fare is below the minimum allowed floor');
   }
 
   if (safeBidFare > userMaxBidFare) {
@@ -568,7 +654,7 @@ const normalizeRideBidAmount = ({ ride, bidFare }) => {
   }
 
   const delta = safeBidFare - baseFare;
-  if (delta % bidStepAmount !== 0) {
+  if (Math.abs(delta) % bidStepAmount !== 0) {
     throw new ApiError(400, `Bid fare must increase in Rs ${bidStepAmount} steps`);
   }
 
@@ -620,7 +706,7 @@ export const normalizeAllowedRidePaymentMethods = (paymentTypes = []) => {
   return unique.length ? unique : ['cash', 'online'];
 };
 
-const resolveSetPriceForRide = async ({ serviceLocationId = null, transportType = 'taxi', vehicleTypeId = null }) => {
+export const resolveSetPriceForRide = async ({ serviceLocationId = null, transportType = 'taxi', vehicleTypeId = null }) => {
   if (!vehicleTypeId) {
     return null;
   }
@@ -826,13 +912,48 @@ export const createRideRecord = async ({
         : 'user_increment_only'
       : 'none';
   const effectiveBookingMode = pricingNegotiationMode === 'driver_bid' ? 'bidding' : 'normal';
-  const effectiveBidStepAmount = normalizeBidStepAmount(bidStepAmount);
-  const effectiveUserMaxBidFare = pricingNegotiationMode !== 'none'
-    ? normalizeBidFareCeiling({
+  const configuredBidStepAmount = pricingNegotiationMode !== 'none'
+    ? normalizeBidStepAmount(
+        isOutstationBiddingFlow
+          ? bidRideSettings.bidding_amount_increase_or_decrease
+          : bidRideSettings.user_bidding_amount_increase_or_decrease,
+      )
+    : normalizeBidStepAmount(bidStepAmount);
+  const effectiveBidStepAmount = configuredBidStepAmount || normalizeBidStepAmount(bidStepAmount);
+  const bidRideRange = resolveBidRideRange({
+    baseFare: safeFare,
+    bidStepAmount: effectiveBidStepAmount,
+    settings: bidRideSettings,
+  });
+  const effectiveUserMaxBidFare = pricingNegotiationMode === 'driver_bid'
+    ? clampBidAmountWithinRange({
+        amount: userMaxBidFare,
+        minFare: bidRideRange.userBidFloorFare,
+        maxFare: Math.min(bidRideRange.userBidCeilingFare, bidRideRange.driverBidCeilingFare),
         baseFare: safeFare,
-        requestedFare: userMaxBidFare,
         bidStepAmount: effectiveBidStepAmount,
       })
+    : pricingNegotiationMode === 'user_increment_only'
+      ? clampBidAmountWithinRange({
+          amount: safeFare,
+          minFare: bidRideRange.userBidFloorFare,
+          maxFare: bidRideRange.userBidCeilingFare,
+          baseFare: safeFare,
+          bidStepAmount: effectiveBidStepAmount,
+        })
+      : safeFare;
+  const effectiveBidFloorFare = pricingNegotiationMode === 'driver_bid'
+    ? bidRideRange.driverBidFloorFare
+    : pricingNegotiationMode === 'user_increment_only'
+      ? bidRideRange.userBidFloorFare
+      : safeFare;
+  const effectiveBidCeilingMaxFare = pricingNegotiationMode === 'driver_bid'
+    ? Math.min(bidRideRange.userBidCeilingFare, bidRideRange.driverBidCeilingFare)
+    : pricingNegotiationMode === 'user_increment_only'
+      ? bidRideRange.userBidCeilingFare
+      : safeFare;
+  const effectiveStartingFare = pricingNegotiationMode === 'user_increment_only'
+    ? effectiveUserMaxBidFare
     : safeFare;
   const nextFareIncreaseAt = pricingNegotiationMode === 'user_increment_only'
     ? new Date(Date.now() + fareIncreaseWaitMinutes * 60 * 1000)
@@ -916,13 +1037,15 @@ export const createRideRecord = async ({
       pickupAddress: normalizeAddress(pickupAddress),
       dropLocation: toPoint(dropCoords, 'drop'),
       dropAddress: normalizeAddress(dropAddress),
-      fare: safeFare,
+      fare: effectiveStartingFare,
       baseFare: safeFare,
       bookingMode: effectiveBookingMode,
       pricingNegotiationMode,
       biddingStatus: pricingNegotiationMode === 'driver_bid' ? 'open' : 'none',
       bidStepAmount: effectiveBidStepAmount,
+      bidFloorFare: effectiveBidFloorFare,
       userMaxBidFare: effectiveUserMaxBidFare,
+      bidCeilingMaxFare: effectiveBidCeilingMaxFare,
       fareIncreaseWaitMinutes: pricingNegotiationMode === 'user_increment_only' ? fareIncreaseWaitMinutes : 0,
       nextFareIncreaseAt,
       estimatedDistanceMeters: safeEstimatedDistanceMeters,
@@ -969,13 +1092,15 @@ export const createRideRecord = async ({
             pickupAddress: normalizeAddress(pickupAddress),
             dropLocation: toPoint(dropCoords, 'drop'),
             dropAddress: normalizeAddress(dropAddress),
-            fare: safeFare,
+            fare: effectiveStartingFare,
             baseFare: safeFare,
             bookingMode: effectiveBookingMode,
             pricingNegotiationMode,
             biddingStatus: pricingNegotiationMode === 'driver_bid' ? 'open' : 'none',
             bidStepAmount: effectiveBidStepAmount,
+            bidFloorFare: effectiveBidFloorFare,
             userMaxBidFare: effectiveUserMaxBidFare,
+            bidCeilingMaxFare: effectiveBidCeilingMaxFare,
             fareIncreaseWaitMinutes: pricingNegotiationMode === 'user_increment_only' ? fareIncreaseWaitMinutes : 0,
             nextFareIncreaseAt,
             estimatedDistanceMeters: safeEstimatedDistanceMeters,
@@ -1071,7 +1196,9 @@ export const serializeRideRealtime = (ride) => ({
   pricingNegotiationMode: ride.pricingNegotiationMode || 'none',
   biddingStatus: ride.biddingStatus || 'none',
   bidStepAmount: Number(ride.bidStepAmount || DEFAULT_BID_STEP_AMOUNT),
+  bidFloorFare: Number(ride.bidFloorFare ?? ride.baseFare ?? ride.fare ?? 0),
   userMaxBidFare: Number(ride.userMaxBidFare || ride.fare || 0),
+  bidCeilingMaxFare: Number(ride.bidCeilingMaxFare || ride.userMaxBidFare || ride.fare || 0),
   fareIncreaseWaitMinutes: Number(ride.fareIncreaseWaitMinutes || 0),
   nextFareIncreaseAt: ride.nextFareIncreaseAt || null,
   acceptedBidId: ride.acceptedBidId ? String(ride.acceptedBidId) : null,
@@ -1317,7 +1444,9 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
     bookingMode: ride.bookingMode || 'normal',
     biddingStatus: ride.biddingStatus || 'none',
     bidStepAmount: Number(ride.bidStepAmount || DEFAULT_BID_STEP_AMOUNT),
+    bidFloorFare: Number(ride.bidFloorFare ?? ride.baseFare ?? ride.fare ?? 0),
     userMaxBidFare: Number(ride.userMaxBidFare || ride.fare || 0),
+    bidCeilingMaxFare: Number(ride.bidCeilingMaxFare || ride.userMaxBidFare || ride.fare || 0),
     acceptedBidId: ride.acceptedBidId ? String(ride.acceptedBidId) : null,
     estimatedDistanceMeters: ride.estimatedDistanceMeters || 0,
     estimatedDurationMinutes: ride.estimatedDurationMinutes || 0,
@@ -1608,7 +1737,7 @@ export const updateRideDriverLocation = async ({ rideId, driverId, coordinates, 
 
 export const listRideBidsForUser = async ({ rideId, userId }) => {
   const ride = await Ride.findOne({ _id: rideId, userId }).select(
-    '_id userId status liveStatus fare baseFare bookingMode pricingNegotiationMode biddingStatus bidStepAmount userMaxBidFare fareIncreaseWaitMinutes nextFareIncreaseAt acceptedBidId',
+    '_id userId status liveStatus fare baseFare bookingMode pricingNegotiationMode biddingStatus bidStepAmount bidFloorFare userMaxBidFare bidCeilingMaxFare fareIncreaseWaitMinutes nextFareIncreaseAt acceptedBidId',
   );
 
   if (!ride) {
@@ -1627,7 +1756,7 @@ export const listRideBidsForUser = async ({ rideId, userId }) => {
 
 export const submitRideBid = async ({ rideId, driverId, bidFare }) => {
   const ride = await Ride.findById(rideId).select(
-    '_id userId driverId vehicleTypeId dispatchVehicleTypeIds status liveStatus fare baseFare bookingMode pricingNegotiationMode biddingStatus bidStepAmount userMaxBidFare',
+    '_id userId driverId vehicleTypeId dispatchVehicleTypeIds status liveStatus fare baseFare bookingMode pricingNegotiationMode biddingStatus bidStepAmount bidFloorFare userMaxBidFare bidCeilingMaxFare',
   );
 
   if (!ride) {
@@ -1754,7 +1883,12 @@ export const increaseRideBidCeiling = async ({ rideId, userId, incrementSteps = 
   }
 
   const currentFare = Math.max(0, Number(ride.fare || ride.baseFare || 0));
-  const nextFare = currentFare + (safeSteps * safeStepAmount);
+  const maxAllowedFare = Math.max(currentFare, Number(ride.bidCeilingMaxFare || ride.userMaxBidFare || currentFare));
+  if (currentFare >= maxAllowedFare) {
+    throw new ApiError(409, 'Fare is already at the configured ceiling');
+  }
+
+  const nextFare = Math.min(maxAllowedFare, currentFare + (safeSteps * safeStepAmount));
   const waitMinutes = Math.max(0, Math.round(Number(ride.fareIncreaseWaitMinutes || 0)));
   const updatedRide = await Ride.findOneAndUpdate(
     {

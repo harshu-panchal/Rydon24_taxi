@@ -159,11 +159,12 @@ const IncomingRideRequest = ({
   const isUserIncrementOnly = pricingNegotiationMode === 'user_increment_only';
   const fareWasIncreased = isUserIncrementOnly && Number(data.raw?.fare || 0) > Number(data.raw?.baseFare || data.raw?.fare || 0);
   const bidBaseFare = Number(data.raw?.bidding?.baseFare || data.raw?.baseFare || data.raw?.fare || 0);
+  const bidFloorFare = Number(data.raw?.bidding?.bidFloorFare || bidBaseFare);
   const bidMaxFare = Number(data.raw?.bidding?.userMaxBidFare || data.raw?.userMaxBidFare || bidBaseFare);
   const bidStepAmount = Number(data.raw?.bidding?.bidStepAmount || 10);
   const scheduledCountdown = getScheduledRideCountdown(scheduledAt, previewNow);
   const bidOptions = isBidding
-    ? Array.from({ length: Math.max(1, Math.floor((bidMaxFare - bidBaseFare) / bidStepAmount) + 1) }, (_, index) => bidBaseFare + (index * bidStepAmount))
+    ? Array.from({ length: Math.max(1, Math.floor((bidMaxFare - bidFloorFare) / bidStepAmount) + 1) }, (_, index) => bidFloorFare + (index * bidStepAmount))
     : [];
 
   return (

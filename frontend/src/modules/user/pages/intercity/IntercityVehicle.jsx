@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Calendar, ChevronRight, Clock3, Info, MapPin, Users } from 'lucide-react';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const pad = (value) => String(value).padStart(2, '0');
 
@@ -28,6 +29,33 @@ const getTomorrowLocalDateTime = () => {
 
 const DEFAULT_BID_STEP_AMOUNT = 10;
 const DEFAULT_BID_HEADROOM_PERCENT = 20;
+
+const toConfiguredPositiveInteger = (value, fallback) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? Math.round(numeric) : fallback;
+};
+
+const clampPercentage = (value, fallback = 0) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+
+  return Math.max(0, Math.min(100, numeric));
+};
+
+const alignBidAmountToStep = ({ baseFare, amount, stepAmount }) => {
+  const safeBaseFare = Math.max(0, Math.round(Number(baseFare || 0)));
+  const safeStepAmount = toConfiguredPositiveInteger(stepAmount, DEFAULT_BID_STEP_AMOUNT);
+  const safeAmount = Math.max(safeBaseFare, Math.round(Number(amount || 0)));
+  const delta = safeAmount - safeBaseFare;
+
+  if (delta === 0) {
+    return safeBaseFare;
+  }
+
+  return safeBaseFare + (Math.ceil(delta / safeStepAmount) * safeStepAmount);
+};
 
 const getTodayLocalDate = () => formatDateInputValue(new Date());
 
@@ -81,10 +109,10 @@ const calculateFare = (vehicle, tripType) => {
   return tripType === 'Round Trip' ? Math.round(baseFare * 1.8) : Math.round(baseFare);
 };
 
-const calculateDefaultBidCeiling = (fare) => {
+const calculateDefaultBidCeiling = (fare, stepAmount = DEFAULT_BID_STEP_AMOUNT, headroomPercent = DEFAULT_BID_HEADROOM_PERCENT) => {
   const safeFare = Math.max(0, Number(fare || 0));
-  const raisedFare = Math.ceil(safeFare * (1 + (DEFAULT_BID_HEADROOM_PERCENT / 100)));
-  return Math.max(safeFare, raisedFare);
+  const raisedFare = safeFare * (1 + (clampPercentage(headroomPercent, DEFAULT_BID_HEADROOM_PERCENT) / 100));
+  return alignBidAmountToStep({ baseFare: safeFare, amount: raisedFare, stepAmount });
 };
 
 const getDisplayDate = (rideMode, travelDate) => (rideMode === 'schedule' ? travelDate : 'Ride Now');
@@ -92,6 +120,7 @@ const getDisplayDate = (rideMode, travelDate) => (rideMode === 'schedule' ? trav
 const IntercityVehicle = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { settings } = useSettings();
   const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
   const {
     fromCity,
@@ -189,6 +218,14 @@ const IntercityVehicle = () => {
   }
 
   const finalFare = selectedVehicle ? calculateFare(selectedVehicle, tripType) : 0;
+  const configuredBidStepAmount = toConfiguredPositiveInteger(
+    settings?.bidRide?.bidding_amount_increase_or_decrease,
+    DEFAULT_BID_STEP_AMOUNT,
+  );
+  const configuredBidHighPercentage = clampPercentage(
+    settings?.bidRide?.user_bidding_high_percentage,
+    DEFAULT_BID_HEADROOM_PERCENT,
+  );
 
   const openPicker = (inputRef) => {
     if (typeof inputRef.current?.showPicker === 'function') {
@@ -256,8 +293,10 @@ const IntercityVehicle = () => {
         fare: finalFare,
         baseFare: finalFare,
         bookingMode: selectedVehicle.supportsBidding ? 'bidding' : 'normal',
-        bidStepAmount: DEFAULT_BID_STEP_AMOUNT,
-        userMaxBidFare: selectedVehicle.supportsBidding ? calculateDefaultBidCeiling(finalFare) : finalFare,
+        bidStepAmount: configuredBidStepAmount,
+        userMaxBidFare: selectedVehicle.supportsBidding
+          ? calculateDefaultBidCeiling(finalFare, configuredBidStepAmount, configuredBidHighPercentage)
+          : finalFare,
       },
     });
   };

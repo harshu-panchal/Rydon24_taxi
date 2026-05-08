@@ -1,13 +1,17 @@
+import mongoose from 'mongoose';
 import { Ride } from '../user/models/Ride.js';
 import { User } from '../user/models/User.js';
+import { UserWallet } from '../user/models/UserWallet.js';
 import { Driver } from '../driver/models/Driver.js';
+import { WalletTransaction } from '../driver/models/WalletTransaction.js';
+import { applyDriverWalletAdjustment } from '../driver/services/walletService.js';
 import { matchDrivers } from './matchingService.js';
 import {
   RIDE_LIVE_STATUS,
   RIDE_STATUS,
 } from '../constants/index.js';
 import { Delivery } from '../user/models/Delivery.js';
-import { getRideRoom } from './rideService.js';
+import { getRideRoom, resolveSetPriceForRide } from './rideService.js';
 import { SOCKET_EVENTS } from '../socket/events.js';
 import { resolveTransportDispatchConfig } from './transportSettingsService.js';
 import { sendPushNotificationToEntities } from './pushNotificationService.js';
@@ -15,6 +19,278 @@ import { sendPushNotificationToEntities } from './pushNotificationService.js';
 const activeDispatches = new Map();
 let ioInstance = null;
 const scheduledDispatchTimers = new Map();
+
+const roundMoney = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+
+const ensureUserWallet = async (userId, session = null) => {
+  if (!userId) {
+    return;
+  }
+
+  await UserWallet.updateOne(
+    { userId },
+    { $setOnInsert: { userId, balance: 0, refundWallet: 0, transactions: [] } },
+    { upsert: true, session },
+  );
+};
+
+const normalizeRideTransportType = (ride) => {
+  const serviceType = String(ride?.serviceType || '').trim().toLowerCase();
+  const transportType = String(ride?.transport_type || '').trim().toLowerCase();
+
+  if (serviceType === 'parcel') {
+    return transportType === 'both' ? 'delivery' : (transportType || 'delivery');
+  }
+
+  if (serviceType === 'intercity') {
+    return 'intercity';
+  }
+
+  if (transportType === 'all' || transportType === 'both' || !transportType) {
+    return 'taxi';
+  }
+
+  return transportType;
+};
+
+const computeCancellationFeeAmount = ({ ride, feeType, feeValue }) => {
+  const baseAmount = Math.max(roundMoney(ride?.fare || 0), roundMoney(ride?.baseFare || 0), 0);
+  const normalizedValue = Math.max(roundMoney(feeValue || 0), 0);
+  const normalizedType = String(feeType || 'percentage').trim().toLowerCase();
+
+  if (normalizedValue <= 0) {
+    return 0;
+  }
+
+  if (normalizedType === 'fixed') {
+    return normalizedValue;
+  }
+
+  return Math.min(roundMoney((baseAmount * normalizedValue) / 100), baseAmount);
+};
+
+const resolveCancellationPricing = async (ride, session) => {
+  if (!ride?.vehicleTypeId) {
+    return null;
+  }
+
+  return resolveSetPriceForRide({
+    serviceLocationId: ride.service_location_id || null,
+    transportType: normalizeRideTransportType(ride),
+    vehicleTypeId: ride.vehicleTypeId,
+  });
+};
+
+const applyUserWalletAdjustment = async ({
+  userId,
+  amount,
+  kind,
+  title,
+  referenceKey,
+  walletField = 'balance',
+  provider = 'ride_cancellation',
+  session = null,
+  requireSufficientFunds = false,
+}) => {
+  const normalizedAmount = roundMoney(amount);
+  const normalizedKind = kind === 'debit' ? 'debit' : 'credit';
+  const normalizedField = walletField === 'refundWallet' ? 'refundWallet' : 'balance';
+  const normalizedReferenceKey = String(referenceKey || '').trim();
+
+  if (!userId || normalizedAmount <= 0 || !normalizedReferenceKey) {
+    return { status: 'skipped', amount: 0 };
+  }
+
+  await ensureUserWallet(userId, session);
+
+  const existing = await UserWallet.findOne({
+    userId,
+    'transactions.referenceKey': normalizedReferenceKey,
+  })
+    .select('_id')
+    .session(session)
+    .lean();
+
+  if (existing) {
+    return { status: 'existing', amount: normalizedAmount };
+  }
+
+  const tx = {
+    kind: normalizedKind,
+    amount: normalizedAmount,
+    title: String(title || '').trim(),
+    provider,
+    referenceKey: normalizedReferenceKey,
+  };
+
+  const updateFilter = { userId };
+  if (normalizedKind === 'debit' && requireSufficientFunds) {
+    updateFilter[normalizedField] = { $gte: normalizedAmount };
+  }
+
+  const updateResult = await UserWallet.updateOne(
+    updateFilter,
+    {
+      $inc: { [normalizedField]: normalizedKind === 'credit' ? normalizedAmount : -normalizedAmount },
+      $push: { transactions: { $each: [tx], $slice: -50 } },
+    },
+    { session },
+  );
+
+  if (!updateResult?.modifiedCount) {
+    return { status: requireSufficientFunds ? 'insufficient_funds' : 'not_modified', amount: normalizedAmount };
+  }
+
+  return { status: 'applied', amount: normalizedAmount };
+};
+
+const applyDriverWalletAdjustmentByReference = async ({
+  driverId,
+  amount,
+  rideId = null,
+  description,
+  referenceKey,
+  metadata = {},
+  session = null,
+}) => {
+  const normalizedAmount = roundMoney(amount);
+  const normalizedReferenceKey = String(referenceKey || '').trim();
+
+  if (!driverId || !normalizedAmount || !normalizedReferenceKey) {
+    return { status: 'skipped', amount: normalizedAmount, walletResult: null };
+  }
+
+  const existing = await WalletTransaction.findOne({
+    driverId,
+    'metadata.referenceKey': normalizedReferenceKey,
+  })
+    .select('_id')
+    .session(session)
+    .lean();
+
+  if (existing) {
+    return { status: 'existing', amount: normalizedAmount, walletResult: null };
+  }
+
+  const walletResult = await applyDriverWalletAdjustment({
+    driverId,
+    amount: normalizedAmount,
+    type: 'adjustment',
+    rideId,
+    description,
+    metadata: {
+      ...metadata,
+      referenceKey: normalizedReferenceKey,
+    },
+    session,
+  });
+
+  return { status: 'applied', amount: normalizedAmount, walletResult };
+};
+
+const settleUserCancellationFee = async (ride, session) => {
+  const pricing = await resolveCancellationPricing(ride, session);
+  const feeAmount = computeCancellationFeeAmount({
+    ride,
+    feeType: pricing?.user_cancellation_fee_type,
+    feeValue: pricing?.user_cancellation_fee,
+  });
+
+  if (feeAmount <= 0) {
+    return { feeAmount: 0, userDebitStatus: 'none', driverCreditStatus: 'none', driverWalletResult: null };
+  }
+
+  const feeReferenceBase = `ride-cancel:user:${String(ride._id)}`;
+  const userDebit = await applyUserWalletAdjustment({
+    userId: ride.userId,
+    amount: feeAmount,
+    kind: 'debit',
+    title: `Ride cancellation fee for booking ${String(ride._id).slice(-6)}`,
+    referenceKey: `${feeReferenceBase}:user-debit`,
+    session,
+    requireSufficientFunds: true,
+  });
+
+  let driverCredit = { status: 'skipped', walletResult: null };
+  const shouldCreditDriver =
+    ['applied', 'existing'].includes(userDebit.status) &&
+    String(pricing?.cancellation_fee_goes_to || 'admin').trim().toLowerCase() === 'driver' &&
+    ride.driverId;
+
+  if (shouldCreditDriver) {
+    driverCredit = await applyDriverWalletAdjustmentByReference({
+      driverId: ride.driverId,
+      amount: feeAmount,
+      rideId: ride._id,
+      description: `Cancellation fee received for booking ${String(ride._id).slice(-6)}`,
+      referenceKey: `${feeReferenceBase}:driver-credit`,
+      metadata: {
+        source: 'ride_cancellation_fee',
+        cancelledBy: 'user',
+        counterpartyRole: 'user',
+        counterpartyId: String(ride.userId),
+      },
+      session,
+    });
+  }
+
+  return {
+    feeAmount,
+    userDebitStatus: userDebit.status,
+    driverCreditStatus: driverCredit.status,
+    driverWalletResult: driverCredit.walletResult || null,
+  };
+};
+
+const settleDriverCancellationFee = async (ride, session) => {
+  const pricing = await resolveCancellationPricing(ride, session);
+  const feeAmount = computeCancellationFeeAmount({
+    ride,
+    feeType: pricing?.driver_cancellation_fee_type,
+    feeValue: pricing?.driver_cancellation_fee,
+  });
+
+  if (feeAmount <= 0 || !ride?.driverId) {
+    return { feeAmount: 0, driverDebitStatus: 'none', userCreditStatus: 'none', driverWalletResult: null };
+  }
+
+  const feeReferenceBase = `ride-cancel:driver:${String(ride._id)}`;
+  const driverDebit = await applyDriverWalletAdjustmentByReference({
+    driverId: ride.driverId,
+    amount: -feeAmount,
+    rideId: ride._id,
+    description: `Scheduled ride cancellation fee for booking ${String(ride._id).slice(-6)}`,
+    referenceKey: `${feeReferenceBase}:driver-debit`,
+    metadata: {
+      source: 'ride_cancellation_fee',
+      cancelledBy: 'driver',
+      counterpartyRole: 'user',
+      counterpartyId: String(ride.userId),
+    },
+    session,
+  });
+
+  let userCredit = { status: 'skipped' };
+  if (['applied', 'existing'].includes(driverDebit.status) && ride.userId) {
+    userCredit = await applyUserWalletAdjustment({
+      userId: ride.userId,
+      amount: feeAmount,
+      kind: 'credit',
+      title: `Driver cancellation compensation for booking ${String(ride._id).slice(-6)}`,
+      referenceKey: `${feeReferenceBase}:user-credit`,
+      walletField: 'refundWallet',
+      provider: 'ride_cancellation_refund',
+      session,
+    });
+  }
+
+  return {
+    feeAmount,
+    driverDebitStatus: driverDebit.status,
+    userCreditStatus: userCredit.status,
+    driverWalletResult: driverDebit.walletResult || null,
+  };
+};
 
 export const getUserRoom = (userId) => `user:${userId}`;
 export const getDriverRoom = (driverId) => `driver:${driverId}`;
@@ -209,7 +485,9 @@ const emitRideRequestToDrivers = async ({
         ? {
             enabled: true,
             baseFare: Number(ride.baseFare || ride.fare || 0),
+            bidFloorFare: Number(ride.bidFloorFare ?? ride.baseFare ?? ride.fare ?? 0),
             userMaxBidFare: Number(ride.userMaxBidFare || ride.fare || 0),
+            bidCeilingMaxFare: Number(ride.bidCeilingMaxFare || ride.userMaxBidFare || ride.fare || 0),
             bidStepAmount: Number(ride.bidStepAmount || 10),
           }
         : {
@@ -367,40 +645,58 @@ export const cancelRideByAdmin = async (rideId) => {
 export const cancelRideByUser = async ({ rideId, userId }) => {
   const dispatchState = getDispatchState(rideId);
   stopDispatchFlow(rideId);
+  const session = await mongoose.startSession();
+  let ride = null;
+  let cancellationSettlement = null;
 
-  const ride = await Ride.findOne({ _id: rideId, userId });
+  try {
+    session.startTransaction();
 
-  if (!ride) {
-    return null;
+    ride = await Ride.findOne({ _id: rideId, userId }).session(session);
+
+    if (!ride) {
+      await session.abortTransaction();
+      return null;
+    }
+
+    if (ride.status === RIDE_STATUS.COMPLETED || ride.liveStatus === RIDE_LIVE_STATUS.COMPLETED) {
+      throw new Error('Completed rides cannot be cancelled');
+    }
+
+    if (ride.status === RIDE_STATUS.CANCELLED || ride.liveStatus === RIDE_LIVE_STATUS.CANCELLED) {
+      await session.commitTransaction();
+      return ride;
+    }
+
+    cancellationSettlement = await settleUserCancellationFee(ride, session);
+
+    ride.status = RIDE_STATUS.CANCELLED;
+    ride.liveStatus = RIDE_LIVE_STATUS.CANCELLED;
+    if (ride.bookingMode === 'bidding') {
+      ride.biddingStatus = 'cancelled';
+    }
+    await ride.save({ session });
+
+    if (ride.deliveryId) {
+      await Delivery.findByIdAndUpdate(ride.deliveryId, {
+        driverId: ride.driverId || null,
+        status: ride.status,
+        liveStatus: ride.liveStatus,
+      }, { session });
+    }
+
+    await Promise.all([
+      User.findByIdAndUpdate(ride.userId, { currentRideId: null }, { session }),
+      ride.driverId ? Driver.findByIdAndUpdate(ride.driverId, { isOnRide: false }, { session }) : Promise.resolve(),
+    ]);
+
+    await session.commitTransaction();
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
   }
-
-  if (ride.status === RIDE_STATUS.COMPLETED || ride.liveStatus === RIDE_LIVE_STATUS.COMPLETED) {
-    throw new Error('Completed rides cannot be cancelled');
-  }
-
-  if (ride.status === RIDE_STATUS.CANCELLED || ride.liveStatus === RIDE_LIVE_STATUS.CANCELLED) {
-    return ride;
-  }
-
-  ride.status = RIDE_STATUS.CANCELLED;
-  ride.liveStatus = RIDE_LIVE_STATUS.CANCELLED;
-  if (ride.bookingMode === 'bidding') {
-    ride.biddingStatus = 'cancelled';
-  }
-  await ride.save();
-
-  if (ride.deliveryId) {
-    await Delivery.findByIdAndUpdate(ride.deliveryId, {
-      driverId: ride.driverId || null,
-      status: ride.status,
-      liveStatus: ride.liveStatus,
-    });
-  }
-
-  await Promise.all([
-    User.findByIdAndUpdate(ride.userId, { currentRideId: null }),
-    ride.driverId ? Driver.findByIdAndUpdate(ride.driverId, { isOnRide: false }) : Promise.resolve(),
-  ]);
 
   emitToRoom(getUserRoom(ride.userId), 'rideCancelled', {
     rideId: String(ride._id),
@@ -442,53 +738,84 @@ export const cancelRideByUser = async ({ rideId, userId }) => {
     liveStatus: ride.liveStatus,
   });
 
+  if (cancellationSettlement?.driverWalletResult?.transaction) {
+    emitToDriver(ride.driverId, 'driver:wallet:updated', {
+      wallet: cancellationSettlement.driverWalletResult.wallet,
+      transaction: cancellationSettlement.driverWalletResult.transaction,
+      notification: {
+        id: `ride-cancel-credit-${String(ride._id)}`,
+        title: 'Cancellation fee received',
+        body: `Rs ${Number(cancellationSettlement.feeAmount || 0).toFixed(2)} credited for rider cancellation.`,
+        sentAt: new Date().toISOString(),
+      },
+    });
+  }
+
   return ride;
 };
 
 export const cancelScheduledRideByDriver = async ({ rideId, driverId }) => {
   const dispatchState = getDispatchState(rideId);
   stopDispatchFlow(rideId);
+  const session = await mongoose.startSession();
+  let ride = null;
+  let cancellationSettlement = null;
 
-  const ride = await Ride.findOne({ _id: rideId, driverId });
+  try {
+    session.startTransaction();
 
-  if (!ride) {
-    return null;
+    ride = await Ride.findOne({ _id: rideId, driverId }).session(session);
+
+    if (!ride) {
+      await session.abortTransaction();
+      return null;
+    }
+
+    const scheduledAt = ride?.scheduledAt ? new Date(ride.scheduledAt) : null;
+    const isScheduledRide = scheduledAt && Number.isFinite(scheduledAt.getTime()) && scheduledAt.getTime() > Date.now();
+
+    if (!isScheduledRide) {
+      throw new Error('Only upcoming scheduled rides can be cancelled by the driver');
+    }
+
+    if (ride.status === RIDE_STATUS.COMPLETED || ride.liveStatus === RIDE_LIVE_STATUS.COMPLETED) {
+      throw new Error('Completed rides cannot be cancelled');
+    }
+
+    if (ride.status === RIDE_STATUS.CANCELLED || ride.liveStatus === RIDE_LIVE_STATUS.CANCELLED) {
+      await session.commitTransaction();
+      return ride;
+    }
+
+    cancellationSettlement = await settleDriverCancellationFee(ride, session);
+
+    ride.status = RIDE_STATUS.CANCELLED;
+    ride.liveStatus = RIDE_LIVE_STATUS.CANCELLED;
+    if (ride.bookingMode === 'bidding') {
+      ride.biddingStatus = 'cancelled';
+    }
+    await ride.save({ session });
+
+    if (ride.deliveryId) {
+      await Delivery.findByIdAndUpdate(ride.deliveryId, {
+        driverId: ride.driverId || null,
+        status: ride.status,
+        liveStatus: ride.liveStatus,
+      }, { session });
+    }
+
+    await Promise.all([
+      User.findByIdAndUpdate(ride.userId, { currentRideId: null }, { session }),
+      ride.driverId ? Driver.findByIdAndUpdate(ride.driverId, { isOnRide: false }, { session }) : Promise.resolve(),
+    ]);
+
+    await session.commitTransaction();
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
   }
-
-  const scheduledAt = ride?.scheduledAt ? new Date(ride.scheduledAt) : null;
-  const isScheduledRide = scheduledAt && Number.isFinite(scheduledAt.getTime()) && scheduledAt.getTime() > Date.now();
-
-  if (!isScheduledRide) {
-    throw new Error('Only upcoming scheduled rides can be cancelled by the driver');
-  }
-
-  if (ride.status === RIDE_STATUS.COMPLETED || ride.liveStatus === RIDE_LIVE_STATUS.COMPLETED) {
-    throw new Error('Completed rides cannot be cancelled');
-  }
-
-  if (ride.status === RIDE_STATUS.CANCELLED || ride.liveStatus === RIDE_LIVE_STATUS.CANCELLED) {
-    return ride;
-  }
-
-  ride.status = RIDE_STATUS.CANCELLED;
-  ride.liveStatus = RIDE_LIVE_STATUS.CANCELLED;
-  if (ride.bookingMode === 'bidding') {
-    ride.biddingStatus = 'cancelled';
-  }
-  await ride.save();
-
-  if (ride.deliveryId) {
-    await Delivery.findByIdAndUpdate(ride.deliveryId, {
-      driverId: ride.driverId || null,
-      status: ride.status,
-      liveStatus: ride.liveStatus,
-    });
-  }
-
-  await Promise.all([
-    User.findByIdAndUpdate(ride.userId, { currentRideId: null }),
-    ride.driverId ? Driver.findByIdAndUpdate(ride.driverId, { isOnRide: false }) : Promise.resolve(),
-  ]);
 
   const cancelReason = 'Your scheduled ride was cancelled by the driver.';
 
@@ -525,6 +852,19 @@ export const cancelScheduledRideByDriver = async ({ rideId, driverId }) => {
     status: ride.status,
     liveStatus: ride.liveStatus,
   });
+
+  if (cancellationSettlement?.driverWalletResult?.transaction) {
+    emitToDriver(ride.driverId, 'driver:wallet:updated', {
+      wallet: cancellationSettlement.driverWalletResult.wallet,
+      transaction: cancellationSettlement.driverWalletResult.transaction,
+      notification: {
+        id: `ride-cancel-debit-${String(ride._id)}`,
+        title: 'Cancellation fee charged',
+        body: `Rs ${Number(cancellationSettlement.feeAmount || 0).toFixed(2)} deducted for scheduled ride cancellation.`,
+        sentAt: new Date().toISOString(),
+      },
+    });
+  }
 
   sendPushNotificationToEntities({
     userIds: [String(ride.userId)],
@@ -896,7 +1236,9 @@ export const notifyRideBidUpdated = async ({ ride, bid }) => {
     biddingStatus: safeRide.biddingStatus || 'none',
     fare: Number(safeRide.fare || 0),
     baseFare: Number(safeRide.baseFare || safeRide.fare || 0),
+    bidFloorFare: Number(safeRide.bidFloorFare ?? safeRide.baseFare ?? safeRide.fare ?? 0),
     userMaxBidFare: Number(safeRide.userMaxBidFare || safeRide.fare || 0),
+    bidCeilingMaxFare: Number(safeRide.bidCeilingMaxFare || safeRide.userMaxBidFare || safeRide.fare || 0),
     bidStepAmount: Number(safeRide.bidStepAmount || 10),
     fareIncreaseWaitMinutes: Number(safeRide.fareIncreaseWaitMinutes || 0),
     nextFareIncreaseAt: safeRide.nextFareIncreaseAt || null,
@@ -921,7 +1263,9 @@ export const notifyRideBiddingUpdated = async (ride) => {
     biddingStatus: safeRide.biddingStatus || 'none',
     fare: Number(safeRide.fare || 0),
     baseFare: Number(safeRide.baseFare || safeRide.fare || 0),
+    bidFloorFare: Number(safeRide.bidFloorFare ?? safeRide.baseFare ?? safeRide.fare ?? 0),
     userMaxBidFare: Number(safeRide.userMaxBidFare || safeRide.fare || 0),
+    bidCeilingMaxFare: Number(safeRide.bidCeilingMaxFare || safeRide.userMaxBidFare || safeRide.fare || 0),
     bidStepAmount: Number(safeRide.bidStepAmount || 10),
     fareIncreaseWaitMinutes: Number(safeRide.fareIncreaseWaitMinutes || 0),
     nextFareIncreaseAt: safeRide.nextFareIncreaseAt || null,

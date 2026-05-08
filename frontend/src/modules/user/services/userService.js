@@ -57,6 +57,14 @@ export const userService = {
     const response = await api.get('/users/service-stores');
     return response;
   },
+  getAvailablePromos: async (params) => {
+    const response = await api.get('/promos/available', { params });
+    return response;
+  },
+  validatePromo: async (payload) => {
+    const response = await api.post('/promos/validate', payload);
+    return response;
+  },
   searchPoolingRoutes: async (params) => {
     const response = await api.get('/users/pooling/search', { params });
     return response;

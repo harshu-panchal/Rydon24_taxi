@@ -4,14 +4,18 @@ import {
   ArrowLeft,
   BadgeIndianRupee,
   Building2,
+  Camera,
   CarFront,
   CheckCircle2,
   ClipboardList,
+  Eye,
+  ImagePlus,
   Loader2,
   LogOut,
   MapPin,
   Phone,
   Plus,
+  RotateCcw,
   ShieldCheck,
   Trash2,
   UserRound,
@@ -65,6 +69,16 @@ const afterReturnItems = [
   { key: 'fuelChecked', label: 'Fuel level noted' },
   { key: 'tyresChecked', label: 'Tyres rechecked' },
   { key: 'damageReviewed', label: 'Damage reviewed' },
+];
+
+const inspectionPhotoSlots = [
+  { key: 'front_left', label: 'Front Left', helper: 'Capture front-left exterior angle.' },
+  { key: 'front_right', label: 'Front Right', helper: 'Capture front-right exterior angle.' },
+  { key: 'rear_left', label: 'Rear Left', helper: 'Capture rear-left exterior angle.' },
+  { key: 'rear_right', label: 'Rear Right', helper: 'Capture rear-right exterior angle.' },
+  { key: 'odometer', label: 'Odometer', helper: 'Capture dashboard meter reading clearly.' },
+  { key: 'fuel_meter', label: 'Fuel Meter', helper: 'Capture fuel level reading clearly.' },
+  { key: 'damage_closeup', label: 'Damage Close-up', helper: 'Use for scratches, dents, or issue proof.' },
 ];
 
 const biometricFingerOptions = [
@@ -256,6 +270,20 @@ const mergeRentalInspection = (current = {}, patch = {}) => ({
   },
 });
 
+const normalizeConditionImages = (images = []) => {
+  const list = Array.isArray(images) ? images.slice(0, inspectionPhotoSlots.length) : [];
+  while (list.length < inspectionPhotoSlots.length) {
+    list.push('');
+  }
+  return list.map((item) => String(item || ''));
+};
+
+const setConditionImageAtSlot = (images = [], slotIndex, imageUrl = '') => {
+  const nextImages = normalizeConditionImages(images);
+  nextImages[slotIndex] = String(imageUrl || '');
+  return nextImages;
+};
+
 const formatDateTime = (value) => {
   if (!value) return 'Not set';
   const date = new Date(value);
@@ -336,6 +364,138 @@ const CollapsibleSection = ({ title, icon: Icon, children, badge }) => {
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+};
+
+const InspectionPhotoSlots = ({
+  title,
+  accent = 'emerald',
+  bookingId,
+  field,
+  images = [],
+  uploadingTarget = '',
+  onFileSelect,
+  onPreview,
+  onRemove,
+}) => {
+  const normalizedImages = normalizeConditionImages(images);
+  const accentClass =
+    accent === 'amber'
+      ? {
+          button: 'text-amber-700 border-amber-200 bg-amber-50 hover:bg-amber-100',
+          primary: 'bg-amber-500 hover:bg-amber-600 text-white',
+          ring: 'focus:ring-amber-500/20',
+          badge: 'bg-amber-50 text-amber-700',
+        }
+      : {
+          button: 'text-emerald-700 border-emerald-200 bg-emerald-50 hover:bg-emerald-100',
+          primary: 'bg-emerald-500 hover:bg-emerald-600 text-white',
+          ring: 'focus:ring-emerald-500/20',
+          badge: 'bg-emerald-50 text-emerald-700',
+        };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">{title}</label>
+          <p className="mt-1 text-xs font-medium text-slate-500">
+            Use the fixed slots below so inspection photos stay consistent across bookings.
+          </p>
+        </div>
+        <div className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${accentClass.badge}`}>
+          {normalizedImages.filter(Boolean).length}/{inspectionPhotoSlots.length}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {inspectionPhotoSlots.map((slot, index) => {
+          const imageUrl = normalizedImages[index];
+          const cameraTarget = `${field}:${index}:camera`;
+          const uploadTarget = `${field}:${index}:upload`;
+          const busy = uploadingTarget === cameraTarget || uploadingTarget === uploadTarget;
+
+          return (
+            <div key={`${field}:${slot.key}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-700">{slot.label}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">{slot.helper}</p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] ${imageUrl ? 'bg-white text-slate-700' : 'bg-slate-200 text-slate-500'}`}>
+                  {imageUrl ? 'Captured' : 'Missing'}
+                </span>
+              </div>
+
+              <div className="mt-3">
+                {imageUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => onPreview(imageUrl)}
+                    className="group relative block aspect-[4/3] w-full overflow-hidden rounded-2xl border border-slate-200 bg-white"
+                  >
+                    <img src={imageUrl} alt={slot.label} className="h-full w-full object-cover" />
+                    <div className="absolute inset-0 bg-slate-950/0 transition group-hover:bg-slate-950/10" />
+                  </button>
+                ) : (
+                  <div className="flex aspect-[4/3] w-full items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white text-center">
+                    <div className="px-4">
+                      <Camera size={20} className="mx-auto text-slate-300" />
+                      <p className="mt-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-400">No photo yet</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-[11px] font-black uppercase tracking-[0.12em] transition ${imageUrl ? accentClass.button : accentClass.primary} ${busy ? 'pointer-events-none opacity-60' : ''}`}>
+                  {busy && uploadingTarget === cameraTarget ? <Loader2 size={14} className="animate-spin" /> : imageUrl ? <RotateCcw size={14} /> : <Camera size={14} />}
+                  {imageUrl ? 'Retake' : 'Take Photo'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(event) => onFileSelect(field, index, event.target.files, 'camera')}
+                  />
+                </label>
+                <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[11px] font-black uppercase tracking-[0.12em] text-slate-700 transition hover:bg-slate-100 ${busy ? 'pointer-events-none opacity-60' : ''}`}>
+                  {busy && uploadingTarget === uploadTarget ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}
+                  Upload
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => onFileSelect(field, index, event.target.files, 'upload')}
+                  />
+                </label>
+              </div>
+
+              {imageUrl ? (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onPreview(imageUrl)}
+                    className={`flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-slate-700 transition hover:bg-slate-100 ${accentClass.ring}`}
+                  >
+                    <Eye size={14} />
+                    Preview
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRemove(bookingId, field, index)}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-rose-600 transition hover:bg-rose-100"
+                  >
+                    <Trash2 size={14} />
+                    Remove
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };
@@ -783,34 +943,33 @@ const ServiceCenterDashboard = () => {
     });
   };
 
-  const uploadConditionImages = async (bookingId, field, fileList) => {
+  const uploadConditionImages = async (bookingId, field, slotIndex, fileList, source = 'upload') => {
     const files = Array.from(fileList || []).filter(Boolean);
     if (!files.length) {
       return;
     }
 
-    setUploadingConditionSection(field);
+    const uploadTarget = `${field}:${slotIndex}:${source}`;
+    setUploadingConditionSection(uploadTarget);
     setError('');
 
     try {
-      const uploadedUrls = [];
-      for (const file of files) {
-        const dataUrl = await fileToDataUrl(file);
-        const uploadResult = await uploadService.uploadImage(dataUrl, 'service-center-condition');
-        const imageUrl = uploadResult?.url || uploadResult?.secureUrl || '';
-        if (imageUrl) {
-          uploadedUrls.push(imageUrl);
-        }
+      const file = files[0];
+      const dataUrl = await fileToDataUrl(file);
+      const uploadResult = await uploadService.uploadImage(dataUrl, 'service-center-condition');
+      const imageUrl = uploadResult?.url || uploadResult?.secureUrl || '';
+      if (!imageUrl) {
+        throw new Error('Unable to upload selected image');
       }
 
       const currentBooking =
         bookings.find((item) => String(item.id || item._id) === String(bookingId)) || null;
       const currentInspection = currentBooking?.rentalInspection || {};
-      const currentImages = Array.isArray(currentInspection[field]) ? currentInspection[field] : [];
+      const currentImages = normalizeConditionImages(currentInspection[field]);
 
       await handleBookingUpdate(bookingId, {
         rentalInspection: {
-          [field]: [...currentImages, ...uploadedUrls],
+          [field]: setConditionImageAtSlot(currentImages, slotIndex, imageUrl),
         },
       });
     } catch (err) {
@@ -820,15 +979,15 @@ const ServiceCenterDashboard = () => {
     }
   };
 
-  const removeConditionImage = async (bookingId, field, imageToRemove) => {
+  const removeConditionImage = async (bookingId, field, slotIndex) => {
     const currentBooking =
       bookings.find((item) => String(item.id || item._id) === String(bookingId)) || null;
     const currentInspection = currentBooking?.rentalInspection || {};
-    const currentImages = Array.isArray(currentInspection[field]) ? currentInspection[field] : [];
+    const currentImages = normalizeConditionImages(currentInspection[field]);
 
     await handleBookingUpdate(bookingId, {
       rentalInspection: {
-        [field]: currentImages.filter((item) => item !== imageToRemove),
+        [field]: setConditionImageAtSlot(currentImages, slotIndex, ''),
       },
     });
   };
@@ -1750,23 +1909,19 @@ const ServiceCenterDashboard = () => {
                                   })}
                                 </div>
 
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Handover Photos</label>
-                                    <label className="cursor-pointer text-[10px] font-black text-emerald-600 hover:text-emerald-700">
-                                      + ADD NEW
-                                      <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => uploadConditionImages(selectedBooking.id || selectedBooking._id, 'beforeConditionImages', e.target.files)} />
-                                    </label>
-                                  </div>
-                                  <div className="grid grid-cols-4 gap-2">
-                                    {beforeConditionImages.map((img, i) => (
-                                      <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-slate-100">
-                                        <img src={img} className="h-full w-full object-cover" alt="" />
-                                        <button onClick={() => removeConditionImage(selectedBooking.id || selectedBooking._id, 'beforeConditionImages', img)} className="absolute top-1 right-1 p-1 bg-black/50 text-white rounded-full"><X size={10} /></button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
+                                <InspectionPhotoSlots
+                                  title="Handover Photos"
+                                  accent="emerald"
+                                  bookingId={selectedBooking.id || selectedBooking._id}
+                                  field="beforeConditionImages"
+                                  images={beforeConditionImages}
+                                  uploadingTarget={uploadingConditionSection}
+                                  onFileSelect={(field, slotIndex, fileList, source) =>
+                                    uploadConditionImages(selectedBooking.id || selectedBooking._id, field, slotIndex, fileList, source)
+                                  }
+                                  onPreview={setPreviewImage}
+                                  onRemove={removeConditionImage}
+                                />
 
                                 <div className="grid grid-cols-2 gap-3">
                                    <div className="space-y-1">
@@ -1815,23 +1970,19 @@ const ServiceCenterDashboard = () => {
                                   })}
                                 </div>
 
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Return Photos</label>
-                                    <label className="cursor-pointer text-[10px] font-black text-amber-600 hover:text-amber-700">
-                                      + ADD NEW
-                                      <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => uploadConditionImages(selectedBooking.id || selectedBooking._id, 'afterConditionImages', e.target.files)} />
-                                    </label>
-                                  </div>
-                                  <div className="grid grid-cols-4 gap-2">
-                                    {afterConditionImages.map((img, i) => (
-                                      <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-slate-100">
-                                        <img src={img} className="h-full w-full object-cover" alt="" />
-                                        <button onClick={() => removeConditionImage(selectedBooking.id || selectedBooking._id, 'afterConditionImages', img)} className="absolute top-1 right-1 p-1 bg-black/50 text-white rounded-full"><X size={10} /></button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
+                                <InspectionPhotoSlots
+                                  title="Return Photos"
+                                  accent="amber"
+                                  bookingId={selectedBooking.id || selectedBooking._id}
+                                  field="afterConditionImages"
+                                  images={afterConditionImages}
+                                  uploadingTarget={uploadingConditionSection}
+                                  onFileSelect={(field, slotIndex, fileList, source) =>
+                                    uploadConditionImages(selectedBooking.id || selectedBooking._id, field, slotIndex, fileList, source)
+                                  }
+                                  onPreview={setPreviewImage}
+                                  onRemove={removeConditionImage}
+                                />
 
                                 <div className="grid grid-cols-2 gap-3">
                                    <div className="space-y-1">
