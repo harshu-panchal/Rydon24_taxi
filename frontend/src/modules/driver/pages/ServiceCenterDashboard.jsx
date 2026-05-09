@@ -113,6 +113,8 @@ const biometricSourceOptions = [
   },
 ];
 
+const BIOMETRIC_BRIDGE_TIMEOUT_MS = 25000;
+
 const buildBiometricDraft = (booking) => ({
   consentAccepted: Boolean(booking?.biometrics?.consentAccepted),
   consentNotes: String(booking?.biometrics?.consentNotes || ''),
@@ -365,6 +367,17 @@ const normalizeBridgeResult = (result, preferredSource, action) => {
     captureSource: normalizedSource,
   };
 };
+
+const withBridgeTimeout = (promise, timeoutMs = BIOMETRIC_BRIDGE_TIMEOUT_MS) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      const timer = setTimeout(() => {
+        clearTimeout(timer);
+        reject(new Error('The scanner is taking too long to respond. Check the USB device connection and try again.'));
+      }, timeoutMs);
+    }),
+  ]);
 
 const buildInspectionCameraInputId = (field = '', slotIndex = 0) =>
   `service-center-inspection-camera-${String(field)}-${String(slotIndex)}`;
@@ -850,6 +863,12 @@ const ServiceCenterDashboard = () => {
   const [biometricDraft, setBiometricDraft] = useState(buildBiometricDraft());
   const [biometricAction, setBiometricAction] = useState('');
   const [biometricSource, setBiometricSource] = useState(() => readStoredBiometricSource());
+  const [biometricStatus, setBiometricStatus] = useState({
+    tone: 'idle',
+    message: '',
+    fingerCode: '',
+    action: '',
+  });
   const bookingsPerPage = 8;
 
   const role = String(profile?.onboarding?.role || '').toLowerCase();
@@ -1132,6 +1151,12 @@ const ServiceCenterDashboard = () => {
       });
       setBiometricDraft(buildBiometricDraft());
       setBiometricSource(readStoredBiometricSource());
+      setBiometricStatus({
+        tone: 'idle',
+        message: '',
+        fingerCode: '',
+        action: '',
+      });
       return;
     }
 
@@ -1142,6 +1167,12 @@ const ServiceCenterDashboard = () => {
     });
     setBiometricDraft(buildBiometricDraft(selectedBooking));
     setBiometricSource(readStoredBiometricSource(selectedBooking.id || selectedBooking._id));
+    setBiometricStatus({
+      tone: 'idle',
+      message: '',
+      fingerCode: '',
+      action: '',
+    });
   }, [selectedBooking]);
 
   const headerContent = useMemo(() => {
@@ -1664,6 +1695,34 @@ const ServiceCenterDashboard = () => {
     }
   };
 
+  const getBiometricPreflightMessage = (action, finger, bridgeStatus, enrolled = false) => {
+    if (!selectedBooking) {
+      return 'Open a booking before starting biometric capture.';
+    }
+
+    if (action === 'captureFinger' && !biometricDraft.consentAccepted && !selectedBooking?.biometrics?.consentAccepted) {
+      return 'Save customer consent before starting fingerprint capture.';
+    }
+
+    if (action === 'verifyFinger' && !enrolled) {
+      return `Capture ${finger.label} before trying to verify it.`;
+    }
+
+    if (biometricSource === 'usb_scanner' && bridgeStatus === 'demo-mode') {
+      return 'USB scanner bridge is not connected in this browser. Use the Flutter APK bridge or connect a desktop FingerprintBridge first.';
+    }
+
+    if (biometricSource === 'usb_scanner' && bridgeStatus === 'unknown') {
+      return 'USB scanner bridge status is unavailable right now. Reopen the booking and reconnect the device.';
+    }
+
+    if (biometricSource === 'phone_sensor' && bridgeStatus === 'demo-mode') {
+      return 'Phone sensor flow needs the Flutter WebView bridge. Open this booking inside the APK to test it.';
+    }
+
+    return '';
+  };
+
   const invokeFingerprintBridge = async (action, payload = {}, preferredSource = biometricSource) => {
     const bridgePayload = {
       ...payload,
@@ -1692,9 +1751,11 @@ const ServiceCenterDashboard = () => {
       try {
         for (const attempt of handlerAttempts) {
           try {
-            const result = await window.flutter_inappwebview.callHandler(
-              attempt.handlerName,
-              ...attempt.args,
+            const result = await withBridgeTimeout(
+              window.flutter_inappwebview.callHandler(
+                attempt.handlerName,
+                ...attempt.args,
+              ),
             );
             if (result !== undefined && result !== null && result !== '') {
               return normalizeBridgeResult(result, preferredSource, action);
@@ -1758,19 +1819,51 @@ const ServiceCenterDashboard = () => {
       return;
     }
 
-    if (!biometricDraft.consentAccepted && !selectedBooking?.biometrics?.consentAccepted) {
-      setError('Save customer consent before capturing fingerprints');
+    const bridgeStatus = getBiometricBridgeStatus(biometricSource);
+    const preflightMessage = getBiometricPreflightMessage('captureFinger', finger, bridgeStatus, false);
+    if (preflightMessage) {
+      setBiometricStatus({
+        tone: 'error',
+        message: preflightMessage,
+        fingerCode: finger.code,
+        action: 'capture',
+      });
+      setError(preflightMessage);
       return;
     }
 
     setBiometricAction(`capture:${finger.code}`);
+    setBiometricStatus({
+      tone: 'loading',
+      message:
+        biometricSource === 'usb_scanner'
+          ? `Waiting for the USB scanner to capture ${finger.label}. Place the finger on the device now.`
+          : `Waiting for ${finger.label} capture from the phone sensor.`,
+      fingerCode: finger.code,
+      action: 'capture',
+    });
     setError('');
 
     try {
       if (!selectedBooking?.biometrics?.id) {
+        setBiometricStatus({
+          tone: 'loading',
+          message: 'Saving biometric consent and enrollment settings before capture…',
+          fingerCode: finger.code,
+          action: 'capture',
+        });
         await saveBiometricDraft();
       }
 
+      setBiometricStatus({
+        tone: 'loading',
+        message:
+          biometricSource === 'usb_scanner'
+            ? `Scanner connected. Capture in progress for ${finger.label}…`
+            : `Capture in progress for ${finger.label}…`,
+        fingerCode: finger.code,
+        action: 'capture',
+      });
       const bridgeResult = await invokeFingerprintBridge('captureFinger', {
         fingerCode: finger.code,
         fingerLabel: finger.label,
@@ -1816,8 +1909,21 @@ const ServiceCenterDashboard = () => {
       } else {
         await refreshBookingBiometrics(selectedBooking.id || selectedBooking._id);
       }
+      setBiometricStatus({
+        tone: 'success',
+        message: `${finger.label} captured successfully from ${getBiometricSourceLabel(biometricSource)}.`,
+        fingerCode: finger.code,
+        action: 'capture',
+      });
     } catch (err) {
-      setError(err?.message || `Unable to capture ${finger.label}`);
+      const message = err?.message || `Unable to capture ${finger.label}`;
+      setBiometricStatus({
+        tone: 'error',
+        message,
+        fingerCode: finger.code,
+        action: 'capture',
+      });
+      setError(message);
     } finally {
       setBiometricAction('');
     }
@@ -1828,7 +1934,32 @@ const ServiceCenterDashboard = () => {
       return;
     }
 
+    const bridgeStatus = getBiometricBridgeStatus(biometricSource);
+    const enrolledFingerSet = new Set(
+      Array.isArray(selectedBooking?.biometrics?.enrolledFingerCodes) ? selectedBooking.biometrics.enrolledFingerCodes : [],
+    );
+    const preflightMessage = getBiometricPreflightMessage('verifyFinger', finger, bridgeStatus, enrolledFingerSet.has(finger.code));
+    if (preflightMessage) {
+      setBiometricStatus({
+        tone: 'error',
+        message: preflightMessage,
+        fingerCode: finger.code,
+        action: 'verify',
+      });
+      setError(preflightMessage);
+      return;
+    }
+
     setBiometricAction(`verify:${finger.code}`);
+    setBiometricStatus({
+      tone: 'loading',
+      message:
+        biometricSource === 'usb_scanner'
+          ? `Waiting for USB scanner verification for ${finger.label}. Ask the customer to place the same finger on the device.`
+          : `Verification in progress for ${finger.label}…`,
+      fingerCode: finger.code,
+      action: 'verify',
+    });
     setError('');
 
     try {
@@ -1858,8 +1989,21 @@ const ServiceCenterDashboard = () => {
       } else {
         await refreshBookingBiometrics(selectedBooking.id || selectedBooking._id);
       }
+      setBiometricStatus({
+        tone: 'success',
+        message: `${finger.label} verified successfully.`,
+        fingerCode: finger.code,
+        action: 'verify',
+      });
     } catch (err) {
-      setError(err?.message || `Unable to verify ${finger.label}`);
+      const message = err?.message || `Unable to verify ${finger.label}`;
+      setBiometricStatus({
+        tone: 'error',
+        message,
+        fingerCode: finger.code,
+        action: 'verify',
+      });
+      setError(message);
     } finally {
       setBiometricAction('');
     }
@@ -2471,6 +2615,34 @@ const ServiceCenterDashboard = () => {
                                 </div>
                               </div>
 
+                              {biometricStatus.message ? (
+                                <div
+                                  className={`rounded-2xl border px-4 py-3 ${
+                                    biometricStatus.tone === 'error'
+                                      ? 'border-rose-200 bg-rose-50'
+                                      : biometricStatus.tone === 'success'
+                                        ? 'border-emerald-200 bg-emerald-50'
+                                        : 'border-sky-200 bg-sky-50'
+                                  }`}
+                                >
+                                  <div className="flex items-start gap-3">
+                                    {biometricStatus.tone === 'loading' ? (
+                                      <Loader2 size={16} className="mt-0.5 shrink-0 animate-spin text-sky-600" />
+                                    ) : biometricStatus.tone === 'success' ? (
+                                      <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-600" />
+                                    ) : (
+                                      <X size={16} className="mt-0.5 shrink-0 text-rose-600" />
+                                    )}
+                                    <div>
+                                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                        {biometricStatus.action ? `${biometricStatus.action} status` : 'Scanner status'}
+                                      </p>
+                                      <p className="mt-1 text-sm font-bold text-slate-900">{biometricStatus.message}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : null}
+
                               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                 <label className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                                   <div className="flex items-start gap-3">
@@ -2608,7 +2780,7 @@ const ServiceCenterDashboard = () => {
                                           className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-60"
                                         >
                                           {captureBusy ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
-                                          {enrolled ? 'Rescan' : 'Capture'}
+                                          {captureBusy ? 'Capturing…' : enrolled ? 'Rescan' : 'Capture'}
                                         </button>
                                         <button
                                           type="button"
@@ -2617,9 +2789,23 @@ const ServiceCenterDashboard = () => {
                                           className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                                         >
                                           {verifyBusy ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                                          Verify
+                                          {verifyBusy ? 'Verifying…' : 'Verify'}
                                         </button>
                                       </div>
+
+                                      {biometricStatus.fingerCode === finger.code ? (
+                                        <p
+                                          className={`mt-2 text-[11px] font-semibold ${
+                                            biometricStatus.tone === 'error'
+                                              ? 'text-rose-600'
+                                              : biometricStatus.tone === 'success'
+                                                ? 'text-emerald-700'
+                                                : 'text-sky-700'
+                                          }`}
+                                        >
+                                          {biometricStatus.message}
+                                        </p>
+                                      ) : null}
 
                                       {enrolled ? (
                                         <button
