@@ -300,6 +300,15 @@ const normalizeInspectionPhotoBridgeResult = (result) => {
   return null;
 };
 
+const isInspectionCameraBridgeAvailable = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return window.isServiceCenterCameraBridgeAvailable === true
+    || typeof window.__nativeServiceCenterCamera === 'function';
+};
+
 
 const canCompleteBooking = (booking) => {
   const inspection = booking?.rentalInspection || {};
@@ -605,11 +614,16 @@ const InspectionPhotoSlots = ({
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => onCameraCapture(field, index, slot.label)}
-                  className={`relative flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-[11px] font-black uppercase tracking-[0.12em] transition ${imageUrl ? accentClass.button : accentClass.primary} ${busy ? 'pointer-events-none opacity-60' : ''}`}
+                <label
+                  className={`relative flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-[11px] font-black uppercase tracking-[0.12em] transition ${imageUrl ? accentClass.button : accentClass.primary} ${busy ? 'pointer-events-none opacity-60' : ''}`}
+                  onClick={(event) => {
+                    if (!isInspectionCameraBridgeAvailable()) {
+                      return;
+                    }
+
+                    event.preventDefault();
+                    onCameraCapture(field, index, slot.label);
+                  }}
                 >
                   {busy && uploadingTarget === cameraTarget ? <Loader2 size={14} className="animate-spin" /> : imageUrl ? <RotateCcw size={14} /> : <Camera size={14} />}
                   {imageUrl ? 'Retake' : 'Take Photo'}
@@ -619,7 +633,7 @@ const InspectionPhotoSlots = ({
                     accept="image/*"
                     capture="environment"
                     disabled={busy}
-                    className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                     aria-label={`${imageUrl ? 'Retake' : 'Take'} ${slot.label} photo`}
                     onChange={(event) => {
                       const files = Array.from(event.target.files || []);
@@ -627,7 +641,7 @@ const InspectionPhotoSlots = ({
                       event.target.value = '';
                     }}
                   />
-                </button>
+                </label>
                 <label className={`relative flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[11px] font-black uppercase tracking-[0.12em] text-slate-700 transition hover:bg-slate-100 ${busy ? 'pointer-events-none opacity-60' : ''}`}>
                   {busy && uploadingTarget === uploadTarget ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}
                   Upload
@@ -940,6 +954,22 @@ const ServiceCenterDashboard = () => {
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const markInspectionCameraBridgeReady = () => {
+      window.isServiceCenterCameraBridgeAvailable = true;
+    };
+
+    window.addEventListener('serviceCenterCameraBridgeReady', markInspectionCameraBridgeReady);
+
+    return () => {
+      window.removeEventListener('serviceCenterCameraBridgeReady', markInspectionCameraBridgeReady);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!selectedBooking) {
       setBookingDraft({
         assignedStaffId: '',
@@ -1239,6 +1269,11 @@ const ServiceCenterDashboard = () => {
   };
 
   const requestInspectionCameraCapture = async (field, slotIndex, slotLabel = '') => {
+    if (!isInspectionCameraBridgeAvailable()) {
+      triggerInspectionCameraInput(field, slotIndex);
+      return;
+    }
+
     const uploadTarget = `${field}:${slotIndex}:camera`;
     setUploadingConditionSection(uploadTarget);
     setError('');
@@ -1253,6 +1288,30 @@ const ServiceCenterDashboard = () => {
     };
 
     try {
+      if (typeof window.__nativeServiceCenterCamera === 'function') {
+        const nativeResult = await window.__nativeServiceCenterCamera(payload);
+        const normalized = normalizeInspectionPhotoBridgeResult(nativeResult);
+        if (normalized?.dataUrl) {
+          const uploadResult = await uploadService.uploadImage(normalized.dataUrl, 'service-center-condition');
+          const imageUrl = uploadResult?.url || uploadResult?.secureUrl || '';
+          if (!imageUrl) {
+            throw new Error('Unable to upload selected image');
+          }
+
+          const currentBooking =
+            bookings.find((item) => String(item.id || item._id) === String(selectedBooking?.id || selectedBooking?._id)) || null;
+          const currentInspection = currentBooking?.rentalInspection || {};
+          const currentImages = normalizeConditionImages(currentInspection[field]);
+
+          await handleBookingUpdate(selectedBooking?.id || selectedBooking?._id, {
+            rentalInspection: {
+              [field]: setConditionImageAtSlot(currentImages, slotIndex, imageUrl),
+            },
+          });
+          return;
+        }
+      }
+
       if (window?.flutter_inappwebview?.callHandler) {
         const handlers = [
           'serviceCenterCamera',
