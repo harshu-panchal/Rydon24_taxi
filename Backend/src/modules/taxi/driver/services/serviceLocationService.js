@@ -10,7 +10,7 @@ export const listDriverServiceLocations = async () => {
     .map((location) => ({
       _id: location._id,
       id: location._id,
-      name: location.name || location.service_location_name,
+      name: location.service_location_name || location.name,
       service_location_name: location.service_location_name || location.name,
       address: location.address || '',
       country: location.country || '',

@@ -390,6 +390,8 @@ const normalizeListResponse = (payload) => {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.results)) return payload.results;
   if (Array.isArray(payload?.data?.results)) return payload.data.results;
+  if (Array.isArray(payload?.data?.data?.results)) return payload.data.data.results;
+  if (Array.isArray(payload?.data?.data)) return payload.data.data;
   if (Array.isArray(payload?.data)) return payload.data;
   return [];
 };
@@ -398,7 +400,11 @@ const normalizeId = (value) =>
   String(value?._id || value?.id || value?.service_location_id || value || '').trim();
 
 const resolveStoreServiceLocationId = (store = {}) =>
-  normalizeId(store.service_location_id);
+  normalizeId(
+    store.service_location_id ||
+    store.zone_id?.service_location_id ||
+    '',
+  );
 
 const getCurrentCoordinates = () =>
   new Promise((resolve) => {
@@ -635,8 +641,8 @@ const RentalVehicleDetail = () => {
 
   const selectedLocationMapPoint = useMemo(
     () =>
-      selectedServiceLocation?.primaryPoint ||
       selectedServiceLocation?.pickupPoints?.[0]?.position ||
+      selectedServiceLocation?.primaryPoint ||
       null,
     [selectedServiceLocation],
   );
@@ -653,11 +659,11 @@ const RentalVehicleDetail = () => {
         const isSelected = String(locationItem.id) === String(selectedServiceLocationId);
         const isClosest = index === 0 && Boolean(userCoordinates);
 
-        if (locationItem.primaryPoint) {
+        if (locationItem.primaryPoint && (!locationItem.pickupPoints || locationItem.pickupPoints.length === 0)) {
           markers.push({
             key: `location-${locationItem.id}`,
             position: locationItem.primaryPoint,
-            title: locationItem.name,
+            title: locationItem.pickupLabel || locationItem.name,
             type: 'location',
             locationId: locationItem.id,
             isSelected,
@@ -669,7 +675,7 @@ const RentalVehicleDetail = () => {
           markers.push({
             key: `pickup-${locationItem.id}-${pickupPoint.id || pickupIndex}`,
             position: pickupPoint.position,
-            title: `${locationItem.name} pickup point`,
+            title: pickupPoint.name || locationItem.pickupLabel || `${locationItem.name} pickup point`,
             type: 'pickup',
             locationId: locationItem.id,
             isSelected,
@@ -767,12 +773,15 @@ const RentalVehicleDetail = () => {
           ? allLocations.filter((item) => allowedLocationIds.has(normalizeId(item)))
           : allLocations;
 
-        const options = scopedLocations
+        const optionsFromLocations = scopedLocations
           .map((item) => {
             const id = normalizeId(item);
             const locationStores = scopedStores.filter(
               (store) => resolveStoreServiceLocationId(store) === id,
             );
+            const primaryStore = locationStores.find(
+              (store) => String(store.name || '').trim() || String(store.address || '').trim(),
+            ) || locationStores[0] || null;
             const pickupPoints = locationStores
               .map((store, storeIndex) => {
                 const position = toMapPoint(store.latitude, store.longitude);
@@ -811,14 +820,16 @@ const RentalVehicleDetail = () => {
 
             return {
               id,
-              name: item.name || item.service_location_name || 'Service location',
+              name: item.service_location_name || item.name || 'Service location',
+              pickupLabel: primaryStore?.name || '',
               address:
+                primaryStore?.address ||
                 item.address ||
-                locationStores.find((store) => store.address)?.address ||
+                primaryStore?.name ||
                 '',
               latitude: Number(item.latitude),
               longitude: Number(item.longitude),
-              primaryPoint,
+              primaryPoint: pickupPoints[0]?.position || primaryPoint,
               pickupPoints,
               distanceKm: nearestDistanceKm,
               distanceLabel: formatDistance(nearestDistanceKm),
@@ -838,6 +849,66 @@ const RentalVehicleDetail = () => {
 
             return left.name.localeCompare(right.name);
           });
+
+        const options =
+          optionsFromLocations.length > 0
+            ? optionsFromLocations
+            : scopedStores
+                .map((store, storeIndex) => {
+                  const resolvedLocationId = resolveStoreServiceLocationId(store);
+                  const matchedLocation = allLocations.find(
+                    (item) => normalizeId(item) === resolvedLocationId,
+                  );
+                  const position = toMapPoint(store.latitude, store.longitude);
+
+                  if (!position) {
+                    return null;
+                  }
+
+                  const distanceKm = calculateDistanceKm(coords, {
+                    latitude: store.latitude,
+                    longitude: store.longitude,
+                  });
+
+                  return {
+                    id: resolvedLocationId || String(store._id || store.id || `store-${storeIndex}`),
+                    name:
+                      matchedLocation?.service_location_name ||
+                      matchedLocation?.name ||
+                      store.zone_id?.name ||
+                      'Service location',
+                    pickupLabel: store.name || '',
+                    address: store.address || store.name || '',
+                    latitude: Number(store.latitude),
+                    longitude: Number(store.longitude),
+                    primaryPoint: position,
+                    pickupPoints: [
+                      {
+                        id: String(store._id || store.id || `pickup-${storeIndex}`),
+                        name: store.name || `Pickup point ${storeIndex + 1}`,
+                        address: store.address || '',
+                        position,
+                      },
+                    ],
+                    distanceKm,
+                    distanceLabel: formatDistance(distanceKm),
+                    storeCount: 1,
+                  };
+                })
+                .filter(Boolean)
+                .sort((left, right) => {
+                  const leftDistance = left.distanceKm;
+                  const rightDistance = right.distanceKm;
+
+                  if (Number.isFinite(leftDistance) && Number.isFinite(rightDistance)) {
+                    return leftDistance - rightDistance;
+                  }
+
+                  if (Number.isFinite(leftDistance)) return -1;
+                  if (Number.isFinite(rightDistance)) return 1;
+
+                  return left.name.localeCompare(right.name);
+                });
 
         setServiceLocations(options);
         setSelectedServiceLocationId(options[0]?.id || '');
@@ -1364,6 +1435,11 @@ const RentalVehicleDetail = () => {
                             <div className="mt-1 flex items-start gap-2">
                               <MapPin size={13} className="mt-0.5 shrink-0 text-orange-400" />
                               <div>
+                                {item.pickupLabel ? (
+                                  <p className="text-[12px] font-black text-slate-700">
+                                    {item.pickupLabel}
+                                  </p>
+                                ) : null}
                                 <p className="text-[12px] font-bold text-slate-600">
                                   {item.address || `${appName} pickup point`}
                                 </p>

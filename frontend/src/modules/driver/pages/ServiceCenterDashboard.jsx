@@ -226,38 +226,144 @@ const normalizeBiometricCaptureSource = (source = '', fallback = 'usb_scanner') 
   return biometricSourceOptions.some((item) => item.value === fallback) ? fallback : 'unknown';
 };
 
+const withImageDataUrlPrefix = (value = '') => {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('data:image/')) return trimmed;
+  if (/^[A-Za-z0-9+/=]+$/.test(trimmed) && trimmed.length > 120) {
+    return `data:image/png;base64,${trimmed}`;
+  }
+  return trimmed;
+};
+
+const pickFirstBiometricValue = (...values) =>
+  values.find((value) => value !== undefined && value !== null && String(value).trim() !== '') || '';
+
+const parseBridgeObject = (result) => {
+  if (!result) return result;
+  if (typeof result === 'string') {
+    const trimmed = result.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        return result;
+      }
+    }
+  }
+  return result;
+};
+
 const normalizeBridgeResult = (result, preferredSource, action) => {
-  if (!result || typeof result !== 'object') {
+  const parsedResult = parseBridgeObject(result);
+  if (!parsedResult || typeof parsedResult !== 'object') {
+    return parsedResult;
+  }
+
+  const payload =
+    (parsedResult.data && typeof parsedResult.data === 'object' && parsedResult.data)
+    || (parsedResult.payload && typeof parsedResult.payload === 'object' && parsedResult.payload)
+    || parsedResult.result
+    || parsedResult;
+
+  if (!payload || typeof payload !== 'object') {
     return result;
   }
 
-  const normalizedSource = normalizeBiometricCaptureSource(result.captureSource || result.source, preferredSource);
+  const normalizedSource = normalizeBiometricCaptureSource(
+    payload.captureSource || payload.source || parsedResult.captureSource || parsedResult.source,
+    preferredSource,
+  );
 
   if (action === 'captureFinger') {
     return {
-      ...result,
-      templateData: result.templateData || result.template || '',
-      templateFormat: result.templateFormat || 'vendor-template',
-      previewImage: result.previewImage || result.imageBase64 || result.imageUrl || '',
-      qualityScore: result.qualityScore,
+      ...parsedResult,
+      ...payload,
+      templateData: String(
+        pickFirstBiometricValue(
+          payload.templateData,
+          payload.template,
+          payload.fingerprintTemplate,
+          payload.isoTemplate,
+          payload.ansiTemplate,
+          payload.wsqTemplate,
+          payload.rawTemplate,
+          parsedResult.templateData,
+          parsedResult.template,
+          parsedResult.fingerprintTemplate,
+          parsedResult.isoTemplate,
+        ),
+      ).trim(),
+      templateFormat: String(
+        pickFirstBiometricValue(
+          payload.templateFormat,
+          payload.format,
+          payload.templateType,
+          parsedResult.templateFormat,
+          parsedResult.format,
+          'vendor-template',
+        ),
+      ).trim(),
+      previewImage: withImageDataUrlPrefix(
+        pickFirstBiometricValue(
+          payload.previewImage,
+          payload.imageBase64,
+          payload.base64Image,
+          payload.bitmap,
+          payload.image,
+          payload.imageUrl,
+          parsedResult.previewImage,
+          parsedResult.imageBase64,
+          parsedResult.base64Image,
+          parsedResult.bitmap,
+          parsedResult.image,
+          parsedResult.imageUrl,
+        ),
+      ),
+      qualityScore: payload.qualityScore ?? payload.quality ?? parsedResult.qualityScore ?? parsedResult.quality,
       captureSource: normalizedSource,
+      deviceLabel: pickFirstBiometricValue(payload.deviceLabel, payload.deviceName, parsedResult.deviceLabel, parsedResult.deviceName),
+      scannerSerial: pickFirstBiometricValue(payload.scannerSerial, payload.deviceId, payload.serialNumber, parsedResult.scannerSerial, parsedResult.deviceId, parsedResult.serialNumber),
+      sampleCount: payload.sampleCount ?? payload.captureCount ?? parsedResult.sampleCount ?? parsedResult.captureCount,
+      notes: pickFirstBiometricValue(payload.notes, payload.message, parsedResult.notes, parsedResult.message),
     };
   }
 
   if (action === 'verifyFinger') {
-    const localMatch = result.localMatch ?? result.match;
+    const localMatch = payload.localMatch ?? payload.match ?? parsedResult.localMatch ?? parsedResult.match;
     return {
-      ...result,
+      ...parsedResult,
+      ...payload,
       localMatch: typeof localMatch === 'boolean' ? localMatch : undefined,
       verificationStatus:
-        result.verificationStatus ||
-        result.status ||
+        payload.verificationStatus ||
+        payload.status ||
+        parsedResult.verificationStatus ||
+        parsedResult.status ||
         (localMatch === true ? 'matched' : localMatch === false ? 'failed' : ''),
+      templateData: String(
+        pickFirstBiometricValue(
+          payload.templateData,
+          payload.template,
+          payload.fingerprintTemplate,
+          payload.isoTemplate,
+          parsedResult.templateData,
+          parsedResult.template,
+          parsedResult.fingerprintTemplate,
+          parsedResult.isoTemplate,
+        ),
+      ).trim(),
       captureSource: normalizedSource,
+      matchScore: payload.matchScore ?? payload.score ?? parsedResult.matchScore ?? parsedResult.score,
+      notes: pickFirstBiometricValue(payload.notes, payload.message, parsedResult.notes, parsedResult.message),
     };
   }
 
-  return result;
+  return {
+    ...parsedResult,
+    ...payload,
+    captureSource: normalizedSource,
+  };
 };
 
 const buildInspectionCameraInputId = (field = '', slotIndex = 0) =>

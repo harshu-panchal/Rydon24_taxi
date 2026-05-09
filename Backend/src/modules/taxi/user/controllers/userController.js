@@ -138,20 +138,27 @@ export const listPublicServiceLocations = async (_req, res) => {
 export const listPublicServiceStores = async (_req, res) => {
   const results = (await listServiceStores())
     .filter(isActiveEntity)
-    .map((store) => ({
-      _id: store._id,
-      id: store.id || store._id,
-      name: store.name || '',
-      address: store.address || '',
-      owner_name: store.owner_name || '',
-      owner_phone: store.owner_phone || '',
-      service_location_id: store.service_location_id,
-      zone_id: store.zone_id,
-      latitude: Number(store.latitude ?? null),
-      longitude: Number(store.longitude ?? null),
-      status: store.status || 'active',
-      active: store.active !== false,
-    }));
+    .map((store) => {
+      const resolvedServiceLocationId =
+        store.service_location_id ||
+        store.zone_id?.service_location_id ||
+        null;
+
+      return {
+        _id: store._id,
+        id: store.id || store._id,
+        name: store.name || '',
+        address: store.address || '',
+        owner_name: store.owner_name || '',
+        owner_phone: store.owner_phone || '',
+        service_location_id: resolvedServiceLocationId,
+        zone_id: store.zone_id,
+        latitude: Number(store.latitude ?? null),
+        longitude: Number(store.longitude ?? null),
+        status: store.status || 'active',
+        active: store.active !== false,
+      };
+    });
 
   res.json({
     success: true,
