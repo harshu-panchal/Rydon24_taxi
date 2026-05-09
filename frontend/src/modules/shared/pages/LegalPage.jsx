@@ -168,10 +168,15 @@ const legalContent = {
       {
         title: 'Refund timelines',
         bullets: [
-          'UPI or wallet refunds are usually processed within 1 to 3 business days after approval.',
-          'Card, bank, or gateway refunds are usually processed within 5 to 10 business days after approval.',
+          'UPI or wallet refunds are usually credited within 1 to 3 business days after approval.',
+          'Card, bank, or gateway refunds are usually credited within 5 to 10 business days after approval.',
           'If a banking partner delays settlement, the final credit timeline may depend on the payment provider.',
         ],
+      },
+      {
+        title: 'Refund eligibility',
+        body:
+          'Eligible refunds will be credited within 5 to 10 business days to the original payment method, subject to banking timelines.',
       },
       {
         title: 'How to request a refund',
