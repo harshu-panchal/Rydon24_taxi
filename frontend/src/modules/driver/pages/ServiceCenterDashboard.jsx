@@ -575,7 +575,7 @@ const InspectionPhotoSlots = ({
                     className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                     aria-label={`${imageUrl ? 'Retake' : 'Take'} ${slot.label} photo`}
                     onChange={(event) => {
-                      const files = event.target.files;
+                      const files = Array.from(event.target.files || []);
                       onFileSelect(field, index, files, 'camera');
                       event.target.value = '';
                     }}
@@ -591,7 +591,7 @@ const InspectionPhotoSlots = ({
                     className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                     aria-label={`Upload ${slot.label} photo`}
                     onChange={(event) => {
-                      const files = event.target.files;
+                      const files = Array.from(event.target.files || []);
                       onFileSelect(field, index, files, 'upload');
                       event.target.value = '';
                     }}
