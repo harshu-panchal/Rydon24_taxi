@@ -1678,16 +1678,41 @@ const ServiceCenterDashboard = () => {
     }
 
     if (window?.flutter_inappwebview?.callHandler) {
+      const command = `fingerprint:${preferredSource}:${bridgeAction}`;
+      const legacyCommand = `fingerprint:${bridgeAction}`;
+      const handlerAttempts = [
+        { handlerName: 'fingerprint', args: [command, bridgePayload] },
+        { handlerName: 'fingerprint', args: [legacyCommand, bridgePayload] },
+        { handlerName: command, args: [bridgePayload] },
+        { handlerName: legacyCommand, args: [bridgePayload] },
+        { handlerName: action, args: [bridgePayload] },
+        { handlerName: bridgeAction, args: [bridgePayload] },
+      ];
+
       try {
-        const command = `fingerprint:${preferredSource}:${bridgeAction}`;
-        const result = await window.flutter_inappwebview.callHandler('fingerprint', command, bridgePayload);
-        if (result !== undefined && result !== null && result !== '') {
-          return normalizeBridgeResult(result, preferredSource, action);
+        for (const attempt of handlerAttempts) {
+          try {
+            const result = await window.flutter_inappwebview.callHandler(
+              attempt.handlerName,
+              ...attempt.args,
+            );
+            if (result !== undefined && result !== null && result !== '') {
+              return normalizeBridgeResult(result, preferredSource, action);
+            }
+          } catch {
+            // Try the next known Flutter bridge signature.
+          }
         }
       } catch (error) {
         if (window.isBiometricBridgeAvailable === true) {
           throw error;
         }
+      }
+
+      if (window.isBiometricBridgeAvailable === true) {
+        throw new Error(
+          `The ${getBiometricSourceActionLabel(preferredSource).toLowerCase()} bridge is connected, but the APK did not return any scan result. Check the Flutter WebView handler names and make sure it returns template data for ${bridgeAction}.`,
+        );
       }
     }
 
