@@ -328,6 +328,12 @@ export const updateServiceCenterStaff = (staffId, payload) =>
 export const deleteServiceCenterStaff = (staffId) =>
   api.delete(`/drivers/service-center/staff/${staffId}`, withDriverAuth());
 
+export const getServiceCenterStaffBiometrics = (staffId) =>
+  api.get(`/drivers/service-center/staff/${staffId}/biometrics`, withDriverAuth());
+
+export const enrollServiceCenterStaffBiometric = (payload) =>
+  api.post("/drivers/service-center/staff/biometrics/enroll", payload, withDriverAuth());
+
 export const getServiceCenterBookings = () =>
   api.get("/drivers/service-center/bookings", withDriverAuth());
 

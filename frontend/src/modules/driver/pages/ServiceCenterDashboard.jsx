@@ -139,6 +139,9 @@ const getBiometricSourceLabel = (source = '') =>
 
 const getBiometricBridgeStatus = (preferredSource = 'usb_scanner') => {
   if (typeof window === 'undefined') return 'unknown';
+  if (window.isBiometricBridgeAvailable === true && window?.flutter_inappwebview?.callHandler) {
+    return 'flutter-ready';
+  }
   if (window?.FingerprintBridge?.captureFinger) {
     if (typeof window.FingerprintBridge.getAvailability === 'function') {
       try {
@@ -158,6 +161,7 @@ const getBiometricBridgeStatus = (preferredSource = 'usb_scanner') => {
 
 const getBiometricBridgeBadge = (status, preferredSource = 'usb_scanner') => {
   if (status === 'device-ready') return `${getBiometricSourceLabel(preferredSource)} bridge ready`;
+  if (status === 'flutter-ready') return `Flutter biometric bridge ready for ${getBiometricSourceLabel(preferredSource)}`;
   if (status === 'flutter-handler') return `Flutter bridge ready for ${getBiometricSourceLabel(preferredSource)}`;
   if (status === 'unknown') return 'Bridge status unavailable';
   return `${getBiometricSourceLabel(preferredSource)} demo fallback`;
@@ -191,6 +195,44 @@ const persistBiometricSource = (bookingId, source) => {
   if (bookingId) {
     window.localStorage.setItem(getBiometricModeStorageKey(bookingId), normalizedSource);
   }
+};
+
+const getBridgeCommandAction = (action = '') => {
+  if (action === 'captureFinger') return 'capture';
+  if (action === 'verifyFinger') return 'verify';
+  if (action === 'getStatus') return 'status';
+  return action;
+};
+
+const normalizeBridgeResult = (result, preferredSource, action) => {
+  if (!result || typeof result !== 'object') {
+    return result;
+  }
+
+  if (action === 'captureFinger') {
+    return {
+      ...result,
+      templateData: result.templateData || result.template || '',
+      templateFormat: result.templateFormat || 'vendor-template',
+      qualityScore: result.qualityScore,
+      captureSource: result.captureSource || preferredSource,
+    };
+  }
+
+  if (action === 'verifyFinger') {
+    const localMatch = result.localMatch ?? result.match;
+    return {
+      ...result,
+      localMatch: typeof localMatch === 'boolean' ? localMatch : undefined,
+      verificationStatus:
+        result.verificationStatus ||
+        result.status ||
+        (localMatch === true ? 'matched' : localMatch === false ? 'failed' : ''),
+      captureSource: result.captureSource || preferredSource,
+    };
+  }
+
+  return result;
 };
 
 
@@ -720,6 +762,25 @@ const ServiceCenterDashboard = () => {
   }, [activeTab]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const markBridgeReady = () => {
+      window.isBiometricBridgeAvailable = true;
+    };
+
+    window.addEventListener('biometricBridgeReady', markBridgeReady);
+    if (window?.flutter_inappwebview?.callHandler) {
+      markBridgeReady();
+    }
+
+    return () => {
+      window.removeEventListener('biometricBridgeReady', markBridgeReady);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!selectedBooking) {
       setBookingDraft({
         assignedStaffId: '',
@@ -1064,31 +1125,23 @@ const ServiceCenterDashboard = () => {
       biometricSource: preferredSource,
       runtime: window?.flutter_inappwebview?.callHandler ? 'flutter-webview' : 'browser',
     };
+    const bridgeAction = getBridgeCommandAction(action);
 
     if (window?.FingerprintBridge && typeof window.FingerprintBridge[action] === 'function') {
       return window.FingerprintBridge[action](bridgePayload);
     }
 
     if (window?.flutter_inappwebview?.callHandler) {
-      const handlerNames = [
-        `fingerprint:${preferredSource}:${action}`,
-        `fingerprint:${action}`,
-      ];
-
-      let lastError = null;
-      for (const handlerName of handlerNames) {
-        try {
-          const result = await window.flutter_inappwebview.callHandler(handlerName, bridgePayload);
-          if (result !== undefined && result !== null && result !== '') {
-            return result;
-          }
-        } catch (error) {
-          lastError = error;
+      try {
+        const command = `fingerprint:${preferredSource}:${bridgeAction}`;
+        const result = await window.flutter_inappwebview.callHandler('fingerprint', command, bridgePayload);
+        if (result !== undefined && result !== null && result !== '') {
+          return normalizeBridgeResult(result, preferredSource, action);
         }
-      }
-
-      if (lastError) {
-        throw lastError;
+      } catch (error) {
+        if (window.isBiometricBridgeAvailable === true) {
+          throw error;
+        }
       }
     }
 
@@ -1120,6 +1173,7 @@ const ServiceCenterDashboard = () => {
       }
       return {
         verificationStatus: status,
+        localMatch: status === 'matched',
         matchScore: status === 'matched' ? 92 : 41,
         captureSource: preferredSource,
       };
@@ -1211,6 +1265,9 @@ const ServiceCenterDashboard = () => {
       const response = await verifyServiceCenterBookingFingerprint(selectedBooking.id || selectedBooking._id, {
         fingerCode: finger.code,
         verificationStatus: bridgeResult?.verificationStatus || bridgeResult?.status || 'matched',
+        localMatch: bridgeResult?.localMatch ?? bridgeResult?.match,
+        templateData: bridgeResult?.templateData || bridgeResult?.template || '',
+        captureSource: bridgeResult?.captureSource || biometricSource,
         matchScore: bridgeResult?.matchScore,
         notes: bridgeResult?.notes || '',
       });
@@ -2220,6 +2277,9 @@ const ServiceCenterDashboard = () => {
                       <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
                         <div className="rounded-full bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600 shadow-sm">
                           {(activeBookingCountByStaffId.get(String(member.id || member._id)) ?? member.bookingCount ?? 0)} bookings
+                        </div>
+                        <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700 shadow-sm">
+                          {Number(member?.biometrics?.enrolledFingerCount || 0)} biometric fingers
                         </div>
                         <div className="grid w-full grid-cols-2 gap-2 sm:w-auto">
                           <button

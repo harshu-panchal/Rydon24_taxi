@@ -59,6 +59,8 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
   const [countryBoundaryPaths, setCountryBoundaryPaths] = useState([]);
   const [boundaryLoading, setBoundaryLoading] = useState(false);
   const mapRef = useRef(null);
+  const polygonRef = useRef(null);
+  const polygonListenersRef = useRef([]);
   const circleRef = useRef(null);
   const circleListenersRef = useRef([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -190,28 +192,58 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
     circle.setMap(null);
   };
 
+  const syncPolygonState = () => {
+    const polygon = polygonRef.current;
+    if (!polygon) {
+      return polygonCoords;
+    }
+
+    const nextCoords = polygon
+      .getPath()
+      .getArray()
+      .map((point) => ({
+        lat: point.lat(),
+        lng: point.lng(),
+      }));
+
+    setPolygonCoords(nextCoords);
+    return nextCoords;
+  };
+
   const syncCircleState = () => {
     const circle = circleRef.current;
     if (!circle) {
-      return;
+      return {
+        center: circleCenter,
+        radiusMeters: circleRadiusMeters,
+      };
     }
 
     const center = circle.getCenter();
     const radius = circle.getRadius();
+    const nextCenter = center
+      ? {
+          lat: center.lat(),
+          lng: center.lng(),
+        }
+      : circleCenter;
+    const nextRadiusMeters = Number.isFinite(radius)
+      ? String(Math.round(radius))
+      : circleRadiusMeters;
 
-    if (center) {
-      setCircleCenter({
-        lat: center.lat(),
-        lng: center.lng(),
-      });
-    }
+    setCircleCenter(nextCenter);
+    setCircleRadiusMeters(nextRadiusMeters);
 
-    if (Number.isFinite(radius)) {
-      setCircleRadiusMeters(String(Math.round(radius)));
-    }
+    return {
+      center: nextCenter,
+      radiusMeters: nextRadiusMeters,
+    };
   };
 
   useEffect(() => () => {
+    polygonListenersRef.current.forEach((listener) => listener?.remove?.());
+    polygonListenersRef.current = [];
+    polygonRef.current = null;
     circleListenersRef.current.forEach((listener) => listener?.remove?.());
     circleListenersRef.current = [];
     circleRef.current = null;
@@ -232,12 +264,19 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
   };
 
   const handleSave = async () => {
-    const hasPolygon = boundaryMode === 'polygon' && polygonCoords.length >= 3;
+    const syncedPolygonCoords = boundaryMode === 'polygon' ? syncPolygonState() : polygonCoords;
+    const syncedCircle = boundaryMode === 'circle'
+      ? syncCircleState()
+      : { center: circleCenter, radiusMeters: circleRadiusMeters };
+    const effectiveCircleCenter = syncedCircle?.center || circleCenter;
+    const effectiveCircleRadiusMeters = syncedCircle?.radiusMeters || circleRadiusMeters;
+
+    const hasPolygon = boundaryMode === 'polygon' && syncedPolygonCoords.length >= 3;
     const hasCircle =
       boundaryMode === 'circle' &&
-      Number(circleRadiusMeters) > 0 &&
-      Number.isFinite(Number(circleCenter?.lat)) &&
-      Number.isFinite(Number(circleCenter?.lng));
+      Number(effectiveCircleRadiusMeters) > 0 &&
+      Number.isFinite(Number(effectiveCircleCenter?.lat)) &&
+      Number.isFinite(Number(effectiveCircleCenter?.lng));
 
     if (!formData.name.English.trim() || (!hasPolygon && !hasCircle)) {
       alert("Please add a zone name and draw a polygon or circle boundary on the map.");
@@ -248,9 +287,9 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
       const payload = {
         ...formData,
         boundary_mode: boundaryMode,
-        coordinates: boundaryMode === 'polygon' ? polygonCoords : undefined,
-        circle_center: boundaryMode === 'circle' ? circleCenter : undefined,
-        circle_radius_meters: boundaryMode === 'circle' ? Number(circleRadiusMeters) : undefined,
+        coordinates: boundaryMode === 'polygon' ? syncedPolygonCoords : undefined,
+        circle_center: boundaryMode === 'circle' ? effectiveCircleCenter : undefined,
+        circle_radius_meters: boundaryMode === 'circle' ? Number(effectiveCircleRadiusMeters) : undefined,
         name: formData.name.English
       };
       const res = editingId 
@@ -767,6 +806,24 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                              <Polygon
                                paths={polygonCoords}
                                options={{ fillColor: '#4f46e5', strokeColor: '#4f46e5', strokeWeight: 2, fillOpacity: 0.25, editable: true, draggable: true }}
+                               onLoad={(polygon) => {
+                                 polygonListenersRef.current.forEach((listener) => listener?.remove?.());
+                                 polygonListenersRef.current = [];
+                                 polygonRef.current = polygon;
+                                 const path = polygon.getPath();
+                                 polygonListenersRef.current = [
+                                   path.addListener('set_at', syncPolygonState),
+                                   path.addListener('insert_at', syncPolygonState),
+                                   path.addListener('remove_at', syncPolygonState),
+                                   polygon.addListener('dragend', syncPolygonState),
+                                   polygon.addListener('mouseup', syncPolygonState),
+                                 ];
+                               }}
+                               onUnmount={() => {
+                                 polygonListenersRef.current.forEach((listener) => listener?.remove?.());
+                                 polygonListenersRef.current = [];
+                                 polygonRef.current = null;
+                               }}
                              />
                            )}
                            {boundaryMode === 'circle' && circleCenter && Number(circleRadiusMeters) > 0 ? (

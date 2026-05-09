@@ -72,6 +72,32 @@ const rentalTrackingAlertSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const rentalTrackingPointSchema = new mongoose.Schema(
+  {
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: 'Point',
+      required: true,
+    },
+    coordinates: {
+      type: [Number],
+      required: true,
+      validate: {
+        validator(value) {
+          return (
+            Array.isArray(value) &&
+            value.length === 2 &&
+            value.every((coordinate) => Number.isFinite(Number(coordinate)))
+          );
+        },
+        message: 'rentalTracking.currentLocation.coordinates must be [lng, lat]',
+      },
+    },
+  },
+  { _id: false },
+);
+
 const rentalBookingRequestSchema = new mongoose.Schema(
   {
     userId: {
@@ -464,15 +490,8 @@ const rentalBookingRequestSchema = new mongoose.Schema(
         default: 'unknown',
       },
       currentLocation: {
-        type: {
-          type: String,
-          enum: ['Point'],
-          default: 'Point',
-        },
-        coordinates: {
-          type: [Number],
-          default: [],
-        },
+        type: rentalTrackingPointSchema,
+        default: undefined,
       },
       lastLocationAt: {
         type: Date,

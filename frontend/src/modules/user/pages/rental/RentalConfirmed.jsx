@@ -50,6 +50,74 @@ const buildRentalBookingPayload = ({
     : null,
 });
 
+const FALLBACK_DURATION_HOURS = {
+  Hourly: 1,
+  'Half-Day': 6,
+  Daily: 24,
+};
+
+const durationSuffix = (hours) => {
+  const value = Number(hours || 0);
+  if (value <= 1) return '/hr';
+  if (value <= 12) return `/${value}hr`;
+  return '/day';
+};
+
+const resolveRentalPricingSummary = ({
+  ride = {},
+  vehicle = null,
+  duration = 'Hourly',
+} = {}) => {
+  const selectedPackage = ride?.selectedPackage || null;
+  const fallbackVehiclePrice =
+    Number(vehicle?.prices?.[duration] || 0) ||
+    Number(ride?.totalCost || 0) ||
+    Number(ride?.advancePaid || ride?.payableNow || 0) ||
+    0;
+  const basePrice = Math.max(
+    Number(ride?.basePrice || 0),
+    Number(selectedPackage?.price || 0),
+    fallbackVehiclePrice,
+  );
+  const includedHours = Math.max(
+    Number(ride?.includedHours || 0),
+    Number(selectedPackage?.durationHours || 0),
+    Number(ride?.requestedHours || 0) > 0 && Number(ride?.extraHourRate || selectedPackage?.extraHourPrice || 0) <= 0
+      ? Number(ride?.requestedHours || 0)
+      : 0,
+    Number(FALLBACK_DURATION_HOURS[duration] || 1),
+  );
+  const extraHourRate = Math.max(
+    Number(ride?.extraHourRate || 0),
+    Number(selectedPackage?.extraHourPrice || 0),
+    0,
+  );
+
+  return {
+    label: selectedPackage?.label || duration,
+    basePrice,
+    includedHours,
+    extraHourRate,
+    suffix: durationSuffix(selectedPackage?.durationHours || includedHours),
+  };
+};
+
+const computeRentalLiveCharge = (ride = {}, pricingSummary = {}, elapsedSeconds = 0) => {
+  const elapsedHours = Math.max(0, Number(elapsedSeconds || 0) / 3600);
+  const basePrice = Math.max(
+    Number(pricingSummary?.basePrice || 0),
+    Number(ride?.advancePaid || ride?.payableNow || 0),
+    0,
+  );
+  const includedHours = Math.max(1, Number(pricingSummary?.includedHours || 0));
+  const extraHourRate = Math.max(0, Number(pricingSummary?.extraHourRate || 0));
+  const packageCharge = elapsedHours <= includedHours
+    ? basePrice
+    : basePrice + Math.ceil(Math.max(0, elapsedHours - includedHours)) * extraHourRate;
+
+  return Math.max(Number(ride?.advancePaid || ride?.payableNow || 0), packageCharge);
+};
+
 const RentalConfirmed = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -120,11 +188,6 @@ const RentalConfirmed = () => {
     return () => window.clearInterval(timer);
   }, [activeRentalRide, isCompletedRentalRide, isEndRequestPending]);
 
-  if (!state.vehicle && !activeRentalRide) {
-    navigate('/rental');
-    return null;
-  }
-
   const {
     vehicle,
     duration,
@@ -137,24 +200,33 @@ const RentalConfirmed = () => {
     paymentMethodLabel,
     bookingReference,
   } = state;
+  const bookingPricingSummary = resolveRentalPricingSummary({
+    ride: { ...state, advancePaid: deposit },
+    vehicle,
+    duration: duration || 'Hourly',
+  });
   const liveElapsedSeconds = activeRentalRide?.assignedAt
     ? isEndRequestPending && Number(activeRentalRide?.finalElapsedMinutes || 0) > 0
       ? Number(activeRentalRide.finalElapsedMinutes || 0) * 60
       : Math.max(1, Math.floor((clockNow - new Date(activeRentalRide.assignedAt || activeRentalRide.createdAt).getTime()) / 1000))
     : Number(activeRentalRide?.elapsedMinutes || 0) * 60;
+  const liveElapsedMinutes = Math.max(1, Math.ceil(liveElapsedSeconds / 60));
 
   const liveElapsedLabel = `${Math.floor(liveElapsedSeconds / 3600)}h ${String(Math.floor((liveElapsedSeconds % 3600) / 60)).padStart(2, '0')}m ${String(liveElapsedSeconds % 60).padStart(2, '0')}s`;
+  const activePricingSummary = useMemo(
+    () =>
+      resolveRentalPricingSummary({
+        ride: activeRentalRide || {},
+        vehicle: activeRentalRide?.assignedVehicle || activeRentalRide?.vehicle || state.vehicle,
+        duration: state.duration || 'Hourly',
+      }),
+    [activeRentalRide, state.duration, state.vehicle],
+  );
 
   const liveCharge = activeRentalRide
     ? isEndRequestPending && Number(activeRentalRide?.finalCharge || 0) > 0
       ? Number(activeRentalRide.finalCharge || 0)
-      : Math.min(
-          Number(activeRentalRide.totalCost || 0),
-          Math.max(
-            Number(activeRentalRide.advancePaid || 0),
-            Number(activeRentalRide.hourlyRate || 0) * (liveElapsedSeconds / 3600),
-          ),
-        )
+      : computeRentalLiveCharge(activeRentalRide, activePricingSummary, liveElapsedSeconds)
     : 0;
   const completedCharge = Number(activeRentalRide?.finalCharge || activeRentalRide?.fare || 0);
   const activeVehicleImage = activeRentalRide?.assignedVehicle?.image || activeRentalRide?.vehicle?.image || state.vehicle?.image;
@@ -216,6 +288,11 @@ const RentalConfirmed = () => {
     }
     return liveCharge;
   }, [completedCharge, isCompletedRentalRide, liveCharge]);
+
+  if (!state.vehicle && !activeRentalRide) {
+    navigate('/rental');
+    return null;
+  }
 
   const handleEndRide = async () => {
     if (!activeRentalRide?.rideId) return;
@@ -315,6 +392,28 @@ const RentalConfirmed = () => {
                 <p className="mt-1 text-[16px] font-black text-slate-900">
                   Rs.{Math.max(0, finalTotal - Number(activeRentalRide.advancePaid || activeRentalRide.payableNow || 0)).toFixed(0)}
                 </p>
+              </div>
+              <div className="rounded-[14px] bg-slate-50 px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Pricing Plan</p>
+                    <p className="mt-1 text-[14px] font-black text-slate-900">
+                      {activePricingSummary.label} - Rs.{Number(activePricingSummary.basePrice || 0).toFixed(0)}
+                      <span className="ml-1 text-[11px] font-bold text-slate-400">{activePricingSummary.suffix}</span>
+                    </p>
+                    <p className="mt-1 text-[11px] font-bold text-slate-500">
+                      Includes {Number(activePricingSummary.includedHours || 0)} hr
+                      {Number(activePricingSummary.includedHours || 0) === 1 ? '' : 's'}
+                      {Number(activePricingSummary.extraHourRate || 0) > 0
+                        ? `, then Rs.${Number(activePricingSummary.extraHourRate || 0).toFixed(0)}/extra hr`
+                        : ' with no extra-hour charge'}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold text-slate-400">Live billed</p>
+                    <p className="mt-1 text-[16px] font-black text-slate-900">Rs.{liveCharge.toFixed(0)}</p>
+                  </div>
+                </div>
               </div>
               <div className="flex items-center gap-2.5">
                 <MapPin size={13} className="text-orange-400 shrink-0" />
@@ -451,6 +550,10 @@ const RentalConfirmed = () => {
               <div>
                 <p className="text-[10px] font-bold text-slate-400">Rental cost (at pickup)</p>
                 <p className="text-[15px] font-black text-slate-900">Rs.{totalCost}</p>
+                <p className="mt-0.5 text-[10px] font-bold text-slate-400">
+                  {bookingPricingSummary.label} - Rs.{Number(bookingPricingSummary.basePrice || 0).toFixed(0)}
+                  {bookingPricingSummary.suffix}
+                </p>
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-bold text-slate-400">Advance paid</p>

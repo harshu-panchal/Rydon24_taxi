@@ -1599,10 +1599,44 @@ const serializeServiceCenterStaff = (staff = {}, bookingCount = 0) => ({
   phone: staff.phone || "",
   active: staff.active !== false,
   status: staff.status || "active",
+  biometrics: {
+    enrolledFingerCount: Array.isArray(staff.biometrics) ? staff.biometrics.length : 0,
+    enrolledFingerCodes: Array.isArray(staff.biometrics)
+      ? staff.biometrics.map((item) => String(item?.fingerCode || "")).filter(Boolean)
+      : [],
+    updatedAt: Array.isArray(staff.biometrics) && staff.biometrics.length > 0
+      ? staff.biometrics.reduce((latest, item) => {
+          const candidate = item?.lastUpdated ? new Date(item.lastUpdated) : null;
+          return !latest || (candidate && candidate > latest) ? candidate : latest;
+        }, null)
+      : null,
+  },
   bookingCount: Number(bookingCount || 0),
   createdAt: staff.createdAt || null,
   updatedAt: staff.updatedAt || null,
 });
+
+const serializeServiceCenterStaffBiometrics = (staff = {}) => {
+  const biometrics = Array.isArray(staff?.biometrics) ? staff.biometrics : [];
+
+  return {
+    staffId: String(staff?._id || ""),
+    enrolledFingerCount: biometrics.length,
+    enrolledFingerCodes: biometrics.map((item) => String(item?.fingerCode || "")).filter(Boolean),
+    fingers: biometrics.map((item) => ({
+      fingerCode: String(item?.fingerCode || "").toUpperCase(),
+      displayName: item?.displayName || getBiometricFingerDisplayName(item?.fingerCode),
+      source: item?.source || "unknown",
+      templateFormat: item?.templateFormat || "vendor-template",
+      qualityScore: Number(item?.qualityScore || 0) || null,
+      lastUpdated: item?.lastUpdated || null,
+      lastVerifiedAt: item?.lastVerifiedAt || null,
+      verificationCount: Number(item?.verificationCount || 0),
+      templateStored: Boolean(item?.templateEncrypted),
+      templateHashPreview: item?.templateHash ? String(item.templateHash).slice(0, 10) : "",
+    })),
+  };
+};
 
 const getBiometricFingerDisplayName = (fingerCode = "") =>
   String(fingerCode || "")
@@ -1900,6 +1934,37 @@ const resolveAuthenticatedServiceCenterAccess = async (req) => {
     canManageVehicles: false,
     canAssignBookings: false,
   };
+};
+
+const ensureServiceCenterStaffTargetAccess = async (req, staffId = "") => {
+  const access = await resolveAuthenticatedServiceCenterAccess(req);
+  const center = access?.center;
+
+  if (!center?._id) {
+    throw new ApiError(403, "Service center access is required");
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(staffId)) {
+    throw new ApiError(400, "Valid staff id is required");
+  }
+
+  const staff = await ServiceCenterStaff.findOne({
+    _id: staffId,
+    serviceCenterId: center._id,
+  });
+
+  if (!staff) {
+    throw new ApiError(404, "Service center staff member not found");
+  }
+
+  if (
+    access.role === "service_center_staff" &&
+    String(access.staff?._id || "") !== String(staff._id || "")
+  ) {
+    throw new ApiError(403, "Staff can only manage their own biometric profile");
+  }
+
+  return { access, center, staff };
 };
 
 const serializeDriverNotification = (item = {}) => ({
@@ -3187,6 +3252,85 @@ export const deleteServiceCenterStaffMember = async (req, res) => {
   });
 };
 
+export const getServiceCenterStaffBiometrics = async (req, res) => {
+  const { staff } = await ensureServiceCenterStaffTargetAccess(
+    req,
+    String(req.params?.staffId || "").trim(),
+  );
+
+  res.json({
+    success: true,
+    data: {
+      staff: serializeServiceCenterStaff(staff.toObject(), 0),
+      biometrics: serializeServiceCenterStaffBiometrics(staff.toObject()),
+    },
+  });
+};
+
+export const enrollServiceCenterStaffBiometric = async (req, res) => {
+  const requestedStaffId = String(req.body?.staffId || req.params?.staffId || "").trim();
+  const { access, staff } = await ensureServiceCenterStaffTargetAccess(req, requestedStaffId);
+
+  const fingerCode = String(req.body?.fingerCode || req.body?.fingerName || "").trim().toUpperCase();
+  const templateData = String(req.body?.template || req.body?.templateData || "").trim();
+  const source = String(req.body?.source || "unknown").trim().toLowerCase();
+  const templateFormat = String(req.body?.templateFormat || "vendor-template").trim();
+  const qualityScore = req.body?.qualityScore === undefined || req.body?.qualityScore === null
+    ? null
+    : Number(req.body.qualityScore);
+
+  if (!BIOMETRIC_FINGER_CODES.includes(fingerCode)) {
+    throw new ApiError(400, "Valid fingerCode is required");
+  }
+
+  if (!templateData) {
+    throw new ApiError(400, "template is required");
+  }
+
+  if (!BIOMETRIC_CAPTURE_SOURCES.includes(source)) {
+    throw new ApiError(400, "Invalid source");
+  }
+
+  if (qualityScore !== null && (!Number.isFinite(qualityScore) || qualityScore < 0)) {
+    throw new ApiError(400, "qualityScore must be a positive number");
+  }
+
+  staff.biometrics = Array.isArray(staff.biometrics) ? staff.biometrics : [];
+  const existingIndex = staff.biometrics.findIndex(
+    (item) => String(item?.fingerCode || "").trim().toUpperCase() === fingerCode,
+  );
+
+  const nextBiometric = {
+    fingerCode,
+    displayName: getBiometricFingerDisplayName(fingerCode),
+    templateEncrypted: encryptBiometricTemplate(templateData),
+    templateHash: buildBiometricTemplateHash(templateData),
+    templateFormat,
+    source,
+    qualityScore,
+    lastUpdated: new Date(),
+    lastVerifiedAt: existingIndex >= 0 ? staff.biometrics[existingIndex]?.lastVerifiedAt || null : null,
+    verificationCount: existingIndex >= 0 ? Number(staff.biometrics[existingIndex]?.verificationCount || 0) : 0,
+  };
+
+  if (existingIndex >= 0) {
+    staff.biometrics.splice(existingIndex, 1, nextBiometric);
+  } else {
+    staff.biometrics.push(nextBiometric);
+  }
+
+  await staff.save();
+
+  res.status(201).json({
+    success: true,
+    data: {
+      enrolledByRole: access.role,
+      staff: serializeServiceCenterStaff(staff.toObject(), 0),
+      biometrics: serializeServiceCenterStaffBiometrics(staff.toObject()),
+    },
+  });
+};
+
 const ensureServiceCenterBookingAccess = async (req, bookingId = "") => {
   const access = await resolveAuthenticatedServiceCenterAccess(req);
   const center = access?.center;
@@ -3499,13 +3643,14 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
   const matchScore = req.body?.matchScore === undefined || req.body?.matchScore === null
     ? null
     : Number(req.body.matchScore);
+  const templateData = String(req.body?.templateData || req.body?.template || "").trim();
+  const captureSource = String(req.body?.captureSource || req.body?.source || "").trim().toLowerCase();
+  const localMatch = req.body?.localMatch === undefined
+    ? null
+    : normalizeBoolean(req.body.localMatch);
 
   if (!BIOMETRIC_FINGER_CODES.includes(fingerCode)) {
     throw new ApiError(400, "Valid fingerCode is required");
-  }
-
-  if (!["matched", "failed", "low_quality"].includes(verificationStatus)) {
-    throw new ApiError(400, "verificationStatus must be matched, failed, or low_quality");
   }
 
   const fingerIndex = Array.isArray(profile.fingers)
@@ -3516,17 +3661,33 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
     throw new ApiError(404, "This finger has not been enrolled for the booking");
   }
 
+  let resolvedVerificationStatus = verificationStatus;
+  const enrolledFinger = profile.fingers[fingerIndex];
+
+  if (captureSource === "phone_sensor" && localMatch !== null) {
+    resolvedVerificationStatus = localMatch ? "matched" : "failed";
+  } else if (captureSource === "usb_scanner" && templateData) {
+    resolvedVerificationStatus =
+      buildBiometricTemplateHash(templateData) === String(enrolledFinger?.templateHash || "")
+        ? "matched"
+        : "failed";
+  }
+
+  if (!["matched", "failed", "low_quality"].includes(resolvedVerificationStatus)) {
+    throw new ApiError(400, "verificationStatus must be matched, failed, or low_quality");
+  }
+
   const now = new Date();
   profile.fingers[fingerIndex].lastVerifiedAt = now;
   profile.fingers[fingerIndex].verificationCount =
     Number(profile.fingers[fingerIndex].verificationCount || 0) + 1;
   profile.verificationSummary = {
     lastVerifiedAt: now,
-    lastVerificationStatus: verificationStatus,
+    lastVerificationStatus: resolvedVerificationStatus,
     lastVerifiedFingerCode: fingerCode,
     lastMatchScore: matchScore,
   };
-  profile.status = verificationStatus === "matched" ? "verified" : profile.status || "completed";
+  profile.status = resolvedVerificationStatus === "matched" ? "verified" : profile.status || "completed";
 
   appendBiometricAuditLog(profile, {
     action: "finger_verified",
@@ -3535,7 +3696,7 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
     actorRole: access.role,
     notes,
     matchScore,
-    verificationStatus,
+    verificationStatus: resolvedVerificationStatus,
   });
 
   await profile.save();
@@ -3545,6 +3706,12 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
     data: {
       booking: serializeServiceCenterBooking(booking.toObject(), profile.toObject()),
       biometrics: serializeBiometricProfile(profile.toObject()),
+      verification: {
+        source: captureSource || enrolledFinger?.captureSource || "unknown",
+        localMatch: localMatch === true,
+        usedTemplateComparison: captureSource === "usb_scanner" && Boolean(templateData),
+        verificationStatus: resolvedVerificationStatus,
+      },
     },
   });
 };

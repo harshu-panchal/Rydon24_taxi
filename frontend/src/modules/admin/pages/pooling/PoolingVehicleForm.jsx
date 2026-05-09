@@ -3,15 +3,13 @@ import {
   Plus,
   ArrowLeft,
   Car,
-  CheckCircle2,
-  ChevronRight,
   Info,
   Save,
   Trash2,
-  Users,
   Armchair,
   Grid3X3,
-  RefreshCcw
+  RefreshCcw,
+  Eye
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
@@ -29,9 +27,11 @@ const VEHICLE_TYPES = [
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50';
 const labelClass = 'mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400';
 
-const PoolingVehicleForm = () => {
+const PoolingVehicleForm = ({ mode: propMode }) => {
   const navigate = useNavigate();
   const { id } = useParams();
+  const isViewMode = propMode === 'view';
+  const isEditMode = Boolean(id) && !isViewMode;
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   
@@ -50,9 +50,6 @@ const PoolingVehicleForm = () => {
       layout: [] // Array of { r, c, type: 'seat' | 'empty' | 'driver' }
     }
   });
-
-  const [imageUrl, setImageUrl] = useState('');
-
   const generateDefaultLayout = (type) => {
     const config = VEHICLE_TYPES.find(t => t.id === type) || VEHICLE_TYPES[2];
     const rows = config.grid[0];
@@ -108,15 +105,6 @@ const PoolingVehicleForm = () => {
     }
   };
 
-  const addImage = () => {
-    if (!imageUrl.trim()) return;
-    setFormData(prev => ({
-      ...prev,
-      images: [...prev.images, imageUrl.trim()]
-    }));
-    setImageUrl('');
-  };
-
   const removeImage = (index) => {
     setFormData(prev => ({
       ...prev,
@@ -125,6 +113,7 @@ const PoolingVehicleForm = () => {
   };
 
   const handleTypeChange = (type) => {
+    if (isViewMode) return;
     setFormData(prev => ({
       ...prev,
       vehicleType: type,
@@ -133,6 +122,7 @@ const PoolingVehicleForm = () => {
   };
 
   const toggleSeat = (r, c) => {
+    if (isViewMode) return;
     const layout = [...formData.blueprint.layout];
     const index = layout.findIndex(s => s.r === r && s.c === c);
     if (index === -1) return;
@@ -157,9 +147,10 @@ const PoolingVehicleForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isViewMode) return;
     setSaving(true);
     try {
-      if (id) {
+      if (isEditMode) {
         await adminService.updatePoolingVehicle(id, formData);
         toast.success('Vehicle updated successfully');
       } else {
@@ -196,17 +187,31 @@ const PoolingVehicleForm = () => {
           </button>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-black text-slate-900">{id ? 'Edit Vehicle' : 'Add New Vehicle'}</h1>
-              <p className="text-sm font-medium text-slate-500">Configure vehicle details and seat layout blueprint</p>
+              <h1 className="text-3xl font-black text-slate-900">
+                {isViewMode ? 'View Vehicle' : isEditMode ? 'Edit Vehicle' : 'Add New Vehicle'}
+              </h1>
+              <p className="text-sm font-medium text-slate-500">
+                {isViewMode ? 'Review vehicle details and seat layout blueprint' : 'Configure vehicle details and seat layout blueprint'}
+              </p>
             </div>
-            <button
-              onClick={handleSubmit}
-              disabled={saving}
-              className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-black text-white shadow-xl shadow-indigo-200 transition-all hover:bg-indigo-700 active:scale-95 disabled:opacity-50"
-            >
-              {saving ? <RefreshCcw size={18} className="animate-spin" /> : <Save size={18} />}
-              {id ? 'Save Changes' : 'Create Vehicle'}
-            </button>
+            {isViewMode ? (
+              <button
+                onClick={() => navigate(`/admin/pooling/vehicles/edit/${id}`)}
+                className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-black text-white shadow-xl shadow-indigo-200 transition-all hover:bg-indigo-700 active:scale-95"
+              >
+                <Save size={18} />
+                Edit Vehicle
+              </button>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-black text-white shadow-xl shadow-indigo-200 transition-all hover:bg-indigo-700 active:scale-95 disabled:opacity-50"
+              >
+                {saving ? <RefreshCcw size={18} className="animate-spin" /> : <Save size={18} />}
+                {isEditMode ? 'Save Changes' : 'Create Vehicle'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -224,11 +229,12 @@ const PoolingVehicleForm = () => {
                         key={type.id}
                         type="button"
                         onClick={() => handleTypeChange(type.id)}
+                        disabled={isViewMode}
                         className={`rounded-xl border p-3 text-center transition-all ${
                           formData.vehicleType === type.id
                             ? 'border-indigo-600 bg-indigo-50 text-indigo-600'
                             : 'border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-200'
-                        }`}
+                        } ${isViewMode ? 'cursor-default opacity-80' : ''}`}
                       >
                         <p className="text-[10px] font-black uppercase tracking-tight">{type.label}</p>
                       </button>
@@ -244,6 +250,7 @@ const PoolingVehicleForm = () => {
                     onChange={(e) => setFormData({...formData, name: e.target.value})}
                     placeholder="e.g. Toyota Camry"
                     className={inputClass}
+                    readOnly={isViewMode}
                   />
                 </div>
                 <div>
@@ -255,6 +262,7 @@ const PoolingVehicleForm = () => {
                     onChange={(e) => setFormData({...formData, vehicleModel: e.target.value})}
                     placeholder="e.g. Hybrid 2024"
                     className={inputClass}
+                    readOnly={isViewMode}
                   />
                 </div>
                 <div>
@@ -266,6 +274,7 @@ const PoolingVehicleForm = () => {
                     onChange={(e) => setFormData({...formData, vehicleNumber: e.target.value})}
                     placeholder="e.g. MP09-AB-1234"
                     className={inputClass}
+                    readOnly={isViewMode}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -283,6 +292,7 @@ const PoolingVehicleForm = () => {
                       onChange={(e) => setFormData({...formData, color: e.target.value})}
                       placeholder="e.g. Black"
                       className={inputClass}
+                      readOnly={isViewMode}
                     />
                   </div>
                 </div>
@@ -293,57 +303,68 @@ const PoolingVehicleForm = () => {
               <div className="mb-6 flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-black text-slate-900">Vehicle Images</h3>
-                  <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Add multiple photos of the vehicle</p>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                    {isViewMode ? 'Vehicle photo gallery' : 'Add multiple photos of the vehicle'}
+                  </p>
                 </div>
-                <div className="relative">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={async (e) => {
-                      const file = e.target.files[0];
-                      if (!file) return;
-                      
-                      const reader = new FileReader();
-                      reader.onloadend = async () => {
-                        const base64 = reader.result;
-                        const loadingToast = toast.loading('Uploading image...');
-                        try {
-                          const res = await adminService.uploadImage(base64);
-                          setFormData(prev => ({
-                            ...prev,
-                            images: [...prev.images, res.data.url]
-                          }));
-                          toast.success('Image uploaded', { id: loadingToast });
-                        } catch (error) {
-                          toast.error('Upload failed', { id: loadingToast });
-                        }
-                      };
-                      reader.readAsDataURL(file);
-                    }}
-                    className="absolute inset-0 cursor-pointer opacity-0"
-                    id="vehicle-image-upload"
-                  />
-                  <label 
-                    htmlFor="vehicle-image-upload"
-                    className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-indigo-50 px-4 py-2 text-xs font-black uppercase tracking-wide text-indigo-600 transition hover:bg-indigo-100"
-                  >
-                    <Plus size={16} />
-                    Upload Image
-                  </label>
-                </div>
+                {isViewMode ? (
+                  <div className="inline-flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-2 text-xs font-black uppercase tracking-wide text-slate-500">
+                    <Eye size={14} />
+                    Read Only
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={async (e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        
+                        const reader = new FileReader();
+                        reader.onloadend = async () => {
+                          const base64 = reader.result;
+                          const loadingToast = toast.loading('Uploading image...');
+                          try {
+                            const res = await adminService.uploadImage(base64);
+                            setFormData(prev => ({
+                              ...prev,
+                              images: [...prev.images, res.data.url]
+                            }));
+                            toast.success('Image uploaded', { id: loadingToast });
+                          } catch (error) {
+                            toast.error('Upload failed', { id: loadingToast });
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                      className="absolute inset-0 cursor-pointer opacity-0"
+                      id="vehicle-image-upload"
+                    />
+                    <label 
+                      htmlFor="vehicle-image-upload"
+                      className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-indigo-50 px-4 py-2 text-xs font-black uppercase tracking-wide text-indigo-600 transition hover:bg-indigo-100"
+                    >
+                      <Plus size={16} />
+                      Upload Image
+                    </label>
+                  </div>
+                )}
               </div>
               
               <div className="grid grid-cols-3 gap-3">
                 {formData.images.map((img, idx) => (
                   <div key={idx} className="group relative aspect-square overflow-hidden rounded-2xl bg-slate-100 border border-slate-200 shadow-sm">
                     <img src={img} alt="" className="h-full w-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => removeImage(idx)}
-                      className="absolute right-2 top-2 rounded-lg bg-rose-500 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100 shadow-lg"
-                    >
-                      <Trash2 size={12} />
-                    </button>
+                    {!isViewMode ? (
+                      <button
+                        type="button"
+                        onClick={() => removeImage(idx)}
+                        className="absolute right-2 top-2 rounded-lg bg-rose-500 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100 shadow-lg"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    ) : null}
                   </div>
                 ))}
                 {formData.images.length === 0 && (
@@ -390,18 +411,19 @@ const PoolingVehicleForm = () => {
                       gridTemplateRows: `repeat(${formData.blueprint.rows}, minmax(0, 1fr))`
                     }}
                   >
-                    {formData.blueprint.layout.map((item, idx) => (
+                    {formData.blueprint.layout.map((item) => (
                       <button
                         key={`${item.r}-${item.c}`}
                         type="button"
                         onClick={() => toggleSeat(item.r, item.c)}
+                        disabled={isViewMode}
                         className={`group relative h-16 w-16 flex items-center justify-center rounded-2xl transition-all ${
                           item.type === 'seat' 
                             ? 'bg-indigo-50 text-indigo-600 border-2 border-indigo-200 hover:bg-indigo-600 hover:text-white' 
                             : item.type === 'driver'
                             ? 'bg-slate-900 text-white border-2 border-slate-900 cursor-default'
                             : 'bg-slate-100 text-slate-300 border-2 border-dashed border-slate-200 hover:bg-slate-200'
-                        }`}
+                        } ${isViewMode ? 'cursor-default' : ''}`}
                       >
                         {item.type === 'seat' && <Armchair size={24} />}
                         {item.type === 'driver' && <Grid3X3 size={24} />}
@@ -424,9 +446,10 @@ const PoolingVehicleForm = () => {
                 <div className="flex gap-3">
                   <Info className="text-amber-500 shrink-0" size={20} />
                   <p className="text-xs font-medium text-amber-700 leading-relaxed">
-                    <strong>Design Instructions:</strong> Click on any block to cycle through 
-                    <span className="font-bold"> Seat</span>, <span className="font-bold">Empty Space</span>, or 
-                    <span className="font-bold"> Driver</span>. The capacity is automatically calculated based on the number of active seats.
+                    <strong>{isViewMode ? 'Layout Preview:' : 'Design Instructions:'}</strong>{' '}
+                    {isViewMode
+                      ? 'This seating blueprint is shown in read-only mode so you can review how the pooling vehicle is configured.'
+                      : 'Click on any block to cycle through Seat, Empty Space, or Driver. The capacity is automatically calculated based on the number of active seats.'}
                   </p>
                 </div>
               </div>

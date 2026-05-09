@@ -1,5 +1,60 @@
 import mongoose from 'mongoose';
 
+const serviceCenterStaffBiometricSchema = new mongoose.Schema(
+  {
+    fingerCode: {
+      type: String,
+      required: true,
+      trim: true,
+      uppercase: true,
+    },
+    displayName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    templateEncrypted: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    templateHash: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    templateFormat: {
+      type: String,
+      default: 'vendor-template',
+      trim: true,
+    },
+    source: {
+      type: String,
+      enum: ['phone_sensor', 'usb_scanner', 'bluetooth_scanner', 'manual', 'unknown'],
+      default: 'unknown',
+    },
+    qualityScore: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    lastUpdated: {
+      type: Date,
+      default: Date.now,
+    },
+    lastVerifiedAt: {
+      type: Date,
+      default: null,
+    },
+    verificationCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+  },
+  { _id: false },
+);
+
 const serviceCenterStaffSchema = new mongoose.Schema(
   {
     serviceCenterId: {
@@ -38,6 +93,10 @@ const serviceCenterStaffSchema = new mongoose.Schema(
       type: String,
       default: '',
       trim: true,
+    },
+    biometrics: {
+      type: [serviceCenterStaffBiometricSchema],
+      default: [],
     },
   },
   { timestamps: true },

@@ -1107,6 +1107,10 @@ function App() {
                   path="pooling/vehicles/edit/:id"
                   element={<AdminPoolingVehicleForm />}
                 />
+                <Route
+                  path="pooling/vehicles/view/:id"
+                  element={<AdminPoolingVehicleForm mode="view" />}
+                />
                 <Route path="pooling/bookings" element={<AdminPoolingBookings />} />
                 <Route path="wallet/payment" element={<AdminWalletPayment />} />
                 <Route path="users" element={<AdminUserList />} />

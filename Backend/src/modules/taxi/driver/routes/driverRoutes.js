@@ -8,6 +8,7 @@ import {
   cancelOwnerBusBookingSeats,
   createDriverPaymentQr,
   createServiceCenterStaffMember,
+  enrollServiceCenterStaffBiometric,
   updateServiceCenterStaffMember,
   createDriverWithdrawalRequest,
   createServiceCenterVehicle,
@@ -39,6 +40,7 @@ import {
   getDriverScheduledRides,
   getServiceCenterBookings,
   getServiceCenterBookingBiometrics,
+  getServiceCenterStaffBiometrics,
   getServiceCenterStaffMembers,
   getServiceCenterVehicles,
   listOwnerBusServices,
@@ -337,6 +339,16 @@ driverRouter.delete(
   "/service-center/staff/:staffId",
   authenticate(["service_center"]),
   asyncHandler(deleteServiceCenterStaffMember),
+);
+driverRouter.get(
+  "/service-center/staff/:staffId/biometrics",
+  authenticate(["service_center", "service_center_staff"]),
+  asyncHandler(getServiceCenterStaffBiometrics),
+);
+driverRouter.post(
+  "/service-center/staff/biometrics/enroll",
+  authenticate(["service_center", "service_center_staff"]),
+  asyncHandler(enrollServiceCenterStaffBiometric),
 );
 driverRouter.get(
   "/service-center/bookings",
