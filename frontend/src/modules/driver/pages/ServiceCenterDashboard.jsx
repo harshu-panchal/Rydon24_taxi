@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -309,6 +309,20 @@ const isInspectionCameraBridgeAvailable = () => {
     || typeof window.__nativeServiceCenterCamera === 'function';
 };
 
+const stopMediaStream = (stream) => {
+  if (!stream || typeof stream.getTracks !== 'function') {
+    return;
+  }
+
+  stream.getTracks().forEach((track) => {
+    try {
+      track.stop();
+    } catch {
+      // Ignore cleanup errors while closing the camera stream.
+    }
+  });
+};
+
 
 const canCompleteBooking = (booking) => {
   const inspection = booking?.rentalInspection || {};
@@ -617,7 +631,7 @@ const InspectionPhotoSlots = ({
                 <label
                   className={`relative flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-[11px] font-black uppercase tracking-[0.12em] transition ${imageUrl ? accentClass.button : accentClass.primary} ${busy ? 'pointer-events-none opacity-60' : ''}`}
                   onClick={(event) => {
-                    if (!isInspectionCameraBridgeAvailable()) {
+                    if (busy) {
                       return;
                     }
 
@@ -709,6 +723,17 @@ const ServiceCenterDashboard = () => {
   const [error, setError] = useState('');
   const [staffForm, setStaffForm] = useState(buildStaffForm);
   const [previewImage, setPreviewImage] = useState('');
+  const [cameraCaptureState, setCameraCaptureState] = useState({
+    open: false,
+    field: '',
+    slotIndex: -1,
+    slotLabel: '',
+    bookingId: '',
+  });
+  const [cameraStream, setCameraStream] = useState(null);
+  const [cameraCaptureError, setCameraCaptureError] = useState('');
+  const [cameraCaptureBusy, setCameraCaptureBusy] = useState(false);
+  const cameraVideoRef = useRef(null);
   const [bookingDraft, setBookingDraft] = useState({
     assignedStaffId: '',
     status: 'pending',
@@ -952,6 +977,29 @@ const ServiceCenterDashboard = () => {
       window.removeEventListener('biometricBridgeReady', markBridgeReady);
     };
   }, []);
+
+  useEffect(() => {
+    const videoElement = cameraVideoRef.current;
+    if (!videoElement) {
+      return undefined;
+    }
+
+    if (cameraCaptureState.open && cameraStream) {
+      videoElement.srcObject = cameraStream;
+      const playPromise = videoElement.play?.();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {});
+      }
+      return undefined;
+    }
+
+    videoElement.srcObject = null;
+    return undefined;
+  }, [cameraCaptureState.open, cameraStream]);
+
+  useEffect(() => () => {
+    stopMediaStream(cameraStream);
+  }, [cameraStream]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -1257,6 +1305,106 @@ const ServiceCenterDashboard = () => {
     }
   };
 
+  const closeCameraCaptureModal = () => {
+    stopMediaStream(cameraStream);
+    setCameraStream(null);
+    setCameraCaptureBusy(false);
+    setCameraCaptureError('');
+    setCameraCaptureState({
+      open: false,
+      field: '',
+      slotIndex: -1,
+      slotLabel: '',
+      bookingId: '',
+    });
+  };
+
+  const openCameraCaptureModal = async (bookingId, field, slotIndex, slotLabel = '') => {
+    if (!navigator?.mediaDevices?.getUserMedia) {
+      triggerInspectionCameraInput(field, slotIndex);
+      return;
+    }
+
+    setCameraCaptureBusy(true);
+    setCameraCaptureError('');
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+        },
+        audio: false,
+      });
+
+      stopMediaStream(cameraStream);
+      setCameraStream(stream);
+      setCameraCaptureState({
+        open: true,
+        field,
+        slotIndex,
+        slotLabel,
+        bookingId: String(bookingId || ''),
+      });
+    } catch (captureError) {
+      triggerInspectionCameraInput(field, slotIndex);
+      setError(captureError?.message || 'Unable to access the camera');
+    } finally {
+      setCameraCaptureBusy(false);
+    }
+  };
+
+  const captureInspectionCameraFrame = async () => {
+    const videoElement = cameraVideoRef.current;
+    if (!videoElement || !cameraCaptureState.open || !cameraCaptureState.bookingId) {
+      return;
+    }
+
+    setCameraCaptureBusy(true);
+    setCameraCaptureError('');
+
+    try {
+      const width = Math.max(1, videoElement.videoWidth || 1280);
+      const height = Math.max(1, videoElement.videoHeight || 720);
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+
+      const context = canvas.getContext('2d');
+      if (!context) {
+        throw new Error('Unable to capture the camera frame');
+      }
+
+      context.drawImage(videoElement, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+      const uploadTarget = `${cameraCaptureState.field}:${cameraCaptureState.slotIndex}:camera`;
+      setUploadingConditionSection(uploadTarget);
+
+      const uploadResult = await uploadService.uploadImage(dataUrl, 'service-center-condition');
+      const imageUrl = uploadResult?.url || uploadResult?.secureUrl || '';
+      if (!imageUrl) {
+        throw new Error('Unable to upload selected image');
+      }
+
+      const currentBooking =
+        bookings.find((item) => String(item.id || item._id) === String(cameraCaptureState.bookingId)) || null;
+      const currentInspection = currentBooking?.rentalInspection || {};
+      const currentImages = normalizeConditionImages(currentInspection[cameraCaptureState.field]);
+
+      await handleBookingUpdate(cameraCaptureState.bookingId, {
+        rentalInspection: {
+          [cameraCaptureState.field]: setConditionImageAtSlot(currentImages, cameraCaptureState.slotIndex, imageUrl),
+        },
+      });
+
+      closeCameraCaptureModal();
+    } catch (captureError) {
+      setCameraCaptureError(captureError?.message || 'Unable to capture photo');
+    } finally {
+      setUploadingConditionSection('');
+      setCameraCaptureBusy(false);
+    }
+  };
+
   const triggerInspectionCameraInput = (field, slotIndex) => {
     if (typeof document === 'undefined') {
       return;
@@ -1269,6 +1417,11 @@ const ServiceCenterDashboard = () => {
   };
 
   const requestInspectionCameraCapture = async (field, slotIndex, slotLabel = '') => {
+    if (selectedBooking?.id || selectedBooking?._id) {
+      await openCameraCaptureModal(selectedBooking.id || selectedBooking._id, field, slotIndex, slotLabel);
+      return;
+    }
+
     if (!isInspectionCameraBridgeAvailable()) {
       triggerInspectionCameraInput(field, slotIndex);
       return;
@@ -2850,6 +3003,56 @@ const ServiceCenterDashboard = () => {
       </div>
 
       <AnimatePresence>
+        {cameraCaptureState.open ? (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-slate-950/90 p-4 backdrop-blur-sm">
+            <div className="mx-auto flex min-h-full max-w-xl items-center justify-center">
+              <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 16 }} className="w-full overflow-hidden rounded-[28px] border border-white/10 bg-slate-950 shadow-[0_28px_100px_rgba(15,23,42,0.45)]">
+                <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4 text-white">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45">Live Camera</p>
+                    <h3 className="mt-1 text-lg font-black">{cameraCaptureState.slotLabel || 'Inspection Photo'}</h3>
+                  </div>
+                  <button type="button" onClick={closeCameraCaptureModal} className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="p-4">
+                  <div className="overflow-hidden rounded-[24px] border border-white/10 bg-black">
+                    <video ref={cameraVideoRef} autoPlay playsInline muted className="aspect-[3/4] w-full object-cover" />
+                  </div>
+
+                  {cameraCaptureError ? (
+                    <p className="mt-3 rounded-2xl bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200">
+                      {cameraCaptureError}
+                    </p>
+                  ) : null}
+
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={closeCameraCaptureModal}
+                      disabled={cameraCaptureBusy}
+                      className="rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/10 disabled:opacity-60"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={captureInspectionCameraFrame}
+                      disabled={cameraCaptureBusy}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-400 disabled:opacity-60"
+                    >
+                      {cameraCaptureBusy ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
+                      Capture
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+        ) : null}
+
         {previewImage ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-slate-950/75 p-4 backdrop-blur-sm">
             <div className="mx-auto flex min-h-full max-w-5xl items-center justify-center">
