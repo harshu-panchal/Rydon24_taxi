@@ -705,6 +705,7 @@ const AdminLayout = () => {
             label: 'Bus Service',
             subItems: [
               { label: 'Fleet Manager', path: '/admin/bus-service', permission: 'bus_service.view' },
+              { label: 'Bus Commission', path: '/admin/bus-service/commission', permission: 'bus_service.view' },
               { label: 'Bus Bookings', path: '/admin/bus-service/bookings', permission: 'bus_service.view' },
             ],
           },
@@ -713,6 +714,7 @@ const AdminLayout = () => {
             label: 'Car Pooling',
             subItems: [
               { label: 'Pooling Vehicles', path: '/admin/pooling/vehicles', permission: 'pooling.view' },
+              { label: 'Pooling Commission', path: '/admin/pooling/commission', permission: 'pooling.view' },
               { label: 'Routes & Stops', path: '/admin/pooling/routes', permission: 'pooling.view' },
               { label: 'Pooling Bookings', path: '/admin/pooling/bookings', permission: 'pooling.view' },
             ],
