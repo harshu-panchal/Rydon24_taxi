@@ -3,15 +3,17 @@ import { motion } from 'framer-motion';
 import heroImg from '@/assets/landing/hero.png';
 import { useSettings } from '../../../shared/context/SettingsContext';
 
+import mobilityBanner from '@/assets/images/mobility-banner-cartoony.png';
+
 const AuthLayout = ({ children, title, subtitle }) => {
   const { settings } = useSettings();
   const appName = settings.general?.app_name || 'App';
   const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
 
   return (
-    <div className="min-h-screen bg-[#F8F9FB] flex flex-col lg:flex-row font-sans selection:bg-black selection:text-white overflow-x-hidden w-full">
+    <div className="h-screen w-screen bg-[#F8F9FB] flex flex-col lg:flex-row font-display selection:bg-black selection:text-white overflow-hidden fixed inset-0">
       {/* Left side (Desktop Only) */}
-      <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden bg-black">
+      <div className="hidden lg:flex lg:w-[55%] h-full relative overflow-hidden bg-black">
         {/* Background Image with Overlay */}
         <div className="absolute inset-0">
           <img 
@@ -22,7 +24,7 @@ const AuthLayout = ({ children, title, subtitle }) => {
           <div className="absolute inset-0 bg-gradient-to-tr from-black via-black/40 to-transparent"></div>
         </div>
 
-        <div className="relative z-10 w-full flex flex-col justify-between p-16">
+        <div className="relative z-10 w-full h-full flex flex-col justify-between p-16">
           <div className="flex items-center gap-3">
             {appLogo ? (
               <img
@@ -35,7 +37,7 @@ const AuthLayout = ({ children, title, subtitle }) => {
                 <div className="w-5 h-5 bg-black rounded-md"></div>
               </div>
             )}
-            <span className="text-2xl font-black tracking-tighter text-white">{appName}</span>
+            <span className="text-2xl font-black tracking-tighter text-white uppercase">{appName}</span>
           </div>
           
           <div className="max-w-xl">
@@ -44,8 +46,8 @@ const AuthLayout = ({ children, title, subtitle }) => {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 1, ease: "easeOut" }}
             >
-              <h2 className="text-7xl font-black text-white leading-[1.1] mb-6 tracking-tight">
-                Move with <br/><span className="text-white/60">Safety and Style.</span>
+              <h2 className="text-7xl font-black text-white leading-[1.1] mb-6 tracking-tight uppercase">
+                Move with <br/><span className="bg-gradient-to-r from-yellow-400 via-orange-500 to-magenta-500 bg-clip-text text-transparent">Safety & Style.</span>
               </h2>
               <p className="text-white/70 text-2xl font-medium mb-12 leading-relaxed">
                 Experience the next generation of urban mobility with {appName}. Reliable, fast, and always at your service.
@@ -74,35 +76,59 @@ const AuthLayout = ({ children, title, subtitle }) => {
       </div>
 
       {/* Right side (Mobile-first login card) */}
-      <div className="flex-1 flex items-start lg:items-center justify-center p-4 md:p-12 pt-36 lg:pt-12 relative w-full bg-white lg:bg-[#F8F9FB]">
+      <div className="flex-1 h-full flex flex-col items-center justify-center p-6 relative w-full bg-white lg:bg-[#F8F9FB] overflow-hidden">
+        {/* Subtle Background Banner */}
+        <div className="absolute inset-0 z-0 flex items-center justify-center opacity-[0.08] pointer-events-none overflow-hidden">
+          <motion.img 
+            animate={{ 
+              scale: [1, 1.2, 1],
+              rotate: [0, 5, 0]
+            }}
+            transition={{ 
+              duration: 25, 
+              repeat: Infinity, 
+              ease: "easeInOut" 
+            }}
+            src={mobilityBanner} 
+            className="w-full max-w-2xl h-auto object-contain"
+          />
+        </div>
+
+        {/* Vibrant Multi-color Background Blobs */}
+        <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-yellow-300/30 to-orange-500/30 rounded-full blur-[100px] -z-10"></div>
+        <div className="absolute bottom-0 left-0 w-80 h-80 bg-gradient-to-tr from-blue-400/20 to-magenta-600/20 rounded-full blur-[100px] -z-10"></div>
+
         {/* Mobile Header (Visible only on small screens) */}
-        <div className="lg:hidden absolute top-8 left-0 right-0 flex flex-col items-center px-4 text-center">
+        <div className="lg:hidden w-full flex flex-col items-center text-center mb-8 z-20">
             {appLogo ? (
-              <img
+              <motion.img
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
                 src={appLogo}
                 alt={`${appName} logo`}
-                className="h-14 w-14 rounded-2xl object-cover bg-white p-1.5 mb-3 shadow-lg shadow-black/10"
+                className="h-16 w-16 rounded-2xl object-cover bg-white p-1.5 mb-4 shadow-2xl shadow-black/10 border border-gray-50"
               />
             ) : (
-              <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center mb-2 shadow-lg shadow-black/10">
-                <div className="w-5 h-5 bg-white rounded-md"></div>
+              <div className="w-14 h-14 bg-gradient-to-br from-yellow-400 via-orange-500 to-magenta-500 rounded-2xl flex items-center justify-center mb-3 shadow-xl">
+                <div className="w-7 h-7 bg-white rounded-lg"></div>
               </div>
             )}
-            <span className="text-2xl font-black tracking-tighter text-black pb-2">{appName}</span>
+            <h2 className="text-2xl font-black tracking-tighter text-black uppercase mb-1">{appName}</h2>
+            <div className="w-8 h-1.5 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full"></div>
         </div>
 
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md bg-white rounded-[28px] md:rounded-[40px] p-8 md:p-12 shadow-[0_30px_70px_rgba(0,0,0,0.06)] border border-gray-100 lg:mt-0"
+          className="w-full max-w-md bg-white rounded-[40px] p-8 md:p-12 shadow-[0_40px_100px_rgba(0,0,0,0.06)] border border-gray-100/50 z-10 relative"
         >
           {title && (
-            <div className="mb-10 text-center lg:text-left">
-              <h1 className="text-3xl md:text-4xl font-black text-gray-900 leading-tight tracking-tight">
+            <div className="mb-8 text-center">
+              <h1 className="text-2xl md:text-3xl font-black text-gray-900 leading-tight tracking-tighter uppercase mb-4">
                 {title}
               </h1>
               {subtitle && (
-                <p className="text-gray-500 text-base font-medium mt-4 leading-relaxed">
+                <p className="text-gray-500 text-sm md:text-base font-medium leading-relaxed max-w-[280px] mx-auto">
                   {subtitle}
                 </p>
               )}
@@ -114,9 +140,9 @@ const AuthLayout = ({ children, title, subtitle }) => {
         </motion.div>
         
         {/* Helper footer link */}
-        <div className="absolute bottom-8 text-center w-full max-w-md">
-            <p className="text-gray-400 text-xs font-bold">
-              Need assistance? <a href="/support" className="text-black hover:underline ml-1">Contact Support</a>
+        <div className="mt-12 text-center w-full max-w-md z-20">
+            <p className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em]">
+              Need assistance? <a href="/support" className="text-black hover:text-orange-500 transition-colors ml-1">Contact Support</a>
             </p>
         </div>
       </div>

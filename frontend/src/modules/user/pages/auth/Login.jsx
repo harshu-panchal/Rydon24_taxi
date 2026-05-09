@@ -54,81 +54,92 @@ const Login = () => {
   return (
     <AuthLayout 
       title="Enter your mobile number" 
-      subtitle={`Fast. Affordable. Local rides with ${appName}.`}
+      subtitle={`Join ${appName} for fast, safe, and premium rides across the city.`}
     >
-      <form onSubmit={handleLogin} className="space-y-6">
+      <form onSubmit={handleLogin} className="space-y-8">
         <div className="space-y-4">
-          <label htmlFor="phone" className="text-sm font-semibold text-gray-700 tracking-tight ml-1">
+          <label htmlFor="phone" className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">
             Mobile Number
           </label>
-            <div className="flex items-center gap-2 bg-[#F6F6F6] rounded-2xl p-4 focus-within:ring-2 focus-within:ring-black/5 focus-within:bg-white transition-all border border-transparent">
-            <div className="flex items-center gap-1.5 pr-2 border-r border-gray-200 opacity-70">
-               <img src="https://flagcdn.com/w40/in.png" alt="India" className="w-4 h-2.5 object-cover rounded-sm" />
-               <span className="text-[14px] font-bold text-gray-800 tracking-tight">+91</span>
-            </div>
-            <div className="flex-1 flex items-center gap-2">
-               <Phone size={16} className="text-gray-400 opacity-50 shrink-0" />
-               <input 
+          <div className="group relative">
+            <div className="absolute -inset-0.5 bg-gradient-to-r from-yellow-400 via-orange-500 to-magenta-500 rounded-2xl blur opacity-20 group-focus-within:opacity-40 transition duration-1000 group-focus-within:duration-200"></div>
+            <div className="relative flex items-center gap-3 bg-white rounded-2xl p-4 transition-all border-2 border-gray-50 focus-within:border-yellow-400/50 shadow-sm">
+              <div className="flex items-center gap-2 pr-3 border-r-2 border-gray-100">
+                <img src="https://flagcdn.com/w40/in.png" alt="India" className="w-5 h-3.5 object-cover rounded-sm" />
+                <span className="text-[15px] font-bold text-gray-800 tracking-tight">+91</span>
+              </div>
+              <div className="flex-1 flex items-center gap-2">
+                <Phone size={18} className="text-gray-400 group-focus-within:text-yellow-500 transition-colors" />
+                <input 
                   type="tel" 
                   id="phone"
                   autoFocus
                   maxLength={10}
-                  placeholder="Enter 10-digit number"
-                  className="w-full bg-transparent border-none text-[17px] font-medium text-gray-900 placeholder:text-gray-300 focus:outline-none tracking-tight"
+                  placeholder="00000 00000"
+                  className="w-full bg-transparent border-none text-[17px] font-bold text-gray-900 placeholder:text-gray-200 focus:outline-none tracking-[0.1em]"
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
-               />
+                />
+              </div>
             </div>
           </div>
         </div>
 
         <motion.button 
+          whileHover={{ scale: 1.02, filter: "brightness(1.1)" }}
           whileTap={{ scale: 0.98 }}
           disabled={!isValidPhone || loading}
-          className={`w-full py-4 rounded-xl text-lg font-bold transition-all flex items-center justify-center gap-3 ${
+          className={`w-full py-5 rounded-2xl text-[14px] font-black transition-all flex items-center justify-center gap-3 shadow-2xl ${
             isValidPhone && !loading
-            ? 'bg-black text-white shadow-xl shadow-black/10' 
+            ? 'bg-gradient-to-r from-yellow-400 via-orange-500 to-magenta-500 text-white shadow-orange-500/30' 
             : 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
           }`}
         >
           {loading ? (
             <div className="flex items-center gap-3">
-              <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-              <span>Sending OTP...</span>
+              <span className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin"></span>
+              <span className="tracking-tight uppercase">Sending...</span>
             </div>
           ) : (
-            <span>Continue</span>
+            <span className="uppercase tracking-[0.15em]">Get Verification Code</span>
           )}
         </motion.button>
 
         {error && (
-          <p className="text-sm font-bold text-red-500 text-center">{error}</p>
+          <motion.p 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-xs font-bold text-red-500 text-center bg-red-50 py-3 rounded-xl border border-red-100"
+          >
+            {error}
+          </motion.p>
         )}
 
-        <div className="relative py-4">
+        <div className="relative py-2">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-gray-100"></div>
           </div>
-          <div className="relative flex justify-center text-xs uppercase tracking-widest font-bold">
-            <span className="bg-white px-4 text-gray-400">or</span>
+          <div className="relative flex justify-center text-[10px] uppercase tracking-[0.3em] font-black">
+            <span className="bg-white px-6 text-gray-300">Secure Login</span>
           </div>
         </div>
 
-        <div className="space-y-3">
-          <button type="button" className="w-full py-4 rounded-xl border border-gray-200 flex items-center justify-center gap-3 hover:bg-gray-50 transition-all group">
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
-            <span className="text-[15px] font-bold text-gray-700 group-hover:text-black">Continue with Google</span>
-          </button>
-          <button type="button" className="w-full py-4 rounded-xl border border-gray-200 flex items-center justify-center gap-3 hover:bg-gray-50 transition-all group">
-            <svg className="w-5 h-5" viewBox="0 0 384 512" fill="currentColor"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
-            <span className="text-[15px] font-bold text-gray-700 group-hover:text-black">Continue with Apple</span>
+        <div className="space-y-4">
+          <button 
+            type="button" 
+            className="w-full py-4 rounded-2xl border-2 border-gray-50 flex items-center justify-center gap-4 hover:bg-gray-50 hover:border-blue-100 transition-all group shadow-sm bg-white"
+          >
+            <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-gray-100 group-hover:scale-110 transition-transform">
+              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-4 h-4" />
+            </div>
+            <span className="text-[13px] font-black text-gray-500 group-hover:text-black uppercase tracking-wider">Continue with Google</span>
           </button>
         </div>
 
-        <p className="text-[12px] text-gray-400 font-medium text-center leading-relaxed px-2 mt-8">
+        <p className="text-[11px] text-gray-400 font-bold text-center leading-relaxed px-4 mt-8">
            By continuing, you agree to our 
-           <Link to="/terms" className="underline text-black hover:opacity-70 transition-colors ml-1">Terms</Link> & 
-           <Link to="/privacy" className="underline text-black hover:opacity-70 transition-colors ml-1">Privacy Policy</Link>
+           <Link to="/terms" className="text-black hover:text-orange-500 transition-colors mx-1 underline decoration-2 decoration-yellow-400 underline-offset-4">Terms</Link> & 
+           <Link to="/privacy" className="text-black hover:text-orange-500 transition-colors mx-1 underline decoration-2 decoration-yellow-400 underline-offset-4">Privacy Policy</Link>
         </p>
       </form>
     </AuthLayout>

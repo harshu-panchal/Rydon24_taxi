@@ -699,6 +699,29 @@ const Home = () => {
             height: 360,
           }}
         >
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-white via-white/40 to-transparent" />
+            <div className="relative z-10 flex h-full items-start justify-center px-6 pt-10 text-left">
+              <div className="flex max-w-[340px] flex-col items-start px-2 py-2 -translate-x-4">
+                <div className="text-[48px] font-black tracking-[-0.04em] text-[#FFB300] drop-shadow-[0_10px_30px_rgba(255,179,0,0.4)] leading-none">
+                  Rydon<span className="text-slate-900">24</span>
+                </div>
+                <div className="mt-2 text-[14px] font-sans italic font-black tracking-wide text-slate-800">
+                  Your Trusted Journey Partner
+                </div>
+                <div className="mt-2 text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
+                  Made for Everyone, Crafted for You.
+                  <img
+                    src="/flag-in.svg"
+                    alt="India"
+                    className="ml-0.5 inline-block h-[2.2em] w-[1.2em] align-[-0.88em]"
+                    draggable={false}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div
             aria-hidden="true"
             className="absolute inset-0 pointer-events-none"
@@ -716,29 +739,6 @@ const Home = () => {
                 ...footerIllustrationEdgeBlurMask,
               }}
             />
-          </div>
-
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute top-0 inset-x-0 h-48 bg-gradient-to-b from-white/80 via-white/35 to-transparent" />
-            <div className="relative z-10 flex h-full items-center justify-center px-6 pt-16 text-left">
-              <div className="flex max-w-[340px] flex-col items-start px-2 py-2 -translate-x-4 translate-y-10">
-                <div className="text-[48px] font-black tracking-[-0.04em] text-[#FFB300] drop-shadow-[0_10px_30px_rgba(255,179,0,0.4)] leading-none">
-                  RYDON<span className="text-slate-900">24</span>
-                </div>
-                <div className="mt-2 text-[14px] font-sans italic font-black tracking-wide text-slate-800">
-                  Your Trusted Journey Partner
-                </div>
-                <div className="mt-2 text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
-                  Made for Everyone, Crafted for You.
-                  <img
-                    src="/flag-in.svg"
-                    alt="India"
-                    className="ml-0.5 inline-block h-[2.2em] w-[1.2em] align-[-0.88em]"
-                    draggable={false}
-                  />
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
