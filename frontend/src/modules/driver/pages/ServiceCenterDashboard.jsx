@@ -260,6 +260,46 @@ const normalizeBridgeResult = (result, preferredSource, action) => {
   return result;
 };
 
+const buildInspectionCameraInputId = (field = '', slotIndex = 0) =>
+  `service-center-inspection-camera-${String(field)}-${String(slotIndex)}`;
+
+const normalizeInspectionPhotoBridgeResult = (result) => {
+  if (!result) {
+    return null;
+  }
+
+  if (typeof result === 'string') {
+    const trimmed = result.trim();
+    if (trimmed.startsWith('data:image/')) {
+      return { dataUrl: trimmed };
+    }
+    if (/^https?:\/\//i.test(trimmed)) {
+      return { imageUrl: trimmed };
+    }
+    return null;
+  }
+
+  const dataUrl = String(
+    result.dataUrl
+    || result.image
+    || result.imageBase64
+    || result.base64Image
+    || result.previewImage
+    || '',
+  ).trim();
+  const imageUrl = String(result.imageUrl || result.url || '').trim();
+
+  if (dataUrl.startsWith('data:image/')) {
+    return { ...result, dataUrl };
+  }
+
+  if (imageUrl) {
+    return { ...result, imageUrl };
+  }
+
+  return null;
+};
+
 
 const canCompleteBooking = (booking) => {
   const inspection = booking?.rentalInspection || {};
@@ -491,6 +531,7 @@ const InspectionPhotoSlots = ({
   images = [],
   uploadingTarget = '',
   onFileSelect,
+  onCameraCapture,
   onPreview,
   onRemove,
 }) => {
@@ -564,15 +605,21 @@ const InspectionPhotoSlots = ({
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <label className={`relative flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-[11px] font-black uppercase tracking-[0.12em] transition ${imageUrl ? accentClass.button : accentClass.primary} ${busy ? 'pointer-events-none opacity-60' : ''}`}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onCameraCapture(field, index, slot.label)}
+                  className={`relative flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-[11px] font-black uppercase tracking-[0.12em] transition ${imageUrl ? accentClass.button : accentClass.primary} ${busy ? 'pointer-events-none opacity-60' : ''}`}
+                >
                   {busy && uploadingTarget === cameraTarget ? <Loader2 size={14} className="animate-spin" /> : imageUrl ? <RotateCcw size={14} /> : <Camera size={14} />}
                   {imageUrl ? 'Retake' : 'Take Photo'}
                   <input
+                    id={buildInspectionCameraInputId(field, index)}
                     type="file"
                     accept="image/*"
                     capture="environment"
                     disabled={busy}
-                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                    className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
                     aria-label={`${imageUrl ? 'Retake' : 'Take'} ${slot.label} photo`}
                     onChange={(event) => {
                       const files = Array.from(event.target.files || []);
@@ -580,7 +627,7 @@ const InspectionPhotoSlots = ({
                       event.target.value = '';
                     }}
                   />
-                </label>
+                </button>
                 <label className={`relative flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[11px] font-black uppercase tracking-[0.12em] text-slate-700 transition hover:bg-slate-100 ${busy ? 'pointer-events-none opacity-60' : ''}`}>
                   {busy && uploadingTarget === uploadTarget ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}
                   Upload
@@ -1178,6 +1225,75 @@ const ServiceCenterDashboard = () => {
     } finally {
       setUpdatingBookingId('');
     }
+  };
+
+  const triggerInspectionCameraInput = (field, slotIndex) => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const input = document.getElementById(buildInspectionCameraInputId(field, slotIndex));
+    if (input && typeof input.click === 'function') {
+      input.click();
+    }
+  };
+
+  const requestInspectionCameraCapture = async (field, slotIndex, slotLabel = '') => {
+    const uploadTarget = `${field}:${slotIndex}:camera`;
+    setUploadingConditionSection(uploadTarget);
+    setError('');
+
+    const payload = {
+      type: 'service_center_inspection_photo',
+      action: 'capture',
+      field,
+      slotIndex,
+      slotLabel,
+      bookingId: selectedBooking?.id || selectedBooking?._id || '',
+    };
+
+    try {
+      if (window?.flutter_inappwebview?.callHandler) {
+        const handlers = [
+          'serviceCenterCamera',
+          'serviceCenterInspectionPhoto',
+          'captureInspectionPhoto',
+          'cameraCapture',
+        ];
+
+        for (const handlerName of handlers) {
+          try {
+            const result = await window.flutter_inappwebview.callHandler(handlerName, payload);
+            const normalized = normalizeInspectionPhotoBridgeResult(result);
+            if (normalized?.dataUrl) {
+              const uploadResult = await uploadService.uploadImage(normalized.dataUrl, 'service-center-condition');
+              const imageUrl = uploadResult?.url || uploadResult?.secureUrl || '';
+              if (!imageUrl) {
+                throw new Error('Unable to upload selected image');
+              }
+
+              const currentBooking =
+                bookings.find((item) => String(item.id || item._id) === String(selectedBooking?.id || selectedBooking?._id)) || null;
+              const currentInspection = currentBooking?.rentalInspection || {};
+              const currentImages = normalizeConditionImages(currentInspection[field]);
+
+              await handleBookingUpdate(selectedBooking?.id || selectedBooking?._id, {
+                rentalInspection: {
+                  [field]: setConditionImageAtSlot(currentImages, slotIndex, imageUrl),
+                },
+              });
+              return;
+            }
+          } catch {
+            // Try the next known handler name before falling back to the file input.
+          }
+        }
+      }
+    } finally {
+      setUploadingConditionSection('');
+    }
+
+    triggerInspectionCameraInput(field, slotIndex);
   };
 
   const refreshBookingBiometrics = async (bookingId) => {
@@ -2229,6 +2345,7 @@ const ServiceCenterDashboard = () => {
                                   onFileSelect={(field, slotIndex, fileList, source) =>
                                     uploadConditionImages(selectedBooking.id || selectedBooking._id, field, slotIndex, fileList, source)
                                   }
+                                  onCameraCapture={requestInspectionCameraCapture}
                                   onPreview={setPreviewImage}
                                   onRemove={removeConditionImage}
                                 />
@@ -2290,6 +2407,7 @@ const ServiceCenterDashboard = () => {
                                   onFileSelect={(field, slotIndex, fileList, source) =>
                                     uploadConditionImages(selectedBooking.id || selectedBooking._id, field, slotIndex, fileList, source)
                                   }
+                                  onCameraCapture={requestInspectionCameraCapture}
                                   onPreview={setPreviewImage}
                                   onRemove={removeConditionImage}
                                 />
