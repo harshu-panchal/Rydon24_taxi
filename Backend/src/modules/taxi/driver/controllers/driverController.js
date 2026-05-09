@@ -3546,6 +3546,7 @@ export const captureServiceCenterBookingFingerprint = async (req, res) => {
   const fingerCode = String(req.body?.fingerCode || "").trim().toUpperCase();
   const templateData = String(req.body?.templateData || "").trim();
   const templateFormat = String(req.body?.templateFormat || "vendor-template").trim();
+  const previewImage = String(req.body?.previewImage || req.body?.imageBase64 || req.body?.imageUrl || "").trim();
   const qualityScore = req.body?.qualityScore === undefined || req.body?.qualityScore === null
     ? null
     : Number(req.body.qualityScore);

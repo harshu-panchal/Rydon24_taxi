@@ -204,10 +204,34 @@ const getBridgeCommandAction = (action = '') => {
   return action;
 };
 
+const normalizeBiometricCaptureSource = (source = '', fallback = 'usb_scanner') => {
+  const normalized = String(source || '').trim().toLowerCase();
+
+  if (normalized === 'phone_sensor' || normalized === 'phone_sensoor') {
+    return 'phone_sensor';
+  }
+
+  if (normalized === 'usb_scanner' || normalized === 'usbscanner' || normalized === 'usb-scanner') {
+    return 'usb_scanner';
+  }
+
+  if (normalized === 'bluetooth_scanner' || normalized === 'bluetoothscanner' || normalized === 'bluetooth-scanner') {
+    return 'bluetooth_scanner';
+  }
+
+  if (normalized === 'manual' || normalized === 'unknown') {
+    return normalized;
+  }
+
+  return biometricSourceOptions.some((item) => item.value === fallback) ? fallback : 'unknown';
+};
+
 const normalizeBridgeResult = (result, preferredSource, action) => {
   if (!result || typeof result !== 'object') {
     return result;
   }
+
+  const normalizedSource = normalizeBiometricCaptureSource(result.captureSource || result.source, preferredSource);
 
   if (action === 'captureFinger') {
     return {
@@ -216,7 +240,7 @@ const normalizeBridgeResult = (result, preferredSource, action) => {
       templateFormat: result.templateFormat || 'vendor-template',
       previewImage: result.previewImage || result.imageBase64 || result.imageUrl || '',
       qualityScore: result.qualityScore,
-      captureSource: result.captureSource || preferredSource,
+      captureSource: normalizedSource,
     };
   }
 
@@ -229,7 +253,7 @@ const normalizeBridgeResult = (result, preferredSource, action) => {
         result.verificationStatus ||
         result.status ||
         (localMatch === true ? 'matched' : localMatch === false ? 'failed' : ''),
-      captureSource: result.captureSource || preferredSource,
+      captureSource: normalizedSource,
     };
   }
 
@@ -1234,6 +1258,10 @@ const ServiceCenterDashboard = () => {
         bookingId: selectedBooking.id || selectedBooking._id,
       }, biometricSource);
 
+      if (bridgeResult && typeof bridgeResult === 'object' && bridgeResult.success === false) {
+        throw new Error(String(bridgeResult.message || `Unable to capture ${finger.label}`));
+      }
+
       const templateData = String(
         bridgeResult?.templateData ||
         bridgeResult?.template ||
@@ -1255,7 +1283,7 @@ const ServiceCenterDashboard = () => {
         templateFormat: bridgeResult?.templateFormat || 'vendor-template',
         previewImage: bridgeResult?.previewImage || bridgeResult?.imageBase64 || bridgeResult?.imageUrl || '',
         qualityScore: bridgeResult?.qualityScore,
-        captureSource: bridgeResult?.captureSource || biometricSource || 'manual',
+        captureSource: normalizeBiometricCaptureSource(bridgeResult?.captureSource, biometricSource || 'manual'),
         deviceLabel: bridgeResult?.deviceLabel || bridgeResult?.deviceName || '',
         scannerSerial: bridgeResult?.scannerSerial || bridgeResult?.deviceId || '',
         sampleCount: bridgeResult?.sampleCount || 1,
@@ -1291,12 +1319,16 @@ const ServiceCenterDashboard = () => {
         bookingId: selectedBooking.id || selectedBooking._id,
       }, biometricSource);
 
+      if (bridgeResult && typeof bridgeResult === 'object' && bridgeResult.success === false) {
+        throw new Error(String(bridgeResult.message || `Unable to verify ${finger.label}`));
+      }
+
       const response = await verifyServiceCenterBookingFingerprint(selectedBooking.id || selectedBooking._id, {
         fingerCode: finger.code,
         verificationStatus: bridgeResult?.verificationStatus || bridgeResult?.status || 'matched',
         localMatch: bridgeResult?.localMatch ?? bridgeResult?.match,
         templateData: bridgeResult?.templateData || bridgeResult?.template || '',
-        captureSource: bridgeResult?.captureSource || biometricSource,
+        captureSource: normalizeBiometricCaptureSource(bridgeResult?.captureSource, biometricSource),
         matchScore: bridgeResult?.matchScore,
         notes: bridgeResult?.notes || '',
       });
