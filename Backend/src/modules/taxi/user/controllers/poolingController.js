@@ -101,6 +101,23 @@ const getBookedSeatIds = async ({ routeId, vehicleId, scheduleId, travelDate }) 
   return reservations.map((item) => String(item?.seatId || '')).filter(Boolean);
 };
 
+const computePoolingFareBreakdown = ({ route = {}, vehicle = {}, seatCount = 0 }) => {
+  const safeSeatCount = Math.max(0, Number(seatCount || 0));
+  const farePerSeat = Math.max(0, Number(route?.farePerSeat || 0));
+  const baseFare = Math.round(farePerSeat * safeSeatCount * 100) / 100;
+  const serviceTaxPercentage = Math.max(0, Math.min(100, Number(vehicle?.serviceTaxPercentage || 0)));
+  const serviceTaxAmount = Math.round((baseFare * serviceTaxPercentage) * 100) / 100 / 100;
+  const totalFare = Math.round((baseFare + serviceTaxAmount) * 100) / 100;
+
+  return {
+    farePerSeat,
+    baseFare,
+    serviceTaxPercentage,
+    serviceTaxAmount,
+    totalFare,
+  };
+};
+
 const serializePoolingBooking = (booking) => {
   const route = booking?.route || booking?.routeId || {};
   const vehicle = booking?.vehicle || booking?.vehicleId || {};
@@ -120,6 +137,9 @@ const serializePoolingBooking = (booking) => {
     seatsBooked: Number(booking?.seatsBooked || 0),
     selectedSeats: Array.isArray(booking?.selectedSeats) ? booking.selectedSeats : [],
     fare: Number(booking?.fare || 0),
+    baseFare: Number(booking?.baseFare || 0),
+    serviceTaxPercentage: Number(booking?.serviceTaxPercentage || 0),
+    serviceTaxAmount: Number(booking?.serviceTaxAmount || 0),
     currency: booking?.currency || 'INR',
     paymentStatus: booking?.paymentStatus || 'pending',
     bookingStatus: booking?.bookingStatus || 'confirmed',
@@ -246,8 +266,8 @@ export const createPoolingBookingOrder = asyncHandler(async (req, res) => {
   }
 
   const farePerSeat = Number(route.farePerSeat || 0);
-  const totalFare = Math.round(farePerSeat * selectedSeats.length * 100) / 100;
-  if (!Number.isFinite(totalFare) || totalFare <= 0) {
+  const fareBreakdown = computePoolingFareBreakdown({ route, vehicle, seatCount: selectedSeats.length });
+  if (!Number.isFinite(fareBreakdown.totalFare) || fareBreakdown.totalFare <= 0) {
     throw new ApiError(400, 'Pooling fare is not configured');
   }
 
@@ -274,7 +294,7 @@ export const createPoolingBookingOrder = asyncHandler(async (req, res) => {
     method: 'POST',
     path: '/orders',
     body: {
-      amount: Math.round(totalFare * 100),
+      amount: Math.round(fareBreakdown.totalFare * 100),
       currency: 'INR',
       receipt: `upool_${compactUserId}_${Date.now().toString(36)}`,
       notes: {
@@ -298,7 +318,10 @@ export const createPoolingBookingOrder = asyncHandler(async (req, res) => {
       amount: order.amount,
       currency: order.currency || 'INR',
       travelDate,
-      fare: totalFare,
+      fare: fareBreakdown.totalFare,
+      baseFare: fareBreakdown.baseFare,
+      serviceTaxPercentage: fareBreakdown.serviceTaxPercentage,
+      serviceTaxAmount: fareBreakdown.serviceTaxAmount,
     },
     'Pooling payment order created successfully',
   );
@@ -378,9 +401,8 @@ export const verifyPoolingBookingPayment = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Pickup and drop points are required for pooling booking');
   }
 
-  const farePerSeat = Number(route.farePerSeat || 0);
-  const totalFare = Math.round(farePerSeat * selectedSeats.length * 100) / 100;
-  if (!Number.isFinite(totalFare) || totalFare <= 0) {
+  const fareBreakdown = computePoolingFareBreakdown({ route, vehicle, seatCount: selectedSeats.length });
+  if (!Number.isFinite(fareBreakdown.totalFare) || fareBreakdown.totalFare <= 0) {
     throw new ApiError(400, 'Pooling fare is not configured');
   }
 
@@ -426,7 +448,10 @@ export const verifyPoolingBookingPayment = asyncHandler(async (req, res) => {
     dropStopId: String(dropStop.id || dropStopId),
     seatsBooked: selectedSeats.length,
     selectedSeats,
-    fare: totalFare,
+    fare: fareBreakdown.totalFare,
+    baseFare: fareBreakdown.baseFare,
+    serviceTaxPercentage: fareBreakdown.serviceTaxPercentage,
+    serviceTaxAmount: fareBreakdown.serviceTaxAmount,
     currency: 'INR',
     paymentStatus: 'paid',
     bookingStatus: 'confirmed',

@@ -31,6 +31,17 @@ const SEAT_LEGEND = [
 
 const unwrapPayload = (response) => response?.data?.data || response?.data || response || {};
 
+const computePoolingFareBreakdown = (route, selectedVehicle, seatCount) => {
+  const safeSeatCount = Math.max(0, Number(seatCount || 0));
+  const farePerSeat = Math.max(0, Number(route?.farePerSeat || 0));
+  const baseFare = Math.round(farePerSeat * safeSeatCount * 100) / 100;
+  const serviceTaxPercentage = Math.max(0, Number(selectedVehicle?.serviceTaxPercentage || 0));
+  const serviceTaxAmount = Math.round((baseFare * serviceTaxPercentage) * 100) / 100 / 100;
+  const totalFare = Math.round((baseFare + serviceTaxAmount) * 100) / 100;
+
+  return { baseFare, serviceTaxPercentage, serviceTaxAmount, totalFare };
+};
+
 const PoolingSeats = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -138,7 +149,7 @@ const PoolingSeats = () => {
         route,
         vehicle: selectedVehicle,
         selectedSeats,
-        totalFare: selectedSeats.length * route.farePerSeat,
+        fareBreakdown: computePoolingFareBreakdown(route, selectedVehicle, selectedSeats.length),
         travelDate,
         schedule: selectedSchedule,
         pickupStop,
@@ -168,6 +179,7 @@ const PoolingSeats = () => {
   const maxSeats = route?.maxSeatsPerBooking || 1;
   const bookedCount = bookedSeatIds.length;
   const vehicleImage = (selectedVehicle?.images && selectedVehicle.images.length > 0) ? selectedVehicle.images[0] : taxiImg;
+  const fareBreakdown = computePoolingFareBreakdown(route, selectedVehicle, selectedSeats.length);
 
   return (
     <div className="mx-auto min-h-screen max-w-lg bg-slate-50 pb-40 font-sans selection:bg-indigo-100">
@@ -418,7 +430,7 @@ const PoolingSeats = () => {
                   <div>
                     <p className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400">Total Fare</p>
                     <div className="flex items-baseline gap-2 mt-0.5">
-                      <span className="text-2xl font-black text-white">₹{selectedSeats.length * (route?.farePerSeat || 0)}</span>
+                      <span className="text-2xl font-black text-white">₹{fareBreakdown.totalFare}</span>
                       <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                         ({selectedSeats.length} {selectedSeats.length === 1 ? 'Seat' : 'Seats'})
                       </span>

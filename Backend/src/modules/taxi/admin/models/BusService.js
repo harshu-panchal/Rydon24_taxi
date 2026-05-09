@@ -239,6 +239,18 @@ const busServiceSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    adminCommissionPercentage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    serviceTaxPercentage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
     fareCurrency: {
       type: String,
       default: 'INR',

@@ -154,6 +154,8 @@ export const createBusDraft = () => ({
   registrationNumber: '',
   busColor: '#1f2937',
   seatPrice: '899',
+  adminCommissionPercentage: '0',
+  serviceTaxPercentage: '0',
   variantPricing: {
     seat: '899',
     window: '899',
@@ -225,6 +227,14 @@ export const normalizeBusCatalog = (catalog = []) =>
       blueprint,
       seatPrice:
         bus.seatPrice !== undefined && bus.seatPrice !== null ? String(bus.seatPrice) : fallbackDraft.seatPrice,
+      adminCommissionPercentage:
+        bus.adminCommissionPercentage !== undefined && bus.adminCommissionPercentage !== null
+          ? String(bus.adminCommissionPercentage)
+          : fallbackDraft.adminCommissionPercentage,
+      serviceTaxPercentage:
+        bus.serviceTaxPercentage !== undefined && bus.serviceTaxPercentage !== null
+          ? String(bus.serviceTaxPercentage)
+          : fallbackDraft.serviceTaxPercentage,
       variantPricing: {
         seat: String(bus.variantPricing?.seat ?? bus.seatPrice ?? fallbackDraft.variantPricing.seat),
         window: String(bus.variantPricing?.window ?? bus.seatPrice ?? fallbackDraft.variantPricing.window),
@@ -291,6 +301,8 @@ export const upsertAdminBus = async (payload) => {
     registrationNumber: String(payload.registrationNumber || '').toUpperCase(),
     fareCurrency: String(payload.fareCurrency || 'INR').toUpperCase(),
     capacity: countTotalSeats(payload.blueprint || {}),
+    adminCommissionPercentage: Math.min(100, Math.max(0, Number(payload.adminCommissionPercentage || 0))),
+    serviceTaxPercentage: Math.min(100, Math.max(0, Number(payload.serviceTaxPercentage || 0))),
   };
 
   const response = payload.id?.startsWith('bus-')

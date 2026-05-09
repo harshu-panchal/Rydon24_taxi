@@ -58,6 +58,17 @@ const formatTravelDate = (value) => {
 
 const unwrapPayload = (response) => response?.data?.data || response?.data || response || {};
 
+const computePoolingFareBreakdown = (route, vehicle, selectedSeats = []) => {
+  const safeSeatCount = Array.isArray(selectedSeats) ? selectedSeats.length : 0;
+  const farePerSeat = Math.max(0, Number(route?.farePerSeat || 0));
+  const baseFare = Math.round(farePerSeat * safeSeatCount * 100) / 100;
+  const serviceTaxPercentage = Math.max(0, Number(vehicle?.serviceTaxPercentage || 0));
+  const serviceTaxAmount = Math.round((baseFare * serviceTaxPercentage) * 100) / 100 / 100;
+  const totalFare = Math.round((baseFare + serviceTaxAmount) * 100) / 100;
+
+  return { baseFare, serviceTaxPercentage, serviceTaxAmount, totalFare };
+};
+
 const formatDateTime = (dateValue, scheduleLabel = '') => {
   const parsed = new Date(dateValue);
   const formattedDate = Number.isNaN(parsed.getTime())
@@ -74,7 +85,7 @@ const formatDateTime = (dateValue, scheduleLabel = '') => {
 const PoolingConfirm = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { route, vehicle, selectedSeats, totalFare, travelDate, schedule, pickupStop, dropStop } = location.state || {};
+  const { route, vehicle, selectedSeats, totalFare, fareBreakdown: routeFareBreakdown, travelDate, schedule, pickupStop, dropStop } = location.state || {};
 
   const [isBooking, setIsBooking] = useState(false);
   const [isBooked, setIsBooked] = useState(false);
@@ -206,6 +217,7 @@ const PoolingConfirm = () => {
   };
 
   const vehicleImage = (vehicle.images && vehicle.images.length > 0) ? vehicle.images[0] : taxiImg;
+  const fareBreakdown = routeFareBreakdown || computePoolingFareBreakdown(route, vehicle, selectedSeats);
 
   return (
     <div className="mx-auto min-h-screen max-w-lg bg-slate-50 pb-32 font-sans selection:bg-indigo-100">
@@ -285,7 +297,7 @@ const PoolingConfirm = () => {
                         <Receipt size={16} />
                       </div>
                       <div>
-                        <p className="text-lg font-black text-slate-900">₹{confirmedBooking?.fare || totalFare}</p>
+                        <p className="text-lg font-black text-slate-900">₹{confirmedBooking?.fare || fareBreakdown.totalFare || totalFare}</p>
                         <p className="mt-0.5 text-[10px] font-bold text-emerald-600 uppercase tracking-widest flex items-center gap-1">
                           <ShieldCheck size={10} />
                           PAID
@@ -539,17 +551,17 @@ const PoolingConfirm = () => {
                     <span className="flex items-center gap-2">
                       Base Fare ({selectedSeats.length} Seats)
                     </span>
-                    <span className="text-slate-900">₹{totalFare}</span>
+                    <span className="text-slate-900">₹{fareBreakdown.baseFare}</span>
                   </div>
                   <div className="flex justify-between items-center text-sm font-bold text-slate-500">
-                    <span>Taxes & Fees</span>
-                    <span className="font-black uppercase text-emerald-500">Free</span>
+                    <span>Service Tax ({fareBreakdown.serviceTaxPercentage}%)</span>
+                    <span className="text-slate-900">₹{fareBreakdown.serviceTaxAmount}</span>
                   </div>
                   
                   <div className="mt-8 flex items-end justify-between border-t border-slate-50 pt-8">
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Amount Payable</p>
-                      <p className="mt-1 text-4xl font-black tracking-tight text-slate-900">₹{totalFare}</p>
+                      <p className="mt-1 text-4xl font-black tracking-tight text-slate-900">₹{fareBreakdown.totalFare}</p>
                     </div>
                     <div className="mb-1">
                       <div className="rounded-xl bg-slate-900 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-white shadow-lg">
@@ -606,7 +618,7 @@ const PoolingConfirm = () => {
                     </div>
                   ) : (
                     <>
-                      <span className="uppercase tracking-[0.2em]">Confirm & Pay ₹{totalFare}</span>
+                      <span className="uppercase tracking-[0.2em]">Confirm & Pay ₹{fareBreakdown.totalFare}</span>
                       <div className="rounded-full bg-slate-900 p-1 text-white group-hover:translate-x-1 transition-transform">
                         <ChevronRight size={18} />
                       </div>

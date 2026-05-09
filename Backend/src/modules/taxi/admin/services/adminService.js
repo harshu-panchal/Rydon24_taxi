@@ -631,6 +631,14 @@ const normalizeBusServicePayload = (payload = {}, existing = {}) => {
     registrationNumber: sanitizeBusText(payload.registrationNumber, existing.registrationNumber || ''),
     busColor: sanitizeBusText(payload.busColor, existing.busColor || '#1f2937'),
     seatPrice: sanitizeBusSeatPrice(payload.seatPrice, existing.seatPrice || 0),
+    adminCommissionPercentage: Math.min(
+      100,
+      Math.max(0, sanitizeBusSeatPrice(payload.adminCommissionPercentage, existing.adminCommissionPercentage || 0)),
+    ),
+    serviceTaxPercentage: Math.min(
+      100,
+      Math.max(0, sanitizeBusSeatPrice(payload.serviceTaxPercentage, existing.serviceTaxPercentage || 0)),
+    ),
     variantPricing: normalizeBusVariantPricing(
       payload.variantPricing ?? existing.variantPricing ?? {},
       sanitizeBusSeatPrice(payload.seatPrice, existing.seatPrice || 0),
@@ -682,6 +690,14 @@ const serializeBusService = (item = {}) => ({
   registrationNumber: item.registrationNumber || '',
   busColor: item.busColor || '#1f2937',
   seatPrice: item.seatPrice !== undefined && item.seatPrice !== null ? String(item.seatPrice) : '0',
+  adminCommissionPercentage:
+    item.adminCommissionPercentage !== undefined && item.adminCommissionPercentage !== null
+      ? String(item.adminCommissionPercentage)
+      : '0',
+  serviceTaxPercentage:
+    item.serviceTaxPercentage !== undefined && item.serviceTaxPercentage !== null
+      ? String(item.serviceTaxPercentage)
+      : '0',
   variantPricing: normalizeBusVariantPricing(item.variantPricing || {}, item.seatPrice ?? 0),
   fareCurrency: item.fareCurrency || 'INR',
   boardingPolicy: item.boardingPolicy || '',

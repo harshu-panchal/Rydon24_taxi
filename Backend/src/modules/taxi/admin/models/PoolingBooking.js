@@ -42,6 +42,22 @@ const poolingBookingSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    baseFare: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    serviceTaxPercentage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    serviceTaxAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     currency: {
       type: String,
       default: 'INR',

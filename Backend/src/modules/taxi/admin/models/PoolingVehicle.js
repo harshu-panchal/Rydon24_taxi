@@ -27,6 +27,18 @@ const poolingVehicleSchema = new mongoose.Schema(
       required: true,
       min: 1,
     },
+    adminCommissionPercentage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    serviceTaxPercentage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
     vehicleType: {
       type: String,
       enum: ['bike', 'sedan', 'hatchback', 'suv', 'van', 'luxury'],

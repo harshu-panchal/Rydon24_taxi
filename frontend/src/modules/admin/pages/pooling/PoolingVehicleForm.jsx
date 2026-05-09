@@ -40,6 +40,8 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
     vehicleModel: '',
     vehicleNumber: '',
     capacity: 4,
+    adminCommissionPercentage: 0,
+    serviceTaxPercentage: 0,
     color: '',
     vehicleType: 'sedan',
     status: 'active',
@@ -91,6 +93,8 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
           vehicleModel: vehicle.vehicleModel || '',
           vehicleNumber: vehicle.vehicleNumber || '',
           capacity: vehicle.capacity || 4,
+          adminCommissionPercentage: Number(vehicle.adminCommissionPercentage ?? 0),
+          serviceTaxPercentage: Number(vehicle.serviceTaxPercentage ?? 0),
           color: vehicle.color || '',
           vehicleType: vehicle.vehicleType || 'sedan',
           status: vehicle.status || 'active',
@@ -150,11 +154,17 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
     if (isViewMode) return;
     setSaving(true);
     try {
+      const payload = {
+        ...formData,
+        adminCommissionPercentage: Math.min(100, Math.max(0, Number(formData.adminCommissionPercentage || 0))),
+        serviceTaxPercentage: Math.min(100, Math.max(0, Number(formData.serviceTaxPercentage || 0))),
+      };
+
       if (isEditMode) {
-        await adminService.updatePoolingVehicle(id, formData);
+        await adminService.updatePoolingVehicle(id, payload);
         toast.success('Vehicle updated successfully');
       } else {
-        await adminService.createPoolingVehicle(formData);
+        await adminService.createPoolingVehicle(payload);
         toast.success('Vehicle created successfully');
       }
       navigate('/admin/pooling/vehicles');
@@ -291,6 +301,36 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
                       value={formData.color}
                       onChange={(e) => setFormData({...formData, color: e.target.value})}
                       placeholder="e.g. Black"
+                      className={inputClass}
+                      readOnly={isViewMode}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className={labelClass}>Admin Commission %</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={formData.adminCommissionPercentage}
+                      onChange={(e) => setFormData({ ...formData, adminCommissionPercentage: e.target.value })}
+                      placeholder="e.g. 12.5"
+                      className={inputClass}
+                      readOnly={isViewMode}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Service Tax %</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={formData.serviceTaxPercentage}
+                      onChange={(e) => setFormData({ ...formData, serviceTaxPercentage: e.target.value })}
+                      placeholder="e.g. 5"
                       className={inputClass}
                       readOnly={isViewMode}
                     />

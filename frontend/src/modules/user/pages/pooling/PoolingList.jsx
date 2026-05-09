@@ -128,6 +128,7 @@ const PoolingList = () => {
             {routes.map((route, idx) => {
               const vehicle = route.assignedVehicleTypeIds?.[0] || {};
               const vehicleImage = (vehicle.images && vehicle.images.length > 0) ? vehicle.images[0] : taxiImg;
+              const serviceTaxPercentage = Number(vehicle.serviceTaxPercentage || 0);
 
               return (
                 <motion.div
@@ -182,6 +183,11 @@ const PoolingList = () => {
                       <div className="text-right">
                          <p className="text-3xl font-black tracking-tight text-slate-900 leading-none">₹{route.farePerSeat}</p>
                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] mt-1.5">Per Seat</p>
+                         {serviceTaxPercentage > 0 ? (
+                           <p className="mt-1 text-[10px] font-bold text-amber-600 uppercase tracking-[0.12em]">
+                             + {serviceTaxPercentage}% service tax
+                           </p>
+                         ) : null}
                       </div>
                     </div>
                   </div>

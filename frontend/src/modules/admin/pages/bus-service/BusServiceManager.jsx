@@ -846,6 +846,12 @@ const BusServiceManager = ({
                     <p className="mt-1 text-xs font-bold text-slate-900">Rs {bus.seatPrice || 0}</p>
                   </div>
                   <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Commission / Tax</p>
+                    <p className="mt-1 text-xs font-bold text-slate-900">
+                      {bus.adminCommissionPercentage || 0}% / {bus.serviceTaxPercentage || 0}%
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
                     <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Driver</p>
                     <p className="mt-1 text-xs font-bold text-slate-900">{bus.driverName || 'Not assigned'}</p>
                   </div>
@@ -924,6 +930,12 @@ const BusServiceManager = ({
                     <div>
                       <p className="text-base font-black text-slate-900">Rs {bus.seatPrice || 0}</p>
                       <p className="mt-2 text-sm font-semibold text-slate-500">{bus.fareCurrency || 'INR'}</p>
+                      <p className="mt-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                        {bus.adminCommissionPercentage || 0}% commission
+                      </p>
+                      <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                        {bus.serviceTaxPercentage || 0}% tax
+                      </p>
                     </div>
 
                     <div className="flex items-center">
@@ -1086,6 +1098,14 @@ const BusServiceManager = ({
                   <div className="rounded-2xl bg-white/10 px-4 py-3">
                     <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Fare</p>
                     <p className="mt-1 text-sm font-black">Rs {detailBus.seatPrice || 0} {detailBus.fareCurrency || 'INR'}</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/10 px-4 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Commission</p>
+                    <p className="mt-1 text-sm font-black">{detailBus.adminCommissionPercentage || 0}%</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/10 px-4 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Service Tax</p>
+                    <p className="mt-1 text-sm font-black">{detailBus.serviceTaxPercentage || 0}%</p>
                   </div>
                 </div>
               </div>
@@ -1494,6 +1514,32 @@ const BusServiceManager = ({
               <div>
                 <label className={labelClassName}>Seat Price</label>
                 <input className={fieldClassName} value={draft.seatPrice} onChange={(event) => updateDraft('seatPrice', event.target.value)} placeholder="1199" />
+              </div>
+              <div>
+                <label className={labelClassName}>Bus Commission %</label>
+                <input
+                  className={fieldClassName}
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={draft.adminCommissionPercentage}
+                  onChange={(event) => updateDraft('adminCommissionPercentage', event.target.value)}
+                  placeholder="10"
+                />
+              </div>
+              <div>
+                <label className={labelClassName}>Service Tax %</label>
+                <input
+                  className={fieldClassName}
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={draft.serviceTaxPercentage}
+                  onChange={(event) => updateDraft('serviceTaxPercentage', event.target.value)}
+                  placeholder="5"
+                />
               </div>
               <div>
                 <label className={labelClassName}>Currency</label>
