@@ -564,14 +564,16 @@ const InspectionPhotoSlots = ({
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-[11px] font-black uppercase tracking-[0.12em] transition ${imageUrl ? accentClass.button : accentClass.primary} ${busy ? 'pointer-events-none opacity-60' : ''}`}>
+                <label className={`relative flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-[11px] font-black uppercase tracking-[0.12em] transition ${imageUrl ? accentClass.button : accentClass.primary} ${busy ? 'pointer-events-none opacity-60' : ''}`}>
                   {busy && uploadingTarget === cameraTarget ? <Loader2 size={14} className="animate-spin" /> : imageUrl ? <RotateCcw size={14} /> : <Camera size={14} />}
                   {imageUrl ? 'Retake' : 'Take Photo'}
                   <input
                     type="file"
                     accept="image/*"
                     capture="environment"
-                    className="hidden"
+                    disabled={busy}
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                    aria-label={`${imageUrl ? 'Retake' : 'Take'} ${slot.label} photo`}
                     onChange={(event) => {
                       const files = event.target.files;
                       onFileSelect(field, index, files, 'camera');
@@ -579,13 +581,15 @@ const InspectionPhotoSlots = ({
                     }}
                   />
                 </label>
-                <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[11px] font-black uppercase tracking-[0.12em] text-slate-700 transition hover:bg-slate-100 ${busy ? 'pointer-events-none opacity-60' : ''}`}>
+                <label className={`relative flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[11px] font-black uppercase tracking-[0.12em] text-slate-700 transition hover:bg-slate-100 ${busy ? 'pointer-events-none opacity-60' : ''}`}>
                   {busy && uploadingTarget === uploadTarget ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}
                   Upload
                   <input
                     type="file"
                     accept="image/*"
-                    className="hidden"
+                    disabled={busy}
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                    aria-label={`Upload ${slot.label} photo`}
                     onChange={(event) => {
                       const files = event.target.files;
                       onFileSelect(field, index, files, 'upload');
