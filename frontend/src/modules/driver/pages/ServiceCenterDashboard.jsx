@@ -214,6 +214,7 @@ const normalizeBridgeResult = (result, preferredSource, action) => {
       ...result,
       templateData: result.templateData || result.template || '',
       templateFormat: result.templateFormat || 'vendor-template',
+      previewImage: result.previewImage || result.imageBase64 || result.imageUrl || '',
       qualityScore: result.qualityScore,
       captureSource: result.captureSource || preferredSource,
     };
@@ -698,11 +699,16 @@ const ServiceCenterDashboard = () => {
   }, [bookings.length, isStaffUser, staff.length, vehicles.length]);
 
   const selectedBookingId = searchParams.get('booking') || '';
+  const selectedFingerprintCode = String(searchParams.get('fingerprint') || '').trim().toUpperCase();
   const selectedBooking = useMemo(
     () =>
       bookings.find((item) => String(item.id || item._id) === String(selectedBookingId)) || null,
     [bookings, selectedBookingId],
   );
+  const selectedFingerprintRecord = useMemo(() => {
+    const fingers = Array.isArray(selectedBooking?.biometrics?.fingers) ? selectedBooking.biometrics.fingers : [];
+    return fingers.find((item) => String(item?.fingerCode || '').trim().toUpperCase() === selectedFingerprintCode) || null;
+  }, [selectedBooking, selectedFingerprintCode]);
   const bookingDraftDirty = useMemo(() => {
     if (!selectedBooking) {
       return false;
@@ -728,6 +734,7 @@ const ServiceCenterDashboard = () => {
     nextParams.set('tab', activeTab);
     if (activeTab !== 'bookings') {
       nextParams.delete('booking');
+      nextParams.delete('fingerprint');
     }
     setSearchParams(nextParams, { replace: true });
   }, [activeTab, rawTab, searchParams, setSearchParams]);
@@ -740,6 +747,7 @@ const ServiceCenterDashboard = () => {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set('tab', tabId);
     nextParams.delete('booking');
+    nextParams.delete('fingerprint');
     setSearchParams(nextParams);
   };
 
@@ -747,6 +755,7 @@ const ServiceCenterDashboard = () => {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set('tab', 'bookings');
     nextParams.set('booking', String(bookingId));
+    nextParams.delete('fingerprint');
     setSearchParams(nextParams);
   };
 
@@ -754,6 +763,25 @@ const ServiceCenterDashboard = () => {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set('tab', 'bookings');
     nextParams.delete('booking');
+    nextParams.delete('fingerprint');
+    setSearchParams(nextParams);
+  };
+
+  const handleFingerprintOpen = (fingerCode) => {
+    if (!selectedBooking || !fingerCode) {
+      return;
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('tab', 'bookings');
+    nextParams.set('booking', String(selectedBooking.id || selectedBooking._id));
+    nextParams.set('fingerprint', String(fingerCode).toUpperCase());
+    setSearchParams(nextParams);
+  };
+
+  const handleFingerprintClose = () => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('fingerprint');
     setSearchParams(nextParams);
   };
 
@@ -1225,6 +1253,7 @@ const ServiceCenterDashboard = () => {
         fingerCode: finger.code,
         templateData,
         templateFormat: bridgeResult?.templateFormat || 'vendor-template',
+        previewImage: bridgeResult?.previewImage || bridgeResult?.imageBase64 || bridgeResult?.imageUrl || '',
         qualityScore: bridgeResult?.qualityScore,
         captureSource: bridgeResult?.captureSource || biometricSource || 'manual',
         deviceLabel: bridgeResult?.deviceLabel || bridgeResult?.deviceName || '',
@@ -1552,10 +1581,16 @@ const ServiceCenterDashboard = () => {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="font-['Outfit'] text-lg font-bold text-slate-950">
-                  {selectedBooking ? selectedBooking.bookingReference || 'Booking Details' : 'Bookings Queue'}
+                  {selectedFingerprintRecord
+                    ? selectedFingerprintRecord.displayName || 'Fingerprint Detail'
+                    : selectedBooking
+                      ? selectedBooking.bookingReference || 'Booking Details'
+                      : 'Bookings Queue'}
                 </h2>
                 <p className="mt-1 text-xs sm:text-sm text-slate-500">
-                  {selectedBooking
+                  {selectedFingerprintRecord
+                    ? 'Open fingerprint detail page with preview support from the Flutter bridge.'
+                    : selectedBooking
                     ? 'Review details, assign staff, and update notes.'
                     : isStaffUser
                       ? 'Bookings assigned to your login.'
@@ -1565,11 +1600,11 @@ const ServiceCenterDashboard = () => {
               {selectedBooking ? (
                 <button
                   type="button"
-                  onClick={handleBookingClose}
+                  onClick={selectedFingerprintRecord ? handleFingerprintClose : handleBookingClose}
                   className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
                 >
                   <ArrowLeft size={14} />
-                  Back To List
+                  {selectedFingerprintRecord ? 'Back To Booking' : 'Back To List'}
                 </button>
               ) : (
                 <div className="inline-flex items-center w-fit gap-2 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
@@ -1609,6 +1644,121 @@ const ServiceCenterDashboard = () => {
                    if (hours > 0) return `${hours}h ${mins}m`;
                    return `${mins}m`;
                  };
+
+                 if (selectedFingerprintRecord) {
+                   return (
+                     <section className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-[0_8px_40px_rgba(0,0,0,0.08)] sm:p-6">
+                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                         <div>
+                           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">
+                             <ShieldCheck size={14} />
+                             Fingerprint Detail
+                           </div>
+                           <h3 className="mt-3 font-['Outfit'] text-2xl font-bold text-slate-950">
+                             {selectedFingerprintRecord.displayName || selectedFingerprintCode || 'Fingerprint'}
+                           </h3>
+                           <p className="mt-1 text-sm text-slate-500">
+                             Booking {selectedBooking.bookingReference || 'N/A'} for {selectedBooking.customer?.name || 'customer'}
+                           </p>
+                         </div>
+                         <button
+                           type="button"
+                           onClick={handleFingerprintClose}
+                           className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                         >
+                           <ArrowLeft size={14} />
+                           Back To Booking
+                         </button>
+                       </div>
+
+                       <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+                         <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-950">
+                           {selectedFingerprintRecord.previewImage ? (
+                             <img
+                               src={selectedFingerprintRecord.previewImage}
+                               alt={`${selectedFingerprintRecord.displayName || 'Fingerprint'} preview`}
+                               className="h-full min-h-[320px] w-full object-contain bg-[radial-gradient(circle_at_top,#1e293b_0%,#020617_78%)] p-4"
+                             />
+                           ) : (
+                             <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-10 text-center text-white">
+                               <ShieldCheck size={42} className="text-emerald-400" />
+                               <p className="mt-4 text-lg font-bold">Fingerprint preview will appear here</p>
+                               <p className="mt-2 max-w-sm text-sm text-slate-300">
+                                 The web page is ready. Once Flutter sends `previewImage`, `imageBase64`, or a scanner bitmap, this page will show the actual fingerprint image here.
+                               </p>
+                             </div>
+                           )}
+                         </div>
+
+                         <div className="space-y-4">
+                           <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-4">
+                             <p className="text-sm font-bold text-amber-900">Current status</p>
+                             <p className="mt-1 text-sm text-amber-800">
+                               {selectedFingerprintRecord.previewImage
+                                 ? 'Preview image received from the capture bridge.'
+                                 : 'Template is stored, but no visual fingerprint preview has been provided by the bridge yet.'}
+                             </p>
+                           </div>
+
+                           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Finger Code</p>
+                               <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.fingerCode || 'N/A'}</p>
+                             </div>
+                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Capture Source</p>
+                               <p className="mt-1 text-sm font-bold text-slate-900">{getBiometricSourceLabel(selectedFingerprintRecord.captureSource || 'unknown')}</p>
+                             </div>
+                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Template Format</p>
+                               <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.templateFormat || 'N/A'}</p>
+                             </div>
+                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Quality Score</p>
+                               <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.qualityScore ?? 'N/A'}</p>
+                             </div>
+                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Captured At</p>
+                               <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.capturedAt ? formatDateTime(selectedFingerprintRecord.capturedAt) : 'N/A'}</p>
+                             </div>
+                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Last Verified</p>
+                               <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.lastVerifiedAt ? formatDateTime(selectedFingerprintRecord.lastVerifiedAt) : 'Not verified yet'}</p>
+                             </div>
+                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Verification Count</p>
+                               <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.verificationCount ?? 0}</p>
+                             </div>
+                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Template Stored</p>
+                               <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.templateStored ? 'Yes' : 'No'}</p>
+                             </div>
+                           </div>
+
+                           <div className="grid grid-cols-1 gap-3">
+                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Device Label</p>
+                               <p className="mt-1 break-words text-sm font-bold text-slate-900">{selectedFingerprintRecord.deviceLabel || 'N/A'}</p>
+                             </div>
+                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Scanner Serial</p>
+                               <p className="mt-1 break-words text-sm font-bold text-slate-900">{selectedFingerprintRecord.scannerSerial || 'N/A'}</p>
+                             </div>
+                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Template Hash Preview</p>
+                               <p className="mt-1 break-all text-sm font-bold text-slate-900">{selectedFingerprintRecord.templateHashPreview || 'N/A'}</p>
+                             </div>
+                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Operator Notes</p>
+                               <p className="mt-1 break-words text-sm font-bold text-slate-900">{selectedFingerprintRecord.notes || 'No notes added'}</p>
+                             </div>
+                           </div>
+                         </div>
+                       </div>
+                     </section>
+                   );
+                 }
+
                  return (
                    <div className="rounded-[32px] border border-slate-200 bg-white shadow-[0_8px_40px_rgba(0,0,0,0.08)] overflow-hidden">
                     <div className="flex flex-col h-full">
@@ -1919,6 +2069,17 @@ const ServiceCenterDashboard = () => {
                                           Verify
                                         </button>
                                       </div>
+
+                                      {enrolled ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleFingerprintOpen(finger.code)}
+                                          className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                        >
+                                          <Eye size={14} />
+                                          View Fingerprint
+                                        </button>
+                                      ) : null}
                                     </div>
                                   );
                                 })}

@@ -1700,6 +1700,7 @@ const serializeBiometricProfile = (profile = {}) => {
       hand: item?.hand || getBiometricFingerHand(item?.fingerCode),
       templateFormat: item?.templateFormat || "vendor-template",
       qualityScore: Number(item?.qualityScore || 0) || null,
+      previewImage: item?.previewImage || "",
       captureSource: item?.captureSource || "unknown",
       deviceLabel: item?.deviceLabel || "",
       scannerSerial: item?.scannerSerial || "",
@@ -3275,6 +3276,7 @@ export const enrollServiceCenterStaffBiometric = async (req, res) => {
   const templateData = String(req.body?.template || req.body?.templateData || "").trim();
   const source = String(req.body?.source || "unknown").trim().toLowerCase();
   const templateFormat = String(req.body?.templateFormat || "vendor-template").trim();
+  const previewImage = String(req.body?.previewImage || req.body?.imageBase64 || "").trim();
   const qualityScore = req.body?.qualityScore === undefined || req.body?.qualityScore === null
     ? null
     : Number(req.body.qualityScore);
@@ -3585,6 +3587,7 @@ export const captureServiceCenterBookingFingerprint = async (req, res) => {
     templateFormat,
     templateEncrypted: encryptBiometricTemplate(templateData),
     templateHash: buildBiometricTemplateHash(templateData),
+    previewImage,
     qualityScore,
     captureSource,
     deviceLabel,

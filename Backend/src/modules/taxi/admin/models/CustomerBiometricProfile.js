@@ -33,6 +33,11 @@ const biometricFingerSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    previewImage: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     qualityScore: {
       type: Number,
       default: null,
