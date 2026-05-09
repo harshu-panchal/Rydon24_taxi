@@ -1,240 +1,314 @@
-import React, { useEffect, useState } from 'react';
-import { ArrowLeft, FileText, ShieldCheck, Scale, ScrollText } from 'lucide-react';
+import React from 'react';
+import { ArrowLeft, FileText, IndianRupee, ReceiptText, Scale, ScrollText, ShieldCheck } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-const getLegalContent = () => ({
+const vehiclePricing = [
+  { type: 'Bike', capacity: 'Up to 2 riders', price: 'Starts at Rs 49', cancellationCut: 'Admin cut up to Rs 10', note: 'Best for quick solo rides and short-distance travel.' },
+  { type: 'Auto', capacity: 'Up to 3 riders', price: 'Starts at Rs 79', cancellationCut: 'Admin cut up to Rs 15', note: 'Suitable for city commutes and local market travel.' },
+  { type: 'Taxi', capacity: 'Up to 4 riders', price: 'Starts at Rs 129', cancellationCut: 'Admin cut up to Rs 25', note: 'Standard cab option for everyday point-to-point trips.' },
+  { type: 'Premium Car', capacity: 'Up to 7 riders', price: 'Starts at Rs 249', cancellationCut: 'Admin cut up to Rs 40', note: 'Extra comfort and larger seating for family or business travel.' },
+  { type: 'eRickshaw', capacity: 'Up to 3 riders', price: 'Starts at Rs 69', cancellationCut: 'Admin cut up to Rs 12', note: 'May be available in selected operating zones only.' },
+];
+
+const legalContent = {
   terms: {
+    label: 'Terms & Conditions',
     title: 'Terms & Conditions',
-    icon: <ScrollText size={24} />,
-    intro: `Effective Date: 29 April 2026\n\nWelcome to Rydon24 (“Company”, “we”, “our”, “us”). These Terms & Conditions govern your access to and use of the Rydon24 website, mobile application, and services including taxi booking, bike rental, parcel delivery, and related transportation solutions.\n\nBy using our platform, you agree to be bound by these Terms.`,
+    icon: ScrollText,
+    intro:
+      'These Terms & Conditions govern the use of the Rydon24 website, app, and booking services. By using the platform, you agree to follow these terms whenever you browse, register, book, cancel, or pay for a service.',
     sections: [
       {
-        title: '1. About Rydon24',
-        content: `Rydon24 is a digital mobility platform that connects users with transport partners for:\n\n• Taxi booking\n• Bike rental\n• Parcel delivery\n• Scheduled transportation services\n• Future mobility services introduced by the platform`
+        title: 'Use of the platform',
+        body:
+          'Rydon24 provides technology services for ride booking, vehicle-based transport support, parcel movement, and related mobility services. Availability can vary by city, vehicle type, demand, operating hours, and serviceability.',
       },
       {
-        title: '2. Eligibility',
-        content: `To use our services, you must:\n\n• Be at least 18 years old\n• Be legally capable of entering into binding contracts\n• Provide accurate registration details\n• Hold a valid driving license for bike rental services`
+        title: 'Eligibility',
+        bullets: [
+          'Users should provide accurate name, phone number, and account details.',
+          'You must use the platform only for lawful purposes.',
+          'For rentals or regulated vehicle services, additional identity or eligibility checks may be required.',
+        ],
       },
       {
-        title: '3. User Account',
-        content: `Users may register through:\n\n• Mobile number with OTP verification\n• Email address\n• Social login (if available)\n\nYou are responsible for:\n\n• Maintaining account confidentiality\n• Activities under your account\n• Accurate personal information\n\nRydon24 may suspend accounts containing false, misleading, or suspicious information.`
+        title: 'Bookings and fares',
+        bullets: [
+          'A booking is confirmed only after the system accepts it and a driver, partner, or service unit is assigned when required.',
+          'Displayed fares can change because of distance, traffic, tolls, waiting time, service zone, taxes, or peak demand.',
+          'Final payable amounts shown at checkout or after trip completion are considered binding unless there is a verified billing error.',
+        ],
       },
       {
-        title: '4. Services',
-        content: `4.1 Taxi Booking\nUsers can book:\n• Local city rides\n• One-way rides\n• Round trips\n• Airport transfers\n• Hourly packages\n• Corporate rides (if available)\n\nImportant Note:\nEstimated fare may vary depending on: Traffic, Route changes, Waiting time, Tolls, Government taxes.\n\n4.2 Bike Rental\nUsers may rent two-wheelers through the platform.\nRequirements:\n• Valid driving license\n• Security deposit (if applicable)\n• Timely return of vehicle\n• Compliance with traffic laws\nUser will be responsible for: Challans/fines during rental period, Damage caused during rental use, Fuel charges (if policy applicable).\n\n4.3 Parcel Delivery\nUsers may send eligible parcels.\nAllowed Items: Documents, Clothing, Electronics (non-fragile, at own risk), Daily-use goods.\nRestricted / Prohibited Items: Weapons, Explosives, Narcotics, Illegal substances, Dangerous chemicals, Cash / valuables without declaration, Live animals.\n\nRydon24 reserves the right to inspect or reject parcels.`
+        title: 'User responsibilities',
+        bullets: [
+          'Do not create fake bookings or misuse payment methods.',
+          'Do not damage vehicles, partner property, or equipment.',
+          'Do not harass drivers, delivery partners, service staff, or support teams.',
+          'Do not use the service for illegal, dangerous, or prohibited goods or activities.',
+        ],
       },
       {
-        title: '5. Booking Confirmation',
-        content: `A booking is considered confirmed only after:\n\n• Driver/partner acceptance OR\n• Successful system confirmation\n\nRydon24 cannot guarantee immediate availability at all times.`
+        title: 'Account actions',
+        body:
+          'Rydon24 may suspend, restrict, or terminate access where there is fraud, abusive conduct, repeated policy violations, non-payment, chargeback misuse, or legal/regulatory risk.',
       },
       {
-        title: '6. Payments',
-        content: `Accepted payment methods may include:\n\n• UPI\n• Debit/Credit Cards\n• Net Banking\n• Wallets\n• Cash (where enabled)\n\nUsers authorize Rydon24 to collect applicable charges including: Base fare, Distance charges, Waiting charges, Toll/Parking, Taxes, Convenience fee, Late fee (bike rental).`
+        title: 'Liability and service interruptions',
+        body:
+          'Rydon24 works to keep the service reliable, but delays may happen because of traffic, weather, technical downtime, route closures, law-and-order issues, or third-party failures. To the extent permitted by law, Rydon24 is not responsible for indirect or consequential loss arising from such interruptions.',
       },
       {
-        title: '7. Cancellation Policy',
-        content: `Taxi\n• Free cancellation may apply within limited time\n• Late cancellation may attract fee\n\nBike Rental\n• Cancellation fee may depend on booking time and vehicle blocking period\n\nParcel Delivery\n• Cancellation after pickup may be non-refundable`
+        title: 'Contact',
+        body:
+          'For questions about these terms, users can contact the support team through the contact details listed on the website.',
       },
-      {
-        title: '8. Refund Policy',
-        content: `Eligible refunds will be processed within 5 to 10 business days to original payment method, subject to banking timelines.`
-      },
-      {
-        title: '9. User Conduct',
-        content: `You agree not to:\n\n• Abuse drivers or staff\n• Damage vehicle/property\n• Create fake bookings\n• Use services for unlawful activity\n• Provide false parcel information\n• Attempt fraud or payment reversal misuse\n\nViolation may result in suspension or permanent ban.`
-      },
-      {
-        title: '10. Driver / Partner Conduct',
-        content: `Rydon24 expects all partners to maintain professionalism and safety standards.\n\nUsers may report:\n\n• Misbehavior\n• Unsafe driving\n• Overcharging\n• Delay issues\n• Fraud attempts`
-      },
-      {
-        title: '11. Delays & Service Interruptions',
-        content: `We are not liable for delays caused by:\n\n• Traffic congestion\n• Weather conditions\n• Road closures\n• Law enforcement checks\n• Strikes\n• Technical downtime\n• Force majeure events`
-      },
-      {
-        title: '12. Limitation of Liability',
-        content: `Rydon24 operates as a technology platform facilitating service access.\n\nTo the maximum extent permitted by law, Rydon24 shall not be liable for:\n\n• Indirect damages\n• Missed appointments\n• Personal items left in vehicle\n• Third-party incidents\n• User negligence\n\nAny direct liability, where applicable, shall be limited to the booking amount paid.`
-      },
-      {
-        title: '13. Safety Guidelines',
-        content: `Users should:\n\n• Verify vehicle and driver details before ride\n• Wear helmet/seatbelt\n• Avoid sharing OTP except for legitimate verification\n• Use emergency support where available`
-      },
-      {
-        title: '14. Intellectual Property',
-        content: `All trademarks, logos, software, design, content, and branding of Rydon24 remain exclusive property of the Company.\n\nUnauthorized copying or use is prohibited.`
-      },
-      {
-        title: '15. Suspension / Termination',
-        content: `We may suspend or terminate accounts for:\n\n• Fraud\n• Chargebacks abuse\n• Misconduct\n• Repeated cancellations\n• Policy violations\n• Legal requests`
-      },
-      {
-        title: '16. Governing Law',
-        content: `These Terms shall be governed by the laws of India.`
-      },
-      {
-        title: '17. Contact Information',
-        content: `Support Email: support@rydon24.com\nWebsite: www.rydon24.com`
-      }
     ],
   },
   privacy: {
+    label: 'Privacy Policy',
     title: 'Privacy Policy',
-    icon: <ShieldCheck size={24} />,
-    intro: `Effective Date: 29 April 2026\n\nRydon24 respects your privacy. This Privacy Policy explains how we collect, use, store, and protect your information.`,
+    icon: ShieldCheck,
+    intro:
+      'This website is managed by Rydon24. This Privacy Policy explains what information we collect, why we collect it, how we use it, and the steps we take to protect it when you use the Rydon24 website or connected services.',
     sections: [
       {
-        title: '1. Information We Collect',
-        content: `Personal Information:\n• Full Name\n• Mobile Number\n• Email Address\n• Profile details\n\nBooking Information:\n• Pickup and drop locations\n• Ride history\n• Rental dates\n• Parcel sender/receiver information\n\nDevice Information:\n• Device type\n• Browser type\n• App version\n• IP address\n\nLocation Data:\nWe may collect live location during active rides/bookings for operational and safety purposes.`
+        title: 'Information we may collect',
+        bullets: [
+          'Name, mobile number, email address, and account profile details.',
+          'Pickup and drop locations, booking history, cancellation records, and support interactions.',
+          'Device, browser, IP address, app version, and diagnostic information needed for security and service quality.',
+          'Location information during active rides or service requests where needed for dispatch, tracking, and safety.',
+        ],
       },
       {
-        title: '2. How We Use Information',
-        content: `We use your data to:\n\n• Process bookings\n• Connect users with drivers/partners\n• Improve route matching\n• Customer support\n• Fraud prevention\n• Notifications / OTP\n• Analytics and service improvement`
+        title: 'How we use your information',
+        bullets: [
+          'To create and manage your account.',
+          'To process bookings, assignments, payments, and support requests.',
+          'To improve matching, service performance, fraud prevention, and safety monitoring.',
+          'To send OTPs, service alerts, invoices, and important operational communication.',
+        ],
       },
       {
-        title: '3. Payment Information',
-        content: `Payments are processed through secure third-party payment gateways.\n\nRydon24 does not store complete debit/credit card details.`
+        title: 'Sharing of information',
+        body:
+          'We may share limited information with drivers, delivery or service partners, payment providers, communication vendors, analytics tools, and authorities when required by law or necessary for service delivery.',
       },
       {
-        title: '4. Sharing of Information',
-        content: `We may share limited data with:\n\n• Drivers / delivery partners\n• Payment processors\n• SMS / email providers\n• Analytics vendors\n• Government authorities where legally required`
+        title: 'Payments and data security',
+        body:
+          'Payments may be processed through third-party payment partners. Rydon24 does not intentionally store full card data on the website. We use reasonable administrative and technical safeguards to protect user information, but no internet-based system can be guaranteed to be fully secure.',
       },
       {
-        title: '5. Data Security',
-        content: `We use commercially reasonable measures such as:\n\n• Encryption\n• Secure APIs\n• OTP verification\n• Access restrictions\n\nHowever, no system is fully immune from cyber threats.`
+        title: 'Data retention and user rights',
+        bullets: [
+          'We may keep records for customer support, tax, compliance, fraud prevention, and dispute handling.',
+          'Users may request correction of incorrect account information.',
+          'Users may request account deletion or review of stored personal data, subject to legal and operational retention obligations.',
+        ],
       },
       {
-        title: '6. Cookies & Tracking',
-        content: `Website/app may use cookies or similar technologies for:\n\n• Login sessions\n• Preferences\n• Performance tracking\n• Analytics`
+        title: 'Policy updates',
+        body:
+          'Rydon24 may revise this Privacy Policy from time to time. Continued use of the website after an update means you accept the revised policy.',
       },
-      {
-        title: '7. Data Retention',
-        content: `We retain data as necessary for:\n\n• Legal compliance\n• Tax records\n• Dispute resolution\n• Fraud prevention\n• Business operations`
-      },
-      {
-        title: '8. User Rights',
-        content: `Subject to law, users may request:\n\n• Access to personal data\n• Correction of data\n• Account deletion request\n• Withdrawal of promotional consent`
-      },
-      {
-        title: '9. Children’s Privacy',
-        content: `Rydon24 services are not intended for users below 18 years of age.`
-      },
-      {
-        title: '10. Third-Party Links',
-        content: `Our platform may contain links to third-party websites. We are not responsible for their privacy practices.`
-      },
-      {
-        title: '11. Policy Updates',
-        content: `We may revise this Privacy Policy periodically. Continued use of services means acceptance of updated policy.`
-      },
-      {
-        title: '12. Contact Us',
-        content: `Privacy Email: privacy@rydon24.com\nSupport Email: support@rydon24.com`
-      }
     ],
   },
   refund: {
-    title: 'Refund Policy',
-    icon: <Scale size={24} />,
-    intro: `Effective Date: 29 April 2026\n\nThis policy explains how refunds are processed at Rydon24.`,
+    label: 'Refund Policy',
+    title: 'Refund & Cancellation Policy',
+    icon: ReceiptText,
+    intro:
+      'This page explains refund eligibility, cancellation timelines, and indicative prices for the main vehicle types available on the Rydon24 platform. Refunds are reviewed based on service status, time of cancellation, and payment mode.',
     sections: [
       {
-        title: 'Refund Eligibility',
-        content: `Eligible refunds will be processed within 5 to 10 business days to original payment method, subject to banking timelines.\n\nRefunds may be applicable in cases of:\n• System errors resulting in overcharging\n• Service not provided as booked (subject to verification)\n• Cancellations within the free cancellation window`
-      }
-    ]
+        title: 'When refunds may be approved',
+        bullets: [
+          'Duplicate payment or verified overcharge.',
+          'Booking cancelled by the platform or partner after confirmation.',
+          'Service could not be fulfilled and the customer was not at fault.',
+          'Cancellation made within the free cancellation period, where applicable.',
+        ],
+      },
+      {
+        title: 'Refund policy overview',
+        body:
+          'Rydon24 reviews refund requests on a case-by-case basis to confirm whether the booking was completed, cancelled before service, cancelled after dispatch, or affected by a technical or payment issue. Approved refunds are returned only after internal verification of ride logs, payment status, and service records.',
+      },
+      {
+        title: 'Cancellation rules',
+        bullets: [
+          'Bike and Auto bookings: free cancellation usually applies before partner assignment or within a short grace window after booking.',
+          'Taxi bookings: a cancellation fee may apply once a driver is assigned, the driver is close to pickup, or the vehicle has already started toward the user.',
+          'Premium Car bookings: because these block a larger-capacity vehicle, late cancellation may attract a higher convenience or blocking fee.',
+          'Parcel or service-center linked vehicle bookings: once pickup, dispatch, or service preparation begins, the booking may become partially refundable or non-refundable.',
+          'No-show cases, repeated misuse, or cancellations after service start are generally non-refundable.',
+        ],
+      },
+      {
+        title: 'Cases where refunds may be partial',
+        bullets: [
+          'If a driver or service partner has already been assigned and operational costs have started.',
+          'If a vehicle was reserved for a scheduled booking and cancelled late by the customer.',
+          'If waiting charges, toll blocking, convenience fees, or zone-specific service costs have already been incurred.',
+          'If the service was partly delivered before the booking was cancelled or interrupted.',
+        ],
+      },
+      {
+        title: 'Cases where refunds are usually not allowed',
+        bullets: [
+          'Incorrect pickup or drop details entered by the user that caused service failure.',
+          'Customer no-show after the partner reaches or waits at the pickup point.',
+          'Cancellations made after the trip, rental, dispatch, or service has already started.',
+          'Fraudulent transactions, chargeback misuse, or policy abuse under investigation.',
+          'Complaints raised without enough booking or payment proof where service records show successful completion.',
+        ],
+      },
+      {
+        title: 'Refund timelines',
+        bullets: [
+          'UPI or wallet refunds are usually processed within 1 to 3 business days after approval.',
+          'Card, bank, or gateway refunds are usually processed within 5 to 10 business days after approval.',
+          'If a banking partner delays settlement, the final credit timeline may depend on the payment provider.',
+        ],
+      },
+      {
+        title: 'How to request a refund',
+        bullets: [
+          'Raise the issue through the support team with your booking ID, payment details, and reason for the request.',
+          'Submit the request as early as possible after the cancelled or affected booking.',
+          'Rydon24 may ask for screenshots, transaction references, or additional verification before approval.',
+        ],
+      },
+      {
+        title: 'Indicative vehicle pricing',
+        table: vehiclePricing,
+      },
+      {
+        title: 'Important pricing note',
+        body:
+          'The prices and admin cancellation cuts listed above are indicative website references only. Actual booking fares and cancellation deductions can change based on city, route, timing, service zone, partner assignment stage, tolls, waiting time, demand, and service availability.',
+      },
+    ],
   },
   cancellation: {
+    label: 'Cancellation Policy',
     title: 'Cancellation Policy',
-    icon: <FileText size={24} />,
-    intro: `Effective Date: 29 April 2026\n\nPlease read our cancellation guidelines carefully before making a booking.`,
+    icon: Scale,
+    intro:
+      'This page summarizes how cancellations are handled across Rydon24 booking categories.',
     sections: [
       {
-        title: 'Taxi',
-        content: `• Free cancellation may apply within limited time\n• Late cancellation may attract fee`
+        title: 'General policy',
+        bullets: [
+          'Free cancellation may be available during a short grace period.',
+          'Charges may apply after partner assignment, dispatch, or service start.',
+          'Refundability depends on timing, service state, and payment verification.',
+        ],
       },
-      {
-        title: 'Bike Rental',
-        content: `• Cancellation fee may depend on booking time and vehicle blocking period`
-      },
-      {
-        title: 'Parcel Delivery',
-        content: `• Cancellation after pickup may be non-refundable`
-      }
-    ]
-  }
-});
+    ],
+  },
+};
 
 const getDocumentType = (pathname = '') => {
-  const p = pathname.toLowerCase();
-  if (p.includes('privacy')) return 'privacy';
-  if (p.includes('refund')) return 'refund';
-  if (p.includes('cancellation')) return 'cancellation';
+  const value = pathname.toLowerCase();
+  if (value.includes('privacy-policy') || value.includes('privacy')) return 'privacy';
+  if (value.includes('terms-and-conditions') || value.includes('terms')) return 'terms';
+  if (value.includes('refund')) return 'refund';
+  if (value.includes('cancellation')) return 'cancellation';
   return 'terms';
 };
 
 const LegalPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [appName, setAppName] = useState('App');
-
-  useEffect(() => {
-    const title = document.title;
-    if (title && title !== 'App') {
-      setAppName(title);
-    }
-  }, []);
-
-  const content = getLegalContent()[getDocumentType(location.pathname)];
+  const content = legalContent[getDocumentType(location.pathname)];
+  const Icon = content.icon || FileText;
 
   return (
-    <div className="min-h-screen bg-white font-sans text-gray-900 selection:bg-black selection:text-white">
-      {/* Header */}
-      <div className="fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-md z-50 border-bottom border-gray-100">
-        <div className="max-w-xl mx-auto px-6 h-16 flex items-center gap-4">
-            <button
-              onClick={() => navigate(-1)}
-              className="p-2 hover:bg-gray-50 rounded-full transition-all"
-            >
-              <ArrowLeft size={20} />
-            </button>
-            <span className="font-bold text-sm uppercase tracking-widest text-gray-400">Legal Center</span>
+    <div className="min-h-screen bg-stone-50 text-slate-900">
+      <div className="fixed top-0 left-0 right-0 z-50 border-b border-stone-200 bg-white/90 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-6">
+          <button
+            onClick={() => navigate(-1)}
+            className="rounded-full p-2 transition-all hover:bg-stone-100"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <span className="text-sm font-bold uppercase tracking-[0.3em] text-stone-500">
+            {content.label}
+          </span>
         </div>
       </div>
 
-      <div className="max-w-xl mx-auto px-6 pt-24 pb-20">
-        {/* Intro Section */}
-        <div className="mb-12">
-            <div className="w-16 h-16 bg-black text-white rounded-3xl flex items-center justify-center mb-6 shadow-xl shadow-black/10">
-                {content.icon}
-            </div>
-            <h1 className="text-4xl font-black tracking-tight mb-4">{content.title}</h1>
-            <p className="text-gray-500 text-lg font-medium leading-relaxed whitespace-pre-line">
-                {content.intro}
-            </p>
+      <section className="bg-[#171717] px-6 pb-16 pt-28 text-white">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-8 flex h-18 w-18 items-center justify-center rounded-[28px] bg-[#f4b400] text-black shadow-lg shadow-black/20">
+            <Icon size={30} />
+          </div>
+          <h1 className="max-w-4xl text-4xl font-black tracking-tight md:text-6xl">
+            {content.title}
+          </h1>
+          <p className="mt-6 max-w-3xl text-lg leading-relaxed text-stone-300">
+            {content.intro}
+          </p>
         </div>
+      </section>
 
-        {/* Content Sections */}
-        <div className="space-y-10">
-          {content.sections.map((section, idx) => (
-            <div key={idx} className="group">
-              <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-400 mb-2 transition-colors group-hover:text-black">
+      <section className="px-6 py-16">
+        <div className="mx-auto max-w-6xl space-y-8">
+          {content.sections.map((section) => (
+            <div key={section.title} className="rounded-[28px] border border-stone-200 bg-white p-8 shadow-sm">
+              <h2 className="text-xl font-black tracking-tight text-slate-900 md:text-2xl">
                 {section.title}
-              </h3>
-              <div className="text-[16px] font-medium leading-relaxed text-gray-600 whitespace-pre-line">
-                {section.content}
-              </div>
+              </h2>
+
+              {section.body ? (
+                <p className="mt-4 text-base leading-8 text-slate-600">{section.body}</p>
+              ) : null}
+
+              {section.bullets ? (
+                <ul className="mt-4 space-y-3 text-base leading-7 text-slate-600">
+                  {section.bullets.map((item) => (
+                    <li key={item} className="flex gap-3">
+                      <span className="mt-2 h-2 w-2 rounded-full bg-[#f4b400]" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+
+              {section.table ? (
+                <div className="mt-6 overflow-hidden rounded-[24px] border border-stone-200">
+                  <div className="grid grid-cols-1 gap-px bg-stone-200 md:grid-cols-5">
+                    <div className="bg-stone-100 px-5 py-4 text-xs font-black uppercase tracking-[0.25em] text-stone-500">Vehicle Type</div>
+                    <div className="bg-stone-100 px-5 py-4 text-xs font-black uppercase tracking-[0.25em] text-stone-500">Capacity</div>
+                    <div className="bg-stone-100 px-5 py-4 text-xs font-black uppercase tracking-[0.25em] text-stone-500">Starting Price</div>
+                    <div className="bg-stone-100 px-5 py-4 text-xs font-black uppercase tracking-[0.25em] text-stone-500">Cancellation Cut</div>
+                    <div className="bg-stone-100 px-5 py-4 text-xs font-black uppercase tracking-[0.25em] text-stone-500">Use Case</div>
+                  </div>
+
+                  {section.table.map((row) => (
+                    <div key={row.type} className="grid grid-cols-1 gap-px border-t border-stone-200 bg-stone-200 md:grid-cols-5">
+                      <div className="bg-white px-5 py-5">
+                        <div className="flex items-center gap-2 text-base font-bold text-slate-900">
+                          <IndianRupee size={16} className="text-[#f4b400]" />
+                          {row.type}
+                        </div>
+                      </div>
+                      <div className="bg-white px-5 py-5 text-sm text-slate-600">{row.capacity}</div>
+                      <div className="bg-white px-5 py-5 text-sm font-bold text-slate-900">{row.price}</div>
+                      <div className="bg-white px-5 py-5 text-sm font-bold text-slate-900">{row.cancellationCut}</div>
+                      <div className="bg-white px-5 py-5 text-sm text-slate-600">{row.note}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>
-
-        {/* Footer info */}
-        <div className="mt-20 pt-10 border-t border-gray-50 text-center">
-            <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-300">
-                Last Updated: April 2026 • © {appName} Technologies
-            </p>
-        </div>
-      </div>
+      </section>
     </div>
   );
 };

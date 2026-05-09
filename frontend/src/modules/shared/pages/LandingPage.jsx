@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Home, Clock, Gift, Map, Car, Phone, Mail } from 'lucide-react';
+import { Home, Clock, Gift, Map, Car, Phone, Mail, LogIn } from 'lucide-react';
 import './LandingPage.css';
 import { useSettings } from '../../../shared/context/SettingsContext';
 
@@ -87,8 +87,10 @@ function LandingPage() {
               <Link to="/faq" className={`new-nav-link ${activeTab === 'faq' ? 'active' : ''}`} onClick={() => { setActiveTab('faq'); setIsMobileMenuOpen(false); }}>FAQs</Link>
               <Link to="/blog" className={`new-nav-link ${activeTab === 'blog' ? 'active' : ''}`} onClick={() => { setActiveTab('blog'); setIsMobileMenuOpen(false); }}>Blog</Link>
               <Link to="/contact" className={`new-nav-link ${activeTab === 'contact' ? 'active' : ''}`} onClick={() => { setActiveTab('contact'); setIsMobileMenuOpen(false); }}>Contact</Link>
+              <Link to="/login" className={`new-nav-link ${activeTab === 'login' ? 'active' : ''}`} onClick={() => { setActiveTab('login'); setIsMobileMenuOpen(false); }}>Login</Link>
             </nav>
             <div className="new-nav-actions">
+              <button className="new-login-btn hidden-mobile" onClick={() => navigate('/login')}>Login</button>
               <button className="new-book-btn hidden-mobile" onClick={() => window.open('https://play.google.com/store/apps/details?id=com.rydon24.user', '_blank')}>Book a Taxi</button>
               <button className="mobile-menu-btn" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
                 ☰
@@ -103,7 +105,13 @@ function LandingPage() {
             <span className="new-hero-subtitle">Travel securely with us!</span>
             <h1 className="new-hero-title">Book your taxi from<br/>anywhere today!</h1>
             <p className="new-hero-desc">Everything your taxi business needs is already here!<br/>Rydon made for taxi service companies!</p>
-            <button className="new-hero-action-btn" onClick={() => window.open('https://play.google.com/store/apps/details?id=com.rydon24.user', '_blank')}>Book Your Ride</button>
+            <div className="new-hero-cta-row">
+              <button className="new-hero-action-btn" onClick={() => window.open('https://play.google.com/store/apps/details?id=com.rydon24.user', '_blank')}>Book Your Ride</button>
+              <button className="new-hero-login-btn" onClick={() => navigate('/login')}>
+                <LogIn size={18} />
+                <span>Login</span>
+              </button>
+            </div>
           </div>
           
           <div className="new-hero-graphic">
@@ -200,6 +208,28 @@ function LandingPage() {
                 <p>We run GPS searching incase you aren't sure of your destination. So you don't have to worry.</p>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="landing-login-section">
+        <div className="landing-login-card">
+          <div className="landing-login-copy">
+            <p className="landing-login-eyebrow">Account Access</p>
+            <h2>Login from the homepage to manage rides, bookings, refunds, and support requests.</h2>
+            <p>
+              Sign in to view trip history, track active services, update your account,
+              and reach support faster from one place.
+            </p>
+          </div>
+          <div className="landing-login-actions">
+            <button className="landing-login-primary" onClick={() => navigate('/login')}>
+              <LogIn size={18} />
+              <span>Go to Login</span>
+            </button>
+            <button className="landing-login-secondary" onClick={() => navigate('/signup')}>
+              Create Account
+            </button>
           </div>
         </div>
       </section>

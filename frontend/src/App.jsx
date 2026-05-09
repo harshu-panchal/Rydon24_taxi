@@ -671,7 +671,9 @@ function App() {
               <Route path="/blog" element={<BlogPage />} />
               <Route path="/links" element={<LinksPage />} />
               <Route path="/terms" element={<LegalPage />} />
+              <Route path="/terms-and-conditions" element={<LegalPage />} />
               <Route path="/privacy" element={<LegalPage />} />
+              <Route path="/privacy-policy" element={<LegalPage />} />
               <Route path="/refund" element={<LegalPage />} />
               <Route path="/cancellation" element={<LegalPage />} />
               <Route path="/login" element={<Login />} />
