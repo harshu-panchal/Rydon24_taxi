@@ -386,6 +386,54 @@ const fileToDataUrl = (file) =>
     reader.readAsDataURL(file);
   });
 
+const loadImageFromDataUrl = (dataUrl) =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Unable to process selected image'));
+    image.src = dataUrl;
+  });
+
+const compressInspectionImageForUpload = async (file) => {
+  const originalDataUrl = await fileToDataUrl(file);
+
+  if (
+    typeof document === 'undefined'
+    || !String(file?.type || '').toLowerCase().startsWith('image/')
+    || originalDataUrl.length <= 8_500_000
+  ) {
+    return originalDataUrl;
+  }
+
+  const image = await loadImageFromDataUrl(originalDataUrl);
+  const maxSide = 1600;
+  const largestSide = Math.max(image.width, image.height, 1);
+  const scale = largestSide > maxSide ? maxSide / largestSide : 1;
+  const width = Math.max(1, Math.round(image.width * scale));
+  const height = Math.max(1, Math.round(image.height * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return originalDataUrl;
+  }
+
+  context.drawImage(image, 0, 0, width, height);
+
+  let quality = 0.82;
+  let compressed = canvas.toDataURL('image/jpeg', quality);
+
+  while (compressed.length > 8_500_000 && quality > 0.45) {
+    quality -= 0.1;
+    compressed = canvas.toDataURL('image/jpeg', quality);
+  }
+
+  return compressed;
+};
+
 const statusBadgeClass = (status = '') => {
   const value = String(status || '').toLowerCase();
   if (value === 'completed') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
@@ -524,7 +572,11 @@ const InspectionPhotoSlots = ({
                     accept="image/*"
                     capture="environment"
                     className="hidden"
-                    onChange={(event) => onFileSelect(field, index, event.target.files, 'camera')}
+                    onChange={(event) => {
+                      const files = event.target.files;
+                      onFileSelect(field, index, files, 'camera');
+                      event.target.value = '';
+                    }}
                   />
                 </label>
                 <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[11px] font-black uppercase tracking-[0.12em] text-slate-700 transition hover:bg-slate-100 ${busy ? 'pointer-events-none opacity-60' : ''}`}>
@@ -534,7 +586,11 @@ const InspectionPhotoSlots = ({
                     type="file"
                     accept="image/*"
                     className="hidden"
-                    onChange={(event) => onFileSelect(field, index, event.target.files, 'upload')}
+                    onChange={(event) => {
+                      const files = event.target.files;
+                      onFileSelect(field, index, files, 'upload');
+                      event.target.value = '';
+                    }}
                   />
                 </label>
               </div>
@@ -1068,7 +1124,7 @@ const ServiceCenterDashboard = () => {
 
     try {
       const file = files[0];
-      const dataUrl = await fileToDataUrl(file);
+      const dataUrl = await compressInspectionImageForUpload(file);
       const uploadResult = await uploadService.uploadImage(dataUrl, 'service-center-condition');
       const imageUrl = uploadResult?.url || uploadResult?.secureUrl || '';
       if (!imageUrl) {
