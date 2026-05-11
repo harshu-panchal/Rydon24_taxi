@@ -416,11 +416,41 @@ const normalizeInspectionPhotoBridgeResult = (result) => {
   const imageUrl = String(result.imageUrl || result.url || '').trim();
 
   if (dataUrl.startsWith('data:image/')) {
-    return { ...result, dataUrl };
+    return {
+      ...result,
+      dataUrl,
+      capturedAt: result.capturedAt || result.timestamp || result.dateTime || null,
+      latitude:
+        result.latitude ?? result.lat ?? result.location?.latitude ?? result.gps?.latitude ?? null,
+      longitude:
+        result.longitude ?? result.lng ?? result.location?.longitude ?? result.gps?.longitude ?? null,
+      address: result.address || result.locationName || result.formattedAddress || '',
+      source: result.source || result.captureSource || '',
+      fileName: result.fileName || '',
+      mimeType,
+      deviceModel: result.deviceModel || result.deviceName || result.deviceLabel || '',
+      watermarkText: result.watermarkText || '',
+      exif: result.exif && typeof result.exif === 'object' ? result.exif : {},
+    };
   }
 
   if (imageUrl) {
-    return { ...result, imageUrl };
+    return {
+      ...result,
+      imageUrl,
+      capturedAt: result.capturedAt || result.timestamp || result.dateTime || null,
+      latitude:
+        result.latitude ?? result.lat ?? result.location?.latitude ?? result.gps?.latitude ?? null,
+      longitude:
+        result.longitude ?? result.lng ?? result.location?.longitude ?? result.gps?.longitude ?? null,
+      address: result.address || result.locationName || result.formattedAddress || '',
+      source: result.source || result.captureSource || '',
+      fileName: result.fileName || '',
+      mimeType,
+      deviceModel: result.deviceModel || result.deviceName || result.deviceLabel || '',
+      watermarkText: result.watermarkText || '',
+      exif: result.exif && typeof result.exif === 'object' ? result.exif : {},
+    };
   }
 
   return null;
@@ -541,6 +571,56 @@ const setConditionImageAtSlot = (images = [], slotIndex, imageUrl = '') => {
   return nextImages;
 };
 
+const normalizeConditionImageDetails = (items = []) => {
+  const list = Array.isArray(items) ? items.slice(0, inspectionPhotoSlots.length) : [];
+  while (list.length < inspectionPhotoSlots.length) {
+    list.push(null);
+  }
+
+  return list.map((item) => {
+    if (!item || typeof item !== 'object') {
+      return null;
+    }
+
+    const imageUrl = String(item.imageUrl || item.url || '').trim();
+    if (!imageUrl) {
+      return null;
+    }
+
+    return {
+      imageUrl,
+      capturedAt: item.capturedAt || item.timestamp || item.dateTime || null,
+      latitude:
+        item.latitude === null || item.latitude === undefined || item.latitude === ''
+          ? null
+          : Number(item.latitude),
+      longitude:
+        item.longitude === null || item.longitude === undefined || item.longitude === ''
+          ? null
+          : Number(item.longitude),
+      address: String(item.address || item.locationName || item.formattedAddress || '').trim(),
+      source: String(item.source || item.captureSource || '').trim(),
+      fileName: String(item.fileName || '').trim(),
+      mimeType: String(item.mimeType || '').trim(),
+      deviceModel: String(item.deviceModel || item.deviceName || item.deviceLabel || '').trim(),
+      watermarkText: String(item.watermarkText || '').trim(),
+      exif: item.exif && typeof item.exif === 'object' ? item.exif : {},
+    };
+  });
+};
+
+const setConditionImageDetailAtSlot = (items = [], slotIndex, detail = null) => {
+  const nextItems = normalizeConditionImageDetails(items);
+  nextItems[slotIndex] = detail && detail.imageUrl ? detail : null;
+  return nextItems;
+};
+
+const getConditionImageDetailsField = (field = '') =>
+  field === 'afterConditionImages' ? 'afterConditionImageDetails' : 'beforeConditionImageDetails';
+
+const formatCoordinate = (value) =>
+  value === null || value === undefined || Number.isNaN(Number(value)) ? '' : Number(value).toFixed(6);
+
 const formatDateTime = (value) => {
   if (!value) return 'Not set';
   const date = new Date(value);
@@ -624,6 +704,29 @@ const compressInspectionImageForUpload = async (file) => {
   return compressed;
 };
 
+const getBrowserCaptureLocation = () =>
+  new Promise((resolve) => {
+    if (!navigator?.geolocation) {
+      resolve(null);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          latitude: position.coords?.latitude ?? null,
+          longitude: position.coords?.longitude ?? null,
+        });
+      },
+      () => resolve(null),
+      {
+        enableHighAccuracy: true,
+        timeout: 5000,
+        maximumAge: 30000,
+      },
+    );
+  });
+
 const statusBadgeClass = (status = '') => {
   const value = String(status || '').toLowerCase();
   if (value === 'completed') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
@@ -679,6 +782,7 @@ const InspectionPhotoSlots = ({
   bookingId,
   field,
   images = [],
+  imageDetails = [],
   uploadingTarget = '',
   onFileSelect,
   onCameraCapture,
@@ -686,6 +790,7 @@ const InspectionPhotoSlots = ({
   onRemove,
 }) => {
   const normalizedImages = normalizeConditionImages(images);
+  const normalizedDetails = normalizeConditionImageDetails(imageDetails);
   const accentClass =
     accent === 'amber'
       ? {
@@ -718,6 +823,7 @@ const InspectionPhotoSlots = ({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {inspectionPhotoSlots.map((slot, index) => {
           const imageUrl = normalizedImages[index];
+          const detail = normalizedDetails[index];
           const cameraTarget = `${field}:${index}:camera`;
           const uploadTarget = `${field}:${index}:upload`;
           const busy = uploadingTarget === cameraTarget || uploadingTarget === uploadTarget;
@@ -802,7 +908,35 @@ const InspectionPhotoSlots = ({
               </div>
 
               {imageUrl ? (
-                <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="mt-2 space-y-2">
+                  {detail ? (
+                    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                      <div className="grid grid-cols-1 gap-1 text-[11px] text-slate-600">
+                        <p>
+                          <span className="font-black uppercase tracking-[0.12em] text-slate-400">Time </span>
+                          <span className="font-semibold text-slate-800">
+                            {detail.capturedAt ? formatDateTime(detail.capturedAt) : 'Not available'}
+                          </span>
+                        </p>
+                        {(detail.latitude !== null && detail.longitude !== null) || detail.address ? (
+                          <p>
+                            <span className="font-black uppercase tracking-[0.12em] text-slate-400">Location </span>
+                            <span className="font-semibold text-slate-800">
+                              {detail.address
+                                || `${formatCoordinate(detail.latitude)}, ${formatCoordinate(detail.longitude)}`}
+                            </span>
+                          </p>
+                        ) : null}
+                        {detail.deviceModel ? (
+                          <p>
+                            <span className="font-black uppercase tracking-[0.12em] text-slate-400">Device </span>
+                            <span className="font-semibold text-slate-800">{detail.deviceModel}</span>
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => onPreview(imageUrl)}
@@ -819,6 +953,7 @@ const InspectionPhotoSlots = ({
                     <Trash2 size={14} />
                     Remove
                   </button>
+                </div>
                 </div>
               ) : null}
             </div>
@@ -1405,7 +1540,7 @@ const ServiceCenterDashboard = () => {
     });
   };
 
-  const attachInspectionImageToBooking = async (bookingId, field, slotIndex, imageSource) => {
+  const attachInspectionImageToBooking = async (bookingId, field, slotIndex, imageSource, metadata = null) => {
     const uploadResult = await uploadService.uploadImage(imageSource, 'service-center-condition');
     const imageUrl = uploadResult?.url || uploadResult?.secureUrl || '';
     if (!imageUrl) {
@@ -1416,10 +1551,32 @@ const ServiceCenterDashboard = () => {
       bookings.find((item) => String(item.id || item._id) === String(bookingId)) || null;
     const currentInspection = currentBooking?.rentalInspection || {};
     const currentImages = normalizeConditionImages(currentInspection[field]);
+    const detailsField = getConditionImageDetailsField(field);
+    const currentDetails = normalizeConditionImageDetails(currentInspection[detailsField]);
+    const nextDetail = {
+      imageUrl,
+      capturedAt: metadata?.capturedAt || new Date().toISOString(),
+      latitude:
+        metadata?.latitude === null || metadata?.latitude === undefined || metadata?.latitude === ''
+          ? null
+          : Number(metadata.latitude),
+      longitude:
+        metadata?.longitude === null || metadata?.longitude === undefined || metadata?.longitude === ''
+          ? null
+          : Number(metadata.longitude),
+      address: String(metadata?.address || '').trim(),
+      source: String(metadata?.source || '').trim(),
+      fileName: String(metadata?.fileName || '').trim(),
+      mimeType: String(metadata?.mimeType || '').trim(),
+      deviceModel: String(metadata?.deviceModel || '').trim(),
+      watermarkText: String(metadata?.watermarkText || '').trim(),
+      exif: metadata?.exif && typeof metadata.exif === 'object' ? metadata.exif : {},
+    };
 
     await handleBookingUpdate(bookingId, {
       rentalInspection: {
         [field]: setConditionImageAtSlot(currentImages, slotIndex, imageUrl),
+        [detailsField]: setConditionImageDetailAtSlot(currentDetails, slotIndex, nextDetail),
       },
     });
   };
@@ -1437,7 +1594,15 @@ const ServiceCenterDashboard = () => {
     try {
       const file = files[0];
       const dataUrl = await compressInspectionImageForUpload(file);
-      await attachInspectionImageToBooking(bookingId, field, slotIndex, dataUrl);
+      const location = source === 'camera' ? await getBrowserCaptureLocation() : null;
+      await attachInspectionImageToBooking(bookingId, field, slotIndex, dataUrl, {
+        capturedAt: new Date().toISOString(),
+        latitude: location?.latitude ?? null,
+        longitude: location?.longitude ?? null,
+        source,
+        fileName: String(file?.name || '').trim(),
+        mimeType: String(file?.type || 'image/jpeg').trim(),
+      });
     } catch (err) {
       setError(err?.message || 'Unable to upload condition images');
     } finally {
@@ -1450,10 +1615,13 @@ const ServiceCenterDashboard = () => {
       bookings.find((item) => String(item.id || item._id) === String(bookingId)) || null;
     const currentInspection = currentBooking?.rentalInspection || {};
     const currentImages = normalizeConditionImages(currentInspection[field]);
+    const detailsField = getConditionImageDetailsField(field);
+    const currentDetails = normalizeConditionImageDetails(currentInspection[detailsField]);
 
     await handleBookingUpdate(bookingId, {
       rentalInspection: {
         [field]: setConditionImageAtSlot(currentImages, slotIndex, ''),
+        [detailsField]: setConditionImageDetailAtSlot(currentDetails, slotIndex, null),
       },
     });
   };
@@ -1546,11 +1714,19 @@ const ServiceCenterDashboard = () => {
       const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
       const uploadTarget = `${cameraCaptureState.field}:${cameraCaptureState.slotIndex}:camera`;
       setUploadingConditionSection(uploadTarget);
+      const location = await getBrowserCaptureLocation();
       await attachInspectionImageToBooking(
         cameraCaptureState.bookingId,
         cameraCaptureState.field,
         cameraCaptureState.slotIndex,
         dataUrl,
+        {
+          capturedAt: new Date().toISOString(),
+          latitude: location?.latitude ?? null,
+          longitude: location?.longitude ?? null,
+          source: 'browser_camera',
+          mimeType: 'image/jpeg',
+        },
       );
 
       closeCameraCaptureModal();
@@ -1605,7 +1781,7 @@ const ServiceCenterDashboard = () => {
         const nativeResult = await window.__nativeServiceCenterCamera(payload);
         const normalized = normalizeInspectionPhotoBridgeResult(nativeResult);
         if (normalized?.dataUrl) {
-          await attachInspectionImageToBooking(bookingId, field, slotIndex, normalized.dataUrl);
+          await attachInspectionImageToBooking(bookingId, field, slotIndex, normalized.dataUrl, normalized);
           return;
         }
       }
@@ -1626,7 +1802,7 @@ const ServiceCenterDashboard = () => {
               : await window.flutter_inappwebview.callHandler(handlerName, payload);
             const normalized = normalizeInspectionPhotoBridgeResult(result);
             if (normalized?.dataUrl) {
-              await attachInspectionImageToBooking(bookingId, field, slotIndex, normalized.dataUrl);
+              await attachInspectionImageToBooking(bookingId, field, slotIndex, normalized.dataUrl, normalized);
               return;
             }
           } catch {
@@ -2323,6 +2499,8 @@ const ServiceCenterDashboard = () => {
                  const afterInspection = inspection.afterReturn || {};
                  const beforeConditionImages = Array.isArray(inspection.beforeConditionImages) ? inspection.beforeConditionImages : [];
                  const afterConditionImages = Array.isArray(inspection.afterConditionImages) ? inspection.afterConditionImages : [];
+                 const beforeConditionImageDetails = Array.isArray(inspection.beforeConditionImageDetails) ? inspection.beforeConditionImageDetails : [];
+                 const afterConditionImageDetails = Array.isArray(inspection.afterConditionImageDetails) ? inspection.afterConditionImageDetails : [];
                  const enrolledFingerSet = new Set(Array.isArray(biometrics.enrolledFingerCodes) ? biometrics.enrolledFingerCodes : []);
                  const fingerDetailMap = new Map(
                    (Array.isArray(biometrics.fingers) ? biometrics.fingers : []).map((item) => [item.fingerCode, item]),
@@ -2871,6 +3049,7 @@ const ServiceCenterDashboard = () => {
                                   bookingId={selectedBooking.id || selectedBooking._id}
                                   field="beforeConditionImages"
                                   images={beforeConditionImages}
+                                  imageDetails={beforeConditionImageDetails}
                                   uploadingTarget={uploadingConditionSection}
                                   onFileSelect={(field, slotIndex, fileList, source) =>
                                     uploadConditionImages(selectedBooking.id || selectedBooking._id, field, slotIndex, fileList, source)
@@ -2933,6 +3112,7 @@ const ServiceCenterDashboard = () => {
                                   bookingId={selectedBooking.id || selectedBooking._id}
                                   field="afterConditionImages"
                                   images={afterConditionImages}
+                                  imageDetails={afterConditionImageDetails}
                                   uploadingTarget={uploadingConditionSection}
                                   onFileSelect={(field, slotIndex, fileList, source) =>
                                     uploadConditionImages(selectedBooking.id || selectedBooking._id, field, slotIndex, fileList, source)

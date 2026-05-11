@@ -1616,6 +1616,57 @@ const serializeServiceCenterStaff = (staff = {}, bookingCount = 0) => ({
   updatedAt: staff.updatedAt || null,
 });
 
+const serializeInspectionPhotoMetadata = (item = {}) => ({
+  imageUrl: String(item?.imageUrl || "").trim(),
+  capturedAt: item?.capturedAt || null,
+  latitude:
+    item?.latitude === null || item?.latitude === undefined || item?.latitude === ""
+      ? null
+      : Number(item.latitude),
+  longitude:
+    item?.longitude === null || item?.longitude === undefined || item?.longitude === ""
+      ? null
+      : Number(item.longitude),
+  address: String(item?.address || "").trim(),
+  source: String(item?.source || "").trim(),
+  fileName: String(item?.fileName || "").trim(),
+  mimeType: String(item?.mimeType || "").trim(),
+  deviceModel: String(item?.deviceModel || "").trim(),
+  watermarkText: String(item?.watermarkText || "").trim(),
+  exif: item?.exif && typeof item.exif === "object" ? item.exif : {},
+});
+
+const normalizeInspectionPhotoMetadataInput = (item = {}) => {
+  const imageUrl = String(item?.imageUrl || item?.url || "").trim();
+  const capturedAtValue = item?.capturedAt || item?.timestamp || item?.dateTime || null;
+  const capturedAtDate = capturedAtValue ? new Date(capturedAtValue) : null;
+  const latitude = item?.latitude ?? item?.lat ?? item?.location?.latitude ?? item?.gps?.latitude ?? null;
+  const longitude = item?.longitude ?? item?.lng ?? item?.location?.longitude ?? item?.gps?.longitude ?? null;
+
+  return {
+    imageUrl,
+    capturedAt:
+      capturedAtDate && !Number.isNaN(capturedAtDate.getTime())
+        ? capturedAtDate
+        : null,
+    latitude:
+      latitude === null || latitude === undefined || latitude === "" || Number.isNaN(Number(latitude))
+        ? null
+        : Number(latitude),
+    longitude:
+      longitude === null || longitude === undefined || longitude === "" || Number.isNaN(Number(longitude))
+        ? null
+        : Number(longitude),
+    address: String(item?.address || item?.locationName || item?.formattedAddress || "").trim(),
+    source: String(item?.source || item?.captureSource || "").trim(),
+    fileName: String(item?.fileName || "").trim(),
+    mimeType: String(item?.mimeType || item?.type || "").trim(),
+    deviceModel: String(item?.deviceModel || item?.deviceName || item?.deviceLabel || "").trim(),
+    watermarkText: String(item?.watermarkText || "").trim(),
+    exif: item?.exif && typeof item.exif === "object" ? item.exif : {},
+  };
+};
+
 const serializeServiceCenterStaffBiometrics = (staff = {}) => {
   const biometrics = Array.isArray(staff?.biometrics) ? staff.biometrics : [];
 
@@ -1828,6 +1879,16 @@ const serializeServiceCenterBooking = (item = {}, biometricProfile = null) => ({
       : [],
     afterConditionImages: Array.isArray(item.rentalInspection?.afterConditionImages)
       ? item.rentalInspection.afterConditionImages.filter(Boolean)
+      : [],
+    beforeConditionImageDetails: Array.isArray(item.rentalInspection?.beforeConditionImageDetails)
+      ? item.rentalInspection.beforeConditionImageDetails
+          .map((detail) => serializeInspectionPhotoMetadata(detail))
+          .filter((detail) => detail.imageUrl)
+      : [],
+    afterConditionImageDetails: Array.isArray(item.rentalInspection?.afterConditionImageDetails)
+      ? item.rentalInspection.afterConditionImageDetails
+          .map((detail) => serializeInspectionPhotoMetadata(detail))
+          .filter((detail) => detail.imageUrl)
       : [],
   },
   serviceCenterNote: item.serviceCenterNote || "",
@@ -3851,6 +3912,32 @@ export const updateServiceCenterBooking = async (req, res) => {
       booking.rentalInspection.afterConditionImages = Array.isArray(inspection.afterConditionImages)
         ? inspection.afterConditionImages.map((item) => String(item || "").trim()).filter(Boolean)
         : [];
+    }
+
+    if (inspection.beforeConditionImageDetails !== undefined) {
+      booking.rentalInspection = booking.rentalInspection || {};
+      booking.rentalInspection.beforeConditionImageDetails = Array.isArray(inspection.beforeConditionImageDetails)
+        ? inspection.beforeConditionImageDetails
+            .map((item) => normalizeInspectionPhotoMetadataInput(item))
+            .filter((item) => item.imageUrl)
+        : [];
+
+      booking.rentalInspection.beforeConditionImages = booking.rentalInspection.beforeConditionImageDetails.map(
+        (item) => item.imageUrl,
+      );
+    }
+
+    if (inspection.afterConditionImageDetails !== undefined) {
+      booking.rentalInspection = booking.rentalInspection || {};
+      booking.rentalInspection.afterConditionImageDetails = Array.isArray(inspection.afterConditionImageDetails)
+        ? inspection.afterConditionImageDetails
+            .map((item) => normalizeInspectionPhotoMetadataInput(item))
+            .filter((item) => item.imageUrl)
+        : [];
+
+      booking.rentalInspection.afterConditionImages = booking.rentalInspection.afterConditionImageDetails.map(
+        (item) => item.imageUrl,
+      );
     }
   }
 

@@ -98,6 +98,63 @@ const rentalTrackingPointSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const inspectionPhotoMetadataSchema = new mongoose.Schema(
+  {
+    imageUrl: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    capturedAt: {
+      type: Date,
+      default: null,
+    },
+    latitude: {
+      type: Number,
+      default: null,
+    },
+    longitude: {
+      type: Number,
+      default: null,
+    },
+    address: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    source: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    fileName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    mimeType: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    deviceModel: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    watermarkText: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    exif: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+  },
+  { _id: false },
+);
+
 const rentalBookingRequestSchema = new mongoose.Schema(
   {
     userId: {
@@ -400,6 +457,14 @@ const rentalBookingRequestSchema = new mongoose.Schema(
       },
       afterConditionImages: {
         type: [String],
+        default: [],
+      },
+      beforeConditionImageDetails: {
+        type: [inspectionPhotoMetadataSchema],
+        default: [],
+      },
+      afterConditionImageDetails: {
+        type: [inspectionPhotoMetadataSchema],
         default: [],
       },
     },
