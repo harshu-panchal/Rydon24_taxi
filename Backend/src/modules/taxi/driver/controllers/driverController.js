@@ -3797,6 +3797,9 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
     ? null
     : Number(req.body.matchScore);
   const templateData = String(req.body?.templateData || req.body?.template || "").trim();
+  const previewImage = normalizeBiometricPreviewImage(
+    req.body?.previewImage || req.body?.imageBase64 || req.body?.imageUrl || "",
+  );
   const captureSource = String(req.body?.captureSource || req.body?.source || "").trim().toLowerCase();
   const localMatch = req.body?.localMatch === undefined
     ? null
@@ -3848,6 +3851,9 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
   }
 
   const now = new Date();
+  if (previewImage) {
+    profile.fingers[fingerIndex].previewImage = previewImage;
+  }
   profile.fingers[fingerIndex].lastVerifiedAt = now;
   profile.fingers[fingerIndex].verificationCount =
     Number(profile.fingers[fingerIndex].verificationCount || 0) + 1;

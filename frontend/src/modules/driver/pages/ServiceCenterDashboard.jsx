@@ -243,6 +243,11 @@ const withImageDataUrlPrefix = (value = '') => {
 const pickFirstBiometricValue = (...values) =>
   values.find((value) => value !== undefined && value !== null && String(value).trim() !== '') || '';
 
+const pickFirstBiometricPreviewValue = (...values) =>
+  withImageDataUrlPrefix(
+    values.find((value) => value !== undefined && value !== null && String(value).trim() !== '') || '',
+  );
+
 const parseBridgeObject = (result) => {
   if (!result) return result;
   if (typeof result === 'string') {
@@ -313,13 +318,25 @@ const normalizeBridgeResult = (result, preferredSource, action) => {
           payload.previewImage,
           payload.imageBase64,
           payload.base64Image,
+          payload.previewBase64,
           payload.bitmap,
+          payload.bitmapBase64,
+          payload.bmpBase64,
+          payload.imageData,
+          payload.fingerprintImage,
+          payload.fingerImage,
           payload.image,
           payload.imageUrl,
           parsedResult.previewImage,
           parsedResult.imageBase64,
           parsedResult.base64Image,
+          parsedResult.previewBase64,
           parsedResult.bitmap,
+          parsedResult.bitmapBase64,
+          parsedResult.bmpBase64,
+          parsedResult.imageData,
+          parsedResult.fingerprintImage,
+          parsedResult.fingerImage,
           parsedResult.image,
           parsedResult.imageUrl,
         ),
@@ -359,6 +376,32 @@ const normalizeBridgeResult = (result, preferredSource, action) => {
       ).trim(),
       captureSource: normalizedSource,
       matchScore: payload.matchScore ?? payload.score ?? parsedResult.matchScore ?? parsedResult.score,
+      previewImage: pickFirstBiometricPreviewValue(
+        payload.previewImage,
+        payload.imageBase64,
+        payload.base64Image,
+        payload.previewBase64,
+        payload.bitmap,
+        payload.bitmapBase64,
+        payload.bmpBase64,
+        payload.imageData,
+        payload.fingerprintImage,
+        payload.fingerImage,
+        payload.image,
+        payload.imageUrl,
+        parsedResult.previewImage,
+        parsedResult.imageBase64,
+        parsedResult.base64Image,
+        parsedResult.previewBase64,
+        parsedResult.bitmap,
+        parsedResult.bitmapBase64,
+        parsedResult.bmpBase64,
+        parsedResult.imageData,
+        parsedResult.fingerprintImage,
+        parsedResult.fingerImage,
+        parsedResult.image,
+        parsedResult.imageUrl,
+      ),
       notes: pickFirstBiometricValue(payload.notes, payload.message, parsedResult.notes, parsedResult.message),
     };
   }
@@ -2184,6 +2227,19 @@ const ServiceCenterDashboard = () => {
         verificationStatus: resolvedBridgeStatus,
         localMatch: bridgeResult?.localMatch ?? bridgeResult?.match,
         templateData: bridgeResult?.templateData || bridgeResult?.template || '',
+        previewImage:
+          bridgeResult?.previewImage
+          || bridgeResult?.imageBase64
+          || bridgeResult?.base64Image
+          || bridgeResult?.previewBase64
+          || bridgeResult?.bitmap
+          || bridgeResult?.bitmapBase64
+          || bridgeResult?.bmpBase64
+          || bridgeResult?.imageData
+          || bridgeResult?.fingerprintImage
+          || bridgeResult?.fingerImage
+          || bridgeResult?.imageUrl
+          || '',
         captureSource: normalizeBiometricCaptureSource(bridgeResult?.captureSource, biometricSource),
         matchScore: Number.isFinite(resolvedBridgeScore) ? resolvedBridgeScore : undefined,
         notes: bridgeResult?.notes || '',
@@ -2676,7 +2732,7 @@ const ServiceCenterDashboard = () => {
                                <ShieldCheck size={42} className="text-emerald-400" />
                                <p className="mt-4 text-lg font-bold">Fingerprint preview will appear here</p>
                                <p className="mt-2 max-w-sm text-sm text-slate-300">
-                                 The web page is ready. Once Flutter sends `previewImage`, `imageBase64`, or a scanner bitmap, this page will show the actual fingerprint image here.
+                                 No fingerprint preview was saved for this finger yet. Re-scan or re-verify from the scanner bridge so the app can attach a visual preview here.
                                </p>
                              </div>
                            )}
@@ -2687,8 +2743,8 @@ const ServiceCenterDashboard = () => {
                              <p className="text-sm font-bold text-amber-900">Current status</p>
                              <p className="mt-1 text-sm text-amber-800">
                                {selectedFingerprintRecord.previewImage
-                                 ? 'Preview image received from the capture bridge.'
-                                 : 'Template is stored, but no visual fingerprint preview has been provided by the bridge yet.'}
+                                 ? 'Preview image received from the capture or verify bridge.'
+                                 : 'Template is stored, but this saved finger record still has no visual preview attached from the scanner bridge.'}
                              </p>
                            </div>
 
