@@ -2091,7 +2091,6 @@ const ServiceCenterDashboard = () => {
         fingerCode: finger.code,
         action: 'capture',
       });
-      setError(preflightMessage);
       return;
     }
 
@@ -2205,7 +2204,6 @@ const ServiceCenterDashboard = () => {
         fingerCode: finger.code,
         action: 'capture',
       });
-      setError(message);
     } finally {
       setBiometricAction('');
     }
@@ -2228,7 +2226,6 @@ const ServiceCenterDashboard = () => {
         fingerCode: finger.code,
         action: 'verify',
       });
-      setError(preflightMessage);
       return;
     }
 
@@ -2258,6 +2255,8 @@ const ServiceCenterDashboard = () => {
       const resolvedBridgeStatus = String(bridgeResult?.verificationStatus || bridgeResult?.status || '').trim().toLowerCase();
       const resolvedBridgeScore = normalizeBiometricMatchScore(bridgeResult?.matchScore);
       const hasBridgeTemplate = Boolean(String(bridgeResult?.templateData || bridgeResult?.template || '').trim());
+      const hasBridgeBooleanMatch = typeof bridgeResult?.localMatch === 'boolean' || typeof bridgeResult?.match === 'boolean';
+      const hasBridgeDecision = Boolean(resolvedBridgeStatus) || hasBridgeBooleanMatch || Number.isFinite(resolvedBridgeScore);
       const hasBridgeEvidence =
         resolvedBridgeStatus
         || typeof bridgeResult?.localMatch === 'boolean'
@@ -2267,6 +2266,12 @@ const ServiceCenterDashboard = () => {
 
       if (!hasBridgeEvidence) {
         throw new Error('The scanner did not return a fingerprint result. Ask the customer to scan again.');
+      }
+
+      if ((biometricSource === 'usb_scanner' || biometricSource === 'bluetooth_scanner') && !hasBridgeDecision) {
+        throw new Error(
+          `${getBiometricSourceLabel(biometricSource)} verification is not returning a real match result yet. The bridge only sent a fresh template capture, so the app cannot reliably prove the same finger matched. Wire the scanner bridge to return matchScore, localMatch, or verificationStatus for verify.`,
+        );
       }
 
       const response = await verifyServiceCenterBookingFingerprint(selectedBooking.id || selectedBooking._id, {
@@ -2330,13 +2335,6 @@ const ServiceCenterDashboard = () => {
         fingerCode: finger.code,
         action: 'verify',
       });
-      if (verificationStatus !== 'matched') {
-        setError(
-          verificationStatus === 'low_quality'
-            ? lowQualityMessage
-            : failedMessage,
-        );
-      }
     } catch (err) {
       const message = err?.message || `Unable to verify ${finger.label}`;
       setBiometricStatus({
@@ -2345,7 +2343,6 @@ const ServiceCenterDashboard = () => {
         fingerCode: finger.code,
         action: 'verify',
       });
-      setError(message);
     } finally {
       setBiometricAction('');
     }
@@ -2401,7 +2398,6 @@ const ServiceCenterDashboard = () => {
         fingerCode: finger.code,
         action: 'delete',
       });
-      setError(message);
     } finally {
       setBiometricAction('');
     }
