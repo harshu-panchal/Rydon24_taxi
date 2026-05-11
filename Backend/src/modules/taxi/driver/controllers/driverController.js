@@ -117,6 +117,22 @@ const toIstDayKey = (value = new Date()) =>
 
 const toCleanString = (value = "") => String(value || "").trim();
 const normalizeBoolean = (value) => value === true || value === "true" || value === 1 || value === "1";
+const normalizeBiometricMatchScore = (value) => {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return null;
+  }
+
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue < 0) {
+    return null;
+  }
+
+  if (numericValue > 0 && numericValue <= 1) {
+    return Number((numericValue * 100).toFixed(2));
+  }
+
+  return numericValue;
+};
 const normalizeBusPassengerPhone = (value = "") =>
   String(value || "")
     .replace(/\D/g, "")
@@ -3626,7 +3642,19 @@ export const captureServiceCenterBookingFingerprint = async (req, res) => {
   const templateData = String(req.body?.templateData || "").trim();
   const templateFormat = String(req.body?.templateFormat || "vendor-template").trim();
   const previewImage = normalizeBiometricPreviewImage(
-    req.body?.previewImage || req.body?.imageBase64 || req.body?.imageUrl || "",
+    req.body?.previewImage ||
+    req.body?.imageBase64 ||
+    req.body?.base64Image ||
+    req.body?.previewBase64 ||
+    req.body?.bitmap ||
+    req.body?.bitmapBase64 ||
+    req.body?.bmpBase64 ||
+    req.body?.imageData ||
+    req.body?.fingerprintImage ||
+    req.body?.fingerImage ||
+    req.body?.image ||
+    req.body?.imageUrl ||
+    "",
   );
   const qualityScore = req.body?.qualityScore === undefined || req.body?.qualityScore === null
     ? null
@@ -3793,12 +3821,22 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
     .trim()
     .toLowerCase();
   const notes = String(req.body?.notes || "").trim();
-  const matchScore = req.body?.matchScore === undefined || req.body?.matchScore === null
-    ? null
-    : Number(req.body.matchScore);
+  const matchScore = normalizeBiometricMatchScore(req.body?.matchScore);
   const templateData = String(req.body?.templateData || req.body?.template || "").trim();
   const previewImage = normalizeBiometricPreviewImage(
-    req.body?.previewImage || req.body?.imageBase64 || req.body?.imageUrl || "",
+    req.body?.previewImage ||
+    req.body?.imageBase64 ||
+    req.body?.base64Image ||
+    req.body?.previewBase64 ||
+    req.body?.bitmap ||
+    req.body?.bitmapBase64 ||
+    req.body?.bmpBase64 ||
+    req.body?.imageData ||
+    req.body?.fingerprintImage ||
+    req.body?.fingerImage ||
+    req.body?.image ||
+    req.body?.imageUrl ||
+    "",
   );
   const captureSource = String(req.body?.captureSource || req.body?.source || "").trim().toLowerCase();
   const localMatch = req.body?.localMatch === undefined

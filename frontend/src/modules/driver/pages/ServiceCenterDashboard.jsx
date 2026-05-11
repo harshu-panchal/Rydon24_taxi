@@ -117,6 +117,23 @@ const biometricSourceOptions = [
 const BIOMETRIC_BRIDGE_TIMEOUT_MS = 25000;
 const BIOMETRIC_MIN_MATCH_SCORE = 80;
 
+const normalizeBiometricMatchScore = (value) => {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return null;
+  }
+
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue < 0) {
+    return null;
+  }
+
+  if (numericValue > 0 && numericValue <= 1) {
+    return Number((numericValue * 100).toFixed(2));
+  }
+
+  return numericValue;
+};
+
 const buildBiometricDraft = (booking) => ({
   consentAccepted: Boolean(booking?.biometrics?.consentAccepted),
   consentNotes: String(booking?.biometrics?.consentNotes || ''),
@@ -375,7 +392,9 @@ const normalizeBridgeResult = (result, preferredSource, action) => {
         ),
       ).trim(),
       captureSource: normalizedSource,
-      matchScore: payload.matchScore ?? payload.score ?? parsedResult.matchScore ?? parsedResult.score,
+      matchScore: normalizeBiometricMatchScore(
+        payload.matchScore ?? payload.score ?? parsedResult.matchScore ?? parsedResult.score,
+      ),
       previewImage: pickFirstBiometricPreviewValue(
         payload.previewImage,
         payload.imageBase64,
@@ -1216,8 +1235,19 @@ const ServiceCenterDashboard = () => {
     }
     return {
       ...matchedRecord,
-      previewImage: withImageDataUrlPrefix(
-        matchedRecord.previewImage || matchedRecord.imageBase64 || matchedRecord.bitmap || '',
+      previewImage: pickFirstBiometricPreviewValue(
+        matchedRecord.previewImage,
+        matchedRecord.imageBase64,
+        matchedRecord.base64Image,
+        matchedRecord.previewBase64,
+        matchedRecord.bitmap,
+        matchedRecord.bitmapBase64,
+        matchedRecord.bmpBase64,
+        matchedRecord.imageData,
+        matchedRecord.fingerprintImage,
+        matchedRecord.fingerImage,
+        matchedRecord.image,
+        matchedRecord.imageUrl,
       ),
     };
   }, [selectedBooking, selectedFingerprintCode]);
@@ -1965,7 +1995,8 @@ const ServiceCenterDashboard = () => {
     const bridgeAction = getBridgeCommandAction(action);
 
     if (window?.FingerprintBridge && typeof window.FingerprintBridge[action] === 'function') {
-      return window.FingerprintBridge[action](bridgePayload);
+      const result = await window.FingerprintBridge[action](bridgePayload);
+      return normalizeBridgeResult(result, preferredSource, action);
     }
 
     if (window?.flutter_inappwebview?.callHandler) {
@@ -2107,10 +2138,16 @@ const ServiceCenterDashboard = () => {
       }
 
       const templateData = String(
-        bridgeResult?.templateData ||
-        bridgeResult?.template ||
-        bridgeResult?.payload ||
-        '',
+        pickFirstBiometricValue(
+          bridgeResult?.templateData,
+          bridgeResult?.template,
+          bridgeResult?.fingerprintTemplate,
+          bridgeResult?.isoTemplate,
+          bridgeResult?.ansiTemplate,
+          bridgeResult?.wsqTemplate,
+          bridgeResult?.rawTemplate,
+          bridgeResult?.payload,
+        ),
       ).trim();
 
       if (!templateData) {
@@ -2125,7 +2162,20 @@ const ServiceCenterDashboard = () => {
         fingerCode: finger.code,
         templateData,
         templateFormat: bridgeResult?.templateFormat || 'vendor-template',
-        previewImage: bridgeResult?.previewImage || bridgeResult?.imageBase64 || bridgeResult?.imageUrl || '',
+        previewImage: pickFirstBiometricPreviewValue(
+          bridgeResult?.previewImage,
+          bridgeResult?.imageBase64,
+          bridgeResult?.base64Image,
+          bridgeResult?.previewBase64,
+          bridgeResult?.bitmap,
+          bridgeResult?.bitmapBase64,
+          bridgeResult?.bmpBase64,
+          bridgeResult?.imageData,
+          bridgeResult?.fingerprintImage,
+          bridgeResult?.fingerImage,
+          bridgeResult?.image,
+          bridgeResult?.imageUrl,
+        ),
         qualityScore: bridgeResult?.qualityScore,
         captureSource: normalizeBiometricCaptureSource(bridgeResult?.captureSource, biometricSource || 'manual'),
         deviceLabel: bridgeResult?.deviceLabel || bridgeResult?.deviceName || '',
@@ -2206,10 +2256,7 @@ const ServiceCenterDashboard = () => {
       }
 
       const resolvedBridgeStatus = String(bridgeResult?.verificationStatus || bridgeResult?.status || '').trim().toLowerCase();
-      const resolvedBridgeScore =
-        bridgeResult?.matchScore === undefined || bridgeResult?.matchScore === null
-          ? null
-          : Number(bridgeResult.matchScore);
+      const resolvedBridgeScore = normalizeBiometricMatchScore(bridgeResult?.matchScore);
       const hasBridgeTemplate = Boolean(String(bridgeResult?.templateData || bridgeResult?.template || '').trim());
       const hasBridgeEvidence =
         resolvedBridgeStatus

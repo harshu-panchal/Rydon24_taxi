@@ -9,6 +9,7 @@ const unwrap = (response) => response?.data?.data || response?.data || response;
 const PENDING_SIGNUP_PHONE_KEY = 'pendingUserSignupPhone';
 const PENDING_OTP_PHONE_KEY = 'pendingUserOtpPhone';
 const PENDING_SIGNUP_REFERRAL_CODE_KEY = 'pendingUserSignupReferralCode';
+const RESEND_OTP_COOLDOWN_SECONDS = 60;
 const syncPushTokens = () => {
   window.__flushNativeFcmToken?.().catch?.(() => {});
   window.__registerBrowserFcmToken?.({ interactive: true }).catch?.(() => {});
@@ -36,7 +37,7 @@ const VerifyOTP = () => {
     '',
   ).trim().toUpperCase();
   const [otp, setOtp] = useState(['', '', '', '']);
-  const [timer, setTimer] = useState(30);
+  const [timer, setTimer] = useState(RESEND_OTP_COOLDOWN_SECONDS);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -164,7 +165,7 @@ const VerifyOTP = () => {
     try {
       await userAuthService.startOtp(phone);
       setOtp(['', '', '', '']);
-      setTimer(30);
+      setTimer(RESEND_OTP_COOLDOWN_SECONDS);
       inputs.current[0]?.focus();
     } catch (err) {
       setError(true);
