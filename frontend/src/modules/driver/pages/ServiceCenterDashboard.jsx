@@ -398,12 +398,19 @@ const normalizeInspectionPhotoBridgeResult = (result) => {
     return null;
   }
 
+  if (result.success === false) {
+    return null;
+  }
+
+  const mimeType = String(result.mimeType || result.type || 'image/jpeg').trim() || 'image/jpeg';
+  const rawBase64 = String(result.base64 || result.base64Data || result.imageBase64 || result.previewBase64 || '').trim();
   const dataUrl = String(
     result.dataUrl
     || result.image
     || result.imageBase64
     || result.base64Image
     || result.previewImage
+    || (rawBase64 ? `data:${mimeType};base64,${rawBase64}` : '')
     || '',
   ).trim();
   const imageUrl = String(result.imageUrl || result.url || '').trim();
@@ -425,7 +432,8 @@ const isInspectionCameraBridgeAvailable = () => {
   }
 
   return window.isServiceCenterCameraBridgeAvailable === true
-    || typeof window.__nativeServiceCenterCamera === 'function';
+    || typeof window.__nativeServiceCenterCamera === 'function'
+    || Boolean(window?.flutter_inappwebview?.callHandler);
 };
 
 const stopMediaStream = (stream) => {
@@ -1397,6 +1405,25 @@ const ServiceCenterDashboard = () => {
     });
   };
 
+  const attachInspectionImageToBooking = async (bookingId, field, slotIndex, imageSource) => {
+    const uploadResult = await uploadService.uploadImage(imageSource, 'service-center-condition');
+    const imageUrl = uploadResult?.url || uploadResult?.secureUrl || '';
+    if (!imageUrl) {
+      throw new Error('Unable to upload selected image');
+    }
+
+    const currentBooking =
+      bookings.find((item) => String(item.id || item._id) === String(bookingId)) || null;
+    const currentInspection = currentBooking?.rentalInspection || {};
+    const currentImages = normalizeConditionImages(currentInspection[field]);
+
+    await handleBookingUpdate(bookingId, {
+      rentalInspection: {
+        [field]: setConditionImageAtSlot(currentImages, slotIndex, imageUrl),
+      },
+    });
+  };
+
   const uploadConditionImages = async (bookingId, field, slotIndex, fileList, source = 'upload') => {
     const files = Array.from(fileList || []).filter(Boolean);
     if (!files.length) {
@@ -1410,22 +1437,7 @@ const ServiceCenterDashboard = () => {
     try {
       const file = files[0];
       const dataUrl = await compressInspectionImageForUpload(file);
-      const uploadResult = await uploadService.uploadImage(dataUrl, 'service-center-condition');
-      const imageUrl = uploadResult?.url || uploadResult?.secureUrl || '';
-      if (!imageUrl) {
-        throw new Error('Unable to upload selected image');
-      }
-
-      const currentBooking =
-        bookings.find((item) => String(item.id || item._id) === String(bookingId)) || null;
-      const currentInspection = currentBooking?.rentalInspection || {};
-      const currentImages = normalizeConditionImages(currentInspection[field]);
-
-      await handleBookingUpdate(bookingId, {
-        rentalInspection: {
-          [field]: setConditionImageAtSlot(currentImages, slotIndex, imageUrl),
-        },
-      });
+      await attachInspectionImageToBooking(bookingId, field, slotIndex, dataUrl);
     } catch (err) {
       setError(err?.message || 'Unable to upload condition images');
     } finally {
@@ -1534,23 +1546,12 @@ const ServiceCenterDashboard = () => {
       const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
       const uploadTarget = `${cameraCaptureState.field}:${cameraCaptureState.slotIndex}:camera`;
       setUploadingConditionSection(uploadTarget);
-
-      const uploadResult = await uploadService.uploadImage(dataUrl, 'service-center-condition');
-      const imageUrl = uploadResult?.url || uploadResult?.secureUrl || '';
-      if (!imageUrl) {
-        throw new Error('Unable to upload selected image');
-      }
-
-      const currentBooking =
-        bookings.find((item) => String(item.id || item._id) === String(cameraCaptureState.bookingId)) || null;
-      const currentInspection = currentBooking?.rentalInspection || {};
-      const currentImages = normalizeConditionImages(currentInspection[cameraCaptureState.field]);
-
-      await handleBookingUpdate(cameraCaptureState.bookingId, {
-        rentalInspection: {
-          [cameraCaptureState.field]: setConditionImageAtSlot(currentImages, cameraCaptureState.slotIndex, imageUrl),
-        },
-      });
+      await attachInspectionImageToBooking(
+        cameraCaptureState.bookingId,
+        cameraCaptureState.field,
+        cameraCaptureState.slotIndex,
+        dataUrl,
+      );
 
       closeCameraCaptureModal();
     } catch (captureError) {
@@ -1573,8 +1574,10 @@ const ServiceCenterDashboard = () => {
   };
 
   const requestInspectionCameraCapture = async (field, slotIndex, slotLabel = '') => {
-    if (selectedBooking?.id || selectedBooking?._id) {
-      await openCameraCaptureModal(selectedBooking.id || selectedBooking._id, field, slotIndex, slotLabel);
+    const bookingId = selectedBooking?.id || selectedBooking?._id || '';
+
+    if (!isInspectionCameraBridgeAvailable() && bookingId) {
+      await openCameraCaptureModal(bookingId, field, slotIndex, slotLabel);
       return;
     }
 
@@ -1593,7 +1596,8 @@ const ServiceCenterDashboard = () => {
       field,
       slotIndex,
       slotLabel,
-      bookingId: selectedBooking?.id || selectedBooking?._id || '',
+      bookingId,
+      source: 'service_center_dashboard',
     };
 
     try {
@@ -1601,28 +1605,14 @@ const ServiceCenterDashboard = () => {
         const nativeResult = await window.__nativeServiceCenterCamera(payload);
         const normalized = normalizeInspectionPhotoBridgeResult(nativeResult);
         if (normalized?.dataUrl) {
-          const uploadResult = await uploadService.uploadImage(normalized.dataUrl, 'service-center-condition');
-          const imageUrl = uploadResult?.url || uploadResult?.secureUrl || '';
-          if (!imageUrl) {
-            throw new Error('Unable to upload selected image');
-          }
-
-          const currentBooking =
-            bookings.find((item) => String(item.id || item._id) === String(selectedBooking?.id || selectedBooking?._id)) || null;
-          const currentInspection = currentBooking?.rentalInspection || {};
-          const currentImages = normalizeConditionImages(currentInspection[field]);
-
-          await handleBookingUpdate(selectedBooking?.id || selectedBooking?._id, {
-            rentalInspection: {
-              [field]: setConditionImageAtSlot(currentImages, slotIndex, imageUrl),
-            },
-          });
+          await attachInspectionImageToBooking(bookingId, field, slotIndex, normalized.dataUrl);
           return;
         }
       }
 
       if (window?.flutter_inappwebview?.callHandler) {
         const handlers = [
+          'openCamera',
           'serviceCenterCamera',
           'serviceCenterInspectionPhoto',
           'captureInspectionPhoto',
@@ -1631,25 +1621,12 @@ const ServiceCenterDashboard = () => {
 
         for (const handlerName of handlers) {
           try {
-            const result = await window.flutter_inappwebview.callHandler(handlerName, payload);
+            const result = handlerName === 'openCamera'
+              ? await window.flutter_inappwebview.callHandler(handlerName)
+              : await window.flutter_inappwebview.callHandler(handlerName, payload);
             const normalized = normalizeInspectionPhotoBridgeResult(result);
             if (normalized?.dataUrl) {
-              const uploadResult = await uploadService.uploadImage(normalized.dataUrl, 'service-center-condition');
-              const imageUrl = uploadResult?.url || uploadResult?.secureUrl || '';
-              if (!imageUrl) {
-                throw new Error('Unable to upload selected image');
-              }
-
-              const currentBooking =
-                bookings.find((item) => String(item.id || item._id) === String(selectedBooking?.id || selectedBooking?._id)) || null;
-              const currentInspection = currentBooking?.rentalInspection || {};
-              const currentImages = normalizeConditionImages(currentInspection[field]);
-
-              await handleBookingUpdate(selectedBooking?.id || selectedBooking?._id, {
-                rentalInspection: {
-                  [field]: setConditionImageAtSlot(currentImages, slotIndex, imageUrl),
-                },
-              });
+              await attachInspectionImageToBooking(bookingId, field, slotIndex, normalized.dataUrl);
               return;
             }
           } catch {
@@ -1659,6 +1636,11 @@ const ServiceCenterDashboard = () => {
       }
     } finally {
       setUploadingConditionSection('');
+    }
+
+    if (bookingId) {
+      await openCameraCaptureModal(bookingId, field, slotIndex, slotLabel);
+      return;
     }
 
     triggerInspectionCameraInput(field, slotIndex);
