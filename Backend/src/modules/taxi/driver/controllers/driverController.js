@@ -1757,6 +1757,43 @@ const normalizeBiometricPreviewImage = (value = "") => {
   return trimmed;
 };
 
+const buildGeneratedBiometricPreview = (finger = {}) => {
+  const seed = String(finger?.templateHash || finger?.fingerCode || "fingerprint").replace(/[^a-fA-F0-9]/g, "") || "fingerprint";
+  const label = String(finger?.displayName || getBiometricFingerDisplayName(finger?.fingerCode) || "Fingerprint").trim();
+  const accent = `#${seed.slice(0, 6).padEnd(6, "8")}`;
+  const accentSoft = `#${seed.slice(6, 12).padEnd(6, "c")}`;
+  const lineOne = Number.parseInt(seed.slice(0, 2) || "18", 16) % 18;
+  const lineTwo = Number.parseInt(seed.slice(2, 4) || "24", 16) % 18;
+  const lineThree = Number.parseInt(seed.slice(4, 6) || "30", 16) % 18;
+  const ridgeA = Number.parseInt(seed.slice(6, 8) || "12", 16) % 14;
+  const ridgeB = Number.parseInt(seed.slice(8, 10) || "8", 16) % 14;
+  const ridgeC = Number.parseInt(seed.slice(10, 12) || "4", 16) % 14;
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="${label}">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f8fafc" />
+      <stop offset="100%" stop-color="#e2e8f0" />
+    </linearGradient>
+    <linearGradient id="ink" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="${accent}" />
+      <stop offset="100%" stop-color="${accentSoft}" />
+    </linearGradient>
+  </defs>
+  <rect width="320" height="320" rx="28" fill="url(#bg)" />
+  <ellipse cx="160" cy="158" rx="${76 + lineOne}" ry="${102 + lineTwo}" fill="none" stroke="url(#ink)" stroke-width="6" opacity="0.95" />
+  <ellipse cx="160" cy="160" rx="${60 + lineTwo}" ry="${84 + lineThree}" fill="none" stroke="url(#ink)" stroke-width="5" opacity="0.88" />
+  <ellipse cx="160" cy="162" rx="${44 + lineThree}" ry="${66 + lineOne}" fill="none" stroke="url(#ink)" stroke-width="4.5" opacity="0.82" />
+  <path d="M88 ${124 + ridgeA} C112 ${88 + ridgeB}, 142 ${72 + ridgeC}, 160 94 C178 ${72 + ridgeA}, 208 ${88 + ridgeC}, 232 ${124 + ridgeB}" fill="none" stroke="url(#ink)" stroke-width="4" stroke-linecap="round" opacity="0.9" />
+  <path d="M96 ${150 + ridgeB} C118 ${124 + ridgeC}, 144 ${110 + ridgeA}, 160 126 C176 ${110 + ridgeB}, 202 ${124 + ridgeA}, 224 ${150 + ridgeC}" fill="none" stroke="url(#ink)" stroke-width="4" stroke-linecap="round" opacity="0.85" />
+  <path d="M108 ${182 + ridgeC} C126 ${162 + ridgeA}, 148 ${150 + ridgeB}, 160 162 C172 ${150 + ridgeC}, 194 ${162 + ridgeB}, 212 ${182 + ridgeA}" fill="none" stroke="url(#ink)" stroke-width="3.5" stroke-linecap="round" opacity="0.8" />
+  <circle cx="160" cy="160" r="10" fill="${accent}" opacity="0.14" />
+  <text x="160" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#0f172a">${label}</text>
+</svg>`.trim();
+
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+};
+
 const serializeBiometricProfile = (profile = {}) => {
   const fingers = Array.isArray(profile?.fingers) ? profile.fingers : [];
   const normalizedRequiredFingerCount = Number(profile?.requiredFingerCount);
@@ -1785,7 +1822,7 @@ const serializeBiometricProfile = (profile = {}) => {
       hand: item?.hand || getBiometricFingerHand(item?.fingerCode),
       templateFormat: item?.templateFormat || "vendor-template",
       qualityScore: Number(item?.qualityScore || 0) || null,
-      previewImage: normalizeBiometricPreviewImage(item?.previewImage || ""),
+      previewImage: normalizeBiometricPreviewImage(item?.previewImage || "") || buildGeneratedBiometricPreview(item),
       captureSource: item?.captureSource || "unknown",
       deviceLabel: item?.deviceLabel || "",
       scannerSerial: item?.scannerSerial || "",
