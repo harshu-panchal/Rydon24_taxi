@@ -110,6 +110,7 @@ const BIOMETRIC_FINGER_CODES = [
 const BIOMETRIC_CAPTURE_SOURCES = ["phone_sensor", "usb_scanner", "bluetooth_scanner", "manual", "unknown"];
 const BIOMETRIC_ENROLLMENT_MODES = ["thumbs_only", "optional", "all_ten"];
 const BIOMETRIC_STATUSES = ["not_started", "in_progress", "completed", "verified"];
+const BIOMETRIC_MIN_MATCH_SCORE = 80;
 
 const toIstDayKey = (value = new Date()) =>
   new Date(new Date(value).getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
@@ -3728,18 +3729,35 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
 
   let resolvedVerificationStatus = verificationStatus;
   const enrolledFinger = profile.fingers[fingerIndex];
+  const hasNumericMatchScore = Number.isFinite(matchScore) && matchScore >= 0;
+  const hasTemplateData = Boolean(templateData);
+  const templateHashMatched =
+    hasTemplateData && buildBiometricTemplateHash(templateData) === String(enrolledFinger?.templateHash || "");
 
   if (captureSource === "phone_sensor" && localMatch !== null) {
     resolvedVerificationStatus = localMatch ? "matched" : "failed";
-  } else if (captureSource === "usb_scanner" && templateData) {
+  } else if (captureSource === "usb_scanner" || captureSource === "bluetooth_scanner") {
+    if (hasNumericMatchScore) {
+      resolvedVerificationStatus = matchScore >= BIOMETRIC_MIN_MATCH_SCORE ? "matched" : "failed";
+    } else if (localMatch !== null) {
+      resolvedVerificationStatus = localMatch ? "matched" : "failed";
+    } else if (templateHashMatched) {
+      resolvedVerificationStatus = "matched";
+    } else if (hasTemplateData) {
+      resolvedVerificationStatus = "failed";
+    }
+  } else if (templateHashMatched) {
     resolvedVerificationStatus =
-      buildBiometricTemplateHash(templateData) === String(enrolledFinger?.templateHash || "")
-        ? "matched"
-        : "failed";
+      "matched";
+  } else if (hasTemplateData) {
+    resolvedVerificationStatus = "failed";
   }
 
   if (!["matched", "failed", "low_quality"].includes(resolvedVerificationStatus)) {
-    throw new ApiError(400, "verificationStatus must be matched, failed, or low_quality");
+    throw new ApiError(
+      400,
+      `verificationStatus must be matched, failed, or low_quality. USB verification should send matchScore or templateData.`,
+    );
   }
 
   const now = new Date();
@@ -3752,7 +3770,7 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
     lastVerifiedFingerCode: fingerCode,
     lastMatchScore: matchScore,
   };
-  profile.status = resolvedVerificationStatus === "matched" ? "verified" : profile.status || "completed";
+  profile.status = resolvedVerificationStatus === "matched" ? "verified" : "completed";
 
   appendBiometricAuditLog(profile, {
     action: "finger_verified",
@@ -3774,7 +3792,10 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
       verification: {
         source: captureSource || enrolledFinger?.captureSource || "unknown",
         localMatch: localMatch === true,
-        usedTemplateComparison: captureSource === "usb_scanner" && Boolean(templateData),
+        usedTemplateComparison:
+          (captureSource === "usb_scanner" || captureSource === "bluetooth_scanner" || !captureSource) && hasTemplateData,
+        minimumMatchScore: BIOMETRIC_MIN_MATCH_SCORE,
+        matchScore,
         verificationStatus: resolvedVerificationStatus,
       },
     },

@@ -114,6 +114,7 @@ const biometricSourceOptions = [
 ];
 
 const BIOMETRIC_BRIDGE_TIMEOUT_MS = 25000;
+const BIOMETRIC_MIN_MATCH_SCORE = 80;
 
 const buildBiometricDraft = (booking) => ({
   consentAccepted: Boolean(booking?.biometrics?.consentAccepted),
@@ -2150,28 +2151,78 @@ const ServiceCenterDashboard = () => {
         throw new Error(String(bridgeResult.message || `Unable to verify ${finger.label}`));
       }
 
+      const resolvedBridgeStatus = String(bridgeResult?.verificationStatus || bridgeResult?.status || '').trim().toLowerCase();
+      const resolvedBridgeScore =
+        bridgeResult?.matchScore === undefined || bridgeResult?.matchScore === null
+          ? null
+          : Number(bridgeResult.matchScore);
+      const hasBridgeTemplate = Boolean(String(bridgeResult?.templateData || bridgeResult?.template || '').trim());
+      const hasBridgeEvidence =
+        resolvedBridgeStatus
+        || typeof bridgeResult?.localMatch === 'boolean'
+        || typeof bridgeResult?.match === 'boolean'
+        || hasBridgeTemplate
+        || Number.isFinite(resolvedBridgeScore);
+
+      if (!hasBridgeEvidence) {
+        throw new Error('The scanner did not return a fingerprint result. Ask the customer to scan again.');
+      }
+
       const response = await verifyServiceCenterBookingFingerprint(selectedBooking.id || selectedBooking._id, {
         fingerCode: finger.code,
-        verificationStatus: bridgeResult?.verificationStatus || bridgeResult?.status || 'matched',
+        verificationStatus: resolvedBridgeStatus,
         localMatch: bridgeResult?.localMatch ?? bridgeResult?.match,
         templateData: bridgeResult?.templateData || bridgeResult?.template || '',
         captureSource: normalizeBiometricCaptureSource(bridgeResult?.captureSource, biometricSource),
-        matchScore: bridgeResult?.matchScore,
+        matchScore: Number.isFinite(resolvedBridgeScore) ? resolvedBridgeScore : undefined,
         notes: bridgeResult?.notes || '',
       });
 
-      const updated = unwrap(response)?.booking || unwrap(response);
+      const responseData = unwrap(response);
+      const updated = responseData?.booking || responseData;
       if (updated?.id || updated?._id) {
         patchBookingLocal(selectedBooking.id || selectedBooking._id, updated);
       } else {
         await refreshBookingBiometrics(selectedBooking.id || selectedBooking._id);
       }
+      const verificationStatus = String(
+        responseData?.verification?.verificationStatus
+        || updated?.biometrics?.verificationSummary?.lastVerificationStatus
+        || '',
+      ).trim().toLowerCase();
+      const responseMatchScore =
+        responseData?.verification?.matchScore === undefined || responseData?.verification?.matchScore === null
+          ? resolvedBridgeScore
+          : Number(responseData.verification.matchScore);
+
+      const successMessage = Number.isFinite(responseMatchScore)
+        ? `${finger.label} verified successfully at ${responseMatchScore}% match.`
+        : `${finger.label} verified successfully.`;
+      const lowQualityMessage = Number.isFinite(responseMatchScore)
+        ? `${finger.label} scan quality was too low at ${responseMatchScore}% match. Ask the customer to place the same finger again.`
+        : `${finger.label} scan quality was too low. Ask the customer to place the same finger again.`;
+      const failedMessage = Number.isFinite(responseMatchScore)
+        ? `${finger.label} did not match. ${BIOMETRIC_MIN_MATCH_SCORE}% is required, but this scan returned ${responseMatchScore}%.`
+        : `${finger.label} did not match the enrolled fingerprint.`;
+
       setBiometricStatus({
-        tone: 'success',
-        message: `${finger.label} verified successfully.`,
+        tone: verificationStatus === 'matched' ? 'success' : 'error',
+        message:
+          verificationStatus === 'matched'
+            ? successMessage
+            : verificationStatus === 'low_quality'
+              ? lowQualityMessage
+              : failedMessage,
         fingerCode: finger.code,
         action: 'verify',
       });
+      if (verificationStatus !== 'matched') {
+        setError(
+          verificationStatus === 'low_quality'
+            ? lowQualityMessage
+            : failedMessage,
+        );
+      }
     } catch (err) {
       const message = err?.message || `Unable to verify ${finger.label}`;
       setBiometricStatus({
