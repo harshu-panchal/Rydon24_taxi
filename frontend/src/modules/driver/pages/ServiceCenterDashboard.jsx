@@ -2200,11 +2200,11 @@ const ServiceCenterDashboard = () => {
         ? `${finger.label} verified successfully at ${responseMatchScore}% match.`
         : `${finger.label} verified successfully.`;
       const lowQualityMessage = Number.isFinite(responseMatchScore)
-        ? `${finger.label} scan quality was too low at ${responseMatchScore}% match. Ask the customer to place the same finger again.`
-        : `${finger.label} scan quality was too low. Ask the customer to place the same finger again.`;
+        ? `Re-verify failed: ${finger.label} scan quality was too low at ${responseMatchScore}% match. Ask the customer to place the same finger again.`
+        : `Re-verify failed: ${finger.label} scan quality was too low. Ask the customer to place the same finger again.`;
       const failedMessage = Number.isFinite(responseMatchScore)
-        ? `${finger.label} did not match. ${BIOMETRIC_MIN_MATCH_SCORE}% is required, but this scan returned ${responseMatchScore}%.`
-        : `${finger.label} did not match the enrolled fingerprint.`;
+        ? `Re-verify failed: ${finger.label} fingerprint does not match. Minimum required is ${BIOMETRIC_MIN_MATCH_SCORE}%, but this scan returned ${responseMatchScore}%.`
+        : `Re-verify failed: ${finger.label} fingerprint does not match the enrolled fingerprint.`;
 
       setBiometricStatus({
         tone: verificationStatus === 'matched' ? 'success' : 'error',
