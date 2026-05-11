@@ -883,14 +883,19 @@ const ServiceCenterDashboard = () => {
       const nextProfile = unwrap(profileResponse);
       setProfile(nextProfile);
 
-      const [vehicleResponse, bookingResponse] = await Promise.all([
-        getServiceCenterVehicles(),
+      const normalizedRole = String(nextProfile?.onboarding?.role || nextProfile?.role || '').toLowerCase();
+      const isStaffProfile = normalizedRole === 'service_center_staff';
+
+      const [bookingResponse, vehicleResponse] = await Promise.allSettled([
         getServiceCenterBookings(),
+        isStaffProfile ? Promise.resolve({ results: [] }) : getServiceCenterVehicles(),
       ]);
 
-      setVehicles(unwrap(vehicleResponse)?.results || []);
+      if (bookingResponse.status !== 'fulfilled') {
+        throw bookingResponse.reason;
+      }
 
-      const bookingData = unwrap(bookingResponse);
+      const bookingData = unwrap(bookingResponse.value);
       setBookings(bookingData?.results || []);
       setPermissions(
         bookingData?.permissions || {
@@ -901,6 +906,20 @@ const ServiceCenterDashboard = () => {
       );
       setBookingStaffOptions(bookingData?.staff || []);
 
+      if (vehicleResponse.status === 'fulfilled') {
+        setVehicles(unwrap(vehicleResponse.value)?.results || []);
+      } else {
+        const vehicleStatus = Number(
+          vehicleResponse.reason?.status || vehicleResponse.reason?.response?.status || 0,
+        );
+
+        if (vehicleStatus === 401) {
+          throw vehicleResponse.reason;
+        }
+
+        setVehicles([]);
+      }
+
       if (bookingData?.permissions?.canManageStaff) {
         const staffResponse = await getServiceCenterStaff();
         setStaff(unwrap(staffResponse)?.results || []);
@@ -909,7 +928,7 @@ const ServiceCenterDashboard = () => {
       }
     } catch (err) {
       const status = Number(err?.status || err?.response?.status || 0);
-      if (status === 401 || status === 403) {
+      if (status === 401) {
         clearDriverAuthState();
         navigate('/taxi/driver/login', { replace: true });
         return;
