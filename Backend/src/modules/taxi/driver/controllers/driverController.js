@@ -1724,6 +1724,23 @@ const encryptBiometricTemplate = (template = "") => {
 const buildBiometricTemplateHash = (template = "") =>
   crypto.createHash("sha256").update(String(template || "")).digest("hex");
 
+const normalizeBiometricPreviewImage = (value = "") => {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (trimmed.startsWith("data:image/")) {
+    return trimmed;
+  }
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^[A-Za-z0-9+/=]+$/.test(trimmed) && trimmed.length > 120) {
+    return `data:image/png;base64,${trimmed}`;
+  }
+  return trimmed;
+};
+
 const serializeBiometricProfile = (profile = {}) => {
   const fingers = Array.isArray(profile?.fingers) ? profile.fingers : [];
   const normalizedRequiredFingerCount = Number(profile?.requiredFingerCount);
@@ -1752,7 +1769,7 @@ const serializeBiometricProfile = (profile = {}) => {
       hand: item?.hand || getBiometricFingerHand(item?.fingerCode),
       templateFormat: item?.templateFormat || "vendor-template",
       qualityScore: Number(item?.qualityScore || 0) || null,
-      previewImage: item?.previewImage || "",
+      previewImage: normalizeBiometricPreviewImage(item?.previewImage || ""),
       captureSource: item?.captureSource || "unknown",
       deviceLabel: item?.deviceLabel || "",
       scannerSerial: item?.scannerSerial || "",
@@ -3338,7 +3355,7 @@ export const enrollServiceCenterStaffBiometric = async (req, res) => {
   const templateData = String(req.body?.template || req.body?.templateData || "").trim();
   const source = String(req.body?.source || "unknown").trim().toLowerCase();
   const templateFormat = String(req.body?.templateFormat || "vendor-template").trim();
-  const previewImage = String(req.body?.previewImage || req.body?.imageBase64 || "").trim();
+  const previewImage = normalizeBiometricPreviewImage(req.body?.previewImage || req.body?.imageBase64 || "");
   const qualityScore = req.body?.qualityScore === undefined || req.body?.qualityScore === null
     ? null
     : Number(req.body.qualityScore);
@@ -3608,7 +3625,9 @@ export const captureServiceCenterBookingFingerprint = async (req, res) => {
   const fingerCode = String(req.body?.fingerCode || "").trim().toUpperCase();
   const templateData = String(req.body?.templateData || "").trim();
   const templateFormat = String(req.body?.templateFormat || "vendor-template").trim();
-  const previewImage = String(req.body?.previewImage || req.body?.imageBase64 || req.body?.imageUrl || "").trim();
+  const previewImage = normalizeBiometricPreviewImage(
+    req.body?.previewImage || req.body?.imageBase64 || req.body?.imageUrl || "",
+  );
   const qualityScore = req.body?.qualityScore === undefined || req.body?.qualityScore === null
     ? null
     : Number(req.body.qualityScore);

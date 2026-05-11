@@ -1166,7 +1166,17 @@ const ServiceCenterDashboard = () => {
   );
   const selectedFingerprintRecord = useMemo(() => {
     const fingers = Array.isArray(selectedBooking?.biometrics?.fingers) ? selectedBooking.biometrics.fingers : [];
-    return fingers.find((item) => String(item?.fingerCode || '').trim().toUpperCase() === selectedFingerprintCode) || null;
+    const matchedRecord =
+      fingers.find((item) => String(item?.fingerCode || '').trim().toUpperCase() === selectedFingerprintCode) || null;
+    if (!matchedRecord) {
+      return null;
+    }
+    return {
+      ...matchedRecord,
+      previewImage: withImageDataUrlPrefix(
+        matchedRecord.previewImage || matchedRecord.imageBase64 || matchedRecord.bitmap || '',
+      ),
+    };
   }, [selectedBooking, selectedFingerprintCode]);
   const bookingDraftDirty = useMemo(() => {
     if (!selectedBooking) {
