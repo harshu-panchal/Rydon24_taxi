@@ -16,6 +16,7 @@ import {
   createOwnerFleetDriver,
   updateOwnerFleetDriver,
   updateOwnerFleetVehicle,
+  deleteServiceCenterBookingFingerprint,
   deleteCurrentDriverAccount,
   deleteServiceCenterVehicle,
   deleteServiceCenterStaffMember,
@@ -369,6 +370,11 @@ driverRouter.post(
   "/service-center/bookings/:bookingId/biometrics/fingers",
   authenticate(["service_center", "service_center_staff"]),
   asyncHandler(captureServiceCenterBookingFingerprint),
+);
+driverRouter.delete(
+  "/service-center/bookings/:bookingId/biometrics/fingers/:fingerCode",
+  authenticate(["service_center", "service_center_staff"]),
+  asyncHandler(deleteServiceCenterBookingFingerprint),
 );
 driverRouter.post(
   "/service-center/bookings/:bookingId/biometrics/verify",

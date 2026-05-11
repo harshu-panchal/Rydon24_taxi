@@ -34,6 +34,7 @@ import {
   captureServiceCenterBookingFingerprint,
   clearDriverAuthState,
   createServiceCenterStaff,
+  deleteServiceCenterBookingFingerprint,
   deleteServiceCenterStaff,
   deleteServiceCenterVehicle,
   getCurrentDriver,
@@ -2237,6 +2238,62 @@ const ServiceCenterDashboard = () => {
     }
   };
 
+  const handleDeleteFinger = async (finger) => {
+    if (!selectedBooking || !finger?.code) {
+      return;
+    }
+
+    if (!window.confirm(`Delete ${finger.label} fingerprint data for this booking?`)) {
+      return;
+    }
+
+    setBiometricAction(`delete:${finger.code}`);
+    setBiometricStatus({
+      tone: 'loading',
+      message: `Deleting ${finger.label} fingerprint data…`,
+      fingerCode: finger.code,
+      action: 'delete',
+    });
+    setError('');
+
+    try {
+      const response = await deleteServiceCenterBookingFingerprint(
+        selectedBooking.id || selectedBooking._id,
+        finger.code,
+      );
+
+      const updated = unwrap(response)?.booking || unwrap(response);
+      if (updated?.id || updated?._id) {
+        patchBookingLocal(selectedBooking.id || selectedBooking._id, updated);
+        setBiometricDraft(buildBiometricDraft(updated));
+      } else {
+        await refreshBookingBiometrics(selectedBooking.id || selectedBooking._id);
+      }
+
+      if (selectedFingerprintCode === finger.code) {
+        handleFingerprintClose();
+      }
+
+      setBiometricStatus({
+        tone: 'success',
+        message: `${finger.label} fingerprint data deleted successfully.`,
+        fingerCode: finger.code,
+        action: 'delete',
+      });
+    } catch (err) {
+      const message = err?.message || `Unable to delete ${finger.label} fingerprint data`;
+      setBiometricStatus({
+        tone: 'error',
+        message,
+        fingerCode: finger.code,
+        action: 'delete',
+      });
+      setError(message);
+    } finally {
+      setBiometricAction('');
+    }
+  };
+
   const saveBookingDraft = async () => {
     if (!selectedBooking || !bookingDraftDirty) {
       return;
@@ -2975,6 +3032,7 @@ const ServiceCenterDashboard = () => {
                                   const fingerInfo = fingerDetailMap.get(finger.code);
                                   const captureBusy = biometricAction === `capture:${finger.code}`;
                                   const verifyBusy = biometricAction === `verify:${finger.code}`;
+                                  const deleteBusy = biometricAction === `delete:${finger.code}`;
 
                                   return (
                                     <div key={finger.code} className={`rounded-2xl border p-4 ${enrolled ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200 bg-slate-50'}`}>
@@ -3002,11 +3060,11 @@ const ServiceCenterDashboard = () => {
                                         </span>
                                       </div>
 
-                                      <div className="mt-4 grid grid-cols-2 gap-2">
+                                      <div className="mt-4 grid grid-cols-3 gap-2">
                                         <button
                                           type="button"
                                           onClick={() => handleCaptureFinger(finger)}
-                                          disabled={Boolean(biometricAction && biometricAction !== `capture:${finger.code}` && biometricAction !== `verify:${finger.code}`)}
+                                          disabled={Boolean(biometricAction && biometricAction !== `capture:${finger.code}` && biometricAction !== `verify:${finger.code}` && biometricAction !== `delete:${finger.code}`)}
                                           className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-60"
                                         >
                                           {captureBusy ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
@@ -3020,6 +3078,15 @@ const ServiceCenterDashboard = () => {
                                         >
                                           {verifyBusy ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
                                           {verifyBusy ? 'Verifying…' : 'Verify'}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteFinger(finger)}
+                                          disabled={!enrolled || Boolean(biometricAction && biometricAction !== `delete:${finger.code}`)}
+                                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-white px-3 py-2.5 text-xs font-bold text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
+                                        >
+                                          {deleteBusy ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                                          {deleteBusy ? 'Deleting…' : 'Delete'}
                                         </button>
                                       </div>
 

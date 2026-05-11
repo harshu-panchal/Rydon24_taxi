@@ -3694,6 +3694,74 @@ export const captureServiceCenterBookingFingerprint = async (req, res) => {
   });
 };
 
+export const deleteServiceCenterBookingFingerprint = async (req, res) => {
+  const { booking, center, access } = await ensureServiceCenterBookingAccess(
+    req,
+    String(req.params?.bookingId || "").trim(),
+  );
+  const profile = await ensureBiometricProfileForBooking({ booking, center, access });
+
+  const fingerCode = String(req.params?.fingerCode || req.body?.fingerCode || "").trim().toUpperCase();
+
+  if (!BIOMETRIC_FINGER_CODES.includes(fingerCode)) {
+    throw new ApiError(400, "Valid fingerCode is required");
+  }
+
+  const currentFingers = Array.isArray(profile.fingers) ? profile.fingers : [];
+  const nextFingers = currentFingers.filter(
+    (item) => String(item?.fingerCode || "").trim().toUpperCase() !== fingerCode,
+  );
+
+  if (nextFingers.length === currentFingers.length) {
+    throw new ApiError(404, "This finger has not been enrolled for the booking");
+  }
+
+  profile.fingers = nextFingers;
+  profile.verificationSummary = {
+    lastVerifiedAt: profile?.verificationSummary?.lastVerifiedFingerCode === fingerCode
+      ? null
+      : profile?.verificationSummary?.lastVerifiedAt || null,
+    lastVerificationStatus: profile?.verificationSummary?.lastVerifiedFingerCode === fingerCode
+      ? ""
+      : profile?.verificationSummary?.lastVerificationStatus || "",
+    lastVerifiedFingerCode: profile?.verificationSummary?.lastVerifiedFingerCode === fingerCode
+      ? ""
+      : profile?.verificationSummary?.lastVerifiedFingerCode || "",
+    lastMatchScore: profile?.verificationSummary?.lastVerifiedFingerCode === fingerCode
+      ? null
+      : profile?.verificationSummary?.lastMatchScore ?? null,
+  };
+
+  const requiredFingerCount = Number(profile.requiredFingerCount);
+  const normalizedRequiredFingerCount =
+    Number.isInteger(requiredFingerCount) && requiredFingerCount >= 0 ? requiredFingerCount : 0;
+  if (profile.fingers.length === 0) {
+    profile.status = "not_started";
+  } else if (profile.fingers.length >= normalizedRequiredFingerCount) {
+    profile.status = "completed";
+  } else {
+    profile.status = "in_progress";
+  }
+
+  appendBiometricAuditLog(profile, {
+    action: "finger_deleted",
+    fingerCode,
+    actorId: access.staff?._id || center._id,
+    actorRole: access.role,
+    notes: `Fingerprint deleted for ${getBiometricFingerDisplayName(fingerCode)}`,
+  });
+
+  await profile.save();
+
+  res.json({
+    success: true,
+    data: {
+      booking: serializeServiceCenterBooking(booking.toObject(), profile.toObject()),
+      biometrics: serializeBiometricProfile(profile.toObject()),
+    },
+  });
+};
+
 export const verifyServiceCenterBookingFingerprint = async (req, res) => {
   const { booking, center, access } = await ensureServiceCenterBookingAccess(
     req,

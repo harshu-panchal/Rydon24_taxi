@@ -346,6 +346,9 @@ export const updateServiceCenterBookingBiometrics = (bookingId, payload) =>
 export const captureServiceCenterBookingFingerprint = (bookingId, payload) =>
   api.post(`/drivers/service-center/bookings/${bookingId}/biometrics/fingers`, payload, withDriverAuth());
 
+export const deleteServiceCenterBookingFingerprint = (bookingId, fingerCode) =>
+  api.delete(`/drivers/service-center/bookings/${bookingId}/biometrics/fingers/${encodeURIComponent(String(fingerCode || '').trim().toUpperCase())}`, withDriverAuth());
+
 export const verifyServiceCenterBookingFingerprint = (bookingId, payload) =>
   api.post(`/drivers/service-center/bookings/${bookingId}/biometrics/verify`, payload, withDriverAuth());
 
