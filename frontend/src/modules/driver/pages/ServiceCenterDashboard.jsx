@@ -421,6 +421,30 @@ const normalizeBridgeResult = (result, preferredSource, action) => {
       matchScore: normalizeBiometricMatchScore(
         payload.matchScore ?? payload.score ?? parsedResult.matchScore ?? parsedResult.score,
       ),
+      referenceTemplateHash: pickFirstBiometricValue(
+        payload.referenceTemplateHash,
+        payload.enrolledTemplateHash,
+        payload.referenceHash,
+        parsedResult.referenceTemplateHash,
+        parsedResult.enrolledTemplateHash,
+        parsedResult.referenceHash,
+      ),
+      matchedTemplateHash: pickFirstBiometricValue(
+        payload.matchedTemplateHash,
+        payload.templateHash,
+        payload.matchedHash,
+        parsedResult.matchedTemplateHash,
+        parsedResult.templateHash,
+        parsedResult.matchedHash,
+      ),
+      matchedFingerCode: pickFirstBiometricValue(
+        payload.matchedFingerCode,
+        payload.comparedFingerCode,
+        payload.fingerCode,
+        parsedResult.matchedFingerCode,
+        parsedResult.comparedFingerCode,
+        parsedResult.fingerCode,
+      ),
       previewImage: pickFirstBiometricPreviewValue(
         payload.previewImage,
         payload.imageBase64,
@@ -2364,7 +2388,24 @@ Processing Time: Refunds are typically credited back to the original payment met
         throw new Error('The scanner did not return a fingerprint result. Ask the customer to scan again.');
       }
 
-      if ((biometricSource === 'usb_scanner' || biometricSource === 'bluetooth_scanner') && !hasBridgeDecision && !hasBridgeTemplate) {
+      if ((biometricSource === 'usb_scanner' || biometricSource === 'bluetooth_scanner') && !hasBridgeTemplate && !Number.isFinite(resolvedBridgeScore)) {
+        throw new Error(
+          `${getBiometricSourceLabel(biometricSource)} verification must return templateData or a numeric matchScore. A generic success response is not enough to verify a fingerprint.`,
+        );
+      }
+
+      if ((biometricSource === 'usb_scanner' || biometricSource === 'bluetooth_scanner') && Number.isFinite(resolvedBridgeScore)) {
+        const referenceHash = String(
+          bridgeResult?.referenceTemplateHash || bridgeResult?.enrolledTemplateHash || enrolledRecord?.templateHash || '',
+        ).trim();
+        if (!referenceHash) {
+          throw new Error(
+            `${getBiometricSourceLabel(biometricSource)} verification score is missing the enrolled template reference. Reconnect the APK scanner bridge and try again.`,
+          );
+        }
+      }
+
+      if (!hasBridgeDecision && !hasBridgeTemplate) {
         throw new Error(
           `${getBiometricSourceLabel(biometricSource)} verification did not return any result. Ask the customer to scan again.`,
         );
@@ -2375,6 +2416,9 @@ Processing Time: Refunds are typically credited back to the original payment met
         verificationStatus: resolvedBridgeStatus,
         localMatch: bridgeResult?.localMatch ?? bridgeResult?.match,
         templateData: bridgeResult?.templateData || bridgeResult?.template || '',
+        referenceTemplateHash: bridgeResult?.referenceTemplateHash || bridgeResult?.enrolledTemplateHash || enrolledRecord?.templateHash || '',
+        matchedTemplateHash: bridgeResult?.matchedTemplateHash || bridgeResult?.templateHash || '',
+        matchedFingerCode: bridgeResult?.matchedFingerCode || bridgeResult?.comparedFingerCode || '',
         previewImage:
           bridgeResult?.previewImage
           || bridgeResult?.imageBase64
