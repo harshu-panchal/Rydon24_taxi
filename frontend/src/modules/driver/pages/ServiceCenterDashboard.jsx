@@ -26,7 +26,12 @@ import {
   ChevronUp,
   ChevronRight,
   Clock,
-  Search
+  Search,
+  Mail,
+  Shield,
+  FileText,
+  HandCoins,
+  UserPlus
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { uploadService } from '../../../shared/services/uploadService';
@@ -374,7 +379,7 @@ const normalizeBridgeResult = (result, preferredSource, action) => {
       qualityScore: payload.qualityScore ?? payload.quality ?? parsedResult.qualityScore ?? parsedResult.quality,
       captureSource: normalizedSource,
       deviceLabel: pickFirstBiometricValue(payload.deviceLabel, payload.deviceName, parsedResult.deviceLabel, parsedResult.deviceName),
-      scannerSerial: pickFirstBiometricValue(payload.scannerSerial, payload.deviceId, payload.serialNumber, parsedResult.scannerSerial, parsedResult.deviceId, parsedResult.serialNumber),
+      scannerSerial: pickFirstBiometricValue(payload.scannerSerial, payload.deviceId, payload.scannerSerial, parsedResult.scannerSerial, parsedResult.deviceId, parsedResult.serialNumber),
       sampleCount: payload.sampleCount ?? payload.captureCount ?? parsedResult.sampleCount ?? parsedResult.captureCount,
       notes: pickFirstBiometricValue(payload.notes, payload.message, parsedResult.notes, parsedResult.message),
     };
@@ -394,14 +399,9 @@ const normalizeBridgeResult = (result, preferredSource, action) => {
           parsedResult.status ||
           (localMatch === true ? 'matched' : localMatch === false ? 'failed' : ''),
         ).trim().toLowerCase();
-        // Map explicit biometric verification results to valid statuses.
-        // IMPORTANT: Do NOT map generic bridge statuses like 'success'/'ok'/'error' here —
-        // those mean "the scan operation completed", not "the fingerprint matched".
         if (['matched', 'match', 'verified'].includes(raw)) return 'matched';
         if (['failed', 'fail', 'rejected', 'mismatch', 'no_match', 'nomatch', 'not_matched'].includes(raw)) return 'failed';
         if (['low_quality', 'lowquality', 'low-quality', 'poor', 'retry'].includes(raw)) return 'low_quality';
-        // For generic statuses like 'success'/'ok'/'error', return empty so the
-        // backend can decide based on template comparison or matchScore instead.
         if (['success', 'ok', 'pass', 'passed', 'true', 'yes', 'done', 'complete', 'captured'].includes(raw)) return '';
         return raw;
       })(),
@@ -1075,6 +1075,7 @@ const ServiceCenterDashboard = () => {
   const [error, setError] = useState('');
   const [staffForm, setStaffForm] = useState(buildStaffForm);
   const [previewImage, setPreviewImage] = useState('');
+  const [legalModal, setLegalModal] = useState(null); 
   const [cameraCaptureState, setCameraCaptureState] = useState({
     open: false,
     field: '',
@@ -1106,6 +1107,65 @@ const ServiceCenterDashboard = () => {
 
   const role = String(profile?.onboarding?.role || '').toLowerCase();
   const isStaffUser = role === 'service_center_staff';
+
+  const openLegal = (type) => {
+    const contentMap = {
+      driver_app: {
+        title: 'Driver Application',
+        Icon: UserPlus,
+        description: 'Join the Rydon24 fleet as a certified driver.',
+        content: `Rydon24 is always looking for professional, dedicated drivers to join our growing ecosystem. 
+
+Steps to apply:
+1. Ensure you have a valid Commercial Driving License.
+2. Visit the Rydon24 Driver Onboarding center or use the Mobile App.
+3. Submit required documents: Aadhaar, PAN, License, and Police Verification.
+4. Complete the Biometric enrollment process at any authorized Service Center.
+5. Once approved, you can start accepting rides and managing your earnings via the dashboard.`
+      },
+      terms: {
+        title: 'Terms and Conditions',
+        Icon: FileText,
+        description: 'General rules for using the Rydon24 platform.',
+        content: `By using the Rydon24 platform, you agree to comply with all applicable transport regulations and our safety standards.
+
+Key Highlights:
+• Professionalism: Drivers and Staff must maintain a high standard of service.
+• Vehicle Readiness: All vehicles listed must be in active, roadworthy condition.
+• Compliance: You must ensure all permits and insurance are valid.
+• Platform Fees: Rydon24 charges a service fee for every successful booking handled.
+• Account Security: You are responsible for keeping your credentials and biometric data secure.`
+      },
+      privacy: {
+        title: 'Privacy Policy',
+        Icon: Shield,
+        description: 'How we handle your data and biometrics.',
+        content: `Rydon24 takes data security seriously. We collect specific information to ensure safety and service quality.
+
+Data Collected:
+• Biometrics: Fingerprint hashes are stored encrypted (AES-256) for verification only. Raw images are never stored permanently.
+• Location: Live GPS tracking is used during active bookings for safety.
+• Contact: Phone and email are used for booking updates and support.
+• Vehicle Data: Inspection logs and photos are kept for insurance purposes.
+
+We do not share your biometric data with third-party advertising networks.`
+      },
+      refund: {
+        title: 'Refund Policy',
+        Icon: HandCoins,
+        description: 'Cancellation and refund guidelines.',
+        content: `Transparent refund rules for customers and partners.
+
+Booking Cancellations:
+• Customer-initiated: Refund varies based on how close the pickup time is.
+• Operator-initiated: If a vehicle fails inspection, a full refund is processed to the customer.
+• Service Center Fees: Fees for inspections are non-refundable once the inspection report is generated.
+
+Processing Time: Refunds are typically credited back to the original payment method within 5-7 working days.`
+      }
+    };
+    setLegalModal(contentMap[type]);
+  };
 
   const loadDashboard = async () => {
     setLoading(true);
@@ -2268,8 +2328,6 @@ const ServiceCenterDashboard = () => {
     setError('');
 
     try {
-      // Look up the enrolled finger record so we can pass its template hash to the bridge.
-      // This lets the Flutter side do on-device 1:1 matching if the scanner SDK supports it.
       const enrolledFingers = Array.isArray(selectedBooking?.biometrics?.fingers)
         ? selectedBooking.biometrics.fingers
         : [];
@@ -2686,6 +2744,52 @@ const ServiceCenterDashboard = () => {
                     </div>
                   </>
                 )}
+              </div>
+            </section>
+
+            <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <h3 className="text-lg font-bold text-slate-950">Support & Legal</h3>
+              <p className="mt-1 text-sm text-slate-500">Contact owner or review platform policies.</p>
+
+              <div className="mt-5 space-y-4">
+                <div className="flex items-center gap-4 rounded-2xl bg-slate-50 p-4 border border-slate-100">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 shadow-sm">
+                    <Mail size={24} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Email Owner</p>
+                    <a href="mailto:rydon24trawler@gmail.com" className="text-base font-bold text-slate-900 hover:text-emerald-600 transition">rydon24trawler@gmail.com</a>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 rounded-2xl bg-slate-50 p-4 border border-slate-100">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-600 shadow-sm">
+                    <Phone size={24} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Call Owner</p>
+                    <a href="tel:9389394808" className="text-base font-bold text-slate-900 hover:text-sky-600 transition">93893 94808</a>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  {[
+                    { type: 'driver_app', label: 'Driver App', Icon: UserPlus, color: 'emerald' },
+                    { type: 'terms', label: 'Terms', Icon: FileText, color: 'slate' },
+                    { type: 'privacy', label: 'Privacy', Icon: Shield, color: 'indigo' },
+                    { type: 'refund', label: 'Refunds', Icon: HandCoins, color: 'rose' }
+                  ].map((link) => (
+                    <button
+                      key={link.type}
+                      type="button"
+                      onClick={() => openLegal(link.type)}
+                      className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-slate-300 hover:bg-slate-50 active:scale-95"
+                    >
+                      <link.Icon size={20} className={`text-${link.color}-600`} />
+                      <span className="text-xs font-bold text-slate-700">{link.label}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </section>
 

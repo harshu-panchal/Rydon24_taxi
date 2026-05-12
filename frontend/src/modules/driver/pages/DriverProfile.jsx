@@ -22,7 +22,11 @@ import {
     Shield,
     Languages,
     BadgePercent,
-    Check
+    Check,
+    Mail,
+    HandCoins,
+    Phone,
+    X
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
@@ -75,6 +79,7 @@ const DriverProfile = () => {
     const navigate = useNavigate();
     const [routeBookingPreferences, setRouteBookingPreferences] = useState(() => readRouteBookingPreferences());
     const [isLogoutOpen, setIsLogoutOpen] = useState(false);
+    const [legalModal, setLegalModal] = useState(null); 
     const [driver, setDriver] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
@@ -113,6 +118,65 @@ const DriverProfile = () => {
             active = false;
         };
     }, []);
+
+    const openLegal = (type) => {
+        const contentMap = {
+            driver_app: {
+                title: 'Driver Application',
+                Icon: UserPlus,
+                description: 'Join the Rydon24 fleet as a certified driver.',
+                content: `Rydon24 is always looking for professional, dedicated drivers to join our growing ecosystem. 
+
+Steps to apply:
+1. Ensure you have a valid Commercial Driving License.
+2. Visit the Rydon24 Driver Onboarding center or use the Mobile App.
+3. Submit required documents: Aadhaar, PAN, License, and Police Verification.
+4. Complete the Biometric enrollment process at any authorized Service Center.
+5. Once approved, you can start accepting rides and managing your earnings via the dashboard.`
+            },
+            terms: {
+                title: 'Terms and Conditions',
+                Icon: FileText,
+                description: 'General rules for using the Rydon24 platform.',
+                content: `By using the Rydon24 platform, you agree to comply with all applicable transport regulations and our safety standards.
+
+Key Highlights:
+• Professionalism: Drivers and Staff must maintain a high standard of service.
+• Vehicle Readiness: All vehicles listed must be in active, roadworthy condition.
+• Compliance: You must ensure all permits and insurance are valid.
+• Platform Fees: Rydon24 charges a service fee for every successful booking handled.
+• Account Security: You are responsible for keeping your credentials and biometric data secure.`
+            },
+            privacy: {
+                title: 'Privacy Policy',
+                Icon: Shield,
+                description: 'How we handle your data and biometrics.',
+                content: `Rydon24 takes data security seriously. We collect specific information to ensure safety and service quality.
+
+Data Collected:
+• Biometrics: Fingerprint hashes are stored encrypted (AES-256) for verification only. Raw images are never stored permanently.
+• Location: Live GPS tracking is used during active bookings for safety.
+• Contact: Phone and email are used for booking updates and support.
+• Vehicle Data: Inspection logs and photos are kept for insurance purposes.
+
+We do not share your biometric data with third-party advertising networks.`
+            },
+            refund: {
+                title: 'Refund Policy',
+                Icon: HandCoins,
+                description: 'Cancellation and refund guidelines.',
+                content: `Transparent refund rules for customers and partners.
+
+Booking Cancellations:
+• Customer-initiated: Refund varies based on how close the pickup time is.
+• Operator-initiated: If a vehicle fails inspection, a full refund is processed to the customer.
+• Service Center Fees: Fees for inspections are non-refundable once the inspection report is generated.
+
+Processing Time: Refunds are typically credited back to the original payment method within 5-7 working days.`
+            }
+        };
+        setLegalModal(contentMap[type]);
+    };
 
     const handleLogout = () => {
         clearDriverAuthState();
@@ -252,6 +316,15 @@ const DriverProfile = () => {
             ]
         },
         {
+            title: 'Legal & Support',
+            items: [
+                { id: 'driver_app', label: 'Driver Application', icon: <UserPlus size={20} />, action: () => openLegal('driver_app') },
+                { id: 'terms', label: 'Terms & Conditions', icon: <FileText size={20} />, action: () => openLegal('terms') },
+                { id: 'privacy', label: 'Privacy Policy', icon: <Shield size={20} />, action: () => openLegal('privacy') },
+                { id: 'refund', label: 'Refund Policy', icon: <HandCoins size={20} />, action: () => openLegal('refund') },
+            ]
+        },
+        {
             title: 'Danger Zone',
             items: [
                 { id: 'deleteAccount', label: 'Delete Account', icon: <LogOut size={20} />, path: `${routePrefix}/delete-account` },
@@ -347,7 +420,10 @@ const DriverProfile = () => {
                                 <motion.div 
                                     key={item.id}
                                     whileTap={item.type !== 'toggle' ? { backgroundColor: '#F8F9FA' } : {}}
-                                    onClick={() => item.path && navigate(item.path, item.state ? { state: item.state } : undefined)}
+                                    onClick={() => {
+                                        if (item.action) item.action();
+                                        else if (item.path) navigate(item.path, item.state ? { state: item.state } : undefined);
+                                    }}
                                     className="flex items-center justify-between px-6 py-4 group cursor-pointer border-b border-slate-50/50"
                                 >
                                     <div className="flex items-center gap-5">
@@ -380,8 +456,40 @@ const DriverProfile = () => {
                 ))}
             </main>
 
+            {/* Owner Support Section */}
+            <div className="px-6 py-4 mt-6">
+                <div className="rounded-[28px] border border-slate-100 bg-slate-50/50 p-6">
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        <h3 className="text-[13px] font-bold text-slate-900 uppercase tracking-wider">Owner Support</h3>
+                    </div>
+                    
+                    <div className="space-y-5">
+                        <a href="mailto:rydon24trawler@gmail.com" className="flex items-center gap-4 group">
+                            <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-emerald-500 transition-colors shadow-sm">
+                                <Mail size={18} />
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Email Support</p>
+                                <p className="text-[14px] font-bold text-slate-800">rydon24trawler@gmail.com</p>
+                            </div>
+                        </a>
+
+                        <a href="tel:9389394808" className="flex items-center gap-4 group">
+                            <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-sky-500 transition-colors shadow-sm">
+                                <Phone size={18} />
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Call Owner</p>
+                                <p className="text-[14px] font-bold text-slate-800">93893 94808</p>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
             {/* Sign Out Section */}
-            <div className="px-6 py-10">
+            <div className="px-6 py-6">
                 <button 
                     onClick={() => setIsLogoutOpen(true)}
                     className="flex items-center gap-3 text-rose-500 font-bold text-[13px] active:translate-x-1 transition-transform"
@@ -424,6 +532,54 @@ const DriverProfile = () => {
                                 </button>
                             </div>
                         </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Legal Modal */}
+            <AnimatePresence>
+                {legalModal && (
+                    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/45 backdrop-blur-sm px-4 pb-8 sm:items-center sm:pb-0">
+                        <motion.div
+                            initial={{ opacity: 0, y: 100 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 100 }}
+                            className="w-full max-w-lg overflow-hidden rounded-[32px] bg-white shadow-2xl"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="p-8">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-slate-50 text-slate-900 shadow-sm border border-slate-100">
+                                        <legalModal.Icon size={28} />
+                                    </div>
+                                    <button
+                                        onClick={() => setLegalModal(null)}
+                                        className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition"
+                                    >
+                                        <X size={20} />
+                                    </button>
+                                </div>
+
+                                <div className="mt-6">
+                                    <h3 className="text-2xl font-bold text-slate-950">{legalModal.title}</h3>
+                                    <p className="mt-1 text-sm font-medium text-slate-500">{legalModal.description}</p>
+                                </div>
+
+                                <div className="mt-8 max-h-[40vh] overflow-y-auto pr-2">
+                                    <div className="whitespace-pre-line text-sm leading-7 text-slate-700 font-medium">
+                                        {legalModal.content}
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={() => setLegalModal(null)}
+                                    className="mt-8 w-full rounded-2xl bg-slate-950 py-4 text-sm font-bold text-white shadow-xl shadow-slate-200 transition hover:bg-slate-800 active:scale-95"
+                                >
+                                    Understood
+                                </button>
+                            </div>
+                        </motion.div>
+                        <div className="absolute inset-0 -z-10" onClick={() => setLegalModal(null)} />
                     </div>
                 )}
             </AnimatePresence>
