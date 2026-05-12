@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { 
     ArrowLeft, 
     Camera, 
@@ -140,10 +140,14 @@ const inferImageMeta = (file, dataUrl) => {
 const StepDocuments = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const routePrefix = location.pathname.startsWith('/taxi/owner')
+    ? '/taxi/owner'
+    : '/taxi/driver';
   const session = {
     ...getStoredDriverRegistrationSession(),
     ...(location.state || {}),
   };
+  const isHandlingHistoryNavigationRef = useRef(false);
   const normalizedRole = normalizeSignupRole(session.role);
 
   const [templates, setTemplates] = useState([]);
@@ -205,6 +209,54 @@ const StepDocuments = () => {
       ...current,
     }));
   }, [documentTemplates, docs]);
+
+  useEffect(() => {
+    saveDriverRegistrationSession({
+      ...getStoredDriverRegistrationSession(),
+      ...session,
+      documents: docs,
+      documentMeta,
+    });
+  }, [docs, documentMeta]);
+
+  const buildCurrentSession = () => saveDriverRegistrationSession({
+    ...getStoredDriverRegistrationSession(),
+    ...session,
+    documents: docs,
+    documentMeta,
+  });
+
+  const handleBackNavigation = () => {
+    const shouldLeave = window.confirm(
+      'Go back to vehicle setup? Your uploaded documents will stay saved.',
+    );
+
+    if (!shouldLeave) {
+      return false;
+    }
+
+    isHandlingHistoryNavigationRef.current = true;
+    navigate(`${routePrefix}/step-vehicle`, { state: buildCurrentSession(), replace: true });
+    return true;
+  };
+
+  useEffect(() => {
+    window.history.pushState({ onboardingStep: 'documents' }, '', window.location.href);
+
+    const handlePopState = () => {
+      if (isHandlingHistoryNavigationRef.current) {
+        return;
+      }
+
+      const didLeave = handleBackNavigation();
+      if (!didLeave) {
+        window.history.pushState({ onboardingStep: 'documents' }, '', window.location.href);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [routePrefix, docs, documentMeta]);
 
   const applyTemplateMetaToDocuments = (templateId, templateDocuments, metaOverride = null) => {
     const meta = metaOverride || documentMeta[templateId] || { identifyNumber: '', expiryDate: '' };
@@ -412,7 +464,7 @@ const StepDocuments = () => {
       });
       clearDriverRegistrationSession();
 
-      navigate('/taxi/driver/registration-status', {
+      navigate(`${routePrefix}/registration-status`, {
         state: {
           ...session,
           documents: docs,
@@ -435,7 +487,7 @@ const StepDocuments = () => {
         <header className="space-y-5">
             <div className="flex items-center justify-between">
                 <button
-                    onClick={() => navigate('/taxi/driver/step-vehicle', { state: session })}
+                    onClick={handleBackNavigation}
                     className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/70 bg-white/80 text-slate-900 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-sm transition-transform active:scale-95"
                 >
                     <ArrowLeft size={18} strokeWidth={2.5} />

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
     ArrowLeft, 
     Car, 
@@ -21,10 +21,15 @@ import {
     getDriverVehicleFieldTemplates,
 } from '../../services/registrationService';
 
-const VEHICLE_NUMBER_REGEX = /^[A-Z]{2}\d{1,2}[A-Z]{1,3}\d{4}$/;
+const VEHICLE_NUMBER_PATTERNS = [
+    /^[A-Z]{2}\d{1,2}[A-Z]{1,4}\d{4}$/,
+    /^[A-Z]{2}\d{1,2}[A-Z]{1,5}\d{4}$/,
+];
 const getCurrentVehicleYear = () => new Date().getFullYear();
-const normalizeVehicleNumber = (value = '') => String(value).replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 11);
+const normalizeVehicleNumber = (value = '') => String(value).replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 12);
 const normalizePostalCode = (value = '') => String(value).replace(/\D/g, '').slice(0, 6);
+const isValidIndianVehicleNumber = (value = '') =>
+    VEHICLE_NUMBER_PATTERNS.some((pattern) => pattern.test(value));
 const matchesVehicleFieldAccountType = (accountType, isOwner) => {
     const normalizedAccountType = String(accountType || 'individual').trim().toLowerCase();
 
@@ -96,10 +101,14 @@ const defaultVehicleFieldConfigs = [
 const StepVehicle = () => {
     const navigate = useNavigate();
     const location = useLocation();
+    const routePrefix = location.pathname.startsWith('/taxi/owner')
+        ? '/taxi/owner'
+        : '/taxi/driver';
     const session = {
         ...getStoredDriverRegistrationSession(),
         ...(location.state || {}),
     };
+    const isHandlingHistoryNavigationRef = useRef(false);
     const role = session.role || 'driver';
     const isOwner = role === 'owner';
 
@@ -139,6 +148,44 @@ const StepVehicle = () => {
             ...formData,
         });
     }, [formData]);
+
+    const buildCurrentSession = () => saveDriverRegistrationSession({
+        ...getStoredDriverRegistrationSession(),
+        ...session,
+        ...formData,
+    });
+
+    const handleBackNavigation = () => {
+        const shouldLeave = window.confirm(
+            'Go back to the previous step? Your vehicle details will stay saved.',
+        );
+
+        if (!shouldLeave) {
+            return false;
+        }
+
+        isHandlingHistoryNavigationRef.current = true;
+        navigate(`${routePrefix}/step-referral`, { state: buildCurrentSession(), replace: true });
+        return true;
+    };
+
+    useEffect(() => {
+        window.history.pushState({ onboardingStep: 'vehicle' }, '', window.location.href);
+
+        const handlePopState = () => {
+            if (isHandlingHistoryNavigationRef.current) {
+                return;
+            }
+
+            const didLeave = handleBackNavigation();
+            if (!didLeave) {
+                window.history.pushState({ onboardingStep: 'vehicle' }, '', window.location.href);
+            }
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, [routePrefix, formData]);
 
     useEffect(() => {
         let active = true;
@@ -296,8 +343,8 @@ const StepVehicle = () => {
                     return;
                 }
 
-                if (isFilled(normalizedNumber) && !VEHICLE_NUMBER_REGEX.test(normalizedNumber)) {
-                    setError('Vehicle number must be in a valid Indian format, for example DL1RT1234 or MH12AB1234');
+                if (isFilled(normalizedNumber) && !isValidIndianVehicleNumber(normalizedNumber)) {
+                    setError('Vehicle number must be in a valid Indian format, for example DL1RT1234, DL1AB2345, DL1ABCD1234, or MH12AB1234');
                     return;
                 }
 
@@ -345,7 +392,7 @@ const StepVehicle = () => {
                     vehicleSession: response?.data?.session || null,
                 });
 
-                navigate('/taxi/driver/step-documents', { state: nextState });
+                navigate(`${routePrefix}/step-documents`, { state: nextState });
             } catch (err) {
                 setError(err?.message || 'Unable to save vehicle details');
             } finally {
@@ -411,7 +458,7 @@ const StepVehicle = () => {
                     <div className="flex items-center justify-between">
                         <motion.button
                             whileTap={{ scale: 0.9 }}
-                            onClick={() => navigate('/taxi/driver/step-referral', { state: session })}
+                            onClick={handleBackNavigation}
                             className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-900 shadow-sm transition-all"
                         >
                             <ArrowLeft size={18} strokeWidth={2.5} />

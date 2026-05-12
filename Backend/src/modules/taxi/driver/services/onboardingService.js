@@ -26,7 +26,9 @@ const OTP_TTL_MS = 10 * 60 * 1000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DRIVER_NAME_REGEX = /^[A-Za-z]+(?:[ .'-][A-Za-z]+)*$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const VEHICLE_NUMBER_REGEX = /^[A-Z]{2}\d{2}[A-Z]{1,2}\d{4}$/;
+const VEHICLE_NUMBER_PATTERNS = [
+  /^[A-Z]{2}\d{1,2}[A-Z]{1,5}\d{4}$/,
+];
 const ALLOWED_SERVICE_CATEGORIES = ['taxi', 'outstation', 'delivery', 'pooling'];
 
 const VEHICLE_TYPE_MAP = {
@@ -740,8 +742,8 @@ export const saveDriverVehicle = async ({
       throw new ApiError(400, `Vehicle year must be between 1980 and ${currentYear}`);
     }
 
-    if (normalizedNumber && !VEHICLE_NUMBER_REGEX.test(normalizedNumber)) {
-      throw new ApiError(400, 'Vehicle number must be in this format: PP09KK1234');
+    if (normalizedNumber && !VEHICLE_NUMBER_PATTERNS.some((pattern) => pattern.test(normalizedNumber))) {
+      throw new ApiError(400, 'Vehicle number must be in a valid format, for example DL1AB2345, DL1ABCD1234, or MH12AB1234');
     }
   }
 
