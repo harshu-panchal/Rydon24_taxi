@@ -1,6 +1,11 @@
 import React from 'react';
-import { ArrowLeft, FileText, IndianRupee, ReceiptText, Scale, ScrollText, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, FileText, IndianRupee, Mail, Phone, ReceiptText, Scale, ScrollText, ShieldCheck } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+
+const ownerContact = {
+  phone: '93893 94808',
+  email: 'rydon24trawler@gmail.com',
+};
 
 const vehiclePricing = [
   { type: 'Bike', capacity: 'Up to 2 riders', price: 'Starts at Rs 49', cancellationCut: 'Admin cut up to Rs 10', note: 'Best for quick solo rides and short-distance travel.' },
@@ -258,6 +263,22 @@ const LegalPage = () => {
           <p className="mt-6 max-w-3xl text-lg leading-relaxed text-stone-300">
             {content.intro}
           </p>
+          <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:flex-wrap">
+            <a
+              href={`tel:${ownerContact.phone}`}
+              className="inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+            >
+              <Phone size={18} className="text-[#f4b400]" />
+              <span>{ownerContact.phone}</span>
+            </a>
+            <a
+              href={`mailto:${ownerContact.email}`}
+              className="inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+            >
+              <Mail size={18} className="text-[#f4b400]" />
+              <span>{ownerContact.email}</span>
+            </a>
+          </div>
         </div>
       </section>
 
