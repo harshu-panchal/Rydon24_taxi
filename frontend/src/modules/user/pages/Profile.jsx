@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  User, Wallet, Bell, Shield, LogOut, ChevronRight, HelpCircle, 
+  User, Wallet, Bell, Shield, LogOut, ChevronRight, HelpCircle, FileText,
   MapPin, Star, Package, Wrench, Gift, Trash2, Check, BusFront, 
   Settings, CreditCard, Heart, Map, MessageSquare, History, Phone
 } from 'lucide-react';
@@ -51,6 +51,14 @@ const menuSections = [
       { icon: Bell, title: 'Notifications', sub: 'Offers & alerts', path: '/taxi/user/profile/notifications', bg: 'bg-purple-50', color: 'text-purple-600' },
       { icon: Shield, title: 'Security & SOS', sub: 'Trust & safety settings', path: '/safety/sos', bg: 'bg-sky-50', color: 'text-sky-600' },
       { icon: HelpCircle, title: 'Help & Support', sub: 'Help center & tickets', path: '/taxi/user/support/tickets', bg: 'bg-slate-50', color: 'text-slate-600' },
+    ]
+  },
+  {
+    title: 'Legal',
+    items: [
+      { icon: FileText, title: 'Terms & Conditions', sub: 'Read service terms', path: '/terms', bg: 'bg-orange-50', color: 'text-orange-600' },
+      { icon: Shield, title: 'Privacy Policy', sub: 'How your data is handled', path: '/privacy', bg: 'bg-emerald-50', color: 'text-emerald-600' },
+      { icon: CreditCard, title: 'Refund Policy', sub: 'Refunds and cancellations', path: '/refund', bg: 'bg-indigo-50', color: 'text-indigo-600' },
     ]
   }
 ];

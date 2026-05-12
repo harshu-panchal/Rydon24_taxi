@@ -779,6 +779,7 @@ function App() {
               <Route path="/taxi/user/login" element={<Login />} />
               <Route path="/taxi/user/terms" element={<LegalPage />} />
               <Route path="/taxi/user/privacy" element={<LegalPage />} />
+              <Route path="/taxi/user/refund" element={<LegalPage />} />
               <Route path="/taxi/user/verify-otp" element={<VerifyOTP />} />
               <Route path="/taxi/user/signup" element={<Signup />} />
               <Route path="/taxi/user" element={<UserHomeRoute taxiPrefixed />} />
