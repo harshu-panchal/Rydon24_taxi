@@ -1757,6 +1757,15 @@ const decryptBiometricTemplate = (encrypted = "") => {
 const buildBiometricTemplateHash = (template = "") =>
   crypto.createHash("sha256").update(String(template || "")).digest("hex");
 
+const isValidBiometricTemplate = (template) => {
+  const s = String(template || "").trim();
+  if (!s || s.length < 20) return false;
+  const lower = s.toLowerCase();
+  if (lower.includes("[object object]") || lower === "undefined" || lower === "null") return false;
+  if (["success", "ok", "true", "false", "matched", "verified"].includes(lower)) return false;
+  return true;
+};
+
 const normalizeBiometricPreviewImage = (value = "") => {
   const trimmed = String(value || "").trim();
   if (!trimmed) {
@@ -3728,6 +3737,10 @@ export const captureServiceCenterBookingFingerprint = async (req, res) => {
     throw new ApiError(400, "templateData is required");
   }
 
+  if (!isValidBiometricTemplate(templateData)) {
+    throw new ApiError(400, "The captured fingerprint data is invalid or too short. Ensure the scanner bridge is returning raw template data.");
+  }
+
   if (!BIOMETRIC_CAPTURE_SOURCES.includes(captureSource)) {
     throw new ApiError(400, "Invalid capture source");
   }
@@ -3878,6 +3891,7 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
   const notes = String(req.body?.notes || "").trim();
   const matchScore = normalizeBiometricMatchScore(req.body?.matchScore);
   const templateData = String(req.body?.templateData || req.body?.template || "").trim();
+  const isTemplateValid = isValidBiometricTemplate(templateData);
   const previewImage = normalizeBiometricPreviewImage(
     req.body?.previewImage ||
     req.body?.imageBase64 ||
@@ -3915,11 +3929,11 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
   const hasNumericMatchScore = Number.isFinite(matchScore) && matchScore >= 0;
   const hasTemplateData = Boolean(templateData);
   const templateHashMatched =
-    hasTemplateData && buildBiometricTemplateHash(templateData) === String(enrolledFinger?.templateHash || "");
+    hasTemplateData && isTemplateValid && buildBiometricTemplateHash(templateData) === String(enrolledFinger?.templateHash || "");
 
   // Server-side template comparison: decrypt the enrolled template and compare directly
   let serverSideTemplateMatched = false;
-  if (hasTemplateData && !templateHashMatched && enrolledFinger?.templateEncrypted) {
+  if (hasTemplateData && isTemplateValid && !templateHashMatched && enrolledFinger?.templateEncrypted) {
     const enrolledTemplate = decryptBiometricTemplate(enrolledFinger.templateEncrypted);
     if (enrolledTemplate && enrolledTemplate === templateData) {
       serverSideTemplateMatched = true;
@@ -3936,7 +3950,8 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
       resolvedVerificationStatus = localMatch ? "matched" : "failed";
     } else if (hasTemplateData) {
       // USB scanner re-captured a template — compare server-side
-      resolvedVerificationStatus = templateMatched ? "matched" : "failed";
+      // If template is invalid/generic, we reject it immediately
+      resolvedVerificationStatus = (isTemplateValid && templateMatched) ? "matched" : "failed";
     }
   } else if (templateMatched) {
     resolvedVerificationStatus =
@@ -3992,6 +4007,26 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
         minimumMatchScore: BIOMETRIC_MIN_MATCH_SCORE,
         matchScore,
         verificationStatus: resolvedVerificationStatus,
+        isMatch: resolvedVerificationStatus === "matched",
+        message: (() => {
+          const isMatch = resolvedVerificationStatus === "matched";
+          if (isMatch) {
+            if (captureSource === "phone_sensor") return "Matched via phone sensor";
+            if (hasNumericMatchScore) return `Matched via bridge score (${matchScore})`;
+            if (localMatch === true) return "Matched via bridge local decision";
+            if (templateHashMatched) return "Matched via template hash";
+            if (serverSideTemplateMatched) return "Matched via server-side template comparison";
+            return "Verified successfully";
+          }
+          if (resolvedVerificationStatus === "failed") {
+            if (hasNumericMatchScore && matchScore < BIOMETRIC_MIN_MATCH_SCORE) return `Failed: low match score (${matchScore})`;
+            if (localMatch === false) return "Failed: bridge reported no match";
+            if (hasTemplateData && !templateMatched) return "Failed: template data mismatch";
+            return "Fingerprint did not match";
+          }
+          if (resolvedVerificationStatus === "low_quality") return "Scan quality too low, please try again";
+          return "";
+        })(),
       },
     },
   });

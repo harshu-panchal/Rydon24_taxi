@@ -257,8 +257,21 @@ const withImageDataUrlPrefix = (value = '') => {
   return trimmed;
 };
 
-const pickFirstBiometricValue = (...values) =>
-  values.find((value) => value !== undefined && value !== null && String(value).trim() !== '') || '';
+const pickFirstBiometricValue = (...values) => {
+  const found = values.find((value) => {
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'object') return false;
+    const s = String(value).trim();
+    return (
+      s !== '' &&
+      s.toLowerCase() !== 'undefined' &&
+      s.toLowerCase() !== 'null' &&
+      s !== '[object Object]' &&
+      s.length > 5
+    );
+  });
+  return found !== undefined ? String(found).trim() : '';
+};
 
 const pickFirstBiometricPreviewValue = (...values) =>
   withImageDataUrlPrefix(
@@ -2349,14 +2362,15 @@ const ServiceCenterDashboard = () => {
         ? `Re-verify failed: ${finger.label} fingerprint does not match. Minimum required is ${BIOMETRIC_MIN_MATCH_SCORE}%, but this scan returned ${responseMatchScore}%.`
         : `Re-verify failed: ${finger.label} fingerprint does not match the enrolled fingerprint.`;
 
+      const resultIsMatch = responseData?.verification?.isMatch ?? (verificationStatus === 'matched');
+      const backendMessage = responseData?.verification?.message;
+
       setBiometricStatus({
-        tone: verificationStatus === 'matched' ? 'success' : 'error',
+        tone: resultIsMatch ? 'success' : 'error',
         message:
-          verificationStatus === 'matched'
+          backendMessage || (resultIsMatch
             ? successMessage
-            : verificationStatus === 'low_quality'
-              ? lowQualityMessage
-              : failedMessage,
+            : (verificationStatus === 'low_quality' ? lowQualityMessage : failedMessage)),
         fingerCode: finger.code,
         action: 'verify',
       });
