@@ -1737,6 +1737,23 @@ const encryptBiometricTemplate = (template = "") => {
   return `${iv.toString("base64")}:${tag.toString("base64")}:${encrypted.toString("base64")}`;
 };
 
+const decryptBiometricTemplate = (encrypted = "") => {
+  const raw = String(encrypted || "").trim();
+  if (!raw) return "";
+  try {
+    const parts = raw.split(":");
+    if (parts.length < 3) return "";
+    const iv = Buffer.from(parts[0], "base64");
+    const tag = Buffer.from(parts[1], "base64");
+    const data = Buffer.from(parts[2], "base64");
+    const decipher = crypto.createDecipheriv("aes-256-gcm", getBiometricEncryptionKey(), iv);
+    decipher.setAuthTag(tag);
+    return decipher.update(data, undefined, "utf8") + decipher.final("utf8");
+  } catch {
+    return "";
+  }
+};
+
 const buildBiometricTemplateHash = (template = "") =>
   crypto.createHash("sha256").update(String(template || "")).digest("hex");
 
@@ -1832,6 +1849,7 @@ const serializeBiometricProfile = (profile = {}) => {
       lastVerifiedAt: item?.lastVerifiedAt || null,
       verificationCount: Number(item?.verificationCount || 0),
       templateStored: Boolean(item?.templateEncrypted),
+      templateHash: item?.templateHash || "",
       templateHashPreview: item?.templateHash ? String(item.templateHash).slice(0, 10) : "",
     })),
     auditLogs: (Array.isArray(profile?.auditLogs) ? profile.auditLogs : [])
@@ -3898,8 +3916,16 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
   const hasTemplateData = Boolean(templateData);
   const templateHashMatched =
     hasTemplateData && buildBiometricTemplateHash(templateData) === String(enrolledFinger?.templateHash || "");
-  const hasExplicitVerificationSignal =
-    hasNumericMatchScore || localMatch !== null || ["matched", "failed", "low_quality"].includes(resolvedVerificationStatus);
+
+  // Server-side template comparison: decrypt the enrolled template and compare directly
+  let serverSideTemplateMatched = false;
+  if (hasTemplateData && !templateHashMatched && enrolledFinger?.templateEncrypted) {
+    const enrolledTemplate = decryptBiometricTemplate(enrolledFinger.templateEncrypted);
+    if (enrolledTemplate && enrolledTemplate === templateData) {
+      serverSideTemplateMatched = true;
+    }
+  }
+  const templateMatched = templateHashMatched || serverSideTemplateMatched;
 
   if (captureSource === "phone_sensor" && localMatch !== null) {
     resolvedVerificationStatus = localMatch ? "matched" : "failed";
@@ -3908,15 +3934,11 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
       resolvedVerificationStatus = matchScore >= BIOMETRIC_MIN_MATCH_SCORE ? "matched" : "failed";
     } else if (localMatch !== null) {
       resolvedVerificationStatus = localMatch ? "matched" : "failed";
-    } else if (["matched", "failed", "low_quality"].includes(resolvedVerificationStatus)) {
-      // The bridge/frontend already resolved a valid verification status — trust it.
-    } else if (hasTemplateData && templateHashMatched) {
-      resolvedVerificationStatus = "matched";
     } else if (hasTemplateData) {
-      // Template data was sent but the hash does not match the enrolled fingerprint.
-      resolvedVerificationStatus = "failed";
+      // USB scanner re-captured a template — compare server-side
+      resolvedVerificationStatus = templateMatched ? "matched" : "failed";
     }
-  } else if (templateHashMatched) {
+  } else if (templateMatched) {
     resolvedVerificationStatus =
       "matched";
   } else if (hasTemplateData) {

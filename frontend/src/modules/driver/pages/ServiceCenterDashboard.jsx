@@ -368,7 +368,7 @@ const normalizeBridgeResult = (result, preferredSource, action) => {
   }
 
   if (action === 'verifyFinger') {
-    const localMatch = payload.localMatch ?? payload.match ?? parsedResult.localMatch ?? parsedResult.match;
+    const localMatch = payload.localMatch ?? payload.match ?? payload.matched ?? payload.isMatch ?? payload.isMatched ?? parsedResult.localMatch ?? parsedResult.match ?? parsedResult.matched ?? parsedResult.isMatch ?? parsedResult.isMatched;
     return {
       ...parsedResult,
       ...payload,
@@ -381,10 +381,15 @@ const normalizeBridgeResult = (result, preferredSource, action) => {
           parsedResult.status ||
           (localMatch === true ? 'matched' : localMatch === false ? 'failed' : ''),
         ).trim().toLowerCase();
-        // Map common bridge success/failure statuses to valid verification statuses
-        if (['matched', 'match', 'success', 'ok', 'pass', 'passed', 'verified', 'true', 'yes'].includes(raw)) return 'matched';
-        if (['failed', 'fail', 'error', 'rejected', 'mismatch', 'no_match', 'nomatch', 'false', 'no'].includes(raw)) return 'failed';
+        // Map explicit biometric verification results to valid statuses.
+        // IMPORTANT: Do NOT map generic bridge statuses like 'success'/'ok'/'error' here —
+        // those mean "the scan operation completed", not "the fingerprint matched".
+        if (['matched', 'match', 'verified'].includes(raw)) return 'matched';
+        if (['failed', 'fail', 'rejected', 'mismatch', 'no_match', 'nomatch', 'not_matched'].includes(raw)) return 'failed';
         if (['low_quality', 'lowquality', 'low-quality', 'poor', 'retry'].includes(raw)) return 'low_quality';
+        // For generic statuses like 'success'/'ok'/'error', return empty so the
+        // backend can decide based on template comparison or matchScore instead.
+        if (['success', 'ok', 'pass', 'passed', 'true', 'yes', 'done', 'complete', 'captured'].includes(raw)) return '';
         return raw;
       })(),
       templateData: String(
@@ -2250,17 +2255,29 @@ const ServiceCenterDashboard = () => {
     setError('');
 
     try {
+      // Look up the enrolled finger record so we can pass its template hash to the bridge.
+      // This lets the Flutter side do on-device 1:1 matching if the scanner SDK supports it.
+      const enrolledFingers = Array.isArray(selectedBooking?.biometrics?.fingers)
+        ? selectedBooking.biometrics.fingers
+        : [];
+      const enrolledRecord = enrolledFingers.find(
+        (item) => String(item?.fingerCode || '').trim().toUpperCase() === String(finger.code).toUpperCase(),
+      );
+
       const bridgeResult = await invokeFingerprintBridge('verifyFinger', {
         fingerCode: finger.code,
         fingerLabel: finger.label,
         bookingId: selectedBooking.id || selectedBooking._id,
+        enrolledTemplateHash: enrolledRecord?.templateHashPreview || enrolledRecord?.templateHash || '',
+        enrolledTemplateFormat: enrolledRecord?.templateFormat || '',
+        enrolledCaptureSource: enrolledRecord?.captureSource || '',
       }, biometricSource);
 
       if (bridgeResult && typeof bridgeResult === 'object' && bridgeResult.success === false) {
         throw new Error(String(bridgeResult.message || `Unable to verify ${finger.label}`));
       }
 
-      const resolvedBridgeStatus = String(bridgeResult?.verificationStatus || bridgeResult?.status || '').trim().toLowerCase();
+      const resolvedBridgeStatus = String(bridgeResult?.verificationStatus || '').trim().toLowerCase();
       const resolvedBridgeScore = normalizeBiometricMatchScore(bridgeResult?.matchScore);
       const hasBridgeTemplate = Boolean(String(bridgeResult?.templateData || bridgeResult?.template || '').trim());
       const hasBridgeBooleanMatch = typeof bridgeResult?.localMatch === 'boolean' || typeof bridgeResult?.match === 'boolean';
