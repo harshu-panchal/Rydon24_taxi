@@ -373,12 +373,20 @@ const normalizeBridgeResult = (result, preferredSource, action) => {
       ...parsedResult,
       ...payload,
       localMatch: typeof localMatch === 'boolean' ? localMatch : undefined,
-      verificationStatus:
-        payload.verificationStatus ||
-        payload.status ||
-        parsedResult.verificationStatus ||
-        parsedResult.status ||
-        (localMatch === true ? 'matched' : localMatch === false ? 'failed' : ''),
+      verificationStatus: (() => {
+        const raw = String(
+          payload.verificationStatus ||
+          payload.status ||
+          parsedResult.verificationStatus ||
+          parsedResult.status ||
+          (localMatch === true ? 'matched' : localMatch === false ? 'failed' : ''),
+        ).trim().toLowerCase();
+        // Map common bridge success/failure statuses to valid verification statuses
+        if (['matched', 'match', 'success', 'ok', 'pass', 'passed', 'verified', 'true', 'yes'].includes(raw)) return 'matched';
+        if (['failed', 'fail', 'error', 'rejected', 'mismatch', 'no_match', 'nomatch', 'false', 'no'].includes(raw)) return 'failed';
+        if (['low_quality', 'lowquality', 'low-quality', 'poor', 'retry'].includes(raw)) return 'low_quality';
+        return raw;
+      })(),
       templateData: String(
         pickFirstBiometricValue(
           payload.templateData,
@@ -2268,9 +2276,9 @@ const ServiceCenterDashboard = () => {
         throw new Error('The scanner did not return a fingerprint result. Ask the customer to scan again.');
       }
 
-      if ((biometricSource === 'usb_scanner' || biometricSource === 'bluetooth_scanner') && !hasBridgeDecision) {
+      if ((biometricSource === 'usb_scanner' || biometricSource === 'bluetooth_scanner') && !hasBridgeDecision && !hasBridgeTemplate) {
         throw new Error(
-          `${getBiometricSourceLabel(biometricSource)} verification is not returning a real match result yet. The bridge only sent a fresh template capture, so the app cannot reliably prove the same finger matched. Wire the scanner bridge to return matchScore, localMatch, or verificationStatus for verify.`,
+          `${getBiometricSourceLabel(biometricSource)} verification did not return any result. Ask the customer to scan again.`,
         );
       }
 

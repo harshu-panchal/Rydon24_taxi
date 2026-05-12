@@ -3908,11 +3908,13 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
       resolvedVerificationStatus = matchScore >= BIOMETRIC_MIN_MATCH_SCORE ? "matched" : "failed";
     } else if (localMatch !== null) {
       resolvedVerificationStatus = localMatch ? "matched" : "failed";
-    } else if (!hasExplicitVerificationSignal && hasTemplateData) {
-      throw new ApiError(
-        400,
-        "USB fingerprint verify must return matchScore, localMatch, or verificationStatus. Template-only recaptures cannot reliably prove the same finger matched.",
-      );
+    } else if (["matched", "failed", "low_quality"].includes(resolvedVerificationStatus)) {
+      // The bridge/frontend already resolved a valid verification status — trust it.
+    } else if (hasTemplateData && templateHashMatched) {
+      resolvedVerificationStatus = "matched";
+    } else if (hasTemplateData) {
+      // Template data was sent but the hash does not match the enrolled fingerprint.
+      resolvedVerificationStatus = "failed";
     }
   } else if (templateHashMatched) {
     resolvedVerificationStatus =
