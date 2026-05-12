@@ -78,7 +78,7 @@ const OTPVerification = () => {
     const [otp, setOtp] = useState(['', '', '', '']);
     const inputs = useRef([]);
     const otpCardRef = useRef(null);
-    const [timer, setTimer] = useState(30);
+    const [timer, setTimer] = useState(60);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -230,7 +230,7 @@ const OTPVerification = () => {
             }
             setOtp(['', '', '', '']);
             inputs.current[0]?.focus();
-            setTimer(30);
+            setTimer(60);
             setError('OTP Resent Successfully');
         } catch (err) {
             setError(err?.message || 'Failed to resend OTP');
