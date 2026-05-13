@@ -124,17 +124,6 @@ const Login = () => {
           </div>
         </div>
 
-        <div className="space-y-4">
-          <button 
-            type="button" 
-            className="w-full py-4 rounded-2xl border-2 border-gray-50 flex items-center justify-center gap-4 hover:bg-gray-50 hover:border-blue-100 transition-all group shadow-sm bg-white"
-          >
-            <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-gray-100 group-hover:scale-110 transition-transform">
-              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-4 h-4" />
-            </div>
-            <span className="text-[13px] font-black text-gray-500 group-hover:text-black uppercase tracking-wider">Continue with Google</span>
-          </button>
-        </div>
 
         <p className="text-[11px] text-gray-400 font-bold text-center leading-relaxed px-4 mt-8">
            By continuing, you agree to our 
