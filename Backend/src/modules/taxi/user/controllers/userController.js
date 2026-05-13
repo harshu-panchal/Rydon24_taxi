@@ -177,49 +177,90 @@ const getFrontendBaseUrl = () => {
   return (configuredOrigin || 'http://localhost:5173').replace(/\/+$/, '');
 };
 
-const getPhonePeBaseUrl = (environment = 'test') => (
+const getPhonePeApiBaseUrl = (environment = 'test') => (
   String(environment).trim().toLowerCase() === 'production'
-    ? 'https://api.phonepe.com/apis/hermes'
+    ? 'https://api.phonepe.com/apis/pg'
     : 'https://api-preprod.phonepe.com/apis/pg-sandbox'
 );
 
-const buildPhonePeChecksum = ({ payload = '', path = '', saltKey = '', saltIndex = '1' }) => {
-  const digest = crypto
-    .createHash('sha256')
-    .update(`${payload}${path}${saltKey}`)
-    .digest('hex');
+const getPhonePeAuthUrl = (environment = 'test') => (
+  String(environment).trim().toLowerCase() === 'production'
+    ? 'https://api.phonepe.com/apis/identity-manager/v1/oauth/token'
+    : 'https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token'
+);
 
-  return `${digest}###${saltIndex}`;
+const phonePeAccessTokenCache = new Map();
+
+const getPhonePeAccessToken = async ({
+  clientId,
+  clientSecret,
+  clientVersion,
+  environment,
+}) => {
+  const cacheKey = `${String(environment).trim().toLowerCase()}::${clientId}::${clientVersion}`;
+  const cachedToken = phonePeAccessTokenCache.get(cacheKey);
+  const nowEpochSeconds = Math.floor(Date.now() / 1000);
+
+  if (cachedToken?.accessToken && Number(cachedToken.expiresAt || 0) - 60 > nowEpochSeconds) {
+    return cachedToken.accessToken;
+  }
+
+  const requestBody = new URLSearchParams({
+    client_id: clientId,
+    client_version: clientVersion,
+    client_secret: clientSecret,
+    grant_type: 'client_credentials',
+  });
+
+  const response = await fetch(getPhonePeAuthUrl(environment), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      accept: 'application/json',
+    },
+    body: requestBody.toString(),
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.access_token) {
+    throw new ApiError(
+      response.status || 502,
+      payload?.message || payload?.error_description || payload?.error || 'PhonePe authorization failed',
+    );
+  }
+
+  phonePeAccessTokenCache.set(cacheKey, {
+    accessToken: String(payload.access_token),
+    expiresAt: Number(payload.expires_at || nowEpochSeconds + 300),
+  });
+
+  return String(payload.access_token);
 };
 
 const phonePeRequest = async ({
   method,
   path,
   body,
-  merchantId,
-  saltKey,
-  saltIndex,
+  clientId,
+  clientSecret,
+  clientVersion,
   environment,
 }) => {
   const normalizedMethod = String(method || 'GET').trim().toUpperCase();
-  const encodedPayload =
-    body && normalizedMethod !== 'GET'
-      ? Buffer.from(JSON.stringify(body)).toString('base64')
-      : '';
-  const response = await fetch(`${getPhonePeBaseUrl(environment)}${path}`, {
+  const accessToken = await getPhonePeAccessToken({
+    clientId,
+    clientSecret,
+    clientVersion,
+    environment,
+  });
+  const response = await fetch(`${getPhonePeApiBaseUrl(environment)}${path}`, {
     method: normalizedMethod,
     headers: {
       'Content-Type': 'application/json',
-      'X-VERIFY': buildPhonePeChecksum({
-        payload: encodedPayload,
-        path,
-        saltKey,
-        saltIndex,
-      }),
-      'X-MERCHANT-ID': merchantId,
+      Authorization: `O-Bearer ${accessToken}`,
       accept: 'application/json',
     },
-    body: encodedPayload ? JSON.stringify({ request: encodedPayload }) : undefined,
+    body: body && normalizedMethod !== 'GET' ? JSON.stringify(body) : undefined,
   });
 
   const payload = await response.json().catch(() => null);
@@ -1959,40 +2000,108 @@ export const createRentalAdvancePaymentOrder = async (req, res) => {
   });
 };
 
+export const createPhonePeRentalAdvancePaymentOrder = async (req, res) => {
+  const amount = normalizeMoneyAmount(req.body?.amount);
+  const vehicleId = String(req.body?.vehicleId || '').trim();
+  const vehicleName = String(req.body?.vehicleName || 'Rental booking').trim();
+  const pickup = String(req.body?.pickup || '').trim();
+  const returnTime = String(req.body?.returnTime || '').trim();
+  const bookingReference =
+    toCleanString(req.body?.bookingReference) || `RNT-${Date.now().toString(36).slice(-6).toUpperCase()}`;
+  const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials();
+  const userId = String(req.auth?.sub || '');
+  const compactUserId = userId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
+  const merchantTransactionId = `URNT${Date.now()}${compactUserId}`.slice(0, 34);
+  const frontendBaseUrl = getFrontendBaseUrl();
+  const redirectUrl = `${frontendBaseUrl}/rental/deposit?phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
+  const user = userId ? await User.findById(userId).select('phone').lean() : null;
+  const payload = await phonePeRequest({
+    method: 'POST',
+    path: '/checkout/v2/pay',
+    body: {
+      merchantOrderId: merchantTransactionId,
+      amount: Math.round(amount * 100),
+      expireAfter: 1200,
+      paymentFlow: {
+        type: 'PG_CHECKOUT',
+        merchantUrls: {
+          redirectUrl,
+        },
+        message: 'Rental advance payment',
+      },
+      metaInfo: {
+        udf1: vehicleId || 'rental',
+        udf2: vehicleName.slice(0, 120) || 'Rental booking',
+        udf3: bookingReference,
+      },
+      prefillUserLoginDetails: normalizePhone(user?.phone || '')
+        ? { phoneNumber: normalizePhone(user?.phone || '') }
+        : undefined,
+    },
+    clientId,
+    clientSecret,
+    clientVersion,
+    environment,
+  });
+
+  const checkoutUrl = payload?.redirectUrl || '';
+  if (!checkoutUrl) {
+    throw new ApiError(502, 'PhonePe payment URL was not returned');
+  }
+
+  res.status(201).json({
+    success: true,
+    data: {
+      gateway: 'phonepe',
+      merchantTransactionId,
+      bookingReference,
+      amount: Math.round(amount * 100),
+      currency: 'INR',
+      checkoutUrl,
+      metadata: {
+        vehicleId,
+        vehicleName,
+        pickup,
+        returnTime,
+      },
+    },
+  });
+};
+
 export const createPhonePeWalletTopupOrder = async (req, res) => {
   const amount = normalizeMoneyAmount(req.body?.amount);
-  const { merchantId, saltKey, saltIndex, environment } = await resolvePhonePeCredentials();
+  const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials();
   const userId = String(req.auth?.sub || '');
   const compactUserId = userId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
   const merchantTransactionId = `UWAL${Date.now()}${compactUserId}`.slice(0, 34);
   const frontendBaseUrl = getFrontendBaseUrl();
-  const backendBaseUrl = `${req.protocol}://${req.get('host')}`;
   const redirectUrl = `${frontendBaseUrl}/taxi/user/wallet?phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
-  const callbackUrl = `${backendBaseUrl}/api/v1/common/payment-gateway/phonepe/callback`;
   const user = userId ? await User.findById(userId).select('phone').lean() : null;
   const payload = await phonePeRequest({
     method: 'POST',
-    path: '/pg/v1/pay',
+    path: '/checkout/v2/pay',
     body: {
-      merchantId,
-      merchantTransactionId,
-      merchantUserId: compactUserId,
+      merchantOrderId: merchantTransactionId,
       amount: Math.round(amount * 100),
-      redirectUrl,
-      redirectMode: 'GET',
-      callbackUrl,
-      mobileNumber: normalizePhone(user?.phone || '') || undefined,
-      paymentInstrument: {
-        type: 'PAY_PAGE',
+      expireAfter: 1200,
+      paymentFlow: {
+        type: 'PG_CHECKOUT',
+        merchantUrls: {
+          redirectUrl,
+        },
+        message: 'Wallet top-up',
       },
+      prefillUserLoginDetails: normalizePhone(user?.phone || '')
+        ? { phoneNumber: normalizePhone(user?.phone || '') }
+        : undefined,
     },
-    merchantId,
-    saltKey,
-    saltIndex,
+    clientId,
+    clientSecret,
+    clientVersion,
     environment,
   });
 
-  const checkoutUrl = payload?.data?.instrumentResponse?.redirectInfo?.url || '';
+  const checkoutUrl = payload?.redirectUrl || '';
   if (!checkoutUrl) {
     throw new ApiError(502, 'PhonePe payment URL was not returned');
   }
@@ -2153,19 +2262,21 @@ export const verifyPhonePeWalletTopup = async (req, res) => {
     throw new ApiError(400, 'merchantTransactionId is required');
   }
 
-  const { merchantId, saltKey, saltIndex, environment } = await resolvePhonePeCredentials();
+  const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials();
   const payload = await phonePeRequest({
     method: 'GET',
-    path: `/pg/v1/status/${encodeURIComponent(merchantId)}/${encodeURIComponent(merchantTransactionId)}`,
-    merchantId,
-    saltKey,
-    saltIndex,
+    path: `/checkout/v2/order/${encodeURIComponent(merchantTransactionId)}/status?details=false`,
+    clientId,
+    clientSecret,
+    clientVersion,
     environment,
   });
 
-  const paymentState = String(payload?.data?.state || payload?.data?.paymentState || '').trim().toUpperCase();
-  const paymentId = toCleanString(payload?.data?.transactionId || merchantTransactionId);
-  const amount = Math.round(Number(payload?.data?.amount || 0)) / 100;
+  const paymentDetails = Array.isArray(payload?.paymentDetails) ? payload.paymentDetails : [];
+  const latestPayment = paymentDetails[0] || {};
+  const paymentState = String(payload?.state || latestPayment?.state || '').trim().toUpperCase();
+  const paymentId = toCleanString(latestPayment?.transactionId || latestPayment?.paymentTransactionId || merchantTransactionId);
+  const amount = Math.round(Number(payload?.amount || latestPayment?.amount || 0)) / 100;
   const userId = req.auth?.sub;
 
   if (paymentState === 'COMPLETED') {
@@ -2234,13 +2345,13 @@ export const verifyPhonePeWalletTopup = async (req, res) => {
 
   res.json({
     success: true,
-    data: {
-      status: 'failed',
-      gateway: 'phonepe',
-      merchantTransactionId,
-      transactionId: paymentId,
-      code: payload?.code || payload?.data?.responseCode || '',
-    },
+      data: {
+        status: 'failed',
+        gateway: 'phonepe',
+        merchantTransactionId,
+        transactionId: paymentId,
+        code: payload?.code || latestPayment?.responseCode || '',
+      },
     message: payload?.message || 'PhonePe payment was not completed',
   });
 };
@@ -2290,6 +2401,81 @@ export const verifyRentalAdvancePayment = async (req, res) => {
       notes: order?.notes || {},
     },
     message: 'Rental advance payment verified successfully',
+  });
+};
+
+export const verifyPhonePeRentalAdvancePayment = async (req, res) => {
+  const merchantTransactionId = toCleanString(
+    req.params?.merchantTransactionId || req.query?.merchantTransactionId || req.query?.transactionId,
+  );
+
+  if (!merchantTransactionId) {
+    throw new ApiError(400, 'merchantTransactionId is required');
+  }
+
+  const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials();
+  const payload = await phonePeRequest({
+    method: 'GET',
+    path: `/checkout/v2/order/${encodeURIComponent(merchantTransactionId)}/status?details=false`,
+    clientId,
+    clientSecret,
+    clientVersion,
+    environment,
+  });
+
+  const paymentDetails = Array.isArray(payload?.paymentDetails) ? payload.paymentDetails : [];
+  const latestPayment = paymentDetails[0] || {};
+  const paymentState = String(payload?.state || latestPayment?.state || '').trim().toUpperCase();
+  const paymentId = toCleanString(latestPayment?.transactionId || latestPayment?.paymentTransactionId || merchantTransactionId);
+  const amount = Math.round(Number(payload?.amount || latestPayment?.amount || 0)) / 100;
+  const bookingReference = toCleanString(payload?.metaInfo?.udf3 || latestPayment?.metaInfo?.udf3);
+
+  if (paymentState === 'COMPLETED') {
+    res.json({
+      success: true,
+      data: {
+        provider: 'phonepe',
+        gateway: 'phonepe',
+        status: 'paid',
+        amount,
+        currency: payload?.currency || 'INR',
+        merchantTransactionId,
+        transactionId: paymentId,
+        bookingReference,
+      },
+      message: 'Rental advance payment verified successfully',
+    });
+    return;
+  }
+
+  if (paymentState === 'PENDING') {
+    res.json({
+      success: true,
+      data: {
+        provider: 'phonepe',
+        gateway: 'phonepe',
+        status: 'pending',
+        merchantTransactionId,
+        transactionId: paymentId,
+        bookingReference,
+      },
+      message: payload?.message || 'PhonePe payment is still pending',
+    });
+    return;
+  }
+
+  res.json({
+    success: true,
+    data: {
+      provider: 'phonepe',
+      gateway: 'phonepe',
+      status: 'failed',
+      merchantTransactionId,
+      transactionId: paymentId,
+      bookingReference,
+      code: payload?.code || latestPayment?.responseCode || '',
+    },
+    message: payload?.message || 'PhonePe payment was not completed',
   });
 };
 

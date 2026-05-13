@@ -73,7 +73,7 @@ const main = async () => {
       },
     },
     {
-      new: true,
+      returnDocument: 'after',
       upsert: true,
       setDefaultsOnInsert: true,
       runValidators: true,

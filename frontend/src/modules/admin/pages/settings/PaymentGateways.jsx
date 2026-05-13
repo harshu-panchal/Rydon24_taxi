@@ -111,9 +111,9 @@ const PaymentGateways = () => {
       color: 'purple',
       fields: [
         { label: 'Environment', key: 'phone_pay.environment', type: 'select', options: ['test', 'production'] },
-        { label: 'Merchant ID', key: 'phone_pay.merchant_id' },
-        { label: 'Salt Key', key: 'phone_pay.salt_key' },
-        { label: 'Salt Index', key: 'phone_pay.salt_index' }
+        { label: 'Client ID / Merchant ID', key: 'phone_pay.merchant_id' },
+        { label: 'Client Secret / Salt Key', key: 'phone_pay.salt_key' },
+        { label: 'Client Version / Salt Index', key: 'phone_pay.salt_index' }
       ]
     },
     { 

@@ -5,6 +5,7 @@ import {
   cancelMyBusBooking,
   createBusBookingOrder,
   createRentalAdvancePaymentOrder,
+  createPhonePeRentalAdvancePaymentOrder,
   payRentalAdvanceWithWallet,
   createRentalBookingRequest,
   createRentalQuoteRequest,
@@ -41,6 +42,7 @@ import {
   uploadUserProfileImage,
   verifyBusBookingPayment,
   verifyRentalAdvancePayment,
+  verifyPhonePeRentalAdvancePayment,
   verifyRazorpayWalletTopup,
   verifyPhonePeWalletTopup,
   verifyUserOtpRequest,
@@ -103,6 +105,8 @@ userRouter.post('/wallet/phonepe/order', authenticateOrResolveUser(['user']), as
 userRouter.get('/wallet/phonepe/status/:merchantTransactionId', authenticateOrResolveUser(['user']), asyncHandler(verifyPhonePeWalletTopup));
 userRouter.post('/rental-advance/razorpay/order', authenticateOrResolveUser(['user']), asyncHandler(createRentalAdvancePaymentOrder));
 userRouter.post('/rental-advance/razorpay/verify', authenticateOrResolveUser(['user']), asyncHandler(verifyRentalAdvancePayment));
+userRouter.post('/rental-advance/phonepe/order', authenticateOrResolveUser(['user']), asyncHandler(createPhonePeRentalAdvancePaymentOrder));
+userRouter.get('/rental-advance/phonepe/status/:merchantTransactionId', authenticateOrResolveUser(['user']), asyncHandler(verifyPhonePeRentalAdvancePayment));
 userRouter.post('/rental-advance/wallet', authenticateOrResolveUser(['user']), asyncHandler(payRentalAdvanceWithWallet));
 userRouter.get('/buses/routes', authenticateOrResolveUser(['user']), asyncHandler(getBusRouteSuggestions));
 userRouter.get('/buses/search', authenticateOrResolveUser(['user']), asyncHandler(searchBuses));

@@ -4,12 +4,15 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, ChevronRight, ShieldCheck, CreditCard, Wallet, Smartphone } from 'lucide-react';
 import { userService } from '../../services/userService';
 import { userAuthService } from '../../services/authService';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const PAYMENT_METHODS = [
   { id: 'upi', label: 'UPI', icon: Smartphone },
   { id: 'card', label: 'Card', icon: CreditCard },
   { id: 'wallet', label: 'Wallet', icon: Wallet },
 ];
+
+const RENTAL_DEPOSIT_STATE_KEY = 'taxi:rental-deposit-pending';
 
 const loadRazorpayScript = () =>
   new Promise((resolve) => {
@@ -74,7 +77,20 @@ const buildRentalBookingPayload = ({
 const RentalDeposit = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const state = location.state || {};
+  const { settings } = useSettings();
+  const routeState = location.state && Object.keys(location.state).length > 0 ? location.state : null;
+  const restoredState = useMemo(() => {
+    if (routeState) return routeState;
+
+    try {
+      const raw = sessionStorage.getItem(RENTAL_DEPOSIT_STATE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  }, [routeState]);
+  const state = routeState || restoredState;
+  const activePaymentGateway = settings.paymentGateway || null;
   const [vehicleSnapshot, setVehicleSnapshot] = useState(state.vehicle || null);
 
   useEffect(() => {
@@ -130,6 +146,21 @@ const RentalDeposit = () => {
   const [paymentError, setPaymentError] = useState('');
   const [walletBalance, setWalletBalance] = useState(0);
   const [walletLoading, setWalletLoading] = useState(false);
+  const supportsRentalAdvance = activePaymentGateway?.supportsRentalAdvance === true;
+  const rentalAdvanceMode = activePaymentGateway?.rentalAdvanceMode || '';
+  const isPhonePeRentalFlow = method !== 'wallet' && rentalAdvanceMode === 'phonepe_redirect';
+
+  useEffect(() => {
+    if (!state || Object.keys(state).length === 0) {
+      return;
+    }
+
+    try {
+      sessionStorage.setItem(RENTAL_DEPOSIT_STATE_KEY, JSON.stringify(state));
+    } catch {
+      // Ignore storage failures and keep the flow usable.
+    }
+  }, [state]);
 
   useEffect(() => {
     let mounted = true;
@@ -159,6 +190,90 @@ const RentalDeposit = () => {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    const merchantTransactionId = new URLSearchParams(window.location.search).get('phonepe_txn');
+    if (!merchantTransactionId || rentalAdvanceMode !== 'phonepe_redirect') {
+      return;
+    }
+
+    let cancelled = false;
+
+    const clearPhonePeQuery = () => {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('phonepe_txn');
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    };
+
+    const syncPhonePeRentalAdvance = async () => {
+      setPaying(true);
+      setPaymentError('');
+
+      try {
+        const verifyResponse = await userService.verifyPhonePeRentalAdvancePayment(merchantTransactionId);
+        if (cancelled) return;
+
+        const payment = verifyResponse?.data || {};
+        if (payment.status === 'paid') {
+          const methodLabel = PAYMENT_METHODS.find((item) => item.id === method)?.label || activePaymentGateway?.label || 'Online';
+          const bookingRequest = await submitBookingRequest({
+            paymentStatus: 'paid',
+            paymentMethod: method,
+            paymentMethodLabel: methodLabel,
+            payment,
+            bookingReference: payment.bookingReference || bookingReference,
+          });
+
+          navigate('/rental/confirmed', {
+            replace: true,
+            state: {
+              ...state,
+              vehicle,
+              deposit: payableNow,
+              paymentMethod: method,
+              paymentMethodLabel: methodLabel,
+              paymentStatus: 'paid',
+              payment,
+              bookingReference: bookingRequest.bookingReference || payment.bookingReference || bookingReference,
+              bookingRequest,
+            },
+          });
+          sessionStorage.removeItem(RENTAL_DEPOSIT_STATE_KEY);
+          return;
+        }
+
+        if (payment.status === 'pending') {
+          setPaymentError('PhonePe payment is still pending. Please refresh in a few seconds.');
+        } else {
+          setPaymentError(verifyResponse?.message || 'PhonePe payment was not completed.');
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setPaymentError(error?.message || 'Could not verify PhonePe payment.');
+        }
+      } finally {
+        if (!cancelled) {
+          setPaying(false);
+          clearPhonePeQuery();
+        }
+      }
+    };
+
+    syncPhonePeRentalAdvance();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activePaymentGateway?.label,
+    bookingReference,
+    method,
+    navigate,
+    payableNow,
+    rentalAdvanceMode,
+    state,
+    vehicle,
+  ]);
 
   if (!vehicleSnapshot) {
     navigate('/rental');
@@ -229,6 +344,16 @@ const RentalDeposit = () => {
     setPaying(true);
 
     try {
+      if (method !== 'wallet') {
+        if (!activePaymentGateway) {
+          throw new Error('No payment gateway is enabled by admin right now.');
+        }
+
+        if (!supportsRentalAdvance || !['razorpay_checkout', 'phonepe_redirect'].includes(rentalAdvanceMode)) {
+          throw new Error(`${activePaymentGateway?.label || 'This payment gateway'} is enabled by admin, but rental advance payment is not available for it yet.`);
+        }
+      }
+
       if (method === 'wallet') {
         if (Number(walletBalance || 0) < payableNow) {
           throw new Error('Not enough wallet balance for this advance payment');
@@ -263,6 +388,26 @@ const RentalDeposit = () => {
             bookingRequest,
           },
         });
+        sessionStorage.removeItem(RENTAL_DEPOSIT_STATE_KEY);
+        return;
+      }
+
+      if (rentalAdvanceMode === 'phonepe_redirect') {
+        const sessionResponse = await userService.createPhonePeRentalAdvanceOrder({
+          amount: payableNow,
+          bookingReference,
+          vehicleId: vehicle.id || vehicle._id,
+          vehicleName: vehicle.name,
+          pickup: state.pickup,
+          returnTime: state.returnTime,
+        });
+        const session = sessionResponse?.data || {};
+
+        if (!session.checkoutUrl) {
+          throw new Error('Unable to start PhonePe payment');
+        }
+
+        window.location.assign(session.checkoutUrl);
         return;
       }
 
@@ -337,6 +482,7 @@ const RentalDeposit = () => {
                 bookingRequest,
               },
             });
+            sessionStorage.removeItem(RENTAL_DEPOSIT_STATE_KEY);
           } catch (verifyError) {
             setPaymentError(verifyError?.message || 'Payment completed but the rental booking could not be saved');
             setPaying(false);
@@ -478,6 +624,11 @@ const RentalDeposit = () => {
                 : `Wallet balance: Rs.${Number(walletBalance || 0).toFixed(2)}`}
             </div>
           ) : null}
+          {isPhonePeRentalFlow ? (
+            <div className="rounded-[14px] border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-bold text-violet-700">
+              {activePaymentGateway?.label || 'PhonePe'} checkout will be used for this advance payment.
+            </div>
+          ) : null}
           {paymentError ? (
             <div className="rounded-[14px] border border-rose-100 bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-500">
               {paymentError}
@@ -497,7 +648,7 @@ const RentalDeposit = () => {
             <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
           ) : (
             <>
-              {method === 'wallet' ? <Wallet size={16} strokeWidth={2.5} /> : <CreditCard size={16} strokeWidth={2.5} />} Confirm & Pay Rs.{payableNow}
+              {method === 'wallet' ? <Wallet size={16} strokeWidth={2.5} /> : <CreditCard size={16} strokeWidth={2.5} />} {isPhonePeRentalFlow ? 'Continue to PhonePe' : 'Confirm & Pay'} Rs.{payableNow}
             </>
           )}
         </motion.button>

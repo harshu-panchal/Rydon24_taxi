@@ -34,9 +34,37 @@ const PAYMENT_GATEWAY_SPECS = {
 const normalizeString = (value = '') => String(value || '').trim();
 const normalizeEnabled = (value) => (String(value ?? '0').trim() === '1' ? '1' : '0');
 
+const PHONEPE_FIELD_ALIASES = {
+  merchant_id: ['merchant_id', 'client_id'],
+  salt_key: ['salt_key', 'client_secret'],
+  salt_index: ['salt_index', 'client_version'],
+};
+
+const getFirstConfiguredValue = (config = {}, candidateKeys = []) =>
+  candidateKeys
+    .map((field) => normalizeString(config?.[field]))
+    .find(Boolean) || '';
+
+const normalizePhonePeAliases = (gatewayValue = {}) => {
+  const normalized = { ...gatewayValue };
+
+  for (const [canonicalField, candidateKeys] of Object.entries(PHONEPE_FIELD_ALIASES)) {
+    const resolvedValue = getFirstConfiguredValue(gatewayValue, candidateKeys);
+    if (resolvedValue) {
+      normalized[canonicalField] = resolvedValue;
+    }
+  }
+
+  return normalized;
+};
+
 const normalizeGatewayConfig = (gatewayKey, gatewayValue = {}) => {
   const current = gatewayValue && typeof gatewayValue === 'object' ? gatewayValue : {};
-  const normalized = { ...current, enabled: normalizeEnabled(current.enabled) };
+  const baseConfig =
+    gatewayKey === 'phone_pay'
+      ? normalizePhonePeAliases(current)
+      : current;
+  const normalized = { ...baseConfig, enabled: normalizeEnabled(baseConfig.enabled) };
   const spec = PAYMENT_GATEWAY_SPECS[gatewayKey];
 
   if (spec?.environmentKey) {
@@ -137,7 +165,14 @@ export const getPublicActivePaymentGateway = async () => {
       slug: activeGateway.slug,
       label: activeGateway.label,
       supportsWalletTopUp: ['razor_pay', 'phone_pay'].includes(activeGateway.slug),
+      supportsRentalAdvance: ['razor_pay', 'phone_pay'].includes(activeGateway.slug),
       walletTopUpMode:
+        activeGateway.slug === 'razor_pay'
+          ? 'razorpay_checkout'
+          : activeGateway.slug === 'phone_pay'
+            ? 'phonepe_redirect'
+            : 'unsupported',
+      rentalAdvanceMode:
         activeGateway.slug === 'razor_pay'
           ? 'razorpay_checkout'
           : activeGateway.slug === 'phone_pay'
@@ -176,15 +211,26 @@ export const resolveConfiguredGatewayCredentials = async (gatewayKey) => {
   }
 
   if (gatewayKey === 'phone_pay') {
-    const merchantId = normalizeString(validatedGateway.merchant_id);
-    const saltKey = normalizeString(validatedGateway.salt_key);
-    const saltIndex = normalizeString(validatedGateway.salt_index || '1');
+    const clientId = getFirstConfiguredValue(validatedGateway, PHONEPE_FIELD_ALIASES.merchant_id);
+    const clientSecret = getFirstConfiguredValue(validatedGateway, PHONEPE_FIELD_ALIASES.salt_key);
+    const clientVersion = getFirstConfiguredValue(validatedGateway, PHONEPE_FIELD_ALIASES.salt_index) || '1';
+    const merchantId = clientId;
+    const saltKey = clientSecret;
+    const saltIndex = clientVersion;
 
-    if (merchantId.toLowerCase().includes('demo') || saltKey.toLowerCase().includes('demo')) {
+    if (clientId.toLowerCase().includes('demo') || clientSecret.toLowerCase().includes('demo')) {
       throw new ApiError(500, 'PhonePe keys are demo placeholders. Configure real keys in Admin > Payment Gateways');
     }
 
-    return { merchantId, saltKey, saltIndex, environment };
+    return {
+      clientId,
+      clientSecret,
+      clientVersion,
+      merchantId,
+      saltKey,
+      saltIndex,
+      environment,
+    };
   }
 
   return { ...validatedGateway, environment };

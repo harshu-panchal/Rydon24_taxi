@@ -21,12 +21,20 @@ export const userService = {
     const response = await api.post('/users/rental-advance/razorpay/order', payload);
     return response;
   },
+  createPhonePeRentalAdvanceOrder: async (payload) => {
+    const response = await api.post('/users/rental-advance/phonepe/order', payload);
+    return response;
+  },
   payRentalAdvanceWithWallet: async (payload) => {
     const response = await api.post('/users/rental-advance/wallet', payload);
     return response;
   },
   verifyRentalAdvancePayment: async (payload) => {
     const response = await api.post('/users/rental-advance/razorpay/verify', payload);
+    return response;
+  },
+  verifyPhonePeRentalAdvancePayment: async (merchantTransactionId) => {
+    const response = await api.get(`/users/rental-advance/phonepe/status/${merchantTransactionId}`);
     return response;
   },
   createRentalBookingRequest: async (payload) => {
