@@ -93,7 +93,7 @@ const DeleteAccount = () => {
               <AlertTriangle size={18} className="text-red-500" strokeWidth={2} />
             </div>
             <div>
-              <p className="text-[14px] font-black text-red-700 leading-tight">Request account deletion</p>
+              <p className="text-[14px] font-black text-red-700 leading-tight">Delete acccount</p>
               <p className="text-[11px] font-bold text-red-400">Admin approval is required</p>
             </div>
           </div>

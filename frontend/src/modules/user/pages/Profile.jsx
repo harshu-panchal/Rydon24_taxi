@@ -336,7 +336,7 @@ const Profile = () => {
               <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
                 <Trash2 size={18} strokeWidth={2.5} />
               </div>
-              <p className="text-[14px] font-bold">Request Account Deletion</p>
+              <p className="text-[14px] font-bold">Delete account</p>
             </MotionButton>
 
             <MotionButton
