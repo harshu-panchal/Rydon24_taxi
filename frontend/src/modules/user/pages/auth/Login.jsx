@@ -13,7 +13,7 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(() => String(location.state?.error || ''));
   const navigate = useNavigate();
-  const appName = settings.general?.app_name || 'App';
+  const appName = settings.general?.app_name || 'Rydon24';
   const userHomeRoute = useMemo(
     () => (location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '/user'),
     [location.pathname],
