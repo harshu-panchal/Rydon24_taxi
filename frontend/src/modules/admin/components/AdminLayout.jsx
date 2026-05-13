@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { socketService } from '../../../shared/api/socket';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import { getSupportConversations, markSupportMessagesRead } from '../../shared/chat/chatApi';
@@ -267,9 +268,29 @@ const SidebarBadge = ({ count, isActive = false }) => {
   }
 
   return (
+    <motion.span
+      initial={{ scale: 0.5, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      className={`ml-auto inline-flex min-w-[1.4rem] h-5 items-center justify-center rounded-full px-1.5 text-[9.5px] font-black tracking-tighter transition-colors duration-300 ${
+        isActive 
+          ? 'bg-white/20 text-white' 
+          : 'bg-orange-500 text-white shadow-[0_2px_10px_rgba(249,115,22,0.4)]'
+      }`}
+    >
+      {count > 99 ? '99+' : count}
+    </motion.span>
+  );
+};
+
+const NotificationTabBadge = ({ count, isActive = false }) => {
+  if (count <= 0) {
+    return null;
+  }
+
+  return (
     <span
-      className={`ml-auto inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-black ${
-        isActive ? 'bg-white/20 text-white' : 'bg-orange-500 text-white'
+      className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-black ${
+        isActive ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-700'
       }`}
     >
       {count > 99 ? '99+' : count}
@@ -282,22 +303,41 @@ const SidebarItem = ({ icon, label, path, isCollapsed, sidebarTextColor, unreadC
     to={path}
     end
     className={({ isActive }) =>
-      `group flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${
+      `group relative flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300 ${
         isActive
           ? 'text-white'
-          : 'hover:text-white hover:bg-slate-800'
+          : 'hover:text-white'
       }`
     }
-    style={({ isActive }) =>
-      isActive
-        ? { backgroundColor: 'rgba(255, 255, 255, 0.16)', color: '#FFFFFF' }
-        : { color: sidebarTextColor }
-    }
+    style={({ isActive }) => ({
+      color: isActive ? '#FFFFFF' : sidebarTextColor,
+      backgroundColor: isActive ? 'rgba(255, 255, 255, 0.12)' : 'transparent',
+    })}
   >
-    {React.createElement(icon, { size: 18, className: 'shrink-0' })}
-    {!isCollapsed && <span className="min-w-0 flex-1 text-[14px] font-bold tracking-tight">{label}</span>}
-    {!isCollapsed && (
-      <SidebarBadge count={unreadCount} />
+    {({ isActive }) => (
+      <>
+        {isActive && (
+          <motion.div
+            layoutId="sidebar-active-indicator"
+            className="absolute left-0 h-6 w-1 rounded-r-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.6)]"
+            initial={{ opacity: 0, x: -4 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          />
+        )}
+        {React.createElement(icon, { 
+          size: 18, 
+          className: `shrink-0 transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}` 
+        })}
+        {!isCollapsed && (
+          <span className={`min-w-0 flex-1 text-[13.5px] tracking-tight transition-all duration-300 ${isActive ? 'font-bold' : 'font-medium opacity-80 group-hover:opacity-100'}`}>
+            {label}
+          </span>
+        )}
+        {!isCollapsed && (
+          <SidebarBadge count={unreadCount} isActive={isActive} />
+        )}
+      </>
     )}
   </NavLink>
 );
@@ -317,14 +357,25 @@ const SidebarGroup = ({
 }) => {
   const isActive = hasActiveChild(pathname, subItems);
   const isOpen = expandedGroups.includes(groupKey);
-  const isExpanded = forceOpen || isActive || isOpen;
+  const isExpanded = forceOpen || isOpen;
   const unreadCount = subItems.reduce((sum, item) => sum + getSidebarItemCount(item, unreadCountsByPath), 0);
+  
   const toggleGroup = () => {
-    setExpandedGroups((current) =>
-      current.includes(groupKey)
-        ? current.filter((key) => key !== groupKey)
-        : [...current, groupKey]
-    );
+    setExpandedGroups((current) => {
+      if (current.includes(groupKey)) {
+        return current.filter((key) => key !== groupKey);
+      }
+      
+      // Accordion logic: close siblings and only keep parents
+      const parts = groupKey.split(':');
+      const newExpanded = [];
+      let currentPath = '';
+      for (const part of parts) {
+        currentPath = currentPath ? `${currentPath}:${part}` : part;
+        newExpanded.push(currentPath);
+      }
+      return newExpanded;
+    });
   };
 
   return (
@@ -332,61 +383,89 @@ const SidebarGroup = ({
       <button
         type="button"
         onClick={toggleGroup}
-        className={`group w-full flex items-center justify-between px-4 py-2.5 rounded-lg transition-all duration-200 ${
-          isActive || isExpanded ? 'text-white' : 'hover:text-white hover:bg-slate-800'
+        className={`group relative w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-300 ${
+          isActive || isExpanded ? 'text-white' : 'hover:text-white'
         }`}
-        style={isActive || isExpanded ? { backgroundColor: 'rgba(255, 255, 255, 0.16)' } : { color: sidebarTextColor }}
+        style={{
+          color: (isActive || isExpanded) ? '#FFFFFF' : sidebarTextColor,
+          backgroundColor: (isActive || isExpanded) ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+        }}
       >
         <div className="flex min-w-0 items-center gap-3">
           {React.createElement(icon, {
             size: 18,
-            className: 'shrink-0',
-            style: isActive || isExpanded ? { color: '#FFFFFF' } : { color: sidebarTextColor },
+            className: `shrink-0 transition-all duration-300 ${(isActive || isExpanded) ? 'scale-110' : 'group-hover:scale-110 opacity-70 group-hover:opacity-100'}`,
           })}
-          {!isCollapsed && <span className="truncate text-[14px] font-bold tracking-tight">{label}</span>}
+          {!isCollapsed && (
+            <span className={`truncate text-[13.5px] tracking-tight transition-all duration-300 ${(isActive || isExpanded) ? 'font-bold' : 'font-medium opacity-80 group-hover:opacity-100'}`}>
+              {label}
+            </span>
+          )}
         </div>
         {!isCollapsed && (
           <div className="ml-3 flex items-center gap-2">
             <SidebarBadge count={unreadCount} isActive={isActive || isExpanded} />
-            <ChevronRight size={14} className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+            <ChevronRight 
+              size={14} 
+              className={`transition-transform duration-300 ease-out ${(isActive || isExpanded) ? 'opacity-100' : 'opacity-40'} ${isExpanded ? 'rotate-90' : ''}`} 
+            />
           </div>
         )}
       </button>
 
-      {!isCollapsed && isExpanded && (
-        <div className="pl-6 pr-2 space-y-1">
-          {subItems.map((item) =>
-            item.subItems ? (
-              <NestedGroup
-                key={item.label}
-                label={item.label}
-                subItems={item.subItems}
-                pathname={pathname}
-                forceOpen={forceOpen}
-                groupKey={`${groupKey}:${item.label}`}
-                expandedGroups={expandedGroups}
-                setExpandedGroups={setExpandedGroups}
-                sidebarTextColor={sidebarTextColor}
-                unreadCountsByPath={unreadCountsByPath}
-              />
-            ) : (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                end
-                className="flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all hover:text-slate-200"
-                style={({ isActive: childActive }) =>
-                  childActive ? { color: '#FFFFFF' } : { color: sidebarTextColor }
-                }
-              >
-                <div className="h-1 w-1 shrink-0 rounded-full bg-slate-600" />
-                <span className="min-w-0 flex-1">{item.label}</span>
-                <SidebarBadge count={getSidebarItemCount(item, unreadCountsByPath)} />
-              </NavLink>
-            )
-          )}
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {!isCollapsed && isExpanded && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="pl-6 pr-2 py-1 space-y-1 border-l-2 border-white/5 ml-6">
+              {subItems.map((item) =>
+                item.subItems ? (
+                  <NestedGroup
+                    key={item.label}
+                    label={item.label}
+                    subItems={item.subItems}
+                    pathname={pathname}
+                    forceOpen={forceOpen}
+                    groupKey={`${groupKey}:${item.label}`}
+                    expandedGroups={expandedGroups}
+                    setExpandedGroups={setExpandedGroups}
+                    sidebarTextColor={sidebarTextColor}
+                    unreadCountsByPath={unreadCountsByPath}
+                  />
+                ) : (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    end
+                    className={({ isActive: childActive }) => 
+                      `group flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-all duration-200 ${
+                        childActive ? 'text-white' : 'hover:text-slate-200'
+                      }`
+                    }
+                    style={({ isActive: childActive }) => ({
+                      color: childActive ? '#FFFFFF' : sidebarTextColor,
+                      backgroundColor: childActive ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                    })}
+                  >
+                    {({ isActive: childActive }) => (
+                      <>
+                        <div className={`h-1.5 w-1.5 shrink-0 rounded-full transition-all duration-300 ${childActive ? 'bg-indigo-400 scale-125 shadow-[0_0_8px_rgba(129,140,248,0.6)]' : 'bg-slate-600'}`} />
+                        <span className={`min-w-0 flex-1 transition-all duration-200 ${childActive ? 'font-bold' : 'font-medium opacity-70 group-hover:opacity-100'}`}>{item.label}</span>
+                        <SidebarBadge count={getSidebarItemCount(item, unreadCountsByPath)} isActive={childActive} />
+                      </>
+                    )}
+                  </NavLink>
+                )
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -404,14 +483,24 @@ const NestedGroup = ({
 }) => {
   const isActive = hasActiveChild(pathname, subItems);
   const isOpen = expandedGroups.includes(groupKey);
-  const isExpanded = forceOpen || isActive || isOpen;
+  const isExpanded = forceOpen || isOpen;
   const unreadCount = subItems.reduce((sum, item) => sum + getSidebarItemCount(item, unreadCountsByPath), 0);
+  
   const toggleGroup = () => {
-    setExpandedGroups((current) =>
-      current.includes(groupKey)
-        ? current.filter((key) => key !== groupKey)
-        : [...current, groupKey]
-    );
+    setExpandedGroups((current) => {
+      if (current.includes(groupKey)) {
+        return current.filter((key) => key !== groupKey);
+      }
+      
+      const parts = groupKey.split(':');
+      const newExpanded = [];
+      let currentPath = '';
+      for (const part of parts) {
+        currentPath = currentPath ? `${currentPath}:${part}` : part;
+        newExpanded.push(currentPath);
+      }
+      return newExpanded;
+    });
   };
 
   return (
@@ -419,40 +508,65 @@ const NestedGroup = ({
       <button
         type="button"
         onClick={toggleGroup}
-        className={`group w-full flex items-center justify-between px-3 py-1.5 rounded-lg transition-all ${
+        className={`group w-full flex items-center justify-between px-3 py-1.5 rounded-lg transition-all duration-200 ${
           isActive || isExpanded ? 'text-white' : 'hover:text-slate-200'
         }`}
-        style={isActive || isExpanded ? { backgroundColor: 'rgba(255, 255, 255, 0.12)' } : { color: sidebarTextColor }}
+        style={{
+          color: (isActive || isExpanded) ? '#FFFFFF' : sidebarTextColor,
+          backgroundColor: (isActive || isExpanded) ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+        }}
       >
-        <span className="flex min-w-0 items-center gap-3 text-[12px] font-medium">
-          <div className="h-1 w-1 shrink-0 rounded-full bg-slate-600" />
+        <span className={`flex min-w-0 items-center gap-3 text-[12.5px] transition-all duration-200 ${(isActive || isExpanded) ? 'font-bold' : 'font-medium opacity-70 group-hover:opacity-100'}`}>
+          <div className={`h-1 w-1 shrink-0 rounded-full transition-all duration-300 ${isActive || isExpanded ? 'bg-indigo-400 scale-125' : 'bg-slate-600'}`} />
           <span className="truncate">{label}</span>
         </span>
         <span className="ml-3 flex items-center gap-2">
           <SidebarBadge count={unreadCount} isActive={isActive || isExpanded} />
-          <ChevronRight size={12} className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+          <ChevronRight 
+            size={12} 
+            className={`transition-transform duration-300 ease-out ${(isActive || isExpanded) ? 'opacity-100' : 'opacity-40'} ${isExpanded ? 'rotate-90' : ''}`} 
+          />
         </span>
       </button>
 
-      {isExpanded && (
-        <div className="pl-4 space-y-1">
-          {subItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              end
-              className="flex items-center gap-3 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all hover:text-slate-300"
-              style={({ isActive: childActive }) =>
-                childActive ? { color: '#FFFFFF' } : { color: sidebarTextColor }
-              }
-            >
-              <div className="h-0.5 w-0.5 shrink-0 rounded-full bg-slate-700" />
-              <span className="min-w-0 flex-1">{item.label}</span>
-              <SidebarBadge count={getSidebarItemCount(item, unreadCountsByPath)} />
-            </NavLink>
-          ))}
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            <div className="pl-4 py-0.5 space-y-1 border-l border-white/5 ml-3">
+              {subItems.map((item) => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  end
+                  className={({ isActive: childActive }) =>
+                    `group flex items-center gap-3 px-3 py-1.5 rounded-lg text-[12px] transition-all duration-200 ${
+                      childActive ? 'text-white' : 'hover:text-slate-300'
+                    }`
+                  }
+                  style={({ isActive: childActive }) => ({
+                    color: childActive ? '#FFFFFF' : sidebarTextColor,
+                    backgroundColor: childActive ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                  })}
+                >
+                  {({ isActive: childActive }) => (
+                    <>
+                      <div className={`h-0.5 w-0.5 shrink-0 rounded-full transition-all duration-300 ${childActive ? 'bg-indigo-400 scale-150' : 'bg-slate-700'}`} />
+                      <span className={`min-w-0 flex-1 transition-all duration-200 ${childActive ? 'font-bold' : 'font-medium opacity-70 group-hover:opacity-100'}`}>{item.label}</span>
+                      <SidebarBadge count={getSidebarItemCount(item, unreadCountsByPath)} isActive={childActive} />
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -543,15 +657,14 @@ const AdminLayout = () => {
   const [bookingsFeed, setBookingsFeed] = useState([]);
   const [chatNotifications, setChatNotifications] = useState([]);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
+  const [rideRequestUnreadTotal, setRideRequestUnreadTotal] = useState(0);
+  const [bookingUnreadTotal, setBookingUnreadTotal] = useState(0);
   const [rideRequestPage, setRideRequestPage] = useState(1);
   const [bookingPage, setBookingPage] = useState(1);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [dismissedNotifications, setDismissedNotifications] = useState(() => readDismissedNotifications());
   const [expandedSidebarGroups, setExpandedSidebarGroups] = useState(() => {
-    if (typeof window === 'undefined') {
-      return [];
-    }
-
+    if (typeof window === 'undefined') return [];
     try {
       const saved = window.localStorage.getItem(SIDEBAR_EXPANSION_STORAGE_KEY);
       const parsed = saved ? JSON.parse(saved) : [];
@@ -562,7 +675,20 @@ const AdminLayout = () => {
   });
   const userMenuRef = useRef(null);
   const notificationsMenuRef = useRef(null);
+  const [lastSeenRideRequestCount, setLastSeenRideRequestCount] = useState(() => {
+    if (typeof window === 'undefined') return 0;
+    return Number(window.localStorage.getItem('adminLastSeenRideRequestCount') || 0);
+  });
+  const [lastSeenBookingCount, setLastSeenBookingCount] = useState(() => {
+    if (typeof window === 'undefined') return 0;
+    return Number(window.localStorage.getItem('adminLastSeenBookingCount') || 0);
+  });
   const [adminProfile, setAdminProfile] = useState(() => readAdminProfile());
+  const isOwnerRoute = location.pathname.startsWith('/admin/owners') || location.pathname.startsWith('/admin/fleet');
+  const isAdminChatRoute = pathMatches(location.pathname, '/admin/chat');
+  const isTripsRoute = pathMatches(location.pathname, '/admin/trips');
+  const isOwnerBookingsRoute = pathMatches(location.pathname, '/admin/owners/bookings');
+  const mode = isOwnerRoute ? OWNER_MODE : ADMIN_MODE;
 
   const appName = settings.general?.app_name || 'App';
   useEffect(() => {
@@ -581,17 +707,17 @@ const AdminLayout = () => {
 
   const dismissedRideRequestSet = useMemo(
     () => new Set((dismissedNotifications.ride_requests || []).map((item) => String(item).trim()).filter(Boolean)),
-    [dismissedNotifications],
+    [dismissedNotifications.ride_requests],
   );
 
   const dismissedBookingSet = useMemo(
     () => new Set((dismissedNotifications.bookings || []).map((item) => String(item).trim()).filter(Boolean)),
-    [dismissedNotifications],
+    [dismissedNotifications.bookings],
   );
 
   const dismissedChatSet = useMemo(
     () => new Set((dismissedNotifications.chats || []).map((item) => String(item).trim()).filter(Boolean)),
-    [dismissedNotifications],
+    [dismissedNotifications.chats],
   );
 
   const visibleRideRequestResults = useMemo(
@@ -624,21 +750,66 @@ const AdminLayout = () => {
         [tab]: [id, ...existingItems].slice(0, 500),
       };
     });
+
+    // When dismissing a single item, we also increment the last seen count to keep the badge in sync
+    if (tab === 'ride_requests') {
+      setLastSeenRideRequestCount((prev) => prev + 1);
+    } else if (tab === 'bookings') {
+      setLastSeenBookingCount((prev) => prev + 1);
+    }
   };
 
   const dismissCurrentNotifications = () => {
     if (notificationTab === 'ride_requests') {
       visibleRideRequestResults.forEach((item) => dismissNotification('ride_requests', item));
+      // Force badge to clear if they clear all visible ones
+      setLastSeenRideRequestCount(rideRequestUnreadTotal);
       return;
     }
 
     if (notificationTab === 'bookings') {
       visibleBookingsFeed.forEach((item) => dismissNotification('bookings', item));
+      // Force badge to clear if they clear all visible ones
+      setLastSeenBookingCount(bookingUnreadTotal);
       return;
     }
 
     visibleChatNotifications.forEach((item) => dismissNotification('chats', item));
   };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('adminLastSeenRideRequestCount', lastSeenRideRequestCount.toString());
+  }, [lastSeenRideRequestCount]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('adminLastSeenBookingCount', lastSeenBookingCount.toString());
+  }, [lastSeenBookingCount]);
+
+  useEffect(() => {
+    if (isTripsRoute && rideRequestUnreadTotal > 0) {
+      setLastSeenRideRequestCount(rideRequestUnreadTotal);
+    }
+  }, [isTripsRoute, rideRequestUnreadTotal]);
+
+  useEffect(() => {
+    if (isOwnerBookingsRoute && bookingUnreadTotal > 0) {
+      setLastSeenBookingCount(bookingUnreadTotal);
+    }
+  }, [isOwnerBookingsRoute, bookingUnreadTotal]);
+
+  useEffect(() => {
+    if (rideRequestUnreadTotal < lastSeenRideRequestCount) {
+      setLastSeenRideRequestCount(rideRequestUnreadTotal);
+    }
+  }, [rideRequestUnreadTotal, lastSeenRideRequestCount]);
+
+  useEffect(() => {
+    if (bookingUnreadTotal < lastSeenBookingCount) {
+      setLastSeenBookingCount(bookingUnreadTotal);
+    }
+  }, [bookingUnreadTotal, lastSeenBookingCount]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -908,18 +1079,20 @@ const AdminLayout = () => {
     []
   );
 
-  const isOwnerRoute = location.pathname.startsWith('/admin/owners') || location.pathname.startsWith('/admin/fleet');
-  const isAdminChatRoute = pathMatches(location.pathname, '/admin/chat');
-  const mode = isOwnerRoute ? OWNER_MODE : ADMIN_MODE;
   const sidebarSections = useMemo(
     () => filterSidebarSectionsByAccess(mode === OWNER_MODE ? ownerSections : adminSections, adminProfile),
     [adminProfile, adminSections, mode, ownerSections],
   );
+  const rideRequestUnreadCount = Math.max(0, rideRequestUnreadTotal - lastSeenRideRequestCount);
+  const bookingUnreadCount = Math.max(0, bookingUnreadTotal - lastSeenBookingCount);
+  const effectiveChatUnreadCount = Math.max(0, chatUnreadCount);
   const unreadCountsByPath = useMemo(
     () => ({
-      '/admin/chat': chatUnreadCount,
+      '/admin/trips': rideRequestUnreadCount,
+      '/admin/owners/bookings': bookingUnreadCount,
+      '/admin/chat': effectiveChatUnreadCount,
     }),
-    [chatUnreadCount],
+    [bookingUnreadCount, effectiveChatUnreadCount, rideRequestUnreadCount],
   );
   const pageTitle = resolvePageTitle(location.pathname, sidebarSections, appName);
   const searchEntries = useMemo(() => flattenSearchEntries(flattenItems(sidebarSections)), [sidebarSections]);
@@ -958,9 +1131,9 @@ const AdminLayout = () => {
         : { current_page: 1, last_page: 1, total: chatNotifications.length };
 
   const totalNotificationItems =
-    Math.max(0, Number(rideRequestFeed?.paginator?.total || 0) - dismissedRideRequestSet.size) +
-    visibleBookingsFeed.length +
-    visibleChatNotifications.length;
+    rideRequestUnreadCount +
+    bookingUnreadCount +
+    effectiveChatUnreadCount;
 
   const currentNotificationCount =
     notificationTab === 'ride_requests'
@@ -1009,14 +1182,48 @@ const AdminLayout = () => {
 
     if (!token || mode !== ADMIN_MODE) {
       setChatUnreadCount(0);
+      setRideRequestUnreadTotal(0);
+      setBookingUnreadTotal(0);
       return undefined;
     }
 
     let active = true;
 
-    const syncUnreadChats = async () => {
+    const syncUnreadNotifications = async () => {
       try {
-        const response = await getSupportConversations(token);
+        const [chatResponse, rideRequestsResponse, bookingsResponse] = await Promise.all([
+          getSupportConversations(token),
+          adminService.getRideRequests({
+            page: 1,
+            limit: NOTIFICATION_PAGE_SIZE,
+            tab: 'all',
+            search: '',
+          }),
+          adminService.getOwnerBookings(),
+        ]);
+
+        if (!active) {
+          return;
+        }
+
+        const rideRequestResults =
+          rideRequestsResponse?.data?.results || rideRequestsResponse?.results || [];
+        const rideRequestPaginator =
+          rideRequestsResponse?.data?.paginator || rideRequestsResponse?.paginator || { current_page: 1, last_page: 1, total: 0 };
+        const bookingsResults =
+          bookingsResponse?.data?.results || bookingsResponse?.results || [];
+        const rideRequestTotal = Math.max(0, Number(rideRequestPaginator?.total || rideRequestResults.length || 0));
+        const bookingsTotal = Array.isArray(bookingsResults) ? bookingsResults.length : 0;
+
+        setRideRequestFeed({
+          results: rideRequestResults,
+          paginator: rideRequestPaginator,
+        });
+        setBookingsFeed(Array.isArray(bookingsResults) ? bookingsResults : []);
+        setRideRequestUnreadTotal(rideRequestTotal);
+        setBookingUnreadTotal(bookingsTotal);
+
+        const response = chatResponse;
         const conversations = response?.data?.conversations || [];
         const unreadTotal = conversations.reduce(
           (sum, conversation) => sum + Math.max(0, Number(conversation?.unreadCount || 0)),
@@ -1054,16 +1261,25 @@ const AdminLayout = () => {
           return;
         }
 
-        console.error('Failed to sync admin chat unread count:', error);
+        console.error('Failed to sync admin notification counts:', error);
       }
     };
 
-    syncUnreadChats();
+    syncUnreadNotifications();
+    const intervalId = window.setInterval(syncUnreadNotifications, 30000);
+
+    const handleWindowFocus = () => {
+      syncUnreadNotifications();
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
 
     return () => {
       active = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleWindowFocus);
     };
-  }, [isAdminChatRoute, mode]);
+  }, [isAdminChatRoute, isOwnerBookingsRoute, isTripsRoute, mode]);
 
   useEffect(() => {
     if (!isNotificationsOpen) return undefined;
@@ -1231,40 +1447,46 @@ const AdminLayout = () => {
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8F9FA] font-sans text-gray-900">
       <aside
-        className={`relative z-50 flex h-screen flex-col overflow-hidden transition-all duration-500 ${
+        className={`relative z-50 flex h-screen flex-col overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
           isCollapsed ? 'w-20' : 'w-72'
         } ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
         style={{ backgroundColor: adminThemeColor }}
       >
         <div className="flex h-full flex-col">
-          <div className="group/sidebar-head relative mb-4 flex h-24 items-center border-b border-white/5 px-6">
+          <div className="group/sidebar-head relative mb-6 flex h-24 items-center border-b border-white/5 px-6">
             <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/5 bg-white/5 p-1 transition-all group-hover/sidebar-head:scale-105">
-                {settings.general?.logo || settings.customization?.logo ? (
-                  <img src={settings.general?.logo || settings.customization?.logo} alt={appName} className="h-10 w-10 object-contain" />
-                ) : (
-                  <Zap size={24} className="text-white fill-white" />
-                )}
+              <div className="relative">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/10 p-1.5 transition-all duration-300 group-hover/sidebar-head:scale-110 group-hover/sidebar-head:rotate-3 shadow-xl backdrop-blur-md">
+                  {settings.general?.logo || settings.customization?.logo ? (
+                    <img src={settings.general?.logo || settings.customization?.logo} alt={appName} className="h-full w-full object-contain" />
+                  ) : (
+                    <Zap size={24} className="text-white fill-white" />
+                  )}
+                </div>
+                <div className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-indigo-900" />
               </div>
               {!isCollapsed && (
-                <div className="flex flex-col">
-                  <h3 className="text-[15px] font-extrabold leading-tight text-white tracking-tight">
-                    {mode === OWNER_MODE ? 'Owner Dashboard' : `${appName || 'App'} Admin`}
+                <motion.div 
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex flex-col"
+                >
+                  <h3 className="text-[16px] font-black leading-tight text-white tracking-tight">
+                    {mode === OWNER_MODE ? 'Owner Panel' : appName || 'Admin'}
                   </h3>
                   <div className="mt-1 flex items-center gap-1.5">
-                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
-                      {mode === OWNER_MODE ? 'Fleet Control' : 'System Admin'}
+                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">
+                      {mode === OWNER_MODE ? 'Fleet Console' : 'System Hub'}
                     </span>
                   </div>
-                </div>
+                </motion.div>
               )}
             </div>
             <button
               type="button"
               onClick={() => setCollapsed((current) => !current)}
-              className="absolute -right-3 top-9 z-[60] hidden h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-800 shadow-lg ring-4 ring-[#0F172A] transition-all hover:bg-indigo-600 hover:text-white hover:border-indigo-500 hover:scale-110 active:scale-90 lg:flex group/collapse"
-              style={{ '--tw-ring-color': '#0F172A' }}
+              className="absolute -right-3 top-9 z-[60] hidden h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-800 shadow-[0_4px_12px_rgba(0,0,0,0.15)] ring-4 ring-[#0F172A] transition-all duration-300 hover:bg-indigo-600 hover:text-white hover:border-indigo-500 hover:scale-110 active:scale-95 lg:flex group/collapse"
+              style={{ '--tw-ring-color': adminThemeColor }}
             >
               {isCollapsed ? (
                 <ChevronRight size={12} strokeWidth={3.5} className="transition-transform group-hover/collapse:translate-x-0.5" />
@@ -1278,11 +1500,12 @@ const AdminLayout = () => {
             {sidebarSections.map((section) => (
               <div key={section.title} className="space-y-1">
                 {!isCollapsed && (
-                  <div className="px-4 mb-4 flex items-center gap-2">
-                    <div className="h-3 w-1 rounded-full bg-white" />
-                    <span className="text-[12px] font-black uppercase tracking-widest text-white/90">
+                  <div className="px-4 mb-4 mt-6 flex items-center gap-3 opacity-60">
+                    <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+                    <span className="text-[10.5px] font-black uppercase tracking-[0.2em] text-white/90 whitespace-nowrap">
                       {section.title}
                     </span>
+                    <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
                   </div>
                 )}
                 {section.items.map((item) =>
@@ -1388,7 +1611,10 @@ const AdminLayout = () => {
                             : 'text-slate-500 hover:text-slate-900'
                         }`}
                       >
-                        Ride Requests
+                        <span className="flex items-center justify-center gap-1.5">
+                          <span>Ride Requests</span>
+                          <NotificationTabBadge count={rideRequestUnreadCount} isActive={notificationTab === 'ride_requests'} />
+                        </span>
                       </button>
                       <button
                         type="button"
@@ -1402,7 +1628,10 @@ const AdminLayout = () => {
                             : 'text-slate-500 hover:text-slate-900'
                         }`}
                       >
-                        Bookings
+                        <span className="flex items-center justify-center gap-1.5">
+                          <span>Bookings</span>
+                          <NotificationTabBadge count={bookingUnreadCount} isActive={notificationTab === 'bookings'} />
+                        </span>
                       </button>
                       <button
                         type="button"
@@ -1415,7 +1644,10 @@ const AdminLayout = () => {
                             : 'text-slate-500 hover:text-slate-900'
                         }`}
                       >
-                        Chats
+                        <span className="flex items-center justify-center gap-1.5">
+                          <span>Chats</span>
+                          <NotificationTabBadge count={effectiveChatUnreadCount} isActive={notificationTab === 'chats'} />
+                        </span>
                       </button>
                     </div>
                   </div>
@@ -1438,6 +1670,7 @@ const AdminLayout = () => {
                               key={item.id || item.requestId}
                               type="button"
                               onClick={() => {
+                                dismissNotification('ride_requests', item);
                                 navigate('/admin/trips');
                                 setIsNotificationsOpen(false);
                               }}
@@ -1498,6 +1731,7 @@ const AdminLayout = () => {
                             key={item._id || item.id || item.booking_reference}
                             type="button"
                             onClick={() => {
+                              dismissNotification('bookings', item);
                               navigate('/admin/owners/bookings');
                               setIsNotificationsOpen(false);
                             }}
@@ -1555,8 +1789,11 @@ const AdminLayout = () => {
                             key={item.id}
                             type="button"
                             onClick={() => {
+                              dismissNotification('chats', item);
                               navigate('/admin/chat');
-                              setChatNotifications([]);
+                              setChatNotifications((current) =>
+                                current.filter((entry) => entry.id !== item.id),
+                              );
                               setIsNotificationsOpen(false);
                             }}
                             className="relative w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
