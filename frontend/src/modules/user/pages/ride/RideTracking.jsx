@@ -337,7 +337,7 @@ const RideTracking = () => {
   const routeHome = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '/';
   const routeComplete = location.pathname.startsWith('/taxi/user') ? '/taxi/user/ride/complete' : '/ride/complete';
   const routeChat = location.pathname.startsWith('/taxi/user') ? '/taxi/user/ride/chat' : '/ride/chat';
-  const routeSupport = location.pathname.startsWith('/taxi/user') ? '/taxi/user/support' : '/support';
+  const routeSupport = location.pathname.startsWith('/taxi/user') ? '/taxi/user/support' : '/ride/support';
   const routeSos = location.pathname.startsWith('/taxi/user') ? '/taxi/user/safety/sos' : '/safety/sos';
 
   const rideId = state.rideId || '';

@@ -1,10 +1,11 @@
 import React from 'react';
 import { ArrowLeft, FileText, IndianRupee, Mail, Phone, ReceiptText, Scale, ScrollText, ShieldCheck } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { SUPPORT_INFO } from '../content/supportInfo';
 
 const ownerContact = {
-  phone: '93893 94808',
-  email: 'rydon24trawler@gmail.com',
+  phone: SUPPORT_INFO.phone,
+  email: SUPPORT_INFO.email,
 };
 
 const vehiclePricing = [

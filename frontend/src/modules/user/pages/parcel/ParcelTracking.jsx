@@ -986,7 +986,7 @@ const ParcelTracking = () => {
             <ActionButton icon={Phone} label="Call" onClick={handleCall} />
             <ActionButton icon={MessageCircle} label="Chat" onClick={() => navigate(`${routePrefix}/ride/chat`, { state: { rideId, peer: driver } })} />
             <ActionButton icon={Share2} label="Share" onClick={handleShare} />
-            <ActionButton icon={ShieldCheck} label="Safety" onClick={() => navigate(`${routePrefix}/support`)} color="dark" />
+            <ActionButton icon={ShieldCheck} label="Safety" onClick={() => navigate(routePrefix ? `${routePrefix}/support` : '/ride/support')} color="dark" />
           </div>
 
           {/* Trip Footer */}

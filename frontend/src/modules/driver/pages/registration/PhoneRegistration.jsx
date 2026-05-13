@@ -335,7 +335,7 @@ const PhoneRegistration = () => {
                                                 ...storedSession,
                                                 role,
                                             });
-                                            navigate('/terms', { state: { role, returnTo: location.pathname } });
+                                            navigate(`${routePrefix}/terms`, { state: { role, returnTo: location.pathname } });
                                         }}
                                         className="text-[#FFB300] font-black hover:underline underline-offset-2"
                                     >
@@ -349,7 +349,7 @@ const PhoneRegistration = () => {
                                                 ...storedSession,
                                                 role,
                                             });
-                                            navigate('/privacy', { state: { role, returnTo: location.pathname } });
+                                            navigate(`${routePrefix}/privacy`, { state: { role, returnTo: location.pathname } });
                                         }}
                                         className="text-[#FFB300] font-black hover:underline underline-offset-2"
                                     >
@@ -391,6 +391,16 @@ const PhoneRegistration = () => {
                             ) : (
                                 <>Already a partner? <span className="text-[#FFB300] border-b-2 border-amber-400/30 pb-0.5">Sign in</span></>
                             )}
+                        </motion.button>
+
+                        <motion.button
+                            variants={itemVariants}
+                            whileHover={{ y: -1 }}
+                            type="button"
+                            onClick={() => navigate(`${routePrefix}/support`, { state: { role, returnTo: location.pathname } })}
+                            className="mx-auto block text-[12px] font-black text-slate-500 transition-all py-1 tracking-tight"
+                        >
+                            Need help? <span className="text-[#FFB300] border-b-2 border-amber-400/30 pb-0.5">Open Support</span>
                         </motion.button>
                     </motion.div>
                 </motion.div>

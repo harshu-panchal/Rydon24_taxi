@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, MessageCircle, Phone, HelpCircle, AlertCircle, XCircle, ShieldCheck, ChevronRight, Siren } from 'lucide-react';
 import BottomNavbar from '../../components/BottomNavbar';
+import { SUPPORT_INFO } from '../../../shared/content/supportInfo';
 
 const Support = () => {
   const navigate = useNavigate();
@@ -17,7 +18,7 @@ const Support = () => {
   ];
 
   const handleCall = () => {
-    window.open('tel:+919876543210', '_self');
+    window.open(`tel:${SUPPORT_INFO.phoneHref}`, '_self');
   };
 
   const openSupportChat = (topicTitle = '') => {

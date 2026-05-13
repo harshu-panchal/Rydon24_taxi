@@ -46,6 +46,14 @@ const getZoneServiceLocationId = (zone) =>
 
 const isZoneActive = (zone) => zone?.active !== false && Number(zone?.status ?? 1) !== 0;
 
+const getZoneId = (zone) => zone?._id || zone?.id || '';
+
+const getStoreZoneId = (store) =>
+  store?.zone_id?._id
+  || store?.zone_id?.id
+  || store?.zone_id
+  || '';
+
 const toZonePoint = (point) => {
   if (Array.isArray(point) && point.length >= 2) {
     const [lng, lat] = point;
@@ -155,7 +163,9 @@ const SelectLocation = () => {
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
+  const [zones, setZones] = useState([]);
   const [zonePaths, setZonePaths] = useState([]);
+  const [serviceStores, setServiceStores] = useState([]);
   const [remoteResults, setRemoteResults] = useState([]);
   const [isSearchingLocations, setIsSearchingLocations] = useState(false);
   const mapInstanceRef = useRef(null);
@@ -194,32 +204,49 @@ const SelectLocation = () => {
   useEffect(() => {
     let active = true;
 
-    const loadZones = async () => {
+    const loadZoneData = async () => {
       if (!serviceLocationId) {
+        setZones([]);
         setZonePaths([]);
+        setServiceStores([]);
         return;
       }
 
       try {
-        const response = await api.get('/admin/zones');
+        const [zonesResponse, storesResponse] = await Promise.all([
+          api.get('/admin/zones'),
+          api.get('/users/service-stores'),
+        ]);
         if (!active) {
           return;
         }
 
-        const matchingPaths = unwrapResults(response)
-          .filter((zone) => isZoneActive(zone) && String(getZoneServiceLocationId(zone)) === String(serviceLocationId))
+        const matchingZones = unwrapResults(zonesResponse)
+          .filter((zone) => isZoneActive(zone) && String(getZoneServiceLocationId(zone)) === String(serviceLocationId));
+        const matchingPaths = matchingZones
           .map(normalizeZonePath)
           .filter((path) => path.length >= 3);
+        const matchingStores = unwrapResults(storesResponse).filter((store) => {
+          if (store?.active === false || String(store?.status || '').toLowerCase() === 'inactive') {
+            return false;
+          }
 
+          return String(store?.service_location_id) === String(serviceLocationId);
+        });
+
+        setZones(matchingZones);
         setZonePaths(matchingPaths);
+        setServiceStores(matchingStores);
       } catch {
         if (active) {
+          setZones([]);
           setZonePaths([]);
+          setServiceStores([]);
         }
       }
     };
 
-    loadZones();
+    loadZoneData();
 
     return () => {
       active = false;
@@ -414,6 +441,40 @@ const SelectLocation = () => {
   };
 
   const query = getQuery();
+  const currentZone = useMemo(() => {
+    if (!Array.isArray(pickupCoords) || pickupCoords.length !== 2 || !zones.length) {
+      return null;
+    }
+
+    const [lng, lat] = pickupCoords;
+    const point = { lat: Number(lat), lng: Number(lng) };
+
+    return zones.find((zone) => {
+      const zonePath = normalizeZonePath(zone);
+      return zonePath.length >= 3 && isPointInPolygon(point, zonePath);
+    }) || null;
+  }, [pickupCoords, zones]);
+
+  const popularSuggestions = useMemo(() => {
+    const currentZoneId = String(getZoneId(currentZone));
+    const zoneStores = currentZoneId
+      ? serviceStores.filter((store) => String(getStoreZoneId(store)) === currentZoneId)
+      : [];
+
+    if (zoneStores.length) {
+      return zoneStores.slice(0, 6).map((store) => ({
+        title: store.name || store.address || 'Service Store',
+        address: store.address || currentZone?.name || 'Service Store',
+        coords:
+          Number.isFinite(Number(store.longitude)) && Number.isFinite(Number(store.latitude))
+            ? [Number(store.longitude), Number(store.latitude)]
+            : null,
+      }));
+    }
+
+    return allResults.slice(0, 6);
+  }, [currentZone, serviceStores]);
+
   const localSearchResults = useMemo(
     () =>
       query.trim().length >= 1
@@ -422,8 +483,8 @@ const SelectLocation = () => {
             result.title.toLowerCase().includes(query.toLowerCase())
             || result.address.toLowerCase().includes(query.toLowerCase()),
         )
-        : allResults.slice(0, 6),
-    [query],
+        : popularSuggestions,
+    [popularSuggestions, query],
   );
 
   useEffect(() => {
@@ -1030,7 +1091,7 @@ const SelectLocation = () => {
       {/* Search Results */}
       <div className="relative z-10 px-5 mb-4">
         <h2 className="text-[14px] font-bold text-slate-400 mb-3 ml-1 uppercase tracking-widest">
-          {query.trim().length > 0 ? 'Search Results' : 'Popular Locations'}
+          {query.trim().length > 0 ? 'Search Results' : currentZone?.name ? `${currentZone.name} Suggestions` : 'Popular Locations'}
         </h2>
 
         {searchResults.length > 0 ? (
@@ -1092,6 +1153,13 @@ const SelectLocation = () => {
                 : zonePaths.length
                   ? 'Showing zone-prioritized results after 3+ characters. Selections outside the zone are blocked.'
                   : 'Showing optimized search results after 3+ characters.'}
+            </p>
+          </div>
+        )}
+        {!query.trim().length && currentZone?.name && (
+          <div className="mt-3 px-1">
+            <p className="text-[11px] font-bold text-slate-400">
+              Popular suggestions are pulled from the admin-created stores in the <span className="text-slate-600">{currentZone.name}</span> zone.
             </p>
           </div>
         )}

@@ -49,6 +49,7 @@ const LegalPage = lazy(() => import('./modules/shared/pages/LegalPage'));
 const LandingPage = lazy(() => import('./modules/shared/pages/LandingPage'));
 const AboutPage = lazy(() => import('./modules/shared/pages/AboutPage'));
 const ContactPage = lazy(() => import('./modules/shared/pages/ContactPage'));
+const SupportPage = lazy(() => import('./modules/shared/pages/SupportPage'));
 const FaqPage = lazy(() => import('./modules/shared/pages/FaqPage'));
 const ServicesPage = lazy(() => import('./modules/shared/pages/ServicesPage'));
 const BlogPage = lazy(() => import('./modules/shared/pages/BlogPage'));
@@ -145,6 +146,7 @@ const ServiceCenterVehicleDetails = lazy(() => import('./modules/driver/pages/Se
 const RideRequests = lazy(() => import('./modules/driver/pages/RideRequests'));
 const DriverIncentives = lazy(() => import('./modules/driver/pages/DriverIncentives'));
 const BusDriverHome = lazy(() => import('./modules/driver/pages/BusDriverHome'));
+const PortalSupportPage = lazy(() => import('./modules/driver/pages/PortalSupportPage'));
 
 // Driver Module - Settings
 const EditProfile = lazy(() => import('./modules/driver/pages/settings/EditProfile'));
@@ -357,7 +359,7 @@ const AdminSectionPlaceholder = () => {
 // A wrapper to handle conditional layouts (Mobile for User/Driver, Full for Admin)
 const MainLayout = ({ children }) => {
   const location = useLocation();
-  const staticPages = ['/', '/about', '/contact', '/faq', '/services', '/privacy', '/terms', '/refund', '/cancellation', '/blog', '/links'];
+  const staticPages = ['/', '/about', '/contact', '/support', '/faq', '/services', '/privacy', '/terms', '/refund', '/cancellation', '/blog', '/links'];
   const isStaticPath = staticPages.includes(location.pathname);
   const isAdminPath =
     location.pathname.startsWith('/admin') ||
@@ -666,6 +668,7 @@ function App() {
               <Route path="/" element={<LandingPage />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/contact" element={<ContactPage />} />
+              <Route path="/support" element={<SupportPage />} />
               <Route path="/faq" element={<FaqPage />} />
               <Route path="/services" element={<ServicesPage />} />
               <Route path="/blog" element={<BlogPage />} />
@@ -692,7 +695,7 @@ function App() {
               <Route path="/ride/tracking" element={<RideTracking />} />
               <Route path="/ride/complete" element={<RideComplete />} />
               <Route path="/ride/chat" element={<Chat />} />
-              <Route path="/support" element={<Support />} />
+              <Route path="/ride/support" element={<Support />} />
               <Route path="/ride/detail/:id" element={<RideDetail />} />
 
               <Route path="/parcel/type" element={<ParcelType />} />
@@ -965,9 +968,11 @@ function App() {
                   element={<DriverEntryRedirect />}
                 />
                 <Route path="lang-select" element={<LanguageSelect />} />
-                <Route path="welcome" element={<DriverWelcome />} />
-                <Route path="login" element={<PhoneRegistration />} />
-                <Route path="reg-phone" element={<PhoneRegistration />} />
+                  <Route path="welcome" element={<DriverWelcome />} />
+                  <Route path="login" element={<PhoneRegistration />} />
+                  <Route path="terms" element={<LegalPage />} />
+                  <Route path="privacy" element={<LegalPage />} />
+                  <Route path="reg-phone" element={<PhoneRegistration />} />
                 <Route path="otp-verify" element={<OTPVerification />} />
                 <Route path="step-personal" element={<StepPersonal />} />
                 <Route path="step-referral" element={<StepReferral />} />
@@ -1002,7 +1007,7 @@ function App() {
                   element={<DriverDeleteAccount />}
                 />
                 <Route path="security" element={<SecuritySOS />} />
-                <Route path="support" element={<DriverSupport />} />
+                  <Route path="support" element={<PortalSupportPage />} />
                 <Route
                   path="help-support"
                   element={<DriverHelpSupportOptions />}
@@ -1025,9 +1030,11 @@ function App() {
               </Route>
 
               <Route path="/taxi/owner" element={<DriverLayout />}>
-                <Route index element={<DriverEntryRedirect />} />
-                <Route path="login" element={<PhoneRegistration />} />
-                <Route path="reg-phone" element={<PhoneRegistration />} />
+                  <Route index element={<DriverEntryRedirect />} />
+                  <Route path="login" element={<PhoneRegistration />} />
+                  <Route path="terms" element={<LegalPage />} />
+                  <Route path="privacy" element={<LegalPage />} />
+                  <Route path="reg-phone" element={<PhoneRegistration />} />
                 <Route path="otp-verify" element={<OTPVerification />} />
                 <Route path="lang-select" element={<LanguageSelect />} />
                 <Route path="step-personal" element={<StepPersonal />} />
@@ -1053,7 +1060,7 @@ function App() {
                 <Route path="referral" element={<Referral />} />
                 <Route path="delete-account" element={<DriverDeleteAccount />} />
                 <Route path="security" element={<SecuritySOS />} />
-                <Route path="support" element={<DriverSupport />} />
+                  <Route path="support" element={<PortalSupportPage />} />
                 <Route path="help-support" element={<DriverHelpSupportOptions />} />
                 <Route path="support/chat" element={<DriverSupportChat />} />
                 <Route path="support/tickets" element={<SupportTickets />} />

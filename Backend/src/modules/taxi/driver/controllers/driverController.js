@@ -3911,6 +3911,23 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
   const localMatch = req.body?.localMatch === undefined
     ? null
     : normalizeBoolean(req.body.localMatch);
+  const referenceTemplateHash = String(
+    req.body?.referenceTemplateHash ||
+    req.body?.enrolledTemplateHash ||
+    req.body?.referenceHash ||
+    "",
+  ).trim();
+  const matchedTemplateHash = String(
+    req.body?.matchedTemplateHash ||
+    req.body?.templateHash ||
+    req.body?.matchedHash ||
+    "",
+  ).trim();
+  const matchedFingerCode = String(
+    req.body?.matchedFingerCode ||
+    req.body?.comparedFingerCode ||
+    "",
+  ).trim().toUpperCase();
 
   if (!BIOMETRIC_FINGER_CODES.includes(fingerCode)) {
     throw new ApiError(400, "Valid fingerCode is required");
@@ -3940,18 +3957,28 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
     }
   }
   const templateMatched = templateHashMatched || serverSideTemplateMatched;
+  const enrolledTemplateHash = String(enrolledFinger?.templateHash || "").trim();
+  const referenceMatchesEnrolled = Boolean(referenceTemplateHash && enrolledTemplateHash && referenceTemplateHash === enrolledTemplateHash);
+  const matchedHashAllowsFinger = !matchedTemplateHash || matchedTemplateHash === enrolledTemplateHash;
+  const matchedFingerAllowsFinger = !matchedFingerCode || matchedFingerCode === fingerCode;
+  const bridgeScoreMatchesEnrolled =
+    hasNumericMatchScore &&
+    matchScore >= BIOMETRIC_MIN_MATCH_SCORE &&
+    referenceMatchesEnrolled &&
+    matchedHashAllowsFinger &&
+    matchedFingerAllowsFinger;
 
   if (captureSource === "phone_sensor" && localMatch !== null) {
     resolvedVerificationStatus = localMatch ? "matched" : "failed";
   } else if (captureSource === "usb_scanner" || captureSource === "bluetooth_scanner") {
-    if (hasNumericMatchScore) {
-      resolvedVerificationStatus = matchScore >= BIOMETRIC_MIN_MATCH_SCORE ? "matched" : "failed";
-    } else if (localMatch !== null) {
-      resolvedVerificationStatus = localMatch ? "matched" : "failed";
-    } else if (hasTemplateData) {
+    if (hasTemplateData) {
       // USB scanner re-captured a template — compare server-side
       // If template is invalid/generic, we reject it immediately
       resolvedVerificationStatus = (isTemplateValid && templateMatched) ? "matched" : "failed";
+    } else if (hasNumericMatchScore) {
+      resolvedVerificationStatus = bridgeScoreMatchesEnrolled ? "matched" : "failed";
+    } else if (localMatch !== null || verificationStatus) {
+      resolvedVerificationStatus = "failed";
     }
   } else if (templateMatched) {
     resolvedVerificationStatus =
@@ -4002,6 +4029,8 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
       verification: {
         source: captureSource || enrolledFinger?.captureSource || "unknown",
         localMatch: localMatch === true,
+        referenceTemplateHashMatched: referenceMatchesEnrolled,
+        matchedFingerCode: matchedFingerCode || null,
         usedTemplateComparison:
           (captureSource === "usb_scanner" || captureSource === "bluetooth_scanner" || !captureSource) && hasTemplateData,
         minimumMatchScore: BIOMETRIC_MIN_MATCH_SCORE,
@@ -4020,7 +4049,13 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
           }
           if (resolvedVerificationStatus === "failed") {
             if (hasNumericMatchScore && matchScore < BIOMETRIC_MIN_MATCH_SCORE) return `Failed: low match score (${matchScore})`;
+            if (hasNumericMatchScore && !referenceMatchesEnrolled) return "Failed: scanner score was not tied to the enrolled fingerprint";
+            if (hasNumericMatchScore && !matchedFingerAllowsFinger) return "Failed: scanner matched a different finger";
+            if (hasNumericMatchScore && !matchedHashAllowsFinger) return "Failed: scanner matched a different enrolled template";
             if (localMatch === false) return "Failed: bridge reported no match";
+            if (localMatch === true && (captureSource === "usb_scanner" || captureSource === "bluetooth_scanner")) {
+              return "Failed: scanner returned only a generic local match, not enrolled fingerprint evidence";
+            }
             if (hasTemplateData && !templateMatched) return "Failed: template data mismatch";
             return "Fingerprint did not match";
           }

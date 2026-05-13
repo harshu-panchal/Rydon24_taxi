@@ -265,7 +265,7 @@ const RideDetail = () => {
           </div>
           <button
             type="button"
-            onClick={() => navigate(`${routePrefix}/support`)}
+            onClick={() => navigate(routePrefix ? `${routePrefix}/support` : '/ride/support')}
             className="bg-white px-4 py-2 rounded-full text-[12px] font-black text-gray-900 border border-orange-100 active:scale-95 transition-all"
           >
             Support
@@ -291,7 +291,7 @@ const RideDetail = () => {
         </button>
         <button
           type="button"
-          onClick={() => navigate(`${routePrefix}/support`)}
+          onClick={() => navigate(routePrefix ? `${routePrefix}/support` : '/ride/support')}
           className="flex-1 bg-gray-50 text-gray-900 py-5 rounded-[24px] text-[14px] font-black uppercase tracking-widest border border-gray-100 flex items-center justify-center gap-2 active:scale-95 transition-all"
         >
           <HelpCircle size={18} />
