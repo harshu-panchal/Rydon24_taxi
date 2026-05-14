@@ -424,6 +424,7 @@ const DriverWallet = () => {
                 }
 
                 await openExternalCheckout(session.checkoutUrl);
+                setProcessingTopUp(false);
                 return;
             }
 

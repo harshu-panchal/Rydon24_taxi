@@ -167,6 +167,7 @@ const Wallet = () => {
         }
 
         await openExternalCheckout(session.checkoutUrl);
+        setIsAdding(false);
         return;
       }
 

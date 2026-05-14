@@ -409,6 +409,7 @@ const RentalDeposit = () => {
         }
 
         await openExternalCheckout(session.checkoutUrl);
+        setPaying(false);
         return;
       }
 
