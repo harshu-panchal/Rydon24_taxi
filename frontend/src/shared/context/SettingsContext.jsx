@@ -8,7 +8,7 @@ const DEFAULT_SIDEBAR_TEXT_COLOR = '#cbd5e1';
 const DEFAULT_SETTINGS_CONTEXT = {
   settings: {
     general: {
-      app_name: 'Rydon24',
+      app_name: 'Rydon24 Trawler',
       logo: '',
       favicon: '',
     },
@@ -182,7 +182,7 @@ export const SettingsProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    const appName = settings.general?.app_name || 'Rydon24';
+    const appName = settings.general?.app_name || 'Rydon24 Trawler';
     document.title = appName;
 
     const favicon = settings.general?.favicon || settings.customization?.favicon;
