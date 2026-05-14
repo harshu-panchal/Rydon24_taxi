@@ -32,6 +32,10 @@ const isAlreadyRegisteredError = (err) =>
     Number(err?.status || err?.response?.status) === 409 &&
     getErrorMessage(err).toLowerCase().includes('already registered');
 
+const isAccountNotFoundError = (err) =>
+    Number(err?.status || err?.response?.status) === 404 &&
+    getErrorMessage(err).toLowerCase().includes('account not found');
+
 const PhoneRegistration = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -138,20 +142,34 @@ const PhoneRegistration = () => {
                         : await sendDriverOtp({ phone, role: requestRole });
                     loginMode = isLoginPage;
                 } catch (requestError) {
-                    if (isLoginPage || !isAlreadyRegisteredError(requestError)) throw requestError;
+                    if (isLoginPage) {
+                        if (!isAccountNotFoundError(requestError)) throw requestError;
 
-                    response = await sendDriverLoginOtp({ phone, role: requestRole });
-                    loginMode = true;
+                        response = await sendDriverOtp({ phone, role: requestRole });
+                        loginMode = false;
+                    } else {
+                        if (!isAlreadyRegisteredError(requestError)) throw requestError;
+
+                        response = await sendDriverLoginOtp({ phone, role: requestRole });
+                        loginMode = true;
+                    }
                 }
             } else {
                 try {
                     response = isLoginPage ? await sendDriverLoginOtp({ phone, role: requestRole }) : await sendDriverOtp({ phone, role: requestRole });
                     loginMode = isLoginPage;
                 } catch (requestError) {
-                    if (isLoginPage || !isAlreadyRegisteredError(requestError)) throw requestError;
+                    if (isLoginPage) {
+                        if (!isAccountNotFoundError(requestError)) throw requestError;
 
-                    response = await sendDriverLoginOtp({ phone, role: requestRole });
-                    loginMode = true;
+                        response = await sendDriverOtp({ phone, role: requestRole });
+                        loginMode = false;
+                    } else {
+                        if (!isAlreadyRegisteredError(requestError)) throw requestError;
+
+                        response = await sendDriverLoginOtp({ phone, role: requestRole });
+                        loginMode = true;
+                    }
                 }
             }
 
