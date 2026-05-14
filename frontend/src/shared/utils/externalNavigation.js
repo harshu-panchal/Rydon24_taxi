@@ -170,6 +170,15 @@ const redirectInCurrentWindow = (targetUrl, status = 'browser-redirect') => {
   return true;
 };
 
+const failInWebView = (reason, extra = {}) => {
+  recordCheckoutDiagnostic({
+    status: reason,
+    ...extra,
+  });
+
+  return false;
+};
+
 export const openExternalCheckout = async (url) => {
   const targetUrl = String(url || '').trim();
   const checkoutPayload = buildCheckoutPayload(targetUrl);
@@ -238,7 +247,9 @@ export const openExternalCheckout = async (url) => {
   }
 
   if (hasFlutterInAppWebView || androidWebView) {
-    return redirectInCurrentWindow(targetUrl, 'webview-same-window-redirect');
+    return failInWebView('webview-external-bridge-required', {
+      message: 'External checkout bridge did not open PhonePe outside the WebView',
+    });
   }
 
   return redirectInCurrentWindow(targetUrl);

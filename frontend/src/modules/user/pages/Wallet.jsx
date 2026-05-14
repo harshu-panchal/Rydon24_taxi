@@ -179,7 +179,10 @@ const Wallet = () => {
           merchantTransactionId: session.merchantTransactionId,
           checkoutUrl: session.checkoutUrl,
         });
-        await openExternalCheckout(session.checkoutUrl);
+        const opened = await openExternalCheckout(session.checkoutUrl);
+        if (!opened) {
+          throw new Error('PhonePe checkout could not open outside the app WebView. Please update the app bridge or open this payment flow in your browser.');
+        }
         setIsAdding(false);
         return;
       }
