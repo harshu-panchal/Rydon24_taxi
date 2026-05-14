@@ -54,6 +54,7 @@ const FaqPage = lazy(() => import('./modules/shared/pages/FaqPage'));
 const ServicesPage = lazy(() => import('./modules/shared/pages/ServicesPage'));
 const BlogPage = lazy(() => import('./modules/shared/pages/BlogPage'));
 const LinksPage = lazy(() => import('./modules/shared/pages/LinksPage'));
+const PhonePeStatusPage = lazy(() => import('./modules/shared/pages/PhonePeStatusPage'));
 
 // Phase 1 — Parcel flow completions
 const ParcelSearchingDriver = lazy(() => import('./modules/user/pages/parcel/ParcelSearchingDriver'));
@@ -679,6 +680,7 @@ function App() {
               <Route path="/privacy-policy" element={<LegalPage />} />
               <Route path="/refund" element={<LegalPage />} />
               <Route path="/cancellation" element={<LegalPage />} />
+              <Route path="/phonepe/status" element={<PhonePeStatusPage />} />
               <Route path="/login" element={<Login />} />
               <Route path="/onboarding" element={<Onboarding />} />
               <Route path="/verify-otp" element={<VerifyOTP />} />

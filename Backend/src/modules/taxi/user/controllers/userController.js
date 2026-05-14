@@ -2083,7 +2083,7 @@ export const createPhonePeRentalAdvancePaymentOrder = async (req, res) => {
   const compactUserId = userId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
   const merchantTransactionId = `URNT${Date.now()}${compactUserId}`.slice(0, 34);
   const frontendBaseUrl = getFrontendBaseUrl();
-  const redirectUrl = `${frontendBaseUrl}/rental/deposit?phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
+  const redirectUrl = `${frontendBaseUrl}/phonepe/status?flow=user-rental&phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
   const user = userId ? await User.findById(userId).select('phone').lean() : null;
   logPaymentDiagnostic({
     provider: 'phonepe',
@@ -2180,7 +2180,7 @@ export const createPhonePeWalletTopupOrder = async (req, res) => {
   const compactUserId = userId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
   const merchantTransactionId = `UWAL${Date.now()}${compactUserId}`.slice(0, 34);
   const frontendBaseUrl = getFrontendBaseUrl();
-  const redirectUrl = `${frontendBaseUrl}/taxi/user/wallet?phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
+  const redirectUrl = `${frontendBaseUrl}/phonepe/status?flow=user-wallet&phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
   const user = userId ? await User.findById(userId).select('phone').lean() : null;
   logPaymentDiagnostic({
     provider: 'phonepe',

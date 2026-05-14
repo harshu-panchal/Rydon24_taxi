@@ -263,19 +263,8 @@ export const openExternalCheckout = async (url) => {
     return false;
   }
 
-  const flutterBridge = globalThis?.flutter_inappwebview;
-  const flutterHandler = flutterBridge?.callHandler;
-  const hasFlutterInAppWebView = Boolean(globalThis?.flutter_inappwebview);
-  const androidWebView = isAndroidWebView();
-  const iosWebView = isIosWebView();
-  const mobileBrowser = isMobileBrowser();
-
   recordCheckoutDiagnostic({
     status: 'starting',
-    hasFlutterInAppWebView,
-    androidWebView,
-    iosWebView,
-    mobileBrowser,
     platform: checkoutPayload.platform,
     runtime: checkoutPayload.runtime,
     targetHost: (() => {
@@ -287,69 +276,8 @@ export const openExternalCheckout = async (url) => {
     })(),
   });
 
-  if (typeof flutterHandler === 'function') {
-    const handlerNames = ['openExternalUrl', 'openExternalCheckout', 'openUrl'];
-
-    for (const handlerName of handlerNames) {
-      const attempts = [
-        { args: [handlerName, checkoutPayload], mode: 'object' },
-        { args: [handlerName, JSON.stringify(checkoutPayload)], mode: 'json-string' },
-        { args: [handlerName, targetUrl], mode: 'plain-url' },
-      ];
-
-      for (const attempt of attempts) {
-        try {
-          const handled = await withTimeout(flutterHandler.call(flutterBridge, ...attempt.args));
-          recordCheckoutDiagnostic({ status: 'handler-response', handlerName, handled, mode: attempt.mode });
-          if (isHandledBridgeResponse(handled)) {
-            return true;
-          }
-        } catch (error) {
-          recordCheckoutDiagnostic({
-            status: 'handler-failed',
-            handlerName,
-            mode: attempt.mode,
-            message: error?.message || String(error),
-          });
-          // Try the next supported APK bridge signature or handler name.
-        }
-      }
-    }
-  }
-
-  if (callNativeInterface(targetUrl, checkoutPayload)) {
-    return true;
-  }
-
-  if (postToJavascriptChannel(targetUrl, checkoutPayload)) {
-    return true;
-  }
-
-  if (mobileBrowser) {
-    return openUsingWindowOpen(targetUrl, 'mobile-browser-window-open')
-      || openUsingAnchor(targetUrl, 'mobile-browser-anchor-open')
-      || redirectInCurrentWindow(targetUrl, 'mobile-browser-redirect');
-  }
-
-  if (hasFlutterInAppWebView || androidWebView || iosWebView) {
-    if (openUsingWindowOpen(targetUrl, 'webview-window-open')) {
-      return true;
-    }
-
-    if (openUsingAnchor(targetUrl, 'webview-anchor-open')) {
-      return true;
-    }
-
-    if (redirectTopWindow(targetUrl, 'webview-top-window-redirect')) {
-      return true;
-    }
-
-    return failInWebView('webview-external-bridge-required', {
-      message: 'External checkout bridge did not open PhonePe outside the WebView',
-    });
-  }
-
-  return openUsingWindowOpen(targetUrl, 'desktop-window-open')
-    || openUsingAnchor(targetUrl, 'desktop-anchor-open')
-    || redirectInCurrentWindow(targetUrl);
+  // Match the quickcomephone project pattern: hand the hosted checkout URL
+  // directly to the current browser/webview instead of layering custom bridge
+  // logic on top of PhonePe's own redirect flow.
+  return redirectInCurrentWindow(targetUrl, 'hosted-checkout-redirect');
 };

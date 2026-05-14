@@ -5079,7 +5079,7 @@ export const createDriverPhonePeWalletTopupOrder = async (req, res) => {
   const compactDriverId = driverId.replace(/[^a-zA-Z0-9]/g, "").slice(-8) || "drv";
   const merchantTransactionId = `DWAL${Date.now()}${compactDriverId}`.slice(0, 34);
   const frontendBaseUrl = getFrontendBaseUrl();
-  const redirectUrl = `${frontendBaseUrl}/taxi/driver/wallet?phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
+  const redirectUrl = `${frontendBaseUrl}/phonepe/status?flow=driver-wallet&phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
   const driver = driverId ? await Driver.findById(driverId).select("phone").lean() : null;
   logPaymentDiagnostic({
     provider: "phonepe",
