@@ -77,6 +77,14 @@ import {
   buildDriverTodaySummaryFromDocument,
   syncDriverTodaySummaryDocument,
 } from "../services/driverTodaySummaryService.js";
+import {
+  buildPaymentRequestContext,
+  logPaymentDiagnostic,
+  summarizeCheckoutUrl,
+  summarizePhonePeCredentialMeta,
+  summarizePhonePePayload,
+  summarizePhonePeRequestBody,
+} from "../../services/paymentDiagnostics.js";
 
 const generateDriverReferralCode = (driver) => {
   const idPart = String(driver?._id || "")
@@ -4851,6 +4859,12 @@ const getPhonePeAccessToken = async ({
   const nowEpochSeconds = Math.floor(Date.now() / 1000);
 
   if (cachedToken?.accessToken && Number(cachedToken.expiresAt || 0) - 60 > nowEpochSeconds) {
+    logPaymentDiagnostic({
+      provider: "phonepe",
+      scope: "driver",
+      stage: "auth-cache-hit",
+      ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+    });
     return cachedToken.accessToken;
   }
 
@@ -4859,6 +4873,13 @@ const getPhonePeAccessToken = async ({
     client_version: clientVersion,
     client_secret: clientSecret,
     grant_type: "client_credentials",
+  });
+
+  logPaymentDiagnostic({
+    provider: "phonepe",
+    scope: "driver",
+    stage: "auth-request",
+    ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
   });
 
   const response = await fetch(getPhonePeAuthUrl(environment), {
@@ -4872,11 +4893,29 @@ const getPhonePeAccessToken = async ({
 
   const payload = await response.json().catch(() => null);
   if (!response.ok || !payload?.access_token) {
+    logPaymentDiagnostic({
+      provider: "phonepe",
+      scope: "driver",
+      stage: "auth-failed",
+      level: "error",
+      statusCode: response.status || 502,
+      ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+      response: summarizePhonePePayload(payload || {}),
+    });
     throw new ApiError(
       response.status || 502,
       payload?.message || payload?.error_description || payload?.error || "PhonePe authorization failed",
     );
   }
+
+  logPaymentDiagnostic({
+    provider: "phonepe",
+    scope: "driver",
+    stage: "auth-success",
+    statusCode: response.status || 200,
+    expiresAt: Number(payload.expires_at || nowEpochSeconds + 300),
+    ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+  });
 
   phonePeAccessTokenCache.set(cacheKey, {
     accessToken: String(payload.access_token),
@@ -4896,6 +4935,15 @@ const phonePeRequest = async ({
   environment,
 }) => {
   const normalizedMethod = String(method || "GET").trim().toUpperCase();
+  logPaymentDiagnostic({
+    provider: "phonepe",
+    scope: "driver",
+    stage: "api-request",
+    method: normalizedMethod,
+    path,
+    ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+    request: summarizePhonePeRequestBody(body || {}),
+  });
   const accessToken = await getPhonePeAccessToken({
     clientId,
     clientSecret,
@@ -4914,11 +4962,33 @@ const phonePeRequest = async ({
 
   const payload = await response.json().catch(() => null);
   if (!response.ok || payload?.success === false) {
+    logPaymentDiagnostic({
+      provider: "phonepe",
+      scope: "driver",
+      stage: "api-failed",
+      level: "error",
+      method: normalizedMethod,
+      path,
+      statusCode: response.status || 502,
+      ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+      response: summarizePhonePePayload(payload || {}),
+    });
     throw new ApiError(
       response.status || 502,
       payload?.message || payload?.code || "PhonePe request failed",
     );
   }
+
+  logPaymentDiagnostic({
+    provider: "phonepe",
+    scope: "driver",
+    stage: "api-success",
+    method: normalizedMethod,
+    path,
+    statusCode: response.status || 200,
+    ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+    response: summarizePhonePePayload(payload || {}),
+  });
 
   return payload;
 };
@@ -5011,6 +5081,17 @@ export const createDriverPhonePeWalletTopupOrder = async (req, res) => {
   const frontendBaseUrl = getFrontendBaseUrl();
   const redirectUrl = `${frontendBaseUrl}/taxi/driver/wallet?phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
   const driver = driverId ? await Driver.findById(driverId).select("phone").lean() : null;
+  logPaymentDiagnostic({
+    provider: "phonepe",
+    scope: "driver-wallet",
+    stage: "create-order-start",
+    merchantTransactionId,
+    amountRupees: amount,
+    request: buildPaymentRequestContext(req),
+    metadata: {
+      redirectUrl: summarizeCheckoutUrl(redirectUrl),
+    },
+  });
   const payload = await phonePeRequest({
     method: "POST",
     path: "/checkout/v2/pay",
@@ -5037,8 +5118,25 @@ export const createDriverPhonePeWalletTopupOrder = async (req, res) => {
 
   const checkoutUrl = payload?.redirectUrl || "";
   if (!checkoutUrl) {
+    logPaymentDiagnostic({
+      provider: "phonepe",
+      scope: "driver-wallet",
+      stage: "create-order-missing-checkout-url",
+      level: "error",
+      merchantTransactionId,
+      response: summarizePhonePePayload(payload || {}),
+    });
     throw new ApiError(502, "PhonePe payment URL was not returned");
   }
+
+  logPaymentDiagnostic({
+    provider: "phonepe",
+    scope: "driver-wallet",
+    stage: "create-order-success",
+    merchantTransactionId,
+    amountPaise: Math.round(amount * 100),
+    checkoutUrl: summarizeCheckoutUrl(checkoutUrl),
+  });
 
   res.status(201).json({
     success: true,
@@ -5139,6 +5237,14 @@ export const verifyDriverPhonePeWalletTopup = async (req, res) => {
     throw new ApiError(400, "merchantTransactionId is required");
   }
 
+  logPaymentDiagnostic({
+    provider: "phonepe",
+    scope: "driver-wallet",
+    stage: "verify-start",
+    merchantTransactionId,
+    request: buildPaymentRequestContext(req),
+  });
+
   const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials();
   const payload = await phonePeRequest({
     method: "GET",
@@ -5155,6 +5261,18 @@ export const verifyDriverPhonePeWalletTopup = async (req, res) => {
   const paymentId = toCleanString(latestPayment?.transactionId || latestPayment?.paymentTransactionId || merchantTransactionId);
   const amount = Math.round(Number(payload?.amount || latestPayment?.amount || 0)) / 100;
   const driverId = req.auth?.sub;
+
+  logPaymentDiagnostic({
+    provider: "phonepe",
+    scope: "driver-wallet",
+    stage: "verify-response",
+    merchantTransactionId,
+    driverId,
+    paymentState,
+    paymentId,
+    amountRupees: amount,
+    response: summarizePhonePePayload(payload || {}),
+  });
 
   if (paymentState === "COMPLETED") {
     const alreadyCredited = await WalletTransaction.findOne({
@@ -5182,6 +5300,16 @@ export const verifyDriverPhonePeWalletTopup = async (req, res) => {
     }
 
     const driver = await Driver.findById(driverId);
+    logPaymentDiagnostic({
+      provider: "phonepe",
+      scope: "driver-wallet",
+      stage: "verify-paid",
+      merchantTransactionId,
+      driverId,
+      paymentId,
+      amountRupees: amount,
+      alreadyCredited: Boolean(alreadyCredited),
+    });
     res.json({
       success: true,
       data: {
@@ -5197,6 +5325,15 @@ export const verifyDriverPhonePeWalletTopup = async (req, res) => {
   }
 
   if (paymentState === "PENDING") {
+    logPaymentDiagnostic({
+      provider: "phonepe",
+      scope: "driver-wallet",
+      stage: "verify-pending",
+      merchantTransactionId,
+      driverId,
+      paymentId,
+      amountRupees: amount,
+    });
     res.json({
       success: true,
       data: {
@@ -5210,6 +5347,18 @@ export const verifyDriverPhonePeWalletTopup = async (req, res) => {
     return;
   }
 
+  logPaymentDiagnostic({
+    provider: "phonepe",
+    scope: "driver-wallet",
+    stage: "verify-failed",
+    level: "warn",
+    merchantTransactionId,
+    driverId,
+    paymentId,
+    paymentState,
+    amountRupees: amount,
+    code: payload?.code || latestPayment?.responseCode || "",
+  });
   res.json({
     success: true,
     data: {

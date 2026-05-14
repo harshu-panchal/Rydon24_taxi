@@ -37,6 +37,14 @@ import {
   listCustomerSubscriptionPlans,
   purchaseUserSubscription,
 } from '../services/subscriptionService.js';
+import {
+  buildPaymentRequestContext,
+  logPaymentDiagnostic,
+  summarizeCheckoutUrl,
+  summarizePhonePeCredentialMeta,
+  summarizePhonePePayload,
+  summarizePhonePeRequestBody,
+} from '../../services/paymentDiagnostics.js';
 
 const VALID_GENDERS = new Set(['male', 'female', 'other', 'prefer-not-to-say', '']);
 
@@ -202,6 +210,12 @@ const getPhonePeAccessToken = async ({
   const nowEpochSeconds = Math.floor(Date.now() / 1000);
 
   if (cachedToken?.accessToken && Number(cachedToken.expiresAt || 0) - 60 > nowEpochSeconds) {
+    logPaymentDiagnostic({
+      provider: 'phonepe',
+      scope: 'user',
+      stage: 'auth-cache-hit',
+      ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+    });
     return cachedToken.accessToken;
   }
 
@@ -210,6 +224,13 @@ const getPhonePeAccessToken = async ({
     client_version: clientVersion,
     client_secret: clientSecret,
     grant_type: 'client_credentials',
+  });
+
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user',
+    stage: 'auth-request',
+    ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
   });
 
   const response = await fetch(getPhonePeAuthUrl(environment), {
@@ -223,11 +244,29 @@ const getPhonePeAccessToken = async ({
 
   const payload = await response.json().catch(() => null);
   if (!response.ok || !payload?.access_token) {
+    logPaymentDiagnostic({
+      provider: 'phonepe',
+      scope: 'user',
+      stage: 'auth-failed',
+      level: 'error',
+      statusCode: response.status || 502,
+      ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+      response: summarizePhonePePayload(payload || {}),
+    });
     throw new ApiError(
       response.status || 502,
       payload?.message || payload?.error_description || payload?.error || 'PhonePe authorization failed',
     );
   }
+
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user',
+    stage: 'auth-success',
+    statusCode: response.status || 200,
+    expiresAt: Number(payload.expires_at || nowEpochSeconds + 300),
+    ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+  });
 
   phonePeAccessTokenCache.set(cacheKey, {
     accessToken: String(payload.access_token),
@@ -247,6 +286,15 @@ const phonePeRequest = async ({
   environment,
 }) => {
   const normalizedMethod = String(method || 'GET').trim().toUpperCase();
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user',
+    stage: 'api-request',
+    method: normalizedMethod,
+    path,
+    ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+    request: summarizePhonePeRequestBody(body || {}),
+  });
   const accessToken = await getPhonePeAccessToken({
     clientId,
     clientSecret,
@@ -265,11 +313,33 @@ const phonePeRequest = async ({
 
   const payload = await response.json().catch(() => null);
   if (!response.ok || payload?.success === false) {
+    logPaymentDiagnostic({
+      provider: 'phonepe',
+      scope: 'user',
+      stage: 'api-failed',
+      level: 'error',
+      method: normalizedMethod,
+      path,
+      statusCode: response.status || 502,
+      ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+      response: summarizePhonePePayload(payload || {}),
+    });
     throw new ApiError(
       response.status || 502,
       payload?.message || payload?.code || 'PhonePe request failed',
     );
   }
+
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user',
+    stage: 'api-success',
+    method: normalizedMethod,
+    path,
+    statusCode: response.status || 200,
+    ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+    response: summarizePhonePePayload(payload || {}),
+  });
 
   return payload;
 };
@@ -2015,6 +2085,22 @@ export const createPhonePeRentalAdvancePaymentOrder = async (req, res) => {
   const frontendBaseUrl = getFrontendBaseUrl();
   const redirectUrl = `${frontendBaseUrl}/rental/deposit?phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
   const user = userId ? await User.findById(userId).select('phone').lean() : null;
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-rental',
+    stage: 'create-order-start',
+    merchantTransactionId,
+    bookingReference,
+    amountRupees: amount,
+    request: buildPaymentRequestContext(req),
+    metadata: {
+      vehicleId,
+      vehicleName,
+      pickup,
+      returnTime,
+      redirectUrl: summarizeCheckoutUrl(redirectUrl),
+    },
+  });
   const payload = await phonePeRequest({
     method: 'POST',
     path: '/checkout/v2/pay',
@@ -2046,8 +2132,27 @@ export const createPhonePeRentalAdvancePaymentOrder = async (req, res) => {
 
   const checkoutUrl = payload?.redirectUrl || '';
   if (!checkoutUrl) {
+    logPaymentDiagnostic({
+      provider: 'phonepe',
+      scope: 'user-rental',
+      stage: 'create-order-missing-checkout-url',
+      level: 'error',
+      merchantTransactionId,
+      bookingReference,
+      response: summarizePhonePePayload(payload || {}),
+    });
     throw new ApiError(502, 'PhonePe payment URL was not returned');
   }
+
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-rental',
+    stage: 'create-order-success',
+    merchantTransactionId,
+    bookingReference,
+    amountPaise: Math.round(amount * 100),
+    checkoutUrl: summarizeCheckoutUrl(checkoutUrl),
+  });
 
   res.status(201).json({
     success: true,
@@ -2077,6 +2182,17 @@ export const createPhonePeWalletTopupOrder = async (req, res) => {
   const frontendBaseUrl = getFrontendBaseUrl();
   const redirectUrl = `${frontendBaseUrl}/taxi/user/wallet?phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
   const user = userId ? await User.findById(userId).select('phone').lean() : null;
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-wallet',
+    stage: 'create-order-start',
+    merchantTransactionId,
+    amountRupees: amount,
+    request: buildPaymentRequestContext(req),
+    metadata: {
+      redirectUrl: summarizeCheckoutUrl(redirectUrl),
+    },
+  });
   const payload = await phonePeRequest({
     method: 'POST',
     path: '/checkout/v2/pay',
@@ -2103,8 +2219,25 @@ export const createPhonePeWalletTopupOrder = async (req, res) => {
 
   const checkoutUrl = payload?.redirectUrl || '';
   if (!checkoutUrl) {
+    logPaymentDiagnostic({
+      provider: 'phonepe',
+      scope: 'user-wallet',
+      stage: 'create-order-missing-checkout-url',
+      level: 'error',
+      merchantTransactionId,
+      response: summarizePhonePePayload(payload || {}),
+    });
     throw new ApiError(502, 'PhonePe payment URL was not returned');
   }
+
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-wallet',
+    stage: 'create-order-success',
+    merchantTransactionId,
+    amountPaise: Math.round(amount * 100),
+    checkoutUrl: summarizeCheckoutUrl(checkoutUrl),
+  });
 
   res.status(201).json({
     success: true,
@@ -2262,6 +2395,14 @@ export const verifyPhonePeWalletTopup = async (req, res) => {
     throw new ApiError(400, 'merchantTransactionId is required');
   }
 
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-wallet',
+    stage: 'verify-start',
+    merchantTransactionId,
+    request: buildPaymentRequestContext(req),
+  });
+
   const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials();
   const payload = await phonePeRequest({
     method: 'GET',
@@ -2278,6 +2419,18 @@ export const verifyPhonePeWalletTopup = async (req, res) => {
   const paymentId = toCleanString(latestPayment?.transactionId || latestPayment?.paymentTransactionId || merchantTransactionId);
   const amount = Math.round(Number(payload?.amount || latestPayment?.amount || 0)) / 100;
   const userId = req.auth?.sub;
+
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-wallet',
+    stage: 'verify-response',
+    merchantTransactionId,
+    userId,
+    paymentState,
+    paymentId,
+    amountRupees: amount,
+    response: summarizePhonePePayload(payload || {}),
+  });
 
   if (paymentState === 'COMPLETED') {
     await ensureUserWallet(userId);
@@ -2316,6 +2469,18 @@ export const verifyPhonePeWalletTopup = async (req, res) => {
       .slice('transactions', -10)
       .lean();
 
+    logPaymentDiagnostic({
+      provider: 'phonepe',
+      scope: 'user-wallet',
+      stage: 'verify-paid',
+      merchantTransactionId,
+      userId,
+      paymentId,
+      amountRupees: amount,
+      alreadyCredited: Boolean(alreadyCredited),
+      walletBalance: Number(wallet?.balance || 0),
+    });
+
     res.json({
       success: true,
       data: {
@@ -2330,6 +2495,15 @@ export const verifyPhonePeWalletTopup = async (req, res) => {
   }
 
   if (paymentState === 'PENDING') {
+    logPaymentDiagnostic({
+      provider: 'phonepe',
+      scope: 'user-wallet',
+      stage: 'verify-pending',
+      merchantTransactionId,
+      userId,
+      paymentId,
+      amountRupees: amount,
+    });
     res.json({
       success: true,
       data: {
@@ -2343,6 +2517,18 @@ export const verifyPhonePeWalletTopup = async (req, res) => {
     return;
   }
 
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-wallet',
+    stage: 'verify-failed',
+    level: 'warn',
+    merchantTransactionId,
+    userId,
+    paymentId,
+    paymentState,
+    amountRupees: amount,
+    code: payload?.code || latestPayment?.responseCode || '',
+  });
   res.json({
     success: true,
       data: {
@@ -2413,6 +2599,14 @@ export const verifyPhonePeRentalAdvancePayment = async (req, res) => {
     throw new ApiError(400, 'merchantTransactionId is required');
   }
 
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-rental',
+    stage: 'verify-start',
+    merchantTransactionId,
+    request: buildPaymentRequestContext(req),
+  });
+
   const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials();
   const payload = await phonePeRequest({
     method: 'GET',
@@ -2430,7 +2624,28 @@ export const verifyPhonePeRentalAdvancePayment = async (req, res) => {
   const amount = Math.round(Number(payload?.amount || latestPayment?.amount || 0)) / 100;
   const bookingReference = toCleanString(payload?.metaInfo?.udf3 || latestPayment?.metaInfo?.udf3);
 
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-rental',
+    stage: 'verify-response',
+    merchantTransactionId,
+    bookingReference,
+    paymentState,
+    paymentId,
+    amountRupees: amount,
+    response: summarizePhonePePayload(payload || {}),
+  });
+
   if (paymentState === 'COMPLETED') {
+    logPaymentDiagnostic({
+      provider: 'phonepe',
+      scope: 'user-rental',
+      stage: 'verify-paid',
+      merchantTransactionId,
+      bookingReference,
+      paymentId,
+      amountRupees: amount,
+    });
     res.json({
       success: true,
       data: {
@@ -2449,6 +2664,15 @@ export const verifyPhonePeRentalAdvancePayment = async (req, res) => {
   }
 
   if (paymentState === 'PENDING') {
+    logPaymentDiagnostic({
+      provider: 'phonepe',
+      scope: 'user-rental',
+      stage: 'verify-pending',
+      merchantTransactionId,
+      bookingReference,
+      paymentId,
+      amountRupees: amount,
+    });
     res.json({
       success: true,
       data: {
@@ -2464,6 +2688,18 @@ export const verifyPhonePeRentalAdvancePayment = async (req, res) => {
     return;
   }
 
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-rental',
+    stage: 'verify-failed',
+    level: 'warn',
+    merchantTransactionId,
+    bookingReference,
+    paymentId,
+    paymentState,
+    amountRupees: amount,
+    code: payload?.code || latestPayment?.responseCode || '',
+  });
   res.json({
     success: true,
     data: {
