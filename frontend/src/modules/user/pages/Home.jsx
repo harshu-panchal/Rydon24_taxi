@@ -8,6 +8,7 @@ import LocationMapSection from '../components/LocationMapSection';
 import ActionsSection from '../components/ActionsSection';
 import PromoBanners from '../components/PromoBanners';
 import ExplorerSection from '../components/ExplorerSection';
+import CheckUsOutSection from '../components/CheckUsOutSection';
 import BottomNavbar from '../components/BottomNavbar';
 import carIcon from '../../../assets/icons/car.png';
 import bikeIcon from '../../../assets/icons/bike.png';
@@ -685,6 +686,7 @@ const Home = () => {
             <ActionsSection />
             <PromoBanners />
             <ExplorerSection />
+            <CheckUsOutSection />
           </>
         ) : (
           <div className="space-y-4 px-5">

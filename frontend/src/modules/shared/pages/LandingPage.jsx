@@ -11,6 +11,8 @@ import parcelImg from '@/assets/landing/parcel.png';
 import bikeImg from '@/assets/landing/bike.png';
 import heroBgImg from '@/assets/landing/hero-bg.png';
 import newHeroTaxiImg from '@/assets/ride-removebg-preview.png';
+import checkUsOutImg from '@/assets/check_us_out.jpg';
+import { Camera, PlayCircle, Share2, ArrowRight as ArrowRightIcon } from 'lucide-react';
 
 function LandingPage() {
   const navigate = useNavigate();
@@ -229,6 +231,59 @@ function LandingPage() {
             </button>
             <button className="landing-login-secondary" onClick={() => navigate('/signup')}>
               Create Account
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Check Us Out Section */}
+      <section className="check-us-out-section" style={{ padding: '80px 5%' }}>
+        <div className="section-header">
+          <h2 className="section-title">CHECK US OUT</h2>
+          <div className="section-triangle"></div>
+        </div>
+        
+        <div style={{
+          marginTop: '40px',
+          background: '#fff',
+          borderRadius: '30px',
+          overflow: 'hidden',
+          boxShadow: '0 25px 60px rgba(0,0,0,0.1)',
+          display: 'flex',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ flex: '1 1 500px', height: '400px', overflow: 'hidden' }}>
+            <img src={checkUsOutImg} alt="Check Us Out" style={{ width: '100%', height: '100%', objectCover: 'cover' }} />
+          </div>
+          <div style={{ flex: '1 1 400px', padding: '60px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <h3 style={{ fontSize: '32px', fontWeight: '800', color: '#1a1a1a', marginBottom: '20px' }}>Join the Rydon24 Community</h3>
+            <p style={{ fontSize: '16px', color: '#666', lineHeight: '1.8', marginBottom: '30px' }}>
+              Follow us on social media to get the latest updates, exclusive offers, and behind-the-scenes content. 
+              Be part of the fastest growing transportation network in the region.
+            </p>
+            <div style={{ display: 'flex', gap: '15px', marginBottom: '40px' }}>
+              <a href="#" style={{ width: '50px', height: '50px', borderRadius: '50%', background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#333' }}><Camera size={24} /></a>
+              <a href="#" style={{ width: '50px', height: '50px', borderRadius: '50%', background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#333' }}><PlayCircle size={24} /></a>
+              <a href="#" style={{ width: '50px', height: '50px', borderRadius: '50%', background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#333' }}><Share2 size={24} /></a>
+            </div>
+            <button 
+              onClick={() => window.open('https://play.google.com/store/apps/details?id=com.rydon24.user', '_blank')}
+              style={{
+                background: '#FFB300',
+                color: '#1a1a1a',
+                border: 'none',
+                padding: '15px 35px',
+                borderRadius: '50px',
+                fontWeight: '800',
+                fontSize: '16px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                width: 'fit-content'
+              }}
+            >
+              Learn More <ArrowRightIcon size={20} />
             </button>
           </div>
         </div>
