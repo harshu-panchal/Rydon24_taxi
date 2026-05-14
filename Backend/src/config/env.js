@@ -49,6 +49,17 @@ export const env = {
   jwtSecret: resolvedJwtSecret,
   jwtExpiresIn: resolvedJwtExpiresIn,
   corsOrigin: process.env.CORS_ORIGIN || process.env.FRONTEND_URL || '*',
+  publicFrontendUrl:
+    process.env.PUBLIC_FRONTEND_URL ||
+    process.env.APP_FRONTEND_URL ||
+    process.env.FRONTEND_PUBLIC_URL ||
+    process.env.FRONTEND_URL ||
+    '',
+  phonePeRedirectBaseUrl:
+    process.env.PHONEPE_REDIRECT_BASE_URL ||
+    process.env.PHONEPE_CALLBACK_BASE_URL ||
+    process.env.PUBLIC_PHONEPE_REDIRECT_URL ||
+    '',
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
     apiKey: process.env.CLOUDINARY_API_KEY || '',

@@ -176,13 +176,85 @@ export const listPublicServiceStores = async (_req, res) => {
   });
 };
 
-const getFrontendBaseUrl = () => {
-  const configuredOrigin = String(env.corsOrigin || '')
-    .split(',')
-    .map((value) => value.trim())
-    .find((value) => value && value !== '*');
+const normalizeOriginCandidate = (value = '') => {
+  const trimmedValue = String(value || '').trim();
+  if (!trimmedValue || trimmedValue === '*') {
+    return '';
+  }
 
-  return (configuredOrigin || 'http://localhost:5173').replace(/\/+$/, '');
+  try {
+    return new URL(trimmedValue).origin.replace(/\/+$/, '');
+  } catch {
+    return '';
+  }
+};
+
+const isPublicWebOrigin = (value = '') => {
+  const origin = normalizeOriginCandidate(value);
+  if (!origin) {
+    return false;
+  }
+
+  try {
+    const { protocol, hostname } = new URL(origin);
+    if (!['http:', 'https:'].includes(protocol)) {
+      return false;
+    }
+
+    return !['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(hostname);
+  } catch {
+    return false;
+  }
+};
+
+const getFrontendBaseUrl = (req) => {
+  const configuredOrigins = [
+    env.phonePeRedirectBaseUrl,
+    env.publicFrontendUrl,
+    ...String(env.corsOrigin || '')
+      .split(',')
+      .map((value) => value.trim()),
+  ]
+    .map(normalizeOriginCandidate)
+    .filter(Boolean);
+
+  const requestCandidates = [
+    normalizeOriginCandidate(req?.get?.('origin')),
+    normalizeOriginCandidate(req?.get?.('referer')),
+    (() => {
+      const forwardedProto = String(req?.get?.('x-forwarded-proto') || '').trim();
+      const forwardedHost = String(req?.get?.('x-forwarded-host') || '').trim();
+      if (!forwardedProto || !forwardedHost) {
+        return '';
+      }
+      return normalizeOriginCandidate(`${forwardedProto}://${forwardedHost}`);
+    })(),
+    (() => {
+      const host = String(req?.get?.('host') || '').trim();
+      const proto =
+        String(req?.protocol || '').trim() ||
+        String(req?.get?.('x-forwarded-proto') || '').trim() ||
+        'http';
+      if (!host) {
+        return '';
+      }
+      return normalizeOriginCandidate(`${proto}://${host}`);
+    })(),
+  ].filter(Boolean);
+
+  const preferredPublicOrigin =
+    configuredOrigins.find(isPublicWebOrigin) ||
+    requestCandidates.find(isPublicWebOrigin);
+
+  if (preferredPublicOrigin) {
+    return preferredPublicOrigin;
+  }
+
+  return (
+    configuredOrigins[0] ||
+    requestCandidates[0] ||
+    'http://localhost:5173'
+  ).replace(/\/+$/, '');
 };
 
 const getPhonePeApiBaseUrl = (environment = 'test') => (
@@ -2082,7 +2154,7 @@ export const createPhonePeRentalAdvancePaymentOrder = async (req, res) => {
   const userId = String(req.auth?.sub || '');
   const compactUserId = userId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
   const merchantTransactionId = `URNT${Date.now()}${compactUserId}`.slice(0, 34);
-  const frontendBaseUrl = getFrontendBaseUrl();
+  const frontendBaseUrl = getFrontendBaseUrl(req);
   const redirectUrl = `${frontendBaseUrl}/phonepe/status?flow=user-rental&phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
   const user = userId ? await User.findById(userId).select('phone').lean() : null;
   logPaymentDiagnostic({
@@ -2179,7 +2251,7 @@ export const createPhonePeWalletTopupOrder = async (req, res) => {
   const userId = String(req.auth?.sub || '');
   const compactUserId = userId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
   const merchantTransactionId = `UWAL${Date.now()}${compactUserId}`.slice(0, 34);
-  const frontendBaseUrl = getFrontendBaseUrl();
+  const frontendBaseUrl = getFrontendBaseUrl(req);
   const redirectUrl = `${frontendBaseUrl}/phonepe/status?flow=user-wallet&phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
   const user = userId ? await User.findById(userId).select('phone').lean() : null;
   logPaymentDiagnostic({
