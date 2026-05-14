@@ -5,6 +5,7 @@ import { ArrowLeft, ChevronRight, ShieldCheck, CreditCard, Wallet, Smartphone } 
 import { userService } from '../../services/userService';
 import { userAuthService } from '../../services/authService';
 import { useSettings } from '../../../../shared/context/SettingsContext';
+import { openExternalCheckout } from '../../../../shared/utils/externalNavigation';
 
 const PAYMENT_METHODS = [
   { id: 'upi', label: 'UPI', icon: Smartphone },
@@ -407,7 +408,7 @@ const RentalDeposit = () => {
           throw new Error('Unable to start PhonePe payment');
         }
 
-        window.location.assign(session.checkoutUrl);
+        await openExternalCheckout(session.checkoutUrl);
         return;
       }
 

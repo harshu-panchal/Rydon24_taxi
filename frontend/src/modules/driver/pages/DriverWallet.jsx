@@ -17,6 +17,7 @@ import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import api from '../../../shared/api/axiosInstance';
 import { socketService } from '../../../shared/api/socket';
 import { useSettings } from '../../../shared/context/SettingsContext';
+import { openExternalCheckout } from '../../../shared/utils/externalNavigation';
 
 const emptyWallet = {
     balance: 0,
@@ -422,7 +423,7 @@ const DriverWallet = () => {
                     throw new Error('Could not initiate PhonePe payment. Please try again.');
                 }
 
-                window.location.assign(session.checkoutUrl);
+                await openExternalCheckout(session.checkoutUrl);
                 return;
             }
 

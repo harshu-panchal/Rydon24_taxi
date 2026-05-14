@@ -4,6 +4,7 @@ import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Plus, History, Gift } from 'lucide-react';
 import { userAuthService } from '../services/authService';
 import { useSettings } from '../../../shared/context/SettingsContext';
+import { openExternalCheckout } from '../../../shared/utils/externalNavigation';
 
 const Wallet = () => {
   const navigate = useNavigate();
@@ -165,7 +166,7 @@ const Wallet = () => {
           throw new Error('Unable to start PhonePe payment');
         }
 
-        window.location.assign(session.checkoutUrl);
+        await openExternalCheckout(session.checkoutUrl);
         return;
       }
 
