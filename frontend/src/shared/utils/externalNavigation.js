@@ -164,37 +164,10 @@ const callNativeInterface = (targetUrl, checkoutPayload) => {
   return false;
 };
 
-const tryWindowOpen = (targetUrl) => {
-  try {
-    const popup = globalThis.open(targetUrl, '_blank', 'noopener,noreferrer');
-    recordCheckoutDiagnostic({ status: 'window-open-attempted', opened: popup !== null });
-    return true;
-  } catch (error) {
-    recordCheckoutDiagnostic({ status: 'window-open-failed', message: error?.message || String(error) });
-    return false;
-  }
-};
-
-const tryAnchorNavigation = (targetUrl) => {
-  try {
-    const anchor = globalThis.document?.createElement?.('a');
-    if (!anchor || !globalThis.document?.body) {
-      return false;
-    }
-
-    anchor.href = targetUrl;
-    anchor.target = '_blank';
-    anchor.rel = 'noopener noreferrer';
-    anchor.style.display = 'none';
-    globalThis.document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    recordCheckoutDiagnostic({ status: 'anchor-open-attempted' });
-    return true;
-  } catch (error) {
-    recordCheckoutDiagnostic({ status: 'anchor-open-failed', message: error?.message || String(error) });
-    return false;
-  }
+const redirectInCurrentWindow = (targetUrl, status = 'browser-redirect') => {
+  recordCheckoutDiagnostic({ status });
+  globalThis.location.href = targetUrl;
+  return true;
 };
 
 export const openExternalCheckout = async (url) => {
@@ -265,15 +238,8 @@ export const openExternalCheckout = async (url) => {
   }
 
   if (hasFlutterInAppWebView || androidWebView) {
-    if (tryWindowOpen(targetUrl) || tryAnchorNavigation(targetUrl)) {
-      return true;
-    }
-
-    recordCheckoutDiagnostic({ status: 'blocked-webview-fallback' });
-    throw new Error('PhonePe must open outside the app WebView. Update the APK external checkout bridge.');
+    return redirectInCurrentWindow(targetUrl, 'webview-same-window-redirect');
   }
 
-  recordCheckoutDiagnostic({ status: 'browser-redirect' });
-  globalThis.location.assign(targetUrl);
-  return true;
+  return redirectInCurrentWindow(targetUrl);
 };
