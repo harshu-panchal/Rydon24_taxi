@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { motion as Motion } from 'framer-motion';
 import { ArrowLeft, ChevronRight, ShieldCheck, CreditCard, Wallet, Smartphone } from 'lucide-react';
 import { userService } from '../../services/userService';
 import { userAuthService } from '../../services/authService';
@@ -522,19 +523,19 @@ const RentalDeposit = () => {
     <div className="min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_38%,#EEF2F7_100%)] max-w-lg mx-auto font-sans pb-28 relative overflow-hidden">
       <div className="absolute -top-16 right-[-40px] h-44 w-44 rounded-full bg-orange-100/60 blur-3xl pointer-events-none" />
 
-      <motion.header
+      <Motion.header
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         className="bg-white/90 backdrop-blur-md px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-white/80 shadow-[0_4px_20px_rgba(15,23,42,0.05)]"
       >
         <div className="flex items-center gap-3">
-          <motion.button
+          <Motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => navigate(-1)}
             className="w-9 h-9 rounded-[12px] border border-white/80 bg-white/90 flex items-center justify-center shadow-[0_4px_12px_rgba(15,23,42,0.07)] shrink-0"
           >
             <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
-          </motion.button>
+          </Motion.button>
           <div className="flex-1 min-w-0">
             <p className="text-[9px] font-black uppercase tracking-[0.26em] text-slate-400">
               Step 5 of 5 - Advance Payment
@@ -544,10 +545,10 @@ const RentalDeposit = () => {
             </h1>
           </div>
         </div>
-      </motion.header>
+      </Motion.header>
 
       <div className="px-5 pt-5 space-y-4">
-        <motion.div
+        <Motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
@@ -589,9 +590,9 @@ const RentalDeposit = () => {
               Rental cost Rs.{totalCost} is paid at pickup.
             </p>
           </div>
-        </motion.div>
+        </Motion.div>
 
-        <motion.div
+        <Motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
@@ -603,9 +604,9 @@ const RentalDeposit = () => {
           <p className="text-[12px] font-bold text-slate-500 leading-relaxed">
             You are paying Rs.{payableNow} right now as the booking advance. The remaining rental cost is paid at pickup.
           </p>
-        </motion.div>
+        </Motion.div>
 
-        <motion.div
+        <Motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
@@ -653,11 +654,11 @@ const RentalDeposit = () => {
               {paymentError}
             </div>
           ) : null}
-        </motion.div>
+        </Motion.div>
       </div>
 
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 pb-6 pt-3 bg-gradient-to-t from-[#EEF2F7] via-[#F3F4F6]/95 to-transparent pointer-events-none z-30">
-        <motion.button
+        <Motion.button
           whileTap={{ scale: 0.98 }}
           onClick={handlePay}
           disabled={paying || (method === 'wallet' && !walletLoading && Number(walletBalance || 0) < payableNow)}
@@ -670,7 +671,7 @@ const RentalDeposit = () => {
               {method === 'wallet' ? <Wallet size={16} strokeWidth={2.5} /> : <CreditCard size={16} strokeWidth={2.5} />} {isPhonePeRentalFlow ? 'Continue to PhonePe' : 'Confirm & Pay'} Rs.{payableNow}
             </>
           )}
-        </motion.button>
+        </Motion.button>
       </div>
     </div>
   );

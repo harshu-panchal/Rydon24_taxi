@@ -30,6 +30,25 @@ const buildCheckoutPayload = (targetUrl) => {
   };
 };
 
+const isHandledBridgeResponse = (value) => {
+  if (value === true) return true;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return ['ok', 'opened', 'handled', 'success', 'true'].includes(normalized);
+  }
+
+  if (value && typeof value === 'object') {
+    if (value.handled === true) return true;
+    if (value.success === true) return true;
+    if (value.opened === true) return true;
+    if (value.status && ['ok', 'opened', 'handled', 'success'].includes(String(value.status).trim().toLowerCase())) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const recordCheckoutDiagnostic = (detail = {}) => {
   const payload = {
     ...detail,
@@ -221,10 +240,9 @@ export const openExternalCheckout = async (url) => {
         try {
           const handled = await withTimeout(flutterHandler.call(flutterBridge, ...attempt.args));
           recordCheckoutDiagnostic({ status: 'handler-response', handlerName, handled, mode: attempt.mode });
-          if (handled === false) {
-            continue;
+          if (isHandledBridgeResponse(handled)) {
+            return true;
           }
-          return true;
         } catch (error) {
           recordCheckoutDiagnostic({
             status: 'handler-failed',
