@@ -11,6 +11,25 @@ const isAndroidWebView = () => {
   return /; wv\)/i.test(userAgent) || /Version\/[\d.]+.*Chrome\/[\d.]+.*Mobile Safari/i.test(userAgent);
 };
 
+const isIosWebView = () => {
+  const userAgent = String(globalThis.navigator?.userAgent || '');
+  return /iPhone|iPad|iPod/i.test(userAgent) && /AppleWebKit/i.test(userAgent) && !/Safari/i.test(userAgent);
+};
+
+const buildCheckoutPayload = (targetUrl) => {
+  const androidWebView = isAndroidWebView();
+  const iosWebView = isIosWebView();
+
+  return {
+    type: 'openExternalUrl',
+    action: 'phonepe_checkout',
+    url: targetUrl,
+    platform: androidWebView ? 'android' : iosWebView ? 'ios' : 'web',
+    runtime: androidWebView ? 'android-webview' : iosWebView ? 'ios-webview' : 'browser',
+    timestamp: Date.now(),
+  };
+};
+
 const recordCheckoutDiagnostic = (detail = {}) => {
   const payload = {
     ...detail,
@@ -30,26 +49,42 @@ const recordCheckoutDiagnostic = (detail = {}) => {
     // Ignore dispatch failures when CustomEvent support is unavailable.
   }
 
-  console.info('[external-checkout]', payload);
+  console.info('[external-checkout]', JSON.stringify(payload));
 };
 
-const postToJavascriptChannel = (targetUrl) => {
+const postToJavascriptChannel = (targetUrl, checkoutPayload) => {
   const channelNames = ['openExternalUrl', 'openExternalCheckout', 'ExternalNavigation', 'AppBridge'];
 
   for (const channelName of channelNames) {
     const channel = globalThis?.[channelName];
 
     if (typeof channel?.postMessage === 'function') {
-      channel.postMessage(targetUrl);
-      recordCheckoutDiagnostic({ status: 'channel-posted', channelName });
-      return true;
+      const attempts = [
+        { value: JSON.stringify(checkoutPayload), mode: 'json-string' },
+        { value: targetUrl, mode: 'plain-url' },
+      ];
+
+      for (const attempt of attempts) {
+        try {
+          channel.postMessage(attempt.value);
+          recordCheckoutDiagnostic({ status: 'channel-posted', channelName, mode: attempt.mode });
+          return true;
+        } catch (error) {
+          recordCheckoutDiagnostic({
+            status: 'channel-post-failed',
+            channelName,
+            mode: attempt.mode,
+            message: error?.message || String(error),
+          });
+        }
+      }
     }
   }
 
   return false;
 };
 
-const callNativeInterface = (targetUrl) => {
+const callNativeInterface = (targetUrl, checkoutPayload) => {
   const bridgeNames = ['Android', 'NativeBridge', 'FlutterBridge', 'AppBridge'];
   const methodNames = ['openExternalUrl', 'openExternalCheckout', 'openUrl'];
 
@@ -59,19 +94,51 @@ const callNativeInterface = (targetUrl) => {
 
     for (const methodName of methodNames) {
       if (typeof bridge?.[methodName] === 'function') {
-        bridge[methodName](targetUrl);
-        recordCheckoutDiagnostic({ status: 'native-interface-called', bridgeName, methodName });
-        return true;
+        const attempts = [
+          { args: [JSON.stringify(checkoutPayload)], mode: 'json-string' },
+          { args: [checkoutPayload], mode: 'object' },
+          { args: [targetUrl], mode: 'plain-url' },
+        ];
+
+        for (const attempt of attempts) {
+          try {
+            bridge[methodName](...attempt.args);
+            recordCheckoutDiagnostic({
+              status: 'native-interface-called',
+              bridgeName,
+              methodName,
+              mode: attempt.mode,
+            });
+            return true;
+          } catch (error) {
+            recordCheckoutDiagnostic({
+              status: 'native-interface-failed',
+              bridgeName,
+              methodName,
+              mode: attempt.mode,
+              message: error?.message || String(error),
+            });
+          }
+        }
       }
     }
   }
 
   if (typeof globalThis?.ReactNativeWebView?.postMessage === 'function') {
-    globalThis.ReactNativeWebView.postMessage(JSON.stringify({
-      type: 'openExternalUrl',
-      url: targetUrl,
-    }));
+    globalThis.ReactNativeWebView.postMessage(JSON.stringify(checkoutPayload));
     recordCheckoutDiagnostic({ status: 'react-native-posted' });
+    return true;
+  }
+
+  if (typeof globalThis?.webkit?.messageHandlers?.openExternalUrl?.postMessage === 'function') {
+    globalThis.webkit.messageHandlers.openExternalUrl.postMessage(checkoutPayload);
+    recordCheckoutDiagnostic({ status: 'webkit-posted', handlerName: 'openExternalUrl' });
+    return true;
+  }
+
+  if (typeof globalThis?.webkit?.messageHandlers?.openExternalCheckout?.postMessage === 'function') {
+    globalThis.webkit.messageHandlers.openExternalCheckout.postMessage(checkoutPayload);
+    recordCheckoutDiagnostic({ status: 'webkit-posted', handlerName: 'openExternalCheckout' });
     return true;
   }
 
@@ -113,6 +180,7 @@ const tryAnchorNavigation = (targetUrl) => {
 
 export const openExternalCheckout = async (url) => {
   const targetUrl = String(url || '').trim();
+  const checkoutPayload = buildCheckoutPayload(targetUrl);
 
   if (!targetUrl) {
     recordCheckoutDiagnostic({ status: 'missing-url' });
@@ -128,6 +196,8 @@ export const openExternalCheckout = async (url) => {
     status: 'starting',
     hasFlutterInAppWebView,
     androidWebView,
+    platform: checkoutPayload.platform,
+    runtime: checkoutPayload.runtime,
     targetHost: (() => {
       try {
         return new URL(targetUrl).host;
@@ -141,25 +211,38 @@ export const openExternalCheckout = async (url) => {
     const handlerNames = ['openExternalUrl', 'openExternalCheckout', 'openUrl'];
 
     for (const handlerName of handlerNames) {
-      try {
-        const handled = await withTimeout(flutterHandler.call(flutterBridge, handlerName, targetUrl));
-        recordCheckoutDiagnostic({ status: 'handler-response', handlerName, handled });
-        if (handled === false) {
-          continue;
+      const attempts = [
+        { args: [handlerName, checkoutPayload], mode: 'object' },
+        { args: [handlerName, JSON.stringify(checkoutPayload)], mode: 'json-string' },
+        { args: [handlerName, targetUrl], mode: 'plain-url' },
+      ];
+
+      for (const attempt of attempts) {
+        try {
+          const handled = await withTimeout(flutterHandler.call(flutterBridge, ...attempt.args));
+          recordCheckoutDiagnostic({ status: 'handler-response', handlerName, handled, mode: attempt.mode });
+          if (handled === false) {
+            continue;
+          }
+          return true;
+        } catch (error) {
+          recordCheckoutDiagnostic({
+            status: 'handler-failed',
+            handlerName,
+            mode: attempt.mode,
+            message: error?.message || String(error),
+          });
+          // Try the next supported APK bridge signature or handler name.
         }
-        return true;
-      } catch (error) {
-        recordCheckoutDiagnostic({ status: 'handler-failed', handlerName, message: error?.message || String(error) });
-        // Try the next supported APK bridge handler name.
       }
     }
   }
 
-  if (callNativeInterface(targetUrl)) {
+  if (callNativeInterface(targetUrl, checkoutPayload)) {
     return true;
   }
 
-  if (postToJavascriptChannel(targetUrl)) {
+  if (postToJavascriptChannel(targetUrl, checkoutPayload)) {
     return true;
   }
 
