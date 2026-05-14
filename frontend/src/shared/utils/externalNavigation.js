@@ -11,21 +11,35 @@ const isAndroidWebView = () => {
   return /; wv\)/i.test(userAgent) || /Version\/[\d.]+.*Chrome\/[\d.]+.*Mobile Safari/i.test(userAgent);
 };
 
+const isAndroid = () => /Android/i.test(String(globalThis.navigator?.userAgent || ''));
+
+const isIos = () => /iPhone|iPad|iPod/i.test(String(globalThis.navigator?.userAgent || ''));
+
 const isIosWebView = () => {
   const userAgent = String(globalThis.navigator?.userAgent || '');
   return /iPhone|iPad|iPod/i.test(userAgent) && /AppleWebKit/i.test(userAgent) && !/Safari/i.test(userAgent);
 };
 
+const isMobileBrowser = () => (isAndroid() || isIos()) && !isAndroidWebView() && !isIosWebView();
+
 const buildCheckoutPayload = (targetUrl) => {
   const androidWebView = isAndroidWebView();
   const iosWebView = isIosWebView();
+  const android = isAndroid();
+  const ios = isIos();
 
   return {
     type: 'openExternalUrl',
     action: 'phonepe_checkout',
     url: targetUrl,
-    platform: androidWebView ? 'android' : iosWebView ? 'ios' : 'web',
-    runtime: androidWebView ? 'android-webview' : iosWebView ? 'ios-webview' : 'browser',
+    platform: android || androidWebView ? 'android' : ios || iosWebView ? 'ios' : 'web',
+    runtime: androidWebView
+      ? 'android-webview'
+      : iosWebView
+        ? 'ios-webview'
+        : isMobileBrowser()
+          ? 'mobile-browser'
+          : 'browser',
     timestamp: Date.now(),
   };
 };
@@ -170,6 +184,67 @@ const redirectInCurrentWindow = (targetUrl, status = 'browser-redirect') => {
   return true;
 };
 
+const openUsingWindowOpen = (targetUrl, status = 'window-open') => {
+  try {
+    const popup = globalThis.open?.(targetUrl, '_blank', 'noopener,noreferrer');
+    if (popup) {
+      recordCheckoutDiagnostic({ status, mode: 'window-open' });
+      return true;
+    }
+  } catch (error) {
+    recordCheckoutDiagnostic({
+      status: `${status}-failed`,
+      mode: 'window-open',
+      message: error?.message || String(error),
+    });
+  }
+
+  return false;
+};
+
+const openUsingAnchor = (targetUrl, status = 'anchor-open') => {
+  try {
+    const anchor = globalThis.document?.createElement?.('a');
+    if (!anchor) return false;
+
+    anchor.href = targetUrl;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    anchor.style.display = 'none';
+    globalThis.document.body?.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    recordCheckoutDiagnostic({ status, mode: 'anchor-click' });
+    return true;
+  } catch (error) {
+    recordCheckoutDiagnostic({
+      status: `${status}-failed`,
+      mode: 'anchor-click',
+      message: error?.message || String(error),
+    });
+  }
+
+  return false;
+};
+
+const redirectTopWindow = (targetUrl, status = 'top-window-redirect') => {
+  try {
+    if (globalThis.top && globalThis.top !== globalThis && globalThis.top.location) {
+      globalThis.top.location.href = targetUrl;
+      recordCheckoutDiagnostic({ status, mode: 'top-location' });
+      return true;
+    }
+  } catch (error) {
+    recordCheckoutDiagnostic({
+      status: `${status}-failed`,
+      mode: 'top-location',
+      message: error?.message || String(error),
+    });
+  }
+
+  return false;
+};
+
 const failInWebView = (reason, extra = {}) => {
   recordCheckoutDiagnostic({
     status: reason,
@@ -192,11 +267,15 @@ export const openExternalCheckout = async (url) => {
   const flutterHandler = flutterBridge?.callHandler;
   const hasFlutterInAppWebView = Boolean(globalThis?.flutter_inappwebview);
   const androidWebView = isAndroidWebView();
+  const iosWebView = isIosWebView();
+  const mobileBrowser = isMobileBrowser();
 
   recordCheckoutDiagnostic({
     status: 'starting',
     hasFlutterInAppWebView,
     androidWebView,
+    iosWebView,
+    mobileBrowser,
     platform: checkoutPayload.platform,
     runtime: checkoutPayload.runtime,
     targetHost: (() => {
@@ -246,11 +325,31 @@ export const openExternalCheckout = async (url) => {
     return true;
   }
 
-  if (hasFlutterInAppWebView || androidWebView) {
+  if (mobileBrowser) {
+    return openUsingWindowOpen(targetUrl, 'mobile-browser-window-open')
+      || openUsingAnchor(targetUrl, 'mobile-browser-anchor-open')
+      || redirectInCurrentWindow(targetUrl, 'mobile-browser-redirect');
+  }
+
+  if (hasFlutterInAppWebView || androidWebView || iosWebView) {
+    if (openUsingWindowOpen(targetUrl, 'webview-window-open')) {
+      return true;
+    }
+
+    if (openUsingAnchor(targetUrl, 'webview-anchor-open')) {
+      return true;
+    }
+
+    if (redirectTopWindow(targetUrl, 'webview-top-window-redirect')) {
+      return true;
+    }
+
     return failInWebView('webview-external-bridge-required', {
       message: 'External checkout bridge did not open PhonePe outside the WebView',
     });
   }
 
-  return redirectInCurrentWindow(targetUrl);
+  return openUsingWindowOpen(targetUrl, 'desktop-window-open')
+    || openUsingAnchor(targetUrl, 'desktop-anchor-open')
+    || redirectInCurrentWindow(targetUrl);
 };
