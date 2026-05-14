@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import mongoose from "mongoose";
 import QRCode from "qrcode";
+import { Env, StandardCheckoutClient, StandardCheckoutPayRequest } from "@phonepe-pg/pg-sdk-node";
 import { env } from "../../../../config/env.js";
 import { ApiError } from "../../../../utils/ApiError.js";
 import { normalizePoint, toPoint } from "../../../../utils/geo.js";
@@ -4919,6 +4920,32 @@ const getPhonePeAuthUrl = (environment = "test") =>
     : "https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token";
 
 const phonePeAccessTokenCache = new Map();
+const phonePeClientCache = new Map();
+
+const getPhonePeCheckoutClient = ({
+  clientId,
+  clientSecret,
+  clientVersion,
+  environment,
+}) => {
+  const normalizedEnvironment = String(environment || "test").trim().toLowerCase();
+  const normalizedVersion = Number.parseInt(String(clientVersion || "1"), 10) || 1;
+  const cacheKey = `${normalizedEnvironment}::${clientId}::${normalizedVersion}`;
+
+  if (phonePeClientCache.has(cacheKey)) {
+    return phonePeClientCache.get(cacheKey);
+  }
+
+  const client = StandardCheckoutClient.getInstance(
+    clientId,
+    clientSecret,
+    normalizedVersion,
+    normalizedEnvironment === "production" ? Env.PRODUCTION : Env.SANDBOX,
+  );
+
+  phonePeClientCache.set(cacheKey, client);
+  return client;
+};
 
 const getPhonePeAccessToken = async ({
   clientId,
@@ -5016,24 +5043,61 @@ const phonePeRequest = async ({
     ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
     request: summarizePhonePeRequestBody(body || {}),
   });
-  const accessToken = await getPhonePeAccessToken({
+  const client = getPhonePeCheckoutClient({
     clientId,
     clientSecret,
     clientVersion,
     environment,
   });
-  const response = await fetch(`${getPhonePeApiBaseUrl(environment)}${path}`, {
-    method: normalizedMethod,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `O-Bearer ${accessToken}`,
-      accept: "application/json",
-    },
-    body: body && normalizedMethod !== "GET" ? JSON.stringify(body) : undefined,
-  });
 
-  const payload = await response.json().catch(() => null);
-  if (!response.ok || payload?.success === false) {
+  try {
+    let payload = null;
+
+    if (normalizedMethod === "POST" && path === "/checkout/v2/pay") {
+      const merchantOrderId = String(body?.merchantOrderId || "").trim();
+      const amount = Number(body?.amount || 0);
+      const redirectUrl = String(body?.paymentFlow?.merchantUrls?.redirectUrl || "").trim();
+
+      if (!merchantOrderId || !amount || !redirectUrl) {
+        throw new ApiError(400, "PhonePe merchant order id, amount, and redirect URL are required");
+      }
+
+      const request = StandardCheckoutPayRequest.builder()
+        .merchantOrderId(merchantOrderId)
+        .amount(amount)
+        .redirectUrl(redirectUrl)
+        .build();
+
+      payload = await client.pay(request);
+    } else if (normalizedMethod === "GET" && path.includes("/checkout/v2/order/")) {
+      const orderMatch = path.match(/\/checkout\/v2\/order\/([^/]+)\/status/i);
+      const merchantOrderId = decodeURIComponent(orderMatch?.[1] || "").trim();
+
+      if (!merchantOrderId) {
+        throw new ApiError(400, "PhonePe merchant order id is required");
+      }
+
+      payload = await client.getOrderStatus(merchantOrderId);
+    } else {
+      throw new ApiError(400, `Unsupported PhonePe operation: ${normalizedMethod} ${path}`);
+    }
+
+    logPaymentDiagnostic({
+      provider: "phonepe",
+      scope: "driver",
+      stage: "api-success",
+      method: normalizedMethod,
+      path,
+      statusCode: 200,
+      ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+      response: summarizePhonePePayload(payload || {}),
+    });
+
+    return payload;
+  } catch (error) {
+    const payload = error?.response || error?.payload || error?.data || null;
+    const statusCode = Number(error?.statusCode || error?.status || 502);
+
     logPaymentDiagnostic({
       provider: "phonepe",
       scope: "driver",
@@ -5041,28 +5105,21 @@ const phonePeRequest = async ({
       level: "error",
       method: normalizedMethod,
       path,
-      statusCode: response.status || 502,
+      statusCode,
       ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
       response: summarizePhonePePayload(payload || {}),
+      providerMessage:
+        error?.message ||
+        payload?.message ||
+        payload?.responseCodeDescription ||
+        payload?.detailedErrorCode ||
+        "",
     });
     throw new ApiError(
-      response.status || 502,
-      payload?.message || payload?.code || "PhonePe request failed",
+      statusCode,
+      error?.message || payload?.message || payload?.code || "PhonePe request failed",
     );
   }
-
-  logPaymentDiagnostic({
-    provider: "phonepe",
-    scope: "driver",
-    stage: "api-success",
-    method: normalizedMethod,
-    path,
-    statusCode: response.status || 200,
-    ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
-    response: summarizePhonePePayload(payload || {}),
-  });
-
-  return payload;
 };
 
 const fetchRazorpay = async ({ method, path, body, keyId, keySecret }) => {
