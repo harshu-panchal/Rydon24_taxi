@@ -18,6 +18,13 @@ import api from '../../../shared/api/axiosInstance';
 import { socketService } from '../../../shared/api/socket';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import { openExternalCheckout } from '../../../shared/utils/externalNavigation';
+import {
+    clearPendingPhonePeRedirect,
+    rememberPendingPhonePeRedirect,
+    resolvePendingPhonePeTransaction,
+} from '../../../shared/utils/phonePeResume';
+
+const PHONEPE_DRIVER_WALLET_FLOW_KEY = 'driver-wallet-topup';
 
 const emptyWallet = {
     balance: 0,
@@ -308,7 +315,7 @@ const DriverWallet = () => {
     const canTopUpWallet = supportsWalletTopUp && ['razorpay_checkout', 'phonepe_redirect'].includes(walletTopUpMode);
 
     useEffect(() => {
-        const merchantTransactionId = new URLSearchParams(window.location.search).get('phonepe_txn');
+        const merchantTransactionId = resolvePendingPhonePeTransaction(PHONEPE_DRIVER_WALLET_FLOW_KEY);
         if (!merchantTransactionId || walletTopUpMode !== 'phonepe_redirect') {
             return;
         }
@@ -331,6 +338,7 @@ const DriverWallet = () => {
 
                 const data = response?.data || response || {};
                 if (data.status === 'paid') {
+                    clearPendingPhonePeRedirect(PHONEPE_DRIVER_WALLET_FLOW_KEY);
                     if (data.wallet) setWallet(data.wallet);
                     if (data.transaction) {
                         setTransactions((previous) => [
@@ -347,6 +355,7 @@ const DriverWallet = () => {
                 } else if (data.status === 'pending') {
                     setError('PhonePe payment is still pending. Please refresh in a few seconds.');
                 } else if (data.status === 'failed') {
+                    clearPendingPhonePeRedirect(PHONEPE_DRIVER_WALLET_FLOW_KEY);
                     setError(response?.message || 'PhonePe payment was not completed.');
                 }
             } catch (requestError) {
@@ -423,6 +432,10 @@ const DriverWallet = () => {
                     throw new Error('Could not initiate PhonePe payment. Please try again.');
                 }
 
+                rememberPendingPhonePeRedirect(PHONEPE_DRIVER_WALLET_FLOW_KEY, {
+                    merchantTransactionId: session.merchantTransactionId,
+                    checkoutUrl: session.checkoutUrl,
+                });
                 await openExternalCheckout(session.checkoutUrl);
                 setProcessingTopUp(false);
                 return;

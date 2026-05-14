@@ -1,11 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { ArrowLeft, ChevronRight, ShieldCheck, CreditCard, Wallet, Smartphone } from 'lucide-react';
 import { userService } from '../../services/userService';
 import { userAuthService } from '../../services/authService';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 import { openExternalCheckout } from '../../../../shared/utils/externalNavigation';
+import {
+  clearPendingPhonePeRedirect,
+  rememberPendingPhonePeRedirect,
+  resolvePendingPhonePeTransaction,
+} from '../../../../shared/utils/phonePeResume';
 
 const PAYMENT_METHODS = [
   { id: 'upi', label: 'UPI', icon: Smartphone },
@@ -14,6 +18,7 @@ const PAYMENT_METHODS = [
 ];
 
 const RENTAL_DEPOSIT_STATE_KEY = 'taxi:rental-deposit-pending';
+const PHONEPE_RENTAL_FLOW_KEY = 'user-rental-advance';
 
 const loadRazorpayScript = () =>
   new Promise((resolve) => {
@@ -131,7 +136,7 @@ const RentalDeposit = () => {
   }, [state.vehicle?.id]);
 
   const { totalCost, selectedPackage, serviceLocation } = state;
-  const vehicle = vehicleSnapshot || {};
+  const vehicle = useMemo(() => vehicleSnapshot || {}, [vehicleSnapshot]);
   const advancePayment = vehicle.advancePayment || {};
   const payableNow = useMemo(
     () => (advancePayment.enabled ? Number(advancePayment.amount || 0) : 0),
@@ -150,6 +155,30 @@ const RentalDeposit = () => {
   const supportsRentalAdvance = activePaymentGateway?.supportsRentalAdvance === true;
   const rentalAdvanceMode = activePaymentGateway?.rentalAdvanceMode || '';
   const isPhonePeRentalFlow = method !== 'wallet' && rentalAdvanceMode === 'phonepe_redirect';
+
+  const submitBookingRequest = React.useCallback(async ({
+    paymentStatus,
+    paymentMethod,
+    paymentMethodLabel,
+    payment,
+    bookingReference,
+  }) => {
+    const response = await userService.createRentalBookingRequest(
+      buildRentalBookingPayload({
+        state,
+        vehicle,
+        payableNow,
+        advancePaymentLabel,
+        paymentStatus,
+        paymentMethod,
+        paymentMethodLabel,
+        payment,
+        bookingReference,
+      }),
+    );
+
+    return response?.data || response || {};
+  }, [advancePaymentLabel, payableNow, state, vehicle]);
 
   useEffect(() => {
     if (!state || Object.keys(state).length === 0) {
@@ -193,7 +222,7 @@ const RentalDeposit = () => {
   }, []);
 
   useEffect(() => {
-    const merchantTransactionId = new URLSearchParams(window.location.search).get('phonepe_txn');
+    const merchantTransactionId = resolvePendingPhonePeTransaction(PHONEPE_RENTAL_FLOW_KEY);
     if (!merchantTransactionId || rentalAdvanceMode !== 'phonepe_redirect') {
       return;
     }
@@ -216,6 +245,7 @@ const RentalDeposit = () => {
 
         const payment = verifyResponse?.data || {};
         if (payment.status === 'paid') {
+          clearPendingPhonePeRedirect(PHONEPE_RENTAL_FLOW_KEY);
           const methodLabel = PAYMENT_METHODS.find((item) => item.id === method)?.label || activePaymentGateway?.label || 'Online';
           const bookingRequest = await submitBookingRequest({
             paymentStatus: 'paid',
@@ -246,6 +276,7 @@ const RentalDeposit = () => {
         if (payment.status === 'pending') {
           setPaymentError('PhonePe payment is still pending. Please refresh in a few seconds.');
         } else {
+          clearPendingPhonePeRedirect(PHONEPE_RENTAL_FLOW_KEY);
           setPaymentError(verifyResponse?.message || 'PhonePe payment was not completed.');
         }
       } catch (error) {
@@ -273,6 +304,7 @@ const RentalDeposit = () => {
     payableNow,
     rentalAdvanceMode,
     state,
+    submitBookingRequest,
     vehicle,
   ]);
 
@@ -280,30 +312,6 @@ const RentalDeposit = () => {
     navigate('/rental');
     return null;
   }
-
-  const submitBookingRequest = async ({
-    paymentStatus,
-    paymentMethod,
-    paymentMethodLabel,
-    payment,
-    bookingReference,
-  }) => {
-    const response = await userService.createRentalBookingRequest(
-      buildRentalBookingPayload({
-        state,
-        vehicle,
-        payableNow,
-        advancePaymentLabel,
-        paymentStatus,
-        paymentMethod,
-        paymentMethodLabel,
-        payment,
-        bookingReference,
-      }),
-    );
-
-    return response?.data || response || {};
-  };
 
   const handlePay = async () => {
     if (paying) return;
@@ -408,6 +416,11 @@ const RentalDeposit = () => {
           throw new Error('Unable to start PhonePe payment');
         }
 
+        rememberPendingPhonePeRedirect(PHONEPE_RENTAL_FLOW_KEY, {
+          merchantTransactionId: session.merchantTransactionId,
+          bookingReference: session.bookingReference || bookingReference,
+          checkoutUrl: session.checkoutUrl,
+        });
         await openExternalCheckout(session.checkoutUrl);
         setPaying(false);
         return;
@@ -602,7 +615,7 @@ const RentalDeposit = () => {
             Payment Method
           </p>
           <div className="grid grid-cols-3 gap-2">
-            {PAYMENT_METHODS.map(({ id, label, icon: Icon }) => (
+            {PAYMENT_METHODS.map(({ id, label, icon }) => (
               <button
                 key={id}
                 onClick={() => setMethod(id)}
@@ -612,7 +625,11 @@ const RentalDeposit = () => {
                     : 'border-slate-100 bg-slate-50'
                 }`}
               >
-                <Icon size={18} className={method === id ? 'text-orange-500' : 'text-slate-400'} strokeWidth={2} />
+                {React.createElement(icon, {
+                  size: 18,
+                  className: method === id ? 'text-orange-500' : 'text-slate-400',
+                  strokeWidth: 2,
+                })}
                 <span className={`text-[11px] font-black ${method === id ? 'text-slate-900' : 'text-slate-400'}`}>
                   {label}
                 </span>

@@ -5,6 +5,13 @@ import { ArrowLeft, Plus, History, Gift } from 'lucide-react';
 import { userAuthService } from '../services/authService';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import { openExternalCheckout } from '../../../shared/utils/externalNavigation';
+import {
+  clearPendingPhonePeRedirect,
+  rememberPendingPhonePeRedirect,
+  resolvePendingPhonePeTransaction,
+} from '../../../shared/utils/phonePeResume';
+
+const PHONEPE_USER_WALLET_FLOW_KEY = 'user-wallet-topup';
 
 const Wallet = () => {
   const navigate = useNavigate();
@@ -69,7 +76,7 @@ const Wallet = () => {
   }, []);
 
   useEffect(() => {
-    const merchantTransactionId = new URLSearchParams(window.location.search).get('phonepe_txn');
+    const merchantTransactionId = resolvePendingPhonePeTransaction(PHONEPE_USER_WALLET_FLOW_KEY);
     if (!merchantTransactionId || walletTopUpMode !== 'phonepe_redirect') {
       return;
     }
@@ -92,6 +99,7 @@ const Wallet = () => {
 
         const data = response?.data || {};
         if (data.status === 'paid' && data.wallet) {
+          clearPendingPhonePeRedirect(PHONEPE_USER_WALLET_FLOW_KEY);
           setWallet({
             balance: Number(data.wallet.balance || 0),
             currency: data.wallet.currency || 'INR',
@@ -106,6 +114,7 @@ const Wallet = () => {
         } else if (data.status === 'pending') {
           setWalletError('PhonePe payment is still pending. Please refresh in a few seconds.');
         } else if (data.status === 'failed') {
+          clearPendingPhonePeRedirect(PHONEPE_USER_WALLET_FLOW_KEY);
           setWalletError(response?.message || 'PhonePe payment was not completed.');
         }
       } catch (err) {
@@ -166,6 +175,10 @@ const Wallet = () => {
           throw new Error('Unable to start PhonePe payment');
         }
 
+        rememberPendingPhonePeRedirect(PHONEPE_USER_WALLET_FLOW_KEY, {
+          merchantTransactionId: session.merchantTransactionId,
+          checkoutUrl: session.checkoutUrl,
+        });
         await openExternalCheckout(session.checkoutUrl);
         setIsAdding(false);
         return;
