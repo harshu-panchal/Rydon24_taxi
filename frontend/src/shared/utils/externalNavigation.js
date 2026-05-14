@@ -276,8 +276,43 @@ export const openExternalCheckout = async (url) => {
     })(),
   });
 
-  // Match the quickcomephone project pattern: hand the hosted checkout URL
-  // directly to the current browser/webview instead of layering custom bridge
-  // logic on top of PhonePe's own redirect flow.
+  // In a WebView environment, try to hand the URL to the native app layer
+  // via JavaScript bridges/channels first. This allows the Flutter/native
+  // WebView to open the checkout URL externally (Chrome Custom Tab, external
+  // browser, etc.) where UPI intents (Google Pay, Paytm, PhonePe UPI) can
+  // launch correctly. WebViews cannot handle UPI deep-link intents on their
+  // own, so UPI payment options won't appear if we just navigate in-place.
+  if (isAndroidWebView() || isIosWebView()) {
+    recordCheckoutDiagnostic({ status: 'webview-detected', runtime: checkoutPayload.runtime });
+
+    // 1. Try Flutter/native JavaScript channels (postMessage)
+    const channelPosted = postToJavascriptChannel(targetUrl, checkoutPayload);
+    if (channelPosted) {
+      return true;
+    }
+
+    // 2. Try native bridge interfaces (Android.openExternalUrl, etc.)
+    const nativeCalled = callNativeInterface(targetUrl, checkoutPayload);
+    if (nativeCalled) {
+      return true;
+    }
+
+    // 3. Try window.open to break out of the WebView
+    const windowOpened = openUsingWindowOpen(targetUrl, 'webview-window-open');
+    if (windowOpened) {
+      return true;
+    }
+
+    // 4. Try anchor-based open as a last external attempt
+    const anchorOpened = openUsingAnchor(targetUrl, 'webview-anchor-open');
+    if (anchorOpened) {
+      return true;
+    }
+
+    recordCheckoutDiagnostic({ status: 'webview-bridge-unavailable' });
+  }
+
+  // For regular browsers, or as a final fallback when no bridge is available,
+  // redirect the current window to the hosted checkout URL directly.
   return redirectInCurrentWindow(targetUrl, 'hosted-checkout-redirect');
 };
