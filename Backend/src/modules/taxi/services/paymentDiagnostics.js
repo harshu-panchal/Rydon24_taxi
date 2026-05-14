@@ -72,6 +72,7 @@ export const summarizePhonePePayload = (payload = {}) => {
     success: payload?.success,
     code: payload?.code || latestPayment?.responseCode || '',
     state: payload?.state || latestPayment?.state || '',
+    message: payload?.message || latestPayment?.responseCodeDescription || latestPayment?.detailedErrorCode || '',
     amount: payload?.amount || latestPayment?.amount || '',
     merchantOrderId: payload?.merchantOrderId || payload?.orderId || '',
     transactionId: latestPayment?.transactionId || latestPayment?.paymentTransactionId || '',

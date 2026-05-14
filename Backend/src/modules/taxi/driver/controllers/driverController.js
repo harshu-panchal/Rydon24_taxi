@@ -5208,6 +5208,7 @@ export const createDriverPhonePeWalletTopupOrder = async (req, res) => {
     merchantTransactionId,
     amountPaise: Math.round(amount * 100),
     checkoutUrl: summarizeCheckoutUrl(checkoutUrl),
+    response: summarizePhonePePayload(payload || {}),
   });
 
   res.status(201).json({
@@ -5430,17 +5431,31 @@ export const verifyDriverPhonePeWalletTopup = async (req, res) => {
     paymentState,
     amountRupees: amount,
     code: payload?.code || latestPayment?.responseCode || "",
+    providerMessage:
+      payload?.message ||
+      latestPayment?.responseCodeDescription ||
+      latestPayment?.detailedErrorCode ||
+      "",
+    response: summarizePhonePePayload(payload || {}),
   });
+  const driverProviderCode = payload?.code || latestPayment?.responseCode || "";
+  const driverProviderMessage =
+    payload?.message ||
+    latestPayment?.responseCodeDescription ||
+    latestPayment?.detailedErrorCode ||
+    "PhonePe payment was not completed";
   res.json({
     success: true,
     data: {
-        status: "failed",
-        gateway: "phonepe",
-        merchantTransactionId,
-        transactionId: paymentId,
-        code: payload?.code || latestPayment?.responseCode || "",
-      },
-    message: payload?.message || "PhonePe payment was not completed",
+      status: "failed",
+      gateway: "phonepe",
+      merchantTransactionId,
+      transactionId: paymentId,
+      code: driverProviderCode,
+      state: paymentState,
+      providerMessage: driverProviderMessage,
+    },
+    message: driverProviderMessage,
   });
 };
 

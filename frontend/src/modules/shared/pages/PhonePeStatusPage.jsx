@@ -37,6 +37,19 @@ const FLOWS = {
 
 const normalizeResponse = (response) => response?.data || response || {};
 
+const buildPhonePeFailureMessage = (payload = {}) => {
+  const data = payload?.data || {};
+  const providerMessage = String(
+    data.providerMessage || payload?.message || 'Transaction Rejected',
+  ).trim();
+  const code = String(data.code || '').trim();
+  const state = String(data.state || '').trim();
+
+  return [providerMessage, code ? `Code: ${code}` : '', state ? `State: ${state}` : '']
+    .filter(Boolean)
+    .join(' | ');
+};
+
 const PhonePeStatusPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -88,7 +101,7 @@ const PhonePeStatusPage = () => {
 
         if (nextStatus === 'failed') {
           setStatus('failure');
-          setError(payload?.message || 'Transaction Rejected');
+          setError(buildPhonePeFailureMessage(payload));
           if (pollInterval.current) window.clearInterval(pollInterval.current);
           return;
         }

@@ -2224,6 +2224,7 @@ export const createPhonePeRentalAdvancePaymentOrder = async (req, res) => {
     bookingReference,
     amountPaise: Math.round(amount * 100),
     checkoutUrl: summarizeCheckoutUrl(checkoutUrl),
+    response: summarizePhonePePayload(payload || {}),
   });
 
   res.status(201).json({
@@ -2309,6 +2310,7 @@ export const createPhonePeWalletTopupOrder = async (req, res) => {
     merchantTransactionId,
     amountPaise: Math.round(amount * 100),
     checkoutUrl: summarizeCheckoutUrl(checkoutUrl),
+    response: summarizePhonePePayload(payload || {}),
   });
 
   res.status(201).json({
@@ -2600,17 +2602,31 @@ export const verifyPhonePeWalletTopup = async (req, res) => {
     paymentState,
     amountRupees: amount,
     code: payload?.code || latestPayment?.responseCode || '',
+    providerMessage:
+      payload?.message ||
+      latestPayment?.responseCodeDescription ||
+      latestPayment?.detailedErrorCode ||
+      '',
+    response: summarizePhonePePayload(payload || {}),
   });
+  const providerCode = payload?.code || latestPayment?.responseCode || '';
+  const providerMessage =
+    payload?.message ||
+    latestPayment?.responseCodeDescription ||
+    latestPayment?.detailedErrorCode ||
+    'PhonePe payment was not completed';
   res.json({
     success: true,
-      data: {
-        status: 'failed',
-        gateway: 'phonepe',
-        merchantTransactionId,
-        transactionId: paymentId,
-        code: payload?.code || latestPayment?.responseCode || '',
-      },
-    message: payload?.message || 'PhonePe payment was not completed',
+    data: {
+      status: 'failed',
+      gateway: 'phonepe',
+      merchantTransactionId,
+      transactionId: paymentId,
+      code: providerCode,
+      state: paymentState,
+      providerMessage,
+    },
+    message: providerMessage,
   });
 };
 
@@ -2771,7 +2787,19 @@ export const verifyPhonePeRentalAdvancePayment = async (req, res) => {
     paymentState,
     amountRupees: amount,
     code: payload?.code || latestPayment?.responseCode || '',
+    providerMessage:
+      payload?.message ||
+      latestPayment?.responseCodeDescription ||
+      latestPayment?.detailedErrorCode ||
+      '',
+    response: summarizePhonePePayload(payload || {}),
   });
+  const rentalProviderCode = payload?.code || latestPayment?.responseCode || '';
+  const rentalProviderMessage =
+    payload?.message ||
+    latestPayment?.responseCodeDescription ||
+    latestPayment?.detailedErrorCode ||
+    'PhonePe payment was not completed';
   res.json({
     success: true,
     data: {
@@ -2781,9 +2809,11 @@ export const verifyPhonePeRentalAdvancePayment = async (req, res) => {
       merchantTransactionId,
       transactionId: paymentId,
       bookingReference,
-      code: payload?.code || latestPayment?.responseCode || '',
+      code: rentalProviderCode,
+      state: paymentState,
+      providerMessage: rentalProviderMessage,
     },
-    message: payload?.message || 'PhonePe payment was not completed',
+    message: rentalProviderMessage,
   });
 };
 
