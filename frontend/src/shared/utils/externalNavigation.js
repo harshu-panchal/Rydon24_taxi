@@ -45,6 +45,35 @@ const postToJavascriptChannel = (targetUrl) => {
   return false;
 };
 
+const callNativeInterface = (targetUrl) => {
+  const bridgeNames = ['Android', 'NativeBridge', 'FlutterBridge', 'AppBridge'];
+  const methodNames = ['openExternalUrl', 'openExternalCheckout', 'openUrl'];
+
+  for (const bridgeName of bridgeNames) {
+    const bridge = globalThis?.[bridgeName];
+    if (!bridge) continue;
+
+    for (const methodName of methodNames) {
+      if (typeof bridge?.[methodName] === 'function') {
+        bridge[methodName](targetUrl);
+        recordCheckoutDiagnostic({ status: 'native-interface-called', bridgeName, methodName });
+        return true;
+      }
+    }
+  }
+
+  if (typeof globalThis?.ReactNativeWebView?.postMessage === 'function') {
+    globalThis.ReactNativeWebView.postMessage(JSON.stringify({
+      type: 'openExternalUrl',
+      url: targetUrl,
+    }));
+    recordCheckoutDiagnostic({ status: 'react-native-posted' });
+    return true;
+  }
+
+  return false;
+};
+
 export const openExternalCheckout = async (url) => {
   const targetUrl = String(url || '').trim();
 
@@ -53,7 +82,8 @@ export const openExternalCheckout = async (url) => {
     return false;
   }
 
-  const flutterHandler = globalThis?.flutter_inappwebview?.callHandler;
+  const flutterBridge = globalThis?.flutter_inappwebview;
+  const flutterHandler = flutterBridge?.callHandler;
   const hasFlutterInAppWebView = Boolean(globalThis?.flutter_inappwebview);
   const androidWebView = isAndroidWebView();
 
@@ -75,7 +105,7 @@ export const openExternalCheckout = async (url) => {
 
     for (const handlerName of handlerNames) {
       try {
-        const handled = await withTimeout(flutterHandler(handlerName, targetUrl));
+        const handled = await withTimeout(flutterHandler.call(flutterBridge, handlerName, targetUrl));
         recordCheckoutDiagnostic({ status: 'handler-response', handlerName, handled });
         if (handled === false) {
           continue;
@@ -86,6 +116,10 @@ export const openExternalCheckout = async (url) => {
         // Try the next supported APK bridge handler name.
       }
     }
+  }
+
+  if (callNativeInterface(targetUrl)) {
+    return true;
   }
 
   if (postToJavascriptChannel(targetUrl)) {
