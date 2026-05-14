@@ -17,6 +17,7 @@ import {
   listOwnerNeededDocuments,
 } from '../../admin/services/adminService.js';
 import { hashPassword, signAccessToken } from './authService.js';
+import { startDriverLoginOtp } from './loginOtpService.js';
 import { findZoneByPickup } from './locationService.js';
 import { sendOtpSms } from '../../services/smsService.js';
 import { WalletTransaction } from '../models/WalletTransaction.js';
@@ -507,12 +508,21 @@ export const startDriverOnboarding = async ({ phone, role = 'driver' }) => {
       : null;
 
   if (existingDriver || existingOwner) {
-    throw new ApiError(
-      409,
-      normalizedRole === 'owner'
-        ? 'Phone number is already registered as an owner'
-        : 'Phone number is already registered',
-    );
+    const loginResult = await startDriverLoginOtp({
+      phone: normalizedPhone,
+      role: normalizedRole,
+    });
+
+    return {
+      ...loginResult,
+      loginMode: true,
+      existingAccount: true,
+      session: {
+        ...(loginResult.session || {}),
+        loginMode: true,
+        existingAccount: true,
+      },
+    };
   }
 
   const { otp, isStatic } = resolveDriverOnboardingOtpForPhone(normalizedPhone);
