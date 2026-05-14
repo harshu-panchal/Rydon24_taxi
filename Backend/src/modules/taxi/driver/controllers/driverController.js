@@ -1474,7 +1474,7 @@ const serializeOwnerProfile = (owner = {}) => ({
     currency: "INR",
   },
   referralCode: "",
-  deletionRequest: { status: "none" },
+  deletionRequest: owner.deletionRequest || { status: "none" },
   isOnline: false,
   isOnRide: false,
   onlineSelfie: {},
@@ -3023,6 +3023,68 @@ export const updateCurrentDriverDocument = async (req, res) => {
 
 export const deleteCurrentDriverAccount = async (req, res) => {
   const driverId = req.auth?.sub;
+  const authRole = String(req.auth?.role || "").toLowerCase();
+  const reason = String(req.body?.reason || "").trim();
+
+  if (authRole === "owner") {
+    const owner = await Owner.findById(driverId);
+
+    if (!owner) {
+      throw new ApiError(404, "Owner not found");
+    }
+
+    if (owner.deletedAt) {
+      res.json({
+        success: true,
+        data: {
+          deleted: true,
+          softDeleted: true,
+          ownerId: String(owner._id),
+        },
+        message: "Owner account already deleted",
+      });
+      return;
+    }
+
+    const deletionReason =
+      reason ||
+      owner.deletionRequest?.reason ||
+      owner.deletion_reason ||
+      "Deleted by account owner";
+    const now = new Date();
+
+    owner.deletedAt = now;
+    owner.deletion_reason = deletionReason.slice(0, 300);
+    owner.active = false;
+    owner.approve = false;
+    owner.status = "inactive";
+    owner.deletionRequest = {
+      ...(owner.deletionRequest || {}),
+      status: "approved",
+      reason: deletionReason.slice(0, 300),
+      requestedAt: owner.deletionRequest?.requestedAt || now,
+      reviewedAt: now,
+      reviewedBy: null,
+      adminNote: "",
+    };
+
+    await owner.save();
+
+    await DriverLoginSession.deleteMany({
+      $or: [{ driverId: owner._id }, { phone: owner.mobile }, { phone: owner.phone }],
+    });
+
+    res.json({
+      success: true,
+      data: {
+        deleted: true,
+        softDeleted: true,
+        ownerId: String(owner._id),
+      },
+      message: "Owner account deleted successfully",
+    });
+    return;
+  }
 
   const activeRide = await Ride.findOne({
     driverId,
@@ -3033,16 +3095,51 @@ export const deleteCurrentDriverAccount = async (req, res) => {
     throw new ApiError(409, "Complete or cancel your active ride before deleting your account");
   }
 
-  const deletedDriver = await Driver.findByIdAndDelete(driverId);
+  const driver = await Driver.findById(driverId);
 
-  if (!deletedDriver) {
+  if (!driver) {
     throw new ApiError(404, "Driver not found");
   }
 
+  if (driver.deletedAt) {
+    res.json({
+      success: true,
+      data: {
+        deleted: true,
+        softDeleted: true,
+        driverId: String(driver._id),
+      },
+      message: "Driver account already deleted",
+    });
+    return;
+  }
+
+  const deletionReason = reason || driver.deletionRequest?.reason || driver.deletion_reason || "Deleted by account owner";
+  const now = new Date();
+
+  driver.deletedAt = now;
+  driver.deletion_reason = deletionReason.slice(0, 300);
+  driver.approve = false;
+  driver.status = "inactive";
+  driver.isOnline = false;
+  driver.isOnRide = false;
+  driver.socketId = null;
+  driver.deletionRequest = {
+    ...(driver.deletionRequest || {}),
+    status: "approved",
+    reason: deletionReason.slice(0, 300),
+    requestedAt: driver.deletionRequest?.requestedAt || now,
+    reviewedAt: now,
+    reviewedBy: null,
+    adminNote: "",
+  };
+
+  await driver.save();
+
   await DriverLoginSession.deleteMany({
     $or: [
-      { driverId: deletedDriver._id },
-      { phone: deletedDriver.phone },
+      { driverId: driver._id },
+      { phone: driver.phone },
     ],
   });
 
@@ -3050,7 +3147,8 @@ export const deleteCurrentDriverAccount = async (req, res) => {
     success: true,
     data: {
       deleted: true,
-      driverId: String(deletedDriver._id),
+      softDeleted: true,
+      driverId: String(driver._id),
     },
     message: "Driver account deleted successfully",
   });

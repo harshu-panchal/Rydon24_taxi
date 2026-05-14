@@ -198,8 +198,8 @@ export const getDriverRideHistory = (params = {}) =>
 
 export const updateDriverProfile = (payload) =>
   api.patch("/drivers/me", payload, withDriverAuth());
-export const deleteCurrentDriverAccount = () =>
-  api.delete("/drivers/me", withDriverAuth());
+export const deleteCurrentDriverAccount = (reason = "") =>
+  api.delete("/drivers/me", withDriverAuth({ data: { reason } }));
 export const requestDriverAccountDeletion = (reason) =>
   api.post("/drivers/me/delete-request", { reason }, withDriverAuth());
 export const getDriverNotifications = (params = {}) =>

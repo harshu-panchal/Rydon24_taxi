@@ -125,7 +125,7 @@ driverRouter.patch(
 );
 driverRouter.delete(
   "/me",
-  authenticate(["driver"]),
+  authenticate(["driver", "owner"]),
   asyncHandler(deleteCurrentDriverAccount),
 );
 driverRouter.post(

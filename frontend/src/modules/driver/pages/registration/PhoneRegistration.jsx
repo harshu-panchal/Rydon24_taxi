@@ -130,10 +130,15 @@ const PhoneRegistration = () => {
                     response = await sendDriverOtp({ phone, role: requestRole });
                     loginMode = false;
                 } catch (requestError) {
-                    if (!isAlreadyRegisteredError(requestError)) throw requestError;
+                    if (isAccountNotFoundError(requestError)) {
+                        response = await sendDriverOtp({ phone, role: requestRole });
+                        loginMode = false;
+                    } else {
+                        if (!isAlreadyRegisteredError(requestError)) throw requestError;
 
-                    response = await sendDriverLoginOtp({ phone, role: requestRole });
-                    loginMode = true;
+                        response = await sendDriverLoginOtp({ phone, role: requestRole });
+                        loginMode = true;
+                    }
                 }
             } else if (shouldUseUnifiedFlow) {
                 try {
@@ -142,7 +147,7 @@ const PhoneRegistration = () => {
                         : await sendDriverOtp({ phone, role: requestRole });
                     loginMode = isLoginPage;
                 } catch (requestError) {
-                    if (isLoginPage) {
+                    if (isLoginPage && requestRole === 'driver') {
                         if (!isAccountNotFoundError(requestError)) throw requestError;
 
                         response = await sendDriverOtp({ phone, role: requestRole });
@@ -159,7 +164,7 @@ const PhoneRegistration = () => {
                     response = isLoginPage ? await sendDriverLoginOtp({ phone, role: requestRole }) : await sendDriverOtp({ phone, role: requestRole });
                     loginMode = isLoginPage;
                 } catch (requestError) {
-                    if (isLoginPage) {
+                    if (isLoginPage && requestRole === 'driver') {
                         if (!isAccountNotFoundError(requestError)) throw requestError;
 
                         response = await sendDriverOtp({ phone, role: requestRole });
