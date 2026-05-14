@@ -93,10 +93,11 @@ const OTPVerification = () => {
     const registrationId = session.registrationId || '';
     const debugOtp = session.debugOtp || '';
     const isLoginFlow = Boolean(session.loginMode);
+    const entryPath = String(session.entryPath || (isLoginFlow ? `${routePrefix}/login` : `${routePrefix}/reg-phone`));
 
     useEffect(() => {
         if (!phone) {
-            navigate(isLoginFlow ? `${routePrefix}/login` : `${routePrefix}/reg-phone`, { replace: true });
+            navigate(entryPath, { replace: true });
             return undefined;
         }
 
@@ -104,7 +105,7 @@ const OTPVerification = () => {
             setTimer(prev => (prev > 0 ? prev - 1 : 0));
         }, 1000);
         return () => clearInterval(interval);
-    }, [isLoginFlow, navigate, phone, routePrefix]);
+    }, [entryPath, navigate, phone]);
 
     useEffect(() => {
         const scrollOtpIntoView = () => {
@@ -277,7 +278,7 @@ const OTPVerification = () => {
                             variants={itemVariants}
                             whileTap={{ scale: 0.9 }}
                             onClick={() =>
-                                navigate(isLoginFlow ? `${routePrefix}/login` : `${routePrefix}/reg-phone`, {
+                                navigate(entryPath, {
                                     state: session,
                                 })
                             }

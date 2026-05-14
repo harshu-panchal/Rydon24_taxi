@@ -360,7 +360,7 @@ const Profile = () => {
 
       <BottomNavbar />
     </div>
-  );
+  );0
 };
-
+ 
 export default Profile;

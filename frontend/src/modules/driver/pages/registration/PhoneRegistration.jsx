@@ -13,6 +13,16 @@ import {
 import { useSettings } from '../../../../shared/context/SettingsContext';
 import loginBg from '../../../../assets/images/driver-login-bg.png';
 
+const AUTO_FLOW_ROLES = new Set(['driver']);
+const LOGIN_ONLY_ROLES = new Set(['bus_driver', 'service_center', 'service_center_staff']);
+const SHARED_ROLE_OPTIONS = [
+    { id: 'driver', label: 'Driver', Icon: UserRound },
+    { id: 'owner', label: 'Owner', Icon: Briefcase },
+    { id: 'bus_driver', label: 'Bus', Icon: ShieldCheck },
+    { id: 'service_center', label: 'Center', Icon: Building2 },
+    { id: 'service_center_staff', label: 'Staff', Icon: UserRound },
+];
+
 const PhoneRegistration = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -54,20 +64,12 @@ const PhoneRegistration = () => {
     const phoneInputRef = useRef(null);
     const routePrefix = location.pathname.startsWith('/taxi/owner') ? '/taxi/owner' : '/taxi/driver';
     const isLoginPage = location.pathname === `${routePrefix}/login` || location.pathname === `${routePrefix}/login/`;
+    const entryPath = isLoginPage ? `${routePrefix}/login` : `${routePrefix}/reg-phone`;
     const appName = settings.general?.app_name || 'App';
-    
-    const roleOptions = isLoginPage
-        ? [
-            { id: 'driver', label: 'Driver', Icon: UserRound },
-            { id: 'owner', label: 'Owner', Icon: Briefcase },
-            { id: 'bus_driver', label: 'Bus', Icon: ShieldCheck },
-            { id: 'service_center', label: 'Center', Icon: Building2 },
-            { id: 'service_center_staff', label: 'Staff', Icon: UserRound },
-        ]
-        : [
-            { id: 'driver', label: 'Driver', Icon: UserRound },
-            { id: 'owner', label: 'Owner', Icon: Briefcase },
-        ];
+    const shouldUseUnifiedFlow = AUTO_FLOW_ROLES.has(role) && routePrefix === '/taxi/driver';
+    const isLoginOnlyRole = LOGIN_ONLY_ROLES.has(role);
+    const usesLoginPresentation = isLoginPage || isLoginOnlyRole;
+    const roleOptions = SHARED_ROLE_OPTIONS;
     
     const modeConfig = useMemo(() => {
         const isOwner = role === 'owner';
@@ -77,17 +79,17 @@ const PhoneRegistration = () => {
 
         return {
             badge: isOwner ? 'Enterprise' : isBusDriver ? 'Transit' : isServiceCenter ? 'Operations' : isServiceCenterStaff ? 'Team' : 'Partner',
-            title: isLoginPage
+            title: usesLoginPresentation
                 ? `${isOwner ? 'Owner' : isBusDriver ? 'Bus Driver' : isServiceCenter ? 'Service Center' : isServiceCenterStaff ? 'Service Staff' : 'Driver'} Login`
                 : `Join ${appName}`,
-            subtitle: isLoginPage
+            subtitle: usesLoginPresentation
                 ? `Enter your number to access account.`
                 : `Start your journey as a ${isOwner ? 'owner' : isBusDriver ? 'captain' : isServiceCenter ? 'operator' : isServiceCenterStaff ? 'staff' : 'driver'}.`,
             highlight: isOwner ? 'Manage fleet, payouts & drivers.' : isBusDriver ? 'Manage your coach, schedules and seat desk.' : isServiceCenter ? 'Manage your center profile, staff and rental vehicle catalog.' : isServiceCenterStaff ? 'Handle assigned bookings and work queues for your center.' : 'Go online, get trips & earn daily.',
             accentColor: isOwner ? '#1C2833' : isBusDriver ? '#0f3d3e' : isServiceCenter ? '#14342b' : isServiceCenterStaff ? '#1e3a5f' : '#4F46E5',
             Icon: isOwner ? Briefcase : isBusDriver ? ShieldCheck : isServiceCenter ? Building2 : isServiceCenterStaff ? ShieldCheck : UserRound,
         };
-    }, [appName, isLoginPage, role]);
+    }, [appName, role, usesLoginPresentation]);
 
     useEffect(() => {
         saveDriverRegistrationSession({
@@ -95,9 +97,10 @@ const PhoneRegistration = () => {
             role,
             phone,
             loginMode: isLoginPage,
+            entryPath,
             referralCode: sharedReferralCode,
         });
-    }, [isLoginPage, role, phone, sharedReferralCode]);
+    }, [entryPath, isLoginPage, role, phone, sharedReferralCode]);
 
     useEffect(() => {
         const scrollPhoneIntoView = () => {
@@ -134,16 +137,40 @@ const PhoneRegistration = () => {
 
         try {
             clearDriverRegistrationSession();
-            const response = isLoginPage
-                ? await sendDriverLoginOtp({ phone, role })
-                : await sendDriverOtp({ phone, role });
+            let response;
+            let loginMode = isLoginPage;
+
+            if (shouldUseUnifiedFlow) {
+                try {
+                    response = await sendDriverLoginOtp({ phone, role });
+                    loginMode = true;
+                } catch (loginError) {
+                    const status = Number(loginError?.response?.status || 0);
+                    const message = String(loginError?.message || '').toLowerCase();
+                    const isMissingAccount = status === 404 || message.includes('account not found');
+
+                    if (!isMissingAccount) {
+                        throw loginError;
+                    }
+
+                    response = await sendDriverOtp({ phone, role });
+                    loginMode = false;
+                }
+            } else {
+                response = usesLoginPresentation
+                    ? await sendDriverLoginOtp({ phone, role })
+                    : await sendDriverOtp({ phone, role });
+                loginMode = usesLoginPresentation;
+            }
+
             const sessionData = response?.data?.session || response?.session || {};
             const nextState = saveDriverRegistrationSession({
                 phone,
                 role,
                 registrationId: sessionData.registrationId || '',
                 debugOtp: sessionData.debugOtp || '',
-                loginMode: isLoginPage,
+                loginMode,
+                entryPath,
                 referralCode: sharedReferralCode,
             });
 
@@ -215,7 +242,7 @@ const PhoneRegistration = () => {
                             variants={itemVariants}
                             className="rounded-full bg-amber-100 px-4 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-[#B48400] border border-amber-200/50 w-fit"
                         >
-                            {isLoginPage ? 'Secure Access' : 'Partner Program'}
+                            {usesLoginPresentation ? 'Secure Access' : 'Partner Program'}
                         </motion.div>
                     </div>
 
@@ -380,18 +407,16 @@ const PhoneRegistration = () => {
                             <span className="text-[11px] font-black tracking-tight text-slate-900 uppercase opacity-70">{modeConfig.highlight}</span>
                         </div>
 
-                        <motion.button 
+                        <motion.p
                             variants={itemVariants}
-                            whileHover={{ y: -1 }}
-                            onClick={() => navigate(isLoginPage ? `${routePrefix}/reg-phone` : `${routePrefix}/login`)}
-                            className="w-full text-[13px] font-black text-slate-400 transition-all py-1 uppercase tracking-widest"
+                            className="w-full py-1 text-center text-[13px] font-black uppercase tracking-widest text-slate-500"
                         >
-                            {isLoginPage ? (
-                                <>Don't have an account? <span className="text-[#FFB300] border-b-2 border-amber-400/30 pb-0.5">Join Now</span></>
-                            ) : (
-                                <>Already a partner? <span className="text-[#FFB300] border-b-2 border-amber-400/30 pb-0.5">Sign in</span></>
-                            )}
-                        </motion.button>
+                            {shouldUseUnifiedFlow
+                                ? 'New drivers sign up automatically. Existing drivers continue to login.'
+                                : isLoginOnlyRole && !isLoginPage
+                                    ? 'This role uses the same phone login flow from here.'
+                                    : 'Use your phone number to continue.'}
+                        </motion.p>
 
                         <motion.button
                             variants={itemVariants}
