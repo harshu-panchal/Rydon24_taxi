@@ -18,11 +18,7 @@ import api from '../../../shared/api/axiosInstance';
 import { socketService } from '../../../shared/api/socket';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import { openExternalCheckout } from '../../../shared/utils/externalNavigation';
-import {
-    clearPendingPhonePeRedirect,
-    rememberPendingPhonePeRedirect,
-    resolvePendingPhonePeTransaction,
-} from '../../../shared/utils/phonePeResume';
+import { rememberPendingPhonePeRedirect } from '../../../shared/utils/phonePeResume';
 
 const PHONEPE_DRIVER_WALLET_FLOW_KEY = 'driver-wallet-topup';
 
@@ -313,69 +309,6 @@ const DriverWallet = () => {
     const supportsWalletTopUp = activePaymentGateway?.supportsWalletTopUp === true;
     const walletTopUpMode = activePaymentGateway?.walletTopUpMode || '';
     const canTopUpWallet = supportsWalletTopUp && ['razorpay_checkout', 'phonepe_redirect'].includes(walletTopUpMode);
-
-    useEffect(() => {
-        const merchantTransactionId = resolvePendingPhonePeTransaction(PHONEPE_DRIVER_WALLET_FLOW_KEY);
-        if (!merchantTransactionId || walletTopUpMode !== 'phonepe_redirect') {
-            return;
-        }
-
-        let cancelled = false;
-
-        const clearPhonePeQuery = () => {
-            const url = new URL(window.location.href);
-            url.searchParams.delete('phonepe_txn');
-            window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
-        };
-
-        const syncPhonePeTopup = async () => {
-            setError('');
-            setLoading(true);
-
-            try {
-                const response = await api.get(`/drivers/wallet/top-up/phonepe/status/${merchantTransactionId}`);
-                if (cancelled) return;
-
-                const data = response?.data || response || {};
-                if (data.status === 'paid') {
-                    clearPendingPhonePeRedirect(PHONEPE_DRIVER_WALLET_FLOW_KEY);
-                    if (data.wallet) setWallet(data.wallet);
-                    if (data.transaction) {
-                        setTransactions((previous) => [
-                            data.transaction,
-                            ...previous.filter((item) => item._id !== data.transaction._id),
-                        ].slice(0, 50));
-                    }
-                    setTopUpSuccess(true);
-                    setShowTopUp(false);
-                    setTopUpAmount('500');
-                    window.setTimeout(() => {
-                        if (!cancelled) setTopUpSuccess(false);
-                    }, 1800);
-                } else if (data.status === 'pending') {
-                    setError('PhonePe payment is still pending. Please refresh in a few seconds.');
-                } else if (data.status === 'failed') {
-                    clearPendingPhonePeRedirect(PHONEPE_DRIVER_WALLET_FLOW_KEY);
-                    setError(response?.message || 'PhonePe payment was not completed.');
-                }
-            } catch (requestError) {
-                if (!cancelled) {
-                    setError(requestError?.message || 'Could not verify PhonePe payment.');
-                }
-            } finally {
-                if (!cancelled) {
-                    setLoading(false);
-                    clearPhonePeQuery();
-                }
-            }
-        };
-
-        syncPhonePeTopup();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [walletTopUpMode]);
 
     const loadRazorpayScript = useCallback(() =>
         new Promise((resolve) => {

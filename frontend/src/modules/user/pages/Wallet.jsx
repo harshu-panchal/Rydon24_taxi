@@ -5,11 +5,7 @@ import { ArrowLeft, Plus, History, Gift } from 'lucide-react';
 import { userAuthService } from '../services/authService';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import { openExternalCheckout } from '../../../shared/utils/externalNavigation';
-import {
-  clearPendingPhonePeRedirect,
-  rememberPendingPhonePeRedirect,
-  resolvePendingPhonePeTransaction,
-} from '../../../shared/utils/phonePeResume';
+import { rememberPendingPhonePeRedirect } from '../../../shared/utils/phonePeResume';
 
 const PHONEPE_USER_WALLET_FLOW_KEY = 'user-wallet-topup';
 
@@ -74,67 +70,6 @@ const Wallet = () => {
   useEffect(() => {
     refreshWallet();
   }, []);
-
-  useEffect(() => {
-    const merchantTransactionId = resolvePendingPhonePeTransaction(PHONEPE_USER_WALLET_FLOW_KEY);
-    if (!merchantTransactionId || walletTopUpMode !== 'phonepe_redirect') {
-      return;
-    }
-
-    let cancelled = false;
-
-    const clearPhonePeQuery = () => {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('phonepe_txn');
-      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
-    };
-
-    const syncPhonePeTopup = async () => {
-      setWalletError('');
-      setWalletLoading(true);
-
-      try {
-        const response = await userAuthService.verifyPhonePeWalletTopup(merchantTransactionId);
-        if (cancelled) return;
-
-        const data = response?.data || {};
-        if (data.status === 'paid' && data.wallet) {
-          clearPendingPhonePeRedirect(PHONEPE_USER_WALLET_FLOW_KEY);
-          setWallet({
-            balance: Number(data.wallet.balance || 0),
-            currency: data.wallet.currency || 'INR',
-            recentTransactions: Array.isArray(data.wallet.recentTransactions) ? data.wallet.recentTransactions : [],
-          });
-          setIsSuccess(true);
-          setShowAddMoney(false);
-          setAmount('');
-          window.setTimeout(() => {
-            if (!cancelled) setIsSuccess(false);
-          }, 1400);
-        } else if (data.status === 'pending') {
-          setWalletError('PhonePe payment is still pending. Please refresh in a few seconds.');
-        } else if (data.status === 'failed') {
-          clearPendingPhonePeRedirect(PHONEPE_USER_WALLET_FLOW_KEY);
-          setWalletError(response?.message || 'PhonePe payment was not completed.');
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setWalletError(err?.message || 'Could not verify PhonePe payment.');
-        }
-      } finally {
-        if (!cancelled) {
-          setWalletLoading(false);
-          clearPhonePeQuery();
-        }
-      }
-    };
-
-    syncPhonePeTopup();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [walletTopUpMode]);
 
   const loadRazorpayScript = () =>
     new Promise((resolve) => {
