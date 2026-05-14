@@ -5193,7 +5193,7 @@ export const createDriverWalletTopupOrder = async (req, res) => {
 export const createDriverPhonePeWalletTopupOrder = async (req, res) => {
   const settings = await getWalletSettings();
   const minTopUp = Number(settings.minimum_amount_added_to_wallet || 0);
-  const amount = Number(req.body.amount);
+  const amount = Math.round(Number(req.body.amount) * 100) / 100;
 
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new ApiError(400, "Invalid top-up amount");
@@ -5235,8 +5235,8 @@ export const createDriverPhonePeWalletTopupOrder = async (req, res) => {
         },
         message: "Wallet top-up",
       },
-      prefillUserLoginDetails: String(driver?.phone || "").replace(/\D/g, "").slice(-10)
-        ? { phoneNumber: String(driver?.phone || "").replace(/\D/g, "").slice(-10) }
+      prefillUserLoginDetails: normalizePhone(driver?.phone || "")
+        ? { phoneNumber: normalizePhone(driver?.phone || "") }
         : undefined,
     },
     clientId,
@@ -5276,7 +5276,6 @@ export const createDriverPhonePeWalletTopupOrder = async (req, res) => {
       amount: Math.round(amount * 100),
       currency: "INR",
       checkoutUrl,
-      method: "GET",
     },
   });
 };
