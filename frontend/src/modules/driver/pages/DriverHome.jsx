@@ -25,7 +25,6 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { GoogleMap, Marker } from '@react-google-maps/api';
 import toast from 'react-hot-toast';
-import LowBalanceModal from './LowBalanceModal';
 
 
 import MapGrid from '@/assets/premium_grid_map.png';
@@ -576,7 +575,6 @@ const DriverHome = () => {
     const [isOwnerManagedDriver, setIsOwnerManagedDriver] = useState(() => isOwnerManagedDriverProfile(storedDriverInfo));
     const [isOnline, setIsOnline] = useState(false);
     const [showRequest, setShowRequest] = useState(false);
-    const [showLowBalanceModal, setShowLowBalanceModal] = useState(false);
 
     const [currentRequest, setCurrentRequest] = useState(null);
     const [todaySummary, setTodaySummary] = useState(() => normalizeTodaySummary());
@@ -638,6 +636,27 @@ const DriverHome = () => {
         () => getWalletAlertState(walletSummary, { ignoreRestrictions: isOwnerManagedDriver }),
         [walletSummary, isOwnerManagedDriver],
     );
+    const walletNotice = useMemo(() => {
+        if (walletAlertState.isBlocked) {
+            return {
+                title: walletAlertState.belowMinimumBalance ? 'Top up to go online' : 'Cash limit reached',
+                message: walletAlertState.belowMinimumBalance
+                    ? 'Keep your wallet above Rs 0 to receive orders.'
+                    : 'Add money to keep receiving ride requests.',
+                tone: 'danger',
+            };
+        }
+
+        if (walletAlertState.isWarning) {
+            return {
+                title: 'Wallet running low',
+                message: 'Top up soon to keep receiving orders smoothly.',
+                tone: 'warning',
+            };
+        }
+
+        return null;
+    }, [walletAlertState]);
 
     const { isLoaded } = useAppGoogleMapsLoader();
 
@@ -748,12 +767,6 @@ const DriverHome = () => {
             window.clearInterval(interval);
         };
     }, [scheduledRides.length]);
-
-    useEffect(() => {
-        if (isOwnerManagedDriver) {
-            setShowLowBalanceModal(false);
-        }
-    }, [isOwnerManagedDriver]);
 
     useEffect(() => {
         currentRequestRef.current = currentRequest;
@@ -1111,10 +1124,9 @@ const DriverHome = () => {
         }
 
         if (walletAlertState.isBlocked) {
-            setShowLowBalanceModal(true);
             setStatusMessage(
                 walletAlertState.belowMinimumBalance
-                    ? 'Minimum wallet balance is not maintained. Please top up to go online.'
+                    ? 'Wallet balance must be above Rs 0 to go online.'
                     : 'Cash limit exceeded. Please top up your wallet to go online.',
             );
             return;
@@ -1267,10 +1279,9 @@ const DriverHome = () => {
         }
 
         if (walletAlertState.isBlocked) {
-            setShowLowBalanceModal(true);
             setStatusMessage(
                 walletAlertState.belowMinimumBalance
-                    ? 'Minimum wallet balance is not maintained. Please top up to go online.'
+                    ? 'Wallet balance must be above Rs 0 to go online.'
                     : 'Cash limit exceeded. Please top up your wallet to go online.',
             );
             return;
@@ -1699,14 +1710,12 @@ const DriverHome = () => {
                         setShowRequest(false);
                         setCurrentRequest(null);
                         stopRideRequestAlertSound();
-                        setShowLowBalanceModal(true);
                         setStatusMessage(
                             nextWalletAlertState.belowMinimumBalance
-                                ? 'Minimum wallet balance is not maintained. Top up to receive new ride requests.'
+                                ? 'Wallet balance must be above Rs 0 to receive new ride requests.'
                                 : 'Cash limit exceeded. Top up to receive new ride requests.',
                         );
                     } else if (nextWalletAlertState.isWarning) {
-                        setShowLowBalanceModal(true);
                         setStatusMessage('Available cash limit is getting low. Top up soon.');
                     }
                 }
@@ -1912,17 +1921,6 @@ const DriverHome = () => {
                 }
                 onClose={() => setSelectedScheduledRide(null)}
                 onDecline={() => setSelectedScheduledRide(null)}
-            />
-
-            <LowBalanceModal 
-                isOpen={showLowBalanceModal}
-                onClose={() => setShowLowBalanceModal(false)}
-                balance={walletAlertState.balance}
-                cashLimit={walletAlertState.cashLimit}
-                minimumBalance={walletAlertState.minimumBalanceForOrders}
-                isBlocked={walletAlertState.isBlocked}
-                belowMinimumBalance={walletAlertState.belowMinimumBalance}
-                cashLimitExceeded={walletAlertState.cashLimitExceeded}
             />
 
             <AnimatePresence>
@@ -2228,6 +2226,46 @@ const DriverHome = () => {
                     </div>
                 </div>
             </div>
+
+            {walletNotice ? (
+                <div className="fixed left-4 right-4 top-[6.5rem] z-40 mx-auto max-w-md pointer-events-auto">
+                    <div className={`flex items-center gap-3 rounded-[1.35rem] border bg-white/95 px-3.5 py-3 shadow-[0_16px_36px_rgba(15,23,42,0.14)] backdrop-blur-md ${
+                        walletNotice.tone === 'danger' ? 'border-rose-100' : 'border-amber-100'
+                    }`}>
+                        <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl ${
+                            walletNotice.tone === 'danger'
+                                ? 'bg-rose-50 text-rose-600'
+                                : 'bg-amber-50 text-amber-600'
+                        }`}>
+                            <Wallet size={18} strokeWidth={2.6} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                                <p className="truncate text-sm font-black tracking-tight text-slate-950">
+                                    {walletNotice.title}
+                                </p>
+                                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${
+                                    walletNotice.tone === 'danger'
+                                        ? 'bg-rose-50 text-rose-600'
+                                        : 'bg-amber-50 text-amber-600'
+                                }`}>
+                                    Rs {Number(walletSummary.balance || 0).toFixed(0)}
+                                </span>
+                            </div>
+                            <p className="mt-0.5 text-[12px] font-semibold leading-snug text-slate-500">
+                                {walletNotice.message}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => navigate('/taxi/driver/wallet')}
+                            className="shrink-0 rounded-full bg-slate-950 px-3 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-white shadow-sm active:scale-95"
+                        >
+                            Top up
+                        </button>
+                    </div>
+                </div>
+            ) : null}
 
             {/* --- MAP BACKGROUND --- */}
             <div className="absolute inset-0 z-0 w-full h-full">

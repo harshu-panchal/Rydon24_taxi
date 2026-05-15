@@ -28,7 +28,12 @@ const isDedupedGet = (url = '') => {
 
 const getDedupedRequestKey = (url = '', config = {}) => {
   const params = config?.params ? JSON.stringify(config.params) : '';
-  return `${String(url || '')}|${params}`;
+  // Include the Authorization header in the cache key so that requests with
+  // different auth tokens (or no token at all) never share a cached response.
+  // Without this, a cached unauthenticated response (e.g. 401) can be returned
+  // to an authenticated request after a page refresh in Flutter WebView.
+  const auth = config?.headers?.Authorization || config?.headers?.authorization || '';
+  return `${String(url || '')}|${params}|${auth}`;
 };
 
 const decodeBase64Url = (value) => {
@@ -81,6 +86,11 @@ const getSessionItem = (key) => {
 
 const getStoredTokenByRole = (role) => {
   const normalizedRole = normalizeAuthRole(role);
+
+  // For driver/owner roles we probe both sessionStorage AND localStorage so
+  // that after a Flutter WebView hard-refresh (which wipes sessionStorage) we
+  // can still find the persisted token in localStorage and avoid sending
+  // unauthenticated requests that produce "Authorization token is required".
   const entries = (
     normalizedRole === 'driver' || normalizedRole === 'owner'
       ? [
