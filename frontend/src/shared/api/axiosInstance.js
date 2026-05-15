@@ -63,6 +63,14 @@ const normalizeAuthRole = (role) => {
   return value;
 };
 
+const DRIVER_PORTAL_ROLES = new Set([
+  'driver',
+  'owner',
+  'bus_driver',
+  'service_center',
+  'service_center_staff',
+]);
+
 const getSessionItem = (key) => {
   try {
     return sessionStorage.getItem(key);
@@ -87,7 +95,15 @@ const getStoredTokenByRole = (role) => {
         ]
   ).filter(Boolean);
 
-  return entries.find((token) => normalizeAuthRole(getTokenPayload(token)?.role) === normalizedRole) || null;
+  return entries.find((token) => {
+    const tokenRole = normalizeAuthRole(getTokenPayload(token)?.role);
+
+    if ((normalizedRole === 'driver' || normalizedRole === 'owner') && DRIVER_PORTAL_ROLES.has(tokenRole)) {
+      return true;
+    }
+
+    return tokenRole === normalizedRole;
+  }) || null;
 };
 
 const getRoleFromPathname = () => {

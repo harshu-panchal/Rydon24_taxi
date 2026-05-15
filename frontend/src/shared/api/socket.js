@@ -35,6 +35,14 @@ const getSessionItem = (key) => {
   }
 };
 
+const DRIVER_PORTAL_ROLES = new Set([
+  'driver',
+  'owner',
+  'bus_driver',
+  'service_center',
+  'service_center_staff',
+]);
+
 const getStoredTokenByRole = (role) => {
   const normalizedRole = String(role || '').toLowerCase();
   const entries = (
@@ -51,7 +59,15 @@ const getStoredTokenByRole = (role) => {
         ]
   ).filter(Boolean);
 
-  return entries.find((token) => String(getTokenPayload(token)?.role || '').toLowerCase() === normalizedRole) || null;
+  return entries.find((token) => {
+    const tokenRole = String(getTokenPayload(token)?.role || '').toLowerCase();
+
+    if ((normalizedRole === 'driver' || normalizedRole === 'owner') && DRIVER_PORTAL_ROLES.has(tokenRole)) {
+      return true;
+    }
+
+    return tokenRole === normalizedRole;
+  }) || null;
 };
 
 const resolveTokenForRole = (role) => {

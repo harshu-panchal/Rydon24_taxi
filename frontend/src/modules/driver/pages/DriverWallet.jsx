@@ -19,6 +19,7 @@ import { socketService } from '../../../shared/api/socket';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import { openExternalCheckout } from '../../../shared/utils/externalNavigation';
 import { rememberPendingPhonePeRedirect } from '../../../shared/utils/phonePeResume';
+import { getLocalDriverToken } from '../services/registrationService';
 
 const PHONEPE_DRIVER_WALLET_FLOW_KEY = 'driver-wallet-topup';
 
@@ -163,6 +164,22 @@ const isOwnerManagedDriverProfile = (driver = {}) =>
         || driver?.owner?._id,
     );
 
+const withDriverAuthorization = (config = {}) => {
+    const token = getLocalDriverToken();
+
+    if (!token) {
+        return config;
+    }
+
+    return {
+        ...config,
+        headers: {
+            ...(config.headers || {}),
+            Authorization: `Bearer ${token}`,
+        },
+    };
+};
+
 const DriverWallet = () => {
     const navigate = useNavigate();
     const { settings: appSettings } = useSettings();
@@ -194,9 +211,10 @@ const DriverWallet = () => {
         setError('');
 
         try {
+            const authConfig = withDriverAuthorization();
             const [walletResponse, profileResponse] = await Promise.all([
-                api.get('/drivers/wallet'),
-                api.get('/drivers/me').catch(() => null),
+                api.get('/drivers/wallet', authConfig),
+                api.get('/drivers/me', authConfig).catch(() => null),
             ]);
             const next = normalizeWalletResponse(walletResponse);
             const profile = profileResponse?.data?.data || profileResponse?.data || profileResponse || {};
@@ -358,7 +376,7 @@ const DriverWallet = () => {
             if (walletTopUpMode === 'phonepe_redirect') {
                 const sessionResponse = await api.post('/drivers/wallet/top-up/phonepe/order', {
                     amount,
-                });
+                }, withDriverAuthorization());
                 const session = sessionResponse?.data || sessionResponse || {};
 
                 if (!session?.checkoutUrl) {
@@ -385,7 +403,7 @@ const DriverWallet = () => {
             // 1. Create order on backend
             const orderResponse = await api.post('/drivers/wallet/top-up/razorpay/order', {
                 amount,
-            });
+            }, withDriverAuthorization());
             const orderData = orderResponse?.data || orderResponse;
 
             if (!orderData?.orderId || !orderData?.keyId) {
@@ -408,7 +426,7 @@ const DriverWallet = () => {
                             razorpay_order_id: response.razorpay_order_id,
                             razorpay_payment_id: response.razorpay_payment_id,
                             razorpay_signature: response.razorpay_signature,
-                        });
+                        }, withDriverAuthorization());
 
                         const result = verifyResponse?.data || verifyResponse;
                         if (result?.wallet) {
@@ -485,7 +503,7 @@ const DriverWallet = () => {
             const response = await api.post('/drivers/wallet/withdrawals', {
                 amount,
                 payment_method: 'bank_transfer',
-            });
+            }, withDriverAuthorization());
             const payload = response?.data || response || {};
 
             if (payload?.request) {
