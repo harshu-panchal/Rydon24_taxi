@@ -295,10 +295,10 @@ const BikeRentalHome = () => {
             <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
           </motion.button>
           <div className="flex-1 min-w-0">
-            <p className="text-[9px] font-black uppercase tracking-[0.26em] text-slate-400">Self-drive · No driver needed</p>
-            <h1 className="text-[19px] font-black tracking-tight text-slate-900 leading-tight">Rental Vehicles</h1>
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500/80">Self-drive · No driver needed</p>
+            <h1 className="text-[22px] font-extrabold tracking-tight text-slate-950 leading-tight">Rental Vehicles</h1>
           </div>
-          <div className="rounded-full border border-white/80 bg-white/90 px-3 py-1.5 text-[10px] font-black text-slate-600 shadow-sm shrink-0">
+          <div className="rounded-full border border-slate-100 bg-slate-50/50 px-3 py-1.5 text-[10px] font-bold text-slate-600 shadow-sm shrink-0">
             {availableCountLabel}
           </div>
         </div>
@@ -309,7 +309,7 @@ const BikeRentalHome = () => {
               key={tab}
               whileTap={{ scale: 0.97 }}
               onClick={() => setSelectedDuration(tab)}
-              className={`flex-1 py-2 rounded-[12px] text-[11px] font-black uppercase tracking-widest transition-all ${
+              className={`flex-1 py-2 rounded-[12px] text-[11px] font-bold uppercase tracking-wider transition-all ${
                 selectedDuration === tab
                   ? 'bg-white text-slate-900 shadow-[0_4px_12px_rgba(15,23,42,0.08)]'
                   : 'text-slate-400'
@@ -347,7 +347,7 @@ const BikeRentalHome = () => {
                   key={suggestion}
                   type="button"
                   onClick={() => setSearchQuery(suggestion)}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 shadow-sm"
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500 shadow-sm"
                 >
                   {suggestion}
                 </button>
@@ -370,16 +370,16 @@ const BikeRentalHome = () => {
             <div className="w-7 h-7 rounded-[10px] bg-blue-50 flex items-center justify-center shrink-0">
               <Info size={14} className="text-blue-500" strokeWidth={2.5} />
             </div>
-            <p className="text-[12px] font-black text-slate-700">{infoBanner[selectedDuration]}</p>
+            <p className="text-[12px] font-bold text-slate-700">{infoBanner[selectedDuration]}</p>
           </motion.div>
         </AnimatePresence>
 
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">Available Rentals</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400/80">Available Rentals</p>
           <div className="mt-0.5 flex items-end justify-between gap-3">
-            <h2 className="text-[16px] font-black tracking-tight text-slate-900">Choose your ride</h2>
+            <h2 className="text-[17px] font-extrabold tracking-tight text-slate-900">Choose your ride</h2>
             {searchQuery ? (
-              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{filteredCountLabel}</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400/60">{filteredCountLabel}</span>
             ) : null}
           </div>
         </div>
@@ -422,17 +422,17 @@ const BikeRentalHome = () => {
                 style={{ background: `linear-gradient(135deg, ${v.gradientFrom} 0%, ${v.gradientTo} 100%)` }}
               >
                 <div className="flex-1 min-w-0 pr-2 space-y-1">
-                  <span className={`inline-block text-[9px] font-black px-2 py-0.5 rounded-full border ${v.tagBg} ${v.tagColor}`}>
+                  <span className={`inline-block text-[9px] font-bold px-2 py-0.5 rounded-full border ${v.tagBg} ${v.tagColor}`}>
                     {v.tag}
                   </span>
-                  <h3 className="text-[15px] font-black text-slate-900 leading-tight tracking-tight">{v.name}</h3>
+                  <h3 className="text-[16px] font-extrabold text-slate-950 leading-tight tracking-tight">{v.name}</h3>
                   {v.shortDescription ? (
-                    <p className="text-[10px] font-bold text-slate-500">{v.shortDescription}</p>
+                    <p className="text-[11px] font-medium text-slate-500/80">{v.shortDescription}</p>
                   ) : null}
                   <div className="flex items-center gap-1">
                     <Star size={10} className="text-yellow-500 fill-yellow-400" />
-                    <span className="text-[11px] font-black text-slate-700">{v.rating}</span>
-                    <span className="text-[10px] font-bold text-slate-400">· {v.kmLimit[selectedDuration]} limit</span>
+                    <span className="text-[11px] font-bold text-slate-700">{v.rating}</span>
+                    <span className="text-[10px] font-medium text-slate-400">· {v.kmLimit[selectedDuration]} limit</span>
                   </div>
                 </div>
                 {v.image ? (
@@ -447,7 +447,7 @@ const BikeRentalHome = () => {
               <div className="px-4 pb-4 pt-3 space-y-2.5 border-t border-slate-50">
                 <div className="flex flex-wrap gap-1">
                   {v.features.map((feature) => (
-                    <span key={feature} className="text-[9px] font-black bg-slate-50 text-slate-500 px-2 py-0.5 rounded-full border border-slate-100">
+                    <span key={feature} className="text-[9px] font-bold bg-slate-50 text-slate-500 px-2 py-0.5 rounded-full border border-slate-100">
                       {feature}
                     </span>
                   ))}
@@ -460,16 +460,16 @@ const BikeRentalHome = () => {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] block">Price</span>
+                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.15em] block">Price</span>
                     <div className="flex items-baseline gap-0.5">
-                      <span className="text-[22px] font-black text-slate-900 tracking-tighter leading-none">₹{v.prices[selectedDuration]}</span>
-                      <span className="text-[11px] font-bold text-slate-400 ml-0.5">{durationSuffix[selectedDuration]}</span>
+                      <span className="text-[24px] font-extrabold text-slate-950 tracking-tighter leading-none">₹{v.prices[selectedDuration]}</span>
+                      <span className="text-[11px] font-bold text-slate-400/80 ml-0.5">{durationSuffix[selectedDuration]}</span>
                     </div>
                   </div>
                   <motion.button
                     whileTap={{ scale: 0.96 }}
                     onClick={() => openVehicleDetail(v)}
-                    className="bg-slate-900 text-white px-4 py-2.5 rounded-[12px] text-[11px] font-black uppercase tracking-widest flex items-center gap-1 shadow-[0_6px_16px_rgba(15,23,42,0.18)] active:bg-black transition-all"
+                    className="bg-slate-950 text-white px-4 py-2.5 rounded-[12px] text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-[0_6px_16px_rgba(15,23,42,0.15)] active:bg-black transition-all"
                   >
                     Book Now <ChevronRight size={13} strokeWidth={3} className="opacity-60" />
                   </motion.button>
@@ -497,7 +497,7 @@ const BikeRentalHome = () => {
               type="button"
               onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
               disabled={currentPage === totalPages}
-              className="rounded-[12px] border border-slate-200 bg-white px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-600 disabled:opacity-40"
+              className="rounded-[12px] border border-slate-200 bg-white px-4 py-2 text-[11px] font-bold uppercase tracking-widest text-slate-600 disabled:opacity-40"
             >
               Next
             </button>

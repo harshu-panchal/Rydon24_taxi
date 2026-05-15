@@ -686,7 +686,7 @@ const Home = () => {
             <ActionsSection />
             <PromoBanners />
             <ExplorerSection />
-            <CheckUsOutSection />
+
           </>
         ) : (
           <div className="space-y-4 px-5">

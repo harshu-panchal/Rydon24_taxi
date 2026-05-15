@@ -78,6 +78,8 @@ const getStoredTokenByRole = (role) => {
       ? [
           getSessionItem('driverToken'),
           getSessionItem('token'),
+          localStorage.getItem('driverToken'),
+          localStorage.getItem('token'),
         ]
       : [
           localStorage.getItem(`${role}Token`),

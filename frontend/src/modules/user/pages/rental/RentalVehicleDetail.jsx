@@ -160,15 +160,15 @@ const DateTimePickerModal = ({
           <div className="mx-auto mb-4 h-1.5 w-14 rounded-full bg-slate-300" />
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">
+              <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-500/80">
                 Pick Schedule
               </p>
-              <h3 className="mt-1 text-lg font-black text-slate-900">{title}</h3>
+              <h3 className="mt-1 text-lg font-extrabold text-slate-950">{title}</h3>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600"
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600"
             >
               Close
             </button>
@@ -183,7 +183,7 @@ const DateTimePickerModal = ({
               >
                 <ChevronLeft size={16} />
               </button>
-              <p className="text-[14px] font-black text-slate-900">
+              <p className="text-[14px] font-bold text-slate-950">
                 {monthDate.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
               </p>
               <button
@@ -197,7 +197,7 @@ const DateTimePickerModal = ({
 
             <div className="mt-4 grid grid-cols-7 gap-2 text-center">
               {WEEK_DAYS.map((day) => (
-                <div key={day} className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                <div key={day} className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   {day}
                 </div>
               ))}
@@ -215,7 +215,7 @@ const DateTimePickerModal = ({
                     type="button"
                     disabled={disabled}
                     onClick={() => onDateSelect(day)}
-                    className={`h-10 rounded-[12px] text-[12px] font-black transition-all ${
+                    className={`h-10 rounded-[12px] text-[12px] font-bold transition-all ${
                       selected
                         ? 'bg-[#2e3c78] text-white shadow-[0_10px_24px_rgba(46,60,120,0.28)]'
                         : disabled
@@ -233,7 +233,7 @@ const DateTimePickerModal = ({
           <div className="mt-4 rounded-[24px] border border-white/80 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
             <div className="mb-3 flex items-center gap-2">
               <Clock size={15} className="text-slate-400" />
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+              <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-500/80">
                 Select Time
               </p>
             </div>
@@ -249,7 +249,7 @@ const DateTimePickerModal = ({
                     type="button"
                     disabled={disabled}
                     onClick={() => onTimeSelect(time)}
-                    className={`rounded-[12px] px-3 py-2.5 text-[11px] font-black transition-all ${
+                    className={`rounded-[12px] px-3 py-2.5 text-[11px] font-bold transition-all ${
                       selected
                         ? 'bg-[#2e3c78] text-white'
                         : disabled
@@ -267,7 +267,7 @@ const DateTimePickerModal = ({
           <button
             type="button"
             onClick={onApply}
-            className="mt-5 w-full rounded-[18px] bg-[#2e3c78] px-5 py-3.5 text-sm font-black text-white shadow-[0_10px_26px_rgba(46,60,120,0.28)]"
+            className="mt-5 w-full rounded-[18px] bg-[#2e3c78] px-5 py-3.5 text-sm font-bold text-white shadow-[0_10px_26px_rgba(46,60,120,0.28)]"
           >
             Apply Date & Time
           </button>
@@ -1090,8 +1090,8 @@ const RentalVehicleDetail = () => {
             <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
           </motion.button>
           <div className="flex-1 min-w-0">
-            <p className="text-[9px] font-black uppercase tracking-[0.26em] text-slate-400">Vehicle Details</p>
-            <h1 className="text-[18px] font-black tracking-tight text-slate-900 leading-tight truncate">
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500/80">Vehicle Details</p>
+            <h1 className="text-[20px] font-extrabold tracking-tight text-slate-950 leading-tight truncate">
               {vehicle.name}
             </h1>
           </div>
@@ -1121,11 +1121,11 @@ const RentalVehicleDetail = () => {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <span
-                  className={`inline-block text-[9px] font-black px-2 py-0.5 rounded-full border ${vehicle.tagBg} ${vehicle.tagColor} mb-1.5`}
+                  className={`inline-block text-[9px] font-bold px-2 py-0.5 rounded-full border ${vehicle.tagBg} ${vehicle.tagColor} mb-1.5`}
                 >
                   {vehicle.tag}
                 </span>
-                <h2 className="text-[20px] font-black text-slate-900 tracking-tight leading-tight">
+                <h2 className="text-[20px] font-extrabold text-slate-950 tracking-tight leading-tight">
                   {vehicle.name}
                 </h2>
                 {vehicle.shortDescription ? (
@@ -1135,7 +1135,7 @@ const RentalVehicleDetail = () => {
                 ) : null}
                 <div className="flex items-center gap-1.5 mt-1">
                   <Star size={12} className="text-yellow-500 fill-yellow-400" />
-                  <span className="text-[13px] font-black text-slate-700">{vehicle.rating}</span>
+                  <span className="text-[13px] font-bold text-slate-700">{vehicle.rating}</span>
                   <span className="text-[11px] font-bold text-slate-400">
                     {selectedPackage
                       ? `- ${selectedPackage.includedKm} km included`
@@ -1144,10 +1144,10 @@ const RentalVehicleDetail = () => {
                 </div>
               </div>
               <div className="text-right shrink-0">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.12em]">
                   Rate
                 </p>
-                <p className="text-[24px] font-black text-slate-900 leading-none">
+                <p className="text-[24px] font-extrabold text-slate-950 leading-none">
                   Rs.{selectedPackage?.price || vehicle.prices?.[duration] || 0}
                 </p>
                 <p className="text-[11px] font-bold text-slate-400">
@@ -1189,7 +1189,7 @@ const RentalVehicleDetail = () => {
               className="rounded-[18px] border border-white/80 bg-white/90 px-3 py-3 shadow-[0_4px_14px_rgba(15,23,42,0.05)]"
             >
               <Icon size={15} className="text-slate-400" />
-              <p className="mt-2 text-[12px] font-black text-slate-900">{label}</p>
+              <p className="mt-2 text-[12px] font-bold text-slate-900">{label}</p>
             </div>
           ))}
         </motion.div>
@@ -1200,7 +1200,7 @@ const RentalVehicleDetail = () => {
           transition={{ delay: 0.1 }}
           className="rounded-[20px] border border-white/80 bg-white/90 shadow-[0_4px_14px_rgba(15,23,42,0.05)] px-5 py-4 space-y-3"
         >
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500/80">
             What's included
           </p>
           <div className="space-y-2">
@@ -1227,11 +1227,11 @@ const RentalVehicleDetail = () => {
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Tag size={14} className="text-slate-400" />
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+              <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500/80">
                 Choose Hourly Rental
               </p>
             </div>
-            <span className="rounded-full bg-orange-50 px-3 py-1 text-[10px] font-black text-orange-600">
+            <span className="rounded-full bg-orange-50 px-3 py-1 text-[10px] font-bold text-orange-600">
               {selectionStep === 'package' ? 'Step 1 of 2' : 'Step 2 of 2'}
             </span>
           </div>
@@ -1253,7 +1253,7 @@ const RentalVehicleDetail = () => {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className={`text-sm font-black ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                      <p className={`text-sm font-bold ${isSelected ? 'text-white' : 'text-slate-900'}`}>
                         {row.label}
                       </p>
                       <p className={`text-[11px] font-semibold ${isSelected ? 'text-white/75' : 'text-slate-500'}`}>
@@ -1261,7 +1261,7 @@ const RentalVehicleDetail = () => {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className={`text-lg font-black ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                      <p className={`text-lg font-bold ${isSelected ? 'text-white' : 'text-slate-900'}`}>
                         Rs.{row.price}
                       </p>
                       <p className={`text-[11px] font-semibold ${isSelected ? 'text-white/75' : 'text-slate-500'}`}>
@@ -1289,7 +1289,7 @@ const RentalVehicleDetail = () => {
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500/80">
                     Available Service Locations
                   </p>
                   <p className="mt-1 text-[13px] font-bold text-slate-700">
@@ -1299,7 +1299,7 @@ const RentalVehicleDetail = () => {
                 <button
                   type="button"
                   onClick={() => setSelectionStep('package')}
-                  className="shrink-0 rounded-full border border-slate-200 px-3 py-1 text-[11px] font-black text-slate-500"
+                  className="shrink-0 rounded-full border border-slate-200 px-3 py-1 text-[11px] font-bold text-slate-500"
                 >
                   <span className="inline-flex items-center gap-1">
                     <ChevronLeft size={12} /> Back
@@ -1333,7 +1333,7 @@ const RentalVehicleDetail = () => {
                   <div className="overflow-hidden rounded-[22px] border border-slate-100 bg-slate-50">
                     <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-white/80 px-4 py-3">
                       <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500/80">
                           Pickup Map
                         </p>
                         <p className="mt-0.5 text-[12px] font-bold text-slate-600">
@@ -1341,7 +1341,7 @@ const RentalVehicleDetail = () => {
                         </p>
                       </div>
                       {selectedServiceLocation?.distanceLabel ? (
-                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">
+                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-bold text-emerald-700">
                           {selectedServiceLocation.distanceLabel}
                         </span>
                       ) : null}
@@ -1427,7 +1427,7 @@ const RentalVehicleDetail = () => {
                             <div className="flex flex-wrap items-center gap-2">
                               <p className="text-[14px] font-black text-slate-900">{item.name}</p>
                               {index === 0 && userCoordinates ? (
-                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-700">
+                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-700">
                                   Closest
                                 </span>
                               ) : null}

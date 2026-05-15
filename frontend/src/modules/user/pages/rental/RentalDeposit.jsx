@@ -540,10 +540,10 @@ const RentalDeposit = () => {
             <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
           </Motion.button>
           <div className="flex-1 min-w-0">
-            <p className="text-[9px] font-black uppercase tracking-[0.26em] text-slate-400">
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500/80">
               Step 5 of 5 - Advance Payment
             </p>
-            <h1 className="text-[18px] font-black tracking-tight text-slate-900 leading-tight">
+            <h1 className="text-[20px] font-extrabold tracking-tight text-slate-950 leading-tight">
               Pay Now
             </h1>
           </div>
@@ -557,13 +557,13 @@ const RentalDeposit = () => {
           transition={{ delay: 0.05 }}
           className="rounded-[20px] border border-white/80 bg-white/90 shadow-[0_4px_14px_rgba(15,23,42,0.05)] px-5 py-4 space-y-3"
         >
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500/80">
             Booking Summary
           </p>
           <div className="flex items-center gap-3">
             <img src={vehicle.image} alt={vehicle.name} className="h-14 w-16 object-contain drop-shadow-md shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-[15px] font-black text-slate-900 leading-tight">{vehicle.name}</p>
+              <p className="text-[15px] font-bold text-slate-900 leading-tight">{vehicle.name}</p>
               <p className="text-[11px] font-bold text-slate-400 mt-0.5">
                 {selectedPackage?.label || state.duration} - {state.pickup?.slice(0, 16).replace('T', ' ')}
               </p>
@@ -585,7 +585,7 @@ const RentalDeposit = () => {
               </span>
               <span>Rs.{payableNow}</span>
             </div>
-            <div className="flex justify-between text-[14px] font-black text-slate-900 pt-1 border-t border-slate-50">
+            <div className="flex justify-between text-[14px] font-bold text-slate-950 pt-1 border-t border-slate-50">
               <span>Total now</span>
               <span>Rs.{payableNow}</span>
             </div>
@@ -615,7 +615,7 @@ const RentalDeposit = () => {
           transition={{ delay: 0.15 }}
           className="rounded-[20px] border border-white/80 bg-white/90 shadow-[0_4px_14px_rgba(15,23,42,0.05)] px-5 py-4 space-y-3"
         >
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500/80">
             Payment Method
           </p>
           <div className="grid grid-cols-3 gap-2">
@@ -634,7 +634,7 @@ const RentalDeposit = () => {
                   className: method === id ? 'text-orange-500' : 'text-slate-400',
                   strokeWidth: 2,
                 })}
-                <span className={`text-[11px] font-black ${method === id ? 'text-slate-900' : 'text-slate-400'}`}>
+                <span className={`text-[11px] font-bold ${method === id ? 'text-slate-900' : 'text-slate-400'}`}>
                   {label}
                 </span>
               </button>
@@ -665,13 +665,13 @@ const RentalDeposit = () => {
           whileTap={{ scale: 0.98 }}
           onClick={handlePay}
           disabled={paying || (method === 'wallet' && !walletLoading && Number(walletBalance || 0) < payableNow)}
-          className="pointer-events-auto w-full bg-slate-900 py-4 rounded-[18px] text-[15px] font-black text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] flex items-center justify-center gap-2"
+          className="pointer-events-auto w-full bg-slate-950 py-4 rounded-[18px] text-[15px] font-bold text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] flex items-center justify-center gap-2"
         >
           {paying ? (
             <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
           ) : (
             <>
-              {method === 'wallet' ? <Wallet size={16} strokeWidth={2.5} /> : <CreditCard size={16} strokeWidth={2.5} />} {isPhonePeRentalFlow ? 'Continue to PhonePe' : 'Confirm & Pay'} Rs.{payableNow}
+              {method === 'wallet' ? <Wallet size={16} strokeWidth={2} /> : <CreditCard size={16} strokeWidth={2} />} {isPhonePeRentalFlow ? 'Continue to PhonePe' : 'Confirm & Pay'} Rs.{payableNow}
             </>
           )}
         </Motion.button>

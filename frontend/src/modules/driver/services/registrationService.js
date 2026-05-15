@@ -2,6 +2,7 @@ import api from "../../../shared/api/axiosInstance";
 
 const STORAGE_KEY = "driverRegistrationSession";
 const DRIVER_AUTH_KEYS = ["token", "driverToken", "driverInfo", "role", "driverRole", "chatRole"];
+const DRIVER_PORTAL_ROLES = ["driver", "owner", "bus_driver", "service_center", "service_center_staff"];
 const readSessionValue = (key) => {
   try {
     return sessionStorage.getItem(key) || "";
@@ -65,14 +66,11 @@ export const persistDriverAuthSession = ({ token = "", role = "driver" } = {}) =
 
   writeSessionValue("role", normalizedRole);
   writeSessionValue("driverRole", normalizedRole);
+  writeSessionValue("chatRole", normalizedRole === "owner" ? "owner" : "driver");
   localStorage.setItem("role", normalizedRole);
   localStorage.setItem("driverRole", normalizedRole);
+  localStorage.setItem("chatRole", normalizedRole === "owner" ? "owner" : "driver");
 };
-
-export const getStoredDriverRole = () =>
-  readSessionValue("driverRole")
-  || readSessionValue("role")
-  || String(localStorage.getItem("driverRole") || localStorage.getItem("role") || "driver").toLowerCase();
 
 export const normalizeDriverPortalRole = (role) => {
   const normalized = String(role || "").toLowerCase();
@@ -144,26 +142,83 @@ const getTokenPayload = (token) => {
   }
 };
 
-const readLocalDriverToken = () => {
-  const direct = readSessionValue("driverToken");
-  if (direct) return direct;
-
-  const fallback = readSessionValue("token");
-  if (["driver", "owner", "bus_driver", "service_center", "service_center_staff"].includes(getTokenPayload(fallback)?.role)) {
-    return fallback;
-  }
-
+const getPersistedDriverToken = () => {
   const persistedDriverToken = String(localStorage.getItem("driverToken") || "");
-  if (["driver", "owner", "bus_driver", "service_center", "service_center_staff"].includes(getTokenPayload(persistedDriverToken)?.role)) {
+  if (DRIVER_PORTAL_ROLES.includes(getTokenPayload(persistedDriverToken)?.role)) {
     return persistedDriverToken;
   }
 
   const persistedGenericToken = String(localStorage.getItem("token") || "");
-  if (["driver", "owner", "bus_driver", "service_center", "service_center_staff"].includes(getTokenPayload(persistedGenericToken)?.role)) {
+  if (DRIVER_PORTAL_ROLES.includes(getTokenPayload(persistedGenericToken)?.role)) {
     return persistedGenericToken;
   }
 
   return "";
+};
+
+export const hydrateDriverAuthSessionFromStorage = () => {
+  const persistedToken = getPersistedDriverToken();
+  const persistedRole =
+    normalizeDriverPortalRole(getTokenPayload(persistedToken)?.role)
+    || normalizeDriverPortalRole(localStorage.getItem("driverRole"))
+    || normalizeDriverPortalRole(localStorage.getItem("role"));
+
+  if (!persistedToken && !persistedRole) {
+    return {
+      token: "",
+      role: "",
+    };
+  }
+
+  if (persistedToken && !readSessionValue("token")) {
+    writeSessionValue("token", persistedToken);
+  }
+
+  if (persistedToken && !readSessionValue("driverToken")) {
+    writeSessionValue("driverToken", persistedToken);
+  }
+
+  if (persistedRole && !readSessionValue("role")) {
+    writeSessionValue("role", persistedRole);
+  }
+
+  if (persistedRole && !readSessionValue("driverRole")) {
+    writeSessionValue("driverRole", persistedRole);
+  }
+
+  const chatRole = persistedRole === "owner" ? "owner" : persistedRole ? "driver" : "";
+  if (chatRole && !readSessionValue("chatRole")) {
+    writeSessionValue("chatRole", chatRole);
+  }
+
+  return {
+    token: persistedToken,
+    role: persistedRole,
+  };
+};
+
+export const getStoredDriverRole = () => {
+  const hydrated = hydrateDriverAuthSessionFromStorage();
+  return (
+    readSessionValue("driverRole")
+    || readSessionValue("role")
+    || hydrated.role
+    || String(localStorage.getItem("driverRole") || localStorage.getItem("role") || "driver").toLowerCase()
+  );
+};
+
+const readLocalDriverToken = () => {
+  hydrateDriverAuthSessionFromStorage();
+
+  const direct = readSessionValue("driverToken");
+  if (direct) return direct;
+
+  const fallback = readSessionValue("token");
+  if (DRIVER_PORTAL_ROLES.includes(getTokenPayload(fallback)?.role)) {
+    return fallback;
+  }
+
+  return getPersistedDriverToken();
 };
 
 export const getLocalDriverToken = readLocalDriverToken;
