@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../api/axiosInstance';
 
 let activeFaviconObjectUrl = '';
+const SETTINGS_CACHE_KEY = 'appSettingsCache:v1';
 const DEFAULT_ADMIN_THEME_COLOR = '#405189';
 const DEFAULT_LANDING_THEME_COLOR = '#0ab39c';
 const DEFAULT_SIDEBAR_TEXT_COLOR = '#cbd5e1';
@@ -31,6 +32,7 @@ const DEFAULT_SETTINGS_CONTEXT = {
     paymentGateway: null,
   },
   loading: true,
+  hasBootstrapSettings: false,
   refreshSettings: () => {},
 };
 const SettingsContext = createContext(DEFAULT_SETTINGS_CONTEXT);
@@ -170,9 +172,53 @@ const buildFaviconHref = (faviconUrl = '') => {
   return `${faviconUrl}${faviconUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
 };
 
+const buildSettingsState = (payload = {}) => ({
+  general: payload?.general || {},
+  customization: payload?.customization || {},
+  transportRide: normalizeTransportRideSettings(payload?.transportRide || {}),
+  bidRide: payload?.bidRide || DEFAULT_SETTINGS_CONTEXT.settings.bidRide,
+  paymentGateway: payload?.paymentGateway || null,
+});
+
+const readCachedSettings = () => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const raw = localStorage.getItem(SETTINGS_CACHE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+
+    return buildSettingsState(parsed);
+  } catch {
+    return null;
+  }
+};
+
+const writeCachedSettings = (settings) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(settings));
+  } catch {
+    // Cache writes are best-effort only.
+  }
+};
+
 export const SettingsProvider = ({ children }) => {
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS_CONTEXT.settings);
+  const cachedSettings = readCachedSettings();
+  const [settings, setSettings] = useState(cachedSettings || DEFAULT_SETTINGS_CONTEXT.settings);
   const [loading, setLoading] = useState(true);
+  const [hasBootstrapSettings, setHasBootstrapSettings] = useState(Boolean(cachedSettings));
 
   const fetchSettings = async () => {
     try {
@@ -184,7 +230,7 @@ export const SettingsProvider = ({ children }) => {
         api.get('/common/payment-gateway'),
       ]);
 
-      setSettings({
+      const nextSettings = buildSettingsState({
         general: genRes.status === 'fulfilled' ? (genRes.value.data?.settings || {}) : {},
         customization: cusRes.status === 'fulfilled' ? (cusRes.value.data?.settings || {}) : {},
         transportRide:
@@ -204,6 +250,9 @@ export const SettingsProvider = ({ children }) => {
             ? (paymentGatewayRes.value.data?.activeGateway || null)
             : null,
       });
+      setSettings(nextSettings);
+      setHasBootstrapSettings(true);
+      writeCachedSettings(nextSettings);
     } catch (err) {
       console.error('Failed to fetch settings:', err);
     } finally {
@@ -213,6 +262,20 @@ export const SettingsProvider = ({ children }) => {
 
   useEffect(() => {
     fetchSettings();
+  }, []);
+
+  useEffect(() => {
+    const refreshOnResume = () => {
+      fetchSettings();
+    };
+
+    window.addEventListener('pageshow', refreshOnResume);
+    window.addEventListener('online', refreshOnResume);
+
+    return () => {
+      window.removeEventListener('pageshow', refreshOnResume);
+      window.removeEventListener('online', refreshOnResume);
+    };
   }, []);
 
   useEffect(() => {
@@ -273,7 +336,7 @@ export const SettingsProvider = ({ children }) => {
   const refreshSettings = () => fetchSettings();
 
   return (
-    <SettingsContext.Provider value={{ settings, loading, refreshSettings }}>
+    <SettingsContext.Provider value={{ settings, loading, hasBootstrapSettings, refreshSettings }}>
       {children}
     </SettingsContext.Provider>
   );

@@ -14,10 +14,11 @@ import { useSettings } from '../../../shared/context/SettingsContext';
 
 const HeaderGreeting = () => {
   const navigate = useNavigate();
-  const { settings } = useSettings();
+  const { settings, loading, hasBootstrapSettings } = useSettings();
   const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
   const appName = settings.general?.app_name || 'App';
   const [locationLabel, setLocationLabel] = useState(getSavedLocationLabel);
+  const showBrandingSkeleton = loading && !hasBootstrapSettings && !appLogo;
 
   useEffect(() => {
     const syncLocationLabel = () => {
@@ -59,6 +60,8 @@ const HeaderGreeting = () => {
                 animate={{ y: [0, -2, 0], scale: [1, 1.02, 1] }}
                 transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
               />
+            ) : showBrandingSkeleton ? (
+              <div className="relative z-10 h-10 min-w-[40px] animate-pulse rounded-full bg-slate-200/90" />
             ) : (
               <div className="relative z-10 flex h-10 min-w-[40px] items-center justify-center rounded-full bg-slate-900 px-3 text-[10px] font-black uppercase tracking-[0.18em] text-white">
                 {appName.slice(0, 2)}

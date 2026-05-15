@@ -21,8 +21,9 @@ const isEnabledFlag = (value) => {
 const BottomNavbar = () => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { settings } = useSettings();
+  const { settings, loading, hasBootstrapSettings } = useSettings();
   const showBusService = isEnabledFlag(settings.transportRide?.enable_bus_service);
+  const showNavSkeleton = loading && !hasBootstrapSettings;
 
   const navItems = [
     { icon: Home, label: 'Ride', path: '/taxi/user' },
@@ -31,6 +32,21 @@ const BottomNavbar = () => {
     { icon: Map, label: 'Support', path: '/taxi/user/support' },
     { icon: User, label: 'Profile', path: '/taxi/user/profile' },
   ];
+
+  if (showNavSkeleton) {
+    return (
+      <nav className="fixed bottom-0 left-0 right-0 z-[100] mx-auto w-full max-w-lg px-4 pb-[max(env(safe-area-inset-bottom),16px)] pt-2 pointer-events-none">
+        <div className="flex items-center justify-around overflow-visible rounded-[32px] border border-white/40 bg-white/85 px-2 py-2 shadow-[0_20px_40px_rgba(0,0,0,0.12)] backdrop-blur-2xl pointer-events-auto relative">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className="flex flex-1 flex-col items-center justify-center py-1.5">
+              <div className="h-[21px] w-[21px] animate-pulse rounded-full bg-slate-200" />
+              <div className="mt-2 h-2.5 w-10 animate-pulse rounded-full bg-slate-200" />
+            </div>
+          ))}
+        </div>
+      </nav>
+    );
+  }
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-[100] mx-auto w-full max-w-lg px-4 pb-[max(env(safe-area-inset-bottom),16px)] pt-2 pointer-events-none">
