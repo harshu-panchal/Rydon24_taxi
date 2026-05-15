@@ -331,23 +331,29 @@ const RentalSchedule = () => {
       <motion.header
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white/90 backdrop-blur-md px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-white/80 shadow-[0_4px_20px_rgba(15,23,42,0.05)]"
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className="sticky top-0 z-30 w-full"
       >
-        <div className="flex items-center gap-3">
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => navigate(-1)}
-            className="w-9 h-9 rounded-[12px] border border-white/80 bg-white/90 flex items-center justify-center shadow-[0_4px_12px_rgba(15,23,42,0.07)] shrink-0"
-          >
-            <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
-          </motion.button>
-          <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500/80">
-              Step 3 of 5 - {vehicle.name}
-            </p>
-            <h1 className="text-[20px] font-extrabold tracking-tight text-slate-950 leading-tight">
-              Date & Duration
-            </h1>
+        <div className="bg-white/85 backdrop-blur-2xl px-5 pt-12 pb-5 border-b border-white/40 shadow-[0_8px_32px_rgba(15,23,42,0.06)] relative overflow-hidden">
+          {/* Subtle accent gradients */}
+          <div className="absolute top-0 right-0 h-32 w-32 rounded-full bg-orange-400/5 blur-[40px] pointer-events-none" />
+          <div className="absolute top-0 left-0 h-24 w-24 rounded-full bg-blue-400/5 blur-[40px] pointer-events-none" />
+
+          <div className="relative flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <motion.button
+                whileHover={{ x: -2 }}
+                whileTap={{ scale: 0.92 }}
+                onClick={() => navigate(-1)}
+                className="w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center shadow-[0_4px_12px_rgba(15,23,42,0.15)] shrink-0 group transition-all"
+              >
+                <ArrowLeft size={20} className="text-white group-hover:opacity-80 transition-opacity" strokeWidth={2.5} />
+              </motion.button>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500/60 leading-none mb-1.5">Schedule · {vehicle.name}</p>
+                <h1 className="text-[22px] font-[900] tracking-tight text-slate-950 leading-none">Date & Time</h1>
+              </div>
+            </div>
           </div>
         </div>
       </motion.header>

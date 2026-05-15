@@ -136,6 +136,41 @@ const normalizeRentalVehicle = (item = {}, index = 0) => {
   };
 };
 
+const RentalSkeleton = () => (
+  <div className="space-y-4">
+    {[1, 2, 3].map((i) => (
+      <div key={i} className="rounded-[24px] border border-white/80 bg-white/90 shadow-[0_8px_24px_rgba(15,23,42,0.06)] overflow-hidden">
+        <div className="px-4 pt-3.5 pb-3 flex items-center justify-between bg-slate-50/50">
+          <div className="flex-1 space-y-2">
+            <div className="h-3 w-16 skeleton rounded-full" />
+            <div className="h-5 w-32 skeleton rounded-md" />
+            <div className="h-3 w-24 skeleton rounded-md" />
+            <div className="flex gap-2">
+              <div className="h-3 w-8 skeleton rounded-full" />
+              <div className="h-3 w-12 skeleton rounded-full" />
+            </div>
+          </div>
+          <div className="h-16 w-20 skeleton rounded-2xl shrink-0" />
+        </div>
+        <div className="px-4 pb-4 pt-3 space-y-3">
+          <div className="flex gap-1">
+            <div className="h-4 w-12 skeleton rounded-full" />
+            <div className="h-4 w-12 skeleton rounded-full" />
+            <div className="h-4 w-12 skeleton rounded-full" />
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <div className="h-2 w-8 skeleton rounded-full" />
+              <div className="h-6 w-20 skeleton rounded-md" />
+            </div>
+            <div className="h-9 w-24 skeleton rounded-xl" />
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
 const BikeRentalHome = () => {
   const [selectedDuration, setSelectedDuration] = useState('Hourly');
   const [vehicles, setVehicles] = useState([]);
@@ -283,132 +318,193 @@ const BikeRentalHome = () => {
       <motion.header
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: 'easeOut' }}
-        className="bg-white/90 backdrop-blur-md px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-white/80 shadow-[0_4px_20px_rgba(15,23,42,0.05)]"
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className="sticky top-0 z-30 w-full"
       >
-        <div className="flex items-center gap-3 mb-4">
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => navigate(-1)}
-            className="w-9 h-9 rounded-[12px] border border-white/80 bg-white/90 flex items-center justify-center shadow-[0_4px_12px_rgba(15,23,42,0.07)] shrink-0"
-          >
-            <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
-          </motion.button>
-          <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500/80">Self-drive · No driver needed</p>
-            <h1 className="text-[22px] font-extrabold tracking-tight text-slate-950 leading-tight">Rental Vehicles</h1>
-          </div>
-          <div className="rounded-full border border-slate-100 bg-slate-50/50 px-3 py-1.5 text-[10px] font-bold text-slate-600 shadow-sm shrink-0">
-            {availableCountLabel}
-          </div>
-        </div>
+        <div className="bg-white/85 backdrop-blur-2xl px-5 pt-12 pb-5 border-b border-white/40 shadow-[0_8px_32px_rgba(15,23,42,0.06)] relative overflow-hidden">
+          {/* Subtle accent gradients */}
+          <div className="absolute top-0 right-0 h-32 w-32 rounded-full bg-orange-400/5 blur-[40px] pointer-events-none" />
+          <div className="absolute top-0 left-0 h-24 w-24 rounded-full bg-blue-400/5 blur-[40px] pointer-events-none" />
 
-        <div className="flex gap-1.5 bg-slate-100/80 p-1.5 rounded-[16px]">
-          {DURATION_TABS.map((tab) => (
-            <motion.button
-              key={tab}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => setSelectedDuration(tab)}
-              className={`flex-1 py-2 rounded-[12px] text-[11px] font-bold uppercase tracking-wider transition-all ${
-                selectedDuration === tab
-                  ? 'bg-white text-slate-900 shadow-[0_4px_12px_rgba(15,23,42,0.08)]'
-                  : 'text-slate-400'
-              }`}
-            >
-              {tab}
-            </motion.button>
-          ))}
-        </div>
+          <div className="relative flex items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-4">
+              <motion.button
+                whileHover={{ x: -2 }}
+                whileTap={{ scale: 0.92 }}
+                onClick={() => navigate(-1)}
+                className="w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center shadow-[0_4px_12px_rgba(15,23,42,0.15)] shrink-0 group transition-all"
+              >
+                <ArrowLeft size={20} className="text-white group-hover:opacity-80 transition-opacity" strokeWidth={2.5} />
+              </motion.button>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500/60 leading-none mb-1.5">Self-drive rentals</p>
+                <h1 className="text-[24px] font-[900] tracking-tight text-slate-950 leading-none">Choose Ride</h1>
+              </div>
+            </div>
+            <div className="flex flex-col items-end">
+              <span className="px-3 py-1 rounded-full bg-slate-900 text-[10px] font-bold text-white shadow-sm uppercase tracking-wider">
+                {availableCountLabel}
+              </span>
+            </div>
+          </div>
 
-        <div className="mt-3 space-y-2">
-          <div className="flex items-center gap-3 rounded-[16px] border border-slate-200 bg-white px-4 py-3 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
-            <Search size={16} className="text-slate-400 shrink-0" strokeWidth={2.6} />
+          <div className="relative mb-5">
+            <div className="flex gap-1.5 bg-slate-100/60 p-1.5 rounded-[20px] border border-slate-200/40 shadow-inner">
+              {DURATION_TABS.map((tab) => {
+                const isActive = selectedDuration === tab;
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setSelectedDuration(tab)}
+                    className="relative flex-1 py-2.5 rounded-[14px] text-[11px] font-[800] uppercase tracking-wider transition-all duration-300 outline-none"
+                  >
+                    {isActive && (
+                      <motion.div
+                        layoutId="activeTab"
+                        className="absolute inset-0 bg-white rounded-[14px] shadow-[0_4px_12px_rgba(15,23,42,0.08)] border border-slate-100"
+                        transition={{ type: 'spring', bounce: 0.25, duration: 0.5 }}
+                      />
+                    )}
+                    <span className={`relative z-10 transition-colors duration-300 ${isActive ? 'text-slate-950' : 'text-slate-400'}`}>
+                      {tab}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="relative group">
+            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+              <Search size={18} className="text-slate-400 group-focus-within:text-slate-900 transition-colors" strokeWidth={2.5} />
+            </div>
             <input
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search rental vehicle, category, seats or amenity"
-              className="w-full bg-transparent text-[13px] font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none"
+              placeholder="Search by vehicle, category or brand..."
+              className="w-full bg-slate-100/50 border border-slate-200/60 focus:border-slate-900/10 focus:bg-white rounded-[20px] pl-11 pr-11 py-3.5 text-[14px] font-bold text-slate-950 placeholder:text-slate-400/80 focus:outline-none focus:shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition-all"
             />
-            {searchQuery ? (
+            {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-slate-400 shrink-0"
+                className="absolute inset-y-0 right-3 flex items-center pr-1"
               >
-                <X size={14} strokeWidth={2.8} />
+                <div className="h-7 w-7 flex items-center justify-center rounded-full bg-slate-200 text-slate-500 hover:bg-slate-300 transition-colors">
+                  <X size={14} strokeWidth={3} />
+                </div>
               </button>
-            ) : null}
+            )}
           </div>
 
-          {visibleSuggestions.length ? (
-            <div className="flex flex-wrap gap-2">
+          {visibleSuggestions.length > 0 && !searchQuery && (
+            <motion.div 
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex gap-2 overflow-x-auto no-scrollbar pt-4 pb-1"
+            >
               {visibleSuggestions.map((suggestion) => (
                 <button
                   key={suggestion}
                   type="button"
                   onClick={() => setSearchQuery(suggestion)}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500 shadow-sm"
+                  className="shrink-0 rounded-full border border-slate-200 bg-white px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500 shadow-sm hover:border-slate-300 transition-colors"
                 >
                   {suggestion}
                 </button>
               ))}
-            </div>
-          ) : null}
+            </motion.div>
+          )}
         </div>
       </motion.header>
 
-      <div className="px-5 pt-4 space-y-4">
+      <div className="px-5 pt-6 space-y-5">
         <AnimatePresence mode="wait">
           <motion.div
             key={selectedDuration}
-            initial={{ opacity: 0, y: -6 }}
+            initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 6 }}
-            transition={{ duration: 0.22 }}
-            className="flex items-center gap-3 rounded-[16px] border border-white/80 bg-white/90 px-4 py-3 shadow-[0_4px_14px_rgba(15,23,42,0.05)]"
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
+            className="flex items-center gap-3 rounded-[20px] border border-white/80 bg-white/60 backdrop-blur-md px-4 py-3.5 shadow-[0_8px_20px_rgba(15,23,42,0.04)]"
           >
-            <div className="w-7 h-7 rounded-[10px] bg-blue-50 flex items-center justify-center shrink-0">
-              <Info size={14} className="text-blue-500" strokeWidth={2.5} />
+            <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center shrink-0 shadow-sm">
+              <Info size={16} className="text-blue-500" strokeWidth={2.5} />
             </div>
-            <p className="text-[12px] font-bold text-slate-700">{infoBanner[selectedDuration]}</p>
+            <p className="text-[13px] font-[700] text-slate-700 tracking-tight leading-tight">
+              {infoBanner[selectedDuration]}
+            </p>
           </motion.div>
         </AnimatePresence>
 
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400/80">Available Rentals</p>
-          <div className="mt-0.5 flex items-end justify-between gap-3">
-            <h2 className="text-[17px] font-extrabold tracking-tight text-slate-900">Choose your ride</h2>
-            {searchQuery ? (
-              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400/60">{filteredCountLabel}</span>
-            ) : null}
+        <div className="relative pt-2">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[10px] font-[800] uppercase tracking-[0.2em] text-slate-400">Available Near You</p>
+            {searchQuery && (
+              <motion.span 
+                initial={{ opacity: 0 }} 
+                animate={{ opacity: 1 }}
+                className="text-[10px] font-[800] uppercase tracking-wider text-blue-500 bg-blue-50 px-2 py-0.5 rounded-md"
+              >
+                {filteredCountLabel}
+              </motion.span>
+            )}
           </div>
+          <h2 className="text-[20px] font-[900] tracking-tight text-slate-900">Explore Fleet</h2>
         </div>
+      </div>
 
-        {loading ? (
-          <div className="rounded-[24px] border border-white/80 bg-white/90 p-5 text-[13px] font-bold text-slate-400 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-            Loading rental vehicles...
-          </div>
-        ) : errorMessage ? (
-          <div className="rounded-[24px] border border-rose-100 bg-rose-50/90 p-5 text-[13px] font-bold text-rose-500 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
-            {errorMessage}
-          </div>
-        ) : vehicles.length === 0 ? (
-          <div className="rounded-[24px] border border-white/80 bg-white/90 p-6 text-center shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-[16px] bg-slate-100 text-slate-400">
-              <Car size={22} />
-            </div>
-            <p className="mt-4 text-[15px] font-black text-slate-900">No rental vehicles available</p>
-            <p className="mt-1 text-[12px] font-bold text-slate-400">Admin has not published any active rental vehicles yet.</p>
-          </div>
-        ) : filteredVehicles.length === 0 ? (
-          <div className="rounded-[24px] border border-white/80 bg-white/90 p-6 text-center shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-[16px] bg-slate-100 text-slate-400">
-              <Search size={22} />
-            </div>
-            <p className="mt-4 text-[15px] font-black text-slate-900">No rentals matched your search</p>
-            <p className="mt-1 text-[12px] font-bold text-slate-400">Try another vehicle name, category, or amenity.</p>
-          </div>
-        ) : (
+      <div className="px-5 pt-4 pb-12 space-y-4">
+        <AnimatePresence mode="wait">
+          {loading ? (
+            <motion.div
+              key="skeleton"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <RentalSkeleton />
+            </motion.div>
+          ) : errorMessage ? (
+            <motion.div
+              key="error"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="rounded-[24px] border border-rose-100 bg-rose-50/90 p-5 text-[13px] font-bold text-rose-500 shadow-[0_8px_24px_rgba(15,23,42,0.04)]"
+            >
+              {errorMessage}
+            </motion.div>
+          ) : vehicles.length === 0 ? (
+            <motion.div
+              key="empty-all"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="rounded-[24px] border border-white/80 bg-white/90 p-6 text-center shadow-[0_8px_24px_rgba(15,23,42,0.06)]"
+            >
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-[16px] bg-slate-100 text-slate-400">
+                <Car size={22} />
+              </div>
+              <p className="mt-4 text-[15px] font-black text-slate-900">No rental vehicles available</p>
+              <p className="mt-1 text-[12px] font-bold text-slate-400">Admin has not published any active rental vehicles yet.</p>
+            </motion.div>
+          ) : filteredVehicles.length === 0 ? (
+            <motion.div
+              key="empty-search"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="rounded-[24px] border border-white/80 bg-white/90 p-6 text-center shadow-[0_8px_24px_rgba(15,23,42,0.06)]"
+            >
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-[16px] bg-slate-100 text-slate-400">
+                <Search size={22} />
+              </div>
+              <p className="mt-4 text-[15px] font-black text-slate-900">No rentals matched your search</p>
+              <p className="mt-1 text-[12px] font-bold text-slate-400">Try another vehicle name, category, or amenity.</p>
+            </motion.div>
+          ) : (
           paginatedVehicles.map((v, idx) => (
             <motion.div
               key={v.id}
@@ -478,6 +574,7 @@ const BikeRentalHome = () => {
             </motion.div>
           ))
         )}
+        </AnimatePresence>
 
         {!loading && !errorMessage && filteredVehicles.length > RENTAL_PAGE_SIZE ? (
           <div className="flex items-center justify-between gap-3 rounded-[20px] border border-white/80 bg-white/90 px-4 py-3.5 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
