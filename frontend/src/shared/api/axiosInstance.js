@@ -163,6 +163,11 @@ const clearStaleAuthState = (role = '', staleToken = '') => {
   localStorage.removeItem('chatRole');
 };
 
+const isStaleAuthMessage = (message = '') => {
+  const normalizedMessage = String(message || '').trim().toLowerCase();
+  return normalizedMessage === 'jwt expired' || normalizedMessage === 'invalid authorization token';
+};
+
 // Request Interceptor: Attach Auth Token automatically
 api.interceptors.request.use(
   (config) => {
@@ -245,23 +250,23 @@ api.interceptors.response.use(
   (error) => {
     if (error.response) {
       // Global error handling: e.g. deleted or inactive account logout
-      if (error.response.status === 401 || error.response.status === 403) {
-        const serverMessage = String(error.response.data?.message || '');
-        const authHeader = error.config?.headers?.Authorization || error.config?.headers?.authorization || '';
-        const token = String(authHeader).startsWith('Bearer ') ? String(authHeader).slice(7) : '';
-        const tokenRole = normalizeAuthRole(getTokenPayload(token)?.role || '');
+      const serverMessage = String(error.response.data?.message || '');
+      const authHeader = error.config?.headers?.Authorization || error.config?.headers?.authorization || '';
+      const token = String(authHeader).startsWith('Bearer ') ? String(authHeader).slice(7) : '';
+      const tokenRole = normalizeAuthRole(getTokenPayload(token)?.role || '');
+      const isAuthStatus = error.response.status === 401 || error.response.status === 403;
+      const shouldClearAuth =
+        serverMessage === 'Authenticated account no longer exists' ||
+        (tokenRole === 'user' && serverMessage === 'User account is not active') ||
+        isStaleAuthMessage(serverMessage);
 
-        const shouldClearAuth =
-          serverMessage === 'Authenticated account no longer exists' ||
-          (tokenRole === 'user' && serverMessage === 'User account is not active');
-
-        if (shouldClearAuth) {
-          clearStaleAuthState(tokenRole, token);
-          window.dispatchEvent(new CustomEvent('app:auth-stale', {
-            detail: { role: tokenRole || null, message: serverMessage, token },
-          }));
-        }
+      if ((isAuthStatus || isStaleAuthMessage(serverMessage)) && shouldClearAuth) {
+        clearStaleAuthState(tokenRole, token);
+        window.dispatchEvent(new CustomEvent('app:auth-stale', {
+          detail: { role: tokenRole || null, message: serverMessage, token },
+        }));
       }
+
       return Promise.reject({ ...error.response.data, status: error.response.status });
     }
 
