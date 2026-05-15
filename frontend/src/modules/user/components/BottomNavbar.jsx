@@ -1,8 +1,9 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Home, Clock, Map, User, BusFront } from 'lucide-react';
+import { Home, Clock, Map, User } from 'lucide-react';
 import { useSettings } from '../../../shared/context/SettingsContext';
+import busIcon from '../../../assets/3d images/AutoCab/bus.png';
 
 const isEnabledFlag = (value) => {
   if (typeof value === 'boolean') {
@@ -26,7 +27,7 @@ const BottomNavbar = () => {
   const navItems = [
     { icon: Home, label: 'Ride', path: '/taxi/user' },
     { icon: Clock, label: 'Rides', path: '/taxi/user/activity' },
-    ...(showBusService ? [{ icon: BusFront, label: 'Bus', path: '/taxi/user/bus' }] : []),
+    ...(showBusService ? [{ imageIcon: busIcon, label: 'Bus', path: '/taxi/user/bus' }] : []),
     { icon: Map, label: 'Support', path: '/taxi/user/support' },
     { icon: User, label: 'Profile', path: '/taxi/user/profile' },
   ];
@@ -34,7 +35,7 @@ const BottomNavbar = () => {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-[100] mx-auto w-full max-w-lg px-4 pb-[max(env(safe-area-inset-bottom),16px)] pt-2 pointer-events-none">
       <div className="flex items-center justify-around overflow-visible rounded-[32px] border border-white/40 bg-white/85 px-2 py-2 shadow-[0_20px_40px_rgba(0,0,0,0.12)] backdrop-blur-2xl pointer-events-auto relative">
-        {navItems.map(({ icon: Icon, label, path }) => {
+        {navItems.map(({ icon: Icon, imageIcon, label, path }) => {
           const isActive =
             path === '/taxi/user'
               ? pathname === path
@@ -77,11 +78,20 @@ const BottomNavbar = () => {
                   }}
                   className="relative z-20"
                 >
-                  <Icon
-                    size={21}
-                    strokeWidth={isActive ? 2.5 : 2}
-                    className={`transition-colors duration-300 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'}`}
-                  />
+                  {imageIcon ? (
+                    <img
+                      src={imageIcon}
+                      alt=""
+                      className={`h-[21px] w-[21px] object-contain transition-opacity duration-300 ${isActive ? 'opacity-100' : 'opacity-60 group-hover:opacity-80'}`}
+                      draggable={false}
+                    />
+                  ) : (
+                    <Icon
+                      size={21}
+                      strokeWidth={isActive ? 2.5 : 2}
+                      className={`transition-colors duration-300 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'}`}
+                    />
+                  )}
                 </motion.div>
 
                 {/* Label with Transition */}
