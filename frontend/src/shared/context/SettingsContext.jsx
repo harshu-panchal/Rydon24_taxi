@@ -35,6 +35,36 @@ const DEFAULT_SETTINGS_CONTEXT = {
 };
 const SettingsContext = createContext(DEFAULT_SETTINGS_CONTEXT);
 
+const normalizeBooleanSetting = (value, fallback = '0') => {
+  if (typeof value === 'boolean') {
+    return value ? '1' : '0';
+  }
+
+  if (typeof value === 'number') {
+    return value === 1 ? '1' : '0';
+  }
+
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) {
+    return fallback;
+  }
+
+  if (['1', 'true', 'yes', 'on', 'enabled'].includes(normalized)) {
+    return '1';
+  }
+
+  if (['0', 'false', 'no', 'off', 'disabled'].includes(normalized)) {
+    return '0';
+  }
+
+  return fallback;
+};
+
+const normalizeTransportRideSettings = (settings = {}) => ({
+  ...settings,
+  enable_bus_service: normalizeBooleanSetting(settings?.enable_bus_service, '0'),
+});
+
 const normalizeHexColor = (value, fallback = '') => {
   const trimmed = String(value || '').trim();
   if (!trimmed) return fallback;
@@ -159,7 +189,11 @@ export const SettingsProvider = ({ children }) => {
         customization: cusRes.status === 'fulfilled' ? (cusRes.value.data?.settings || {}) : {},
         transportRide:
           transportRideRes.status === 'fulfilled'
-            ? (transportRideRes.value.data?.settings || {})
+            ? normalizeTransportRideSettings(
+                transportRideRes.value.data?.settings
+                || transportRideRes.value.data
+                || {},
+              )
             : { enable_bus_service: '0' },
         bidRide:
           bidRideRes.status === 'fulfilled'
