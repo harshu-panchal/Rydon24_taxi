@@ -59,12 +59,14 @@ import {
   createPoolingBooking,
   getMyPoolingBookings
 } from '../controllers/poolingController.js';
-import { getAppModules, getGoodsTypes, getPublicRentalVehicleCatalog, getPublicVehicleTypeCatalog } from '../../admin/controllers/adminController.js';
+import { getAppBootstrap, getAppModules, getGeneralSettingsCategory, getGoodsTypes, getPublicRentalVehicleCatalog, getPublicVehicleTypeCatalog } from '../../admin/controllers/adminController.js';
 import { triggerUserSosAlert } from '../../safety/controllers/safetyController.js';
 
 export const userRouter = Router();
 
+userRouter.get('/bootstrap', asyncHandler(getAppBootstrap));
 userRouter.get('/app-modules', asyncHandler(getAppModules));
+userRouter.get('/settings/:category', asyncHandler(getGeneralSettingsCategory));
 userRouter.get('/intercity-packages', asyncHandler(getIntercityPackageCatalog));
 userRouter.get('/goods-types', asyncHandler(getGoodsTypes));
 userRouter.get('/vehicle-types', asyncHandler(getPublicVehicleTypeCatalog));

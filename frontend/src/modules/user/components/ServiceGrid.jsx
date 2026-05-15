@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { userService } from '../services/userService';
+import { useSettings, normalizeAssetUrl } from '../../../shared/context/SettingsContext';
 import toast from 'react-hot-toast';
 
 const ServiceTile = ({ icon, label, description, path, accentClass, loading }) => {
@@ -79,37 +79,25 @@ const ServiceGrid = () => {
     return accnets[index % accnets.length];
   };
 
-  useEffect(() => {
-    const fetchServices = async () => {
-      try {
-        setLoading(true);
-        const res = await userService.getAppModules();
-        
-        // Extract results: res could be { results: [] } or { data: { results: [] } } depending on service
-        const results = res?.results || res?.data?.results || [];
-        
-        // Only show active modules
-        const activeModules = results.filter(m => m.active);
-        
-        const mapped = activeModules.map((m, idx) => ({
-          icon: m.mobile_menu_icon,
-          label: m.name,
-          description: m.short_description,
-          path: getPath(m),
-          accentClass: getAccent(idx)
-        }));
-        
-        setServices(mapped);
-      } catch (err) {
-        console.error('Failed to load services:', err);
-        toast.error('Could not load services');
-      } finally {
-        setLoading(false);
-      }
-    };
+  const { modules, loading: settingsLoading } = useSettings();
 
-    fetchServices();
-  }, []);
+  useEffect(() => {
+    if (settingsLoading) return;
+    
+    // Only show active modules
+    const activeModules = (modules || []).filter(m => m.active);
+    
+    const mapped = activeModules.map((m, idx) => ({
+      icon: normalizeAssetUrl(m.mobile_menu_icon),
+      label: m.name,
+      description: m.short_description,
+      path: getPath(m),
+      accentClass: getAccent(idx)
+    }));
+    
+    setServices(mapped);
+    setLoading(false);
+  }, [modules, settingsLoading]);
 
   const optionCount = loading ? '...' : services.length;
   const optionLabel = services.length === 1 ? 'option' : 'options';

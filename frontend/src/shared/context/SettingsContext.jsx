@@ -1,11 +1,21 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../api/axiosInstance';
+import { BACKEND_ORIGIN } from '../api/runtimeConfig';
 
 let activeFaviconObjectUrl = '';
 const SETTINGS_CACHE_KEY = 'appSettingsCache:v1';
 const DEFAULT_ADMIN_THEME_COLOR = '#405189';
 const DEFAULT_LANDING_THEME_COLOR = '#0ab39c';
 const DEFAULT_SIDEBAR_TEXT_COLOR = '#cbd5e1';
+
+export const normalizeAssetUrl = (url = '') => {
+  if (!url || typeof url !== 'string') return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
+  }
+  return `${BACKEND_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
 const DEFAULT_SETTINGS_CONTEXT = {
   settings: {
     general: {
@@ -169,11 +179,16 @@ const buildFaviconHref = (faviconUrl = '') => {
     activeFaviconObjectUrl = '';
   }
 
-  return `${faviconUrl}${faviconUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
+  const normalized = normalizeAssetUrl(faviconUrl);
+  return `${normalized}${normalized.includes('?') ? '&' : '?'}v=${Date.now()}`;
 };
 
 const buildSettingsState = (payload = {}) => ({
-  general: payload?.general || {},
+  general: {
+    ...(payload?.general || {}),
+    logo: normalizeAssetUrl(payload?.general?.logo),
+    favicon: normalizeAssetUrl(payload?.general?.favicon),
+  },
   customization: payload?.customization || {},
   transportRide: normalizeTransportRideSettings(payload?.transportRide || {}),
   bidRide: payload?.bidRide || DEFAULT_SETTINGS_CONTEXT.settings.bidRide,
@@ -219,42 +234,27 @@ export const SettingsProvider = ({ children }) => {
   const [settings, setSettings] = useState(cachedSettings || DEFAULT_SETTINGS_CONTEXT.settings);
   const [loading, setLoading] = useState(true);
   const [hasBootstrapSettings, setHasBootstrapSettings] = useState(Boolean(cachedSettings));
+  const [modules, setModules] = useState([]);
 
   const fetchSettings = async () => {
     try {
-      const [genRes, cusRes, transportRideRes, bidRideRes, paymentGatewayRes] = await Promise.allSettled([
-        api.get('/admin/general-settings/general'),
-        api.get('/admin/general-settings/customize'),
-        api.get('/admin/general-settings/transport-ride'),
-        api.get('/admin/general-settings/bid-ride'),
-        api.get('/common/payment-gateway'),
-      ]);
-
+      const response = await api.get('/users/bootstrap');
+      const data = response?.data || {};
+      
       const nextSettings = buildSettingsState({
-        general: genRes.status === 'fulfilled' ? (genRes.value.data?.settings || {}) : {},
-        customization: cusRes.status === 'fulfilled' ? (cusRes.value.data?.settings || {}) : {},
-        transportRide:
-          transportRideRes.status === 'fulfilled'
-            ? normalizeTransportRideSettings(
-                transportRideRes.value.data?.settings
-                || transportRideRes.value.data
-                || {},
-              )
-            : { enable_bus_service: '0' },
-        bidRide:
-          bidRideRes.status === 'fulfilled'
-            ? (bidRideRes.value.data?.settings || DEFAULT_SETTINGS_CONTEXT.settings.bidRide)
-            : DEFAULT_SETTINGS_CONTEXT.settings.bidRide,
-        paymentGateway:
-          paymentGatewayRes.status === 'fulfilled'
-            ? (paymentGatewayRes.value.data?.activeGateway || null)
-            : null,
+        general: data.settings?.general || {},
+        customization: data.settings?.customization || {},
+        transportRide: data.settings?.transportRide || {},
+        bidRide: data.settings?.bidRide || DEFAULT_SETTINGS_CONTEXT.settings.bidRide,
+        paymentGateway: data.settings?.paymentGateway || null,
       });
+
       setSettings(nextSettings);
+      setModules(data.modules || []);
       setHasBootstrapSettings(true);
       writeCachedSettings(nextSettings);
     } catch (err) {
-      console.error('Failed to fetch settings:', err);
+      console.error('[SettingsContext] Failed to fetch bootstrap settings:', err);
     } finally {
       setLoading(false);
     }
@@ -336,7 +336,7 @@ export const SettingsProvider = ({ children }) => {
   const refreshSettings = () => fetchSettings();
 
   return (
-    <SettingsContext.Provider value={{ settings, loading, hasBootstrapSettings, refreshSettings }}>
+    <SettingsContext.Provider value={{ settings, modules, loading, hasBootstrapSettings, refreshSettings }}>
       {children}
     </SettingsContext.Provider>
   );

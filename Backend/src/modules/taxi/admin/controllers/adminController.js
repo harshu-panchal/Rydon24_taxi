@@ -1574,3 +1574,21 @@ export const updateGeneralSettingsCategory = asyncHandler(async (req, res) =>
 export const getTransportTypes = asyncHandler(async (_req, res) =>
   ok(res, await adminService.listTransportTypes()),
 );
+
+export const getAppBootstrap = asyncHandler(async (_req, res) => {
+  const [modules, general, transportRide, customize] = await Promise.all([
+    adminService.listAppModules(),
+    adminService.getGeneralSettings('general'),
+    adminService.getGeneralSettings('transport-ride'),
+    adminService.getGeneralSettings('customize')
+  ]);
+
+  ok(res, {
+    modules: modules.results || modules,
+    settings: {
+      general: general.settings || {},
+      transportRide: transportRide.settings || {},
+      customization: customize.settings || {}
+    }
+  });
+});
