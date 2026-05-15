@@ -227,6 +227,10 @@ adminRouter.post('/admin/login', loginAdmin);
 adminRouter.post('/admin/forgot-password', forgotPassword);
 adminRouter.post('/admin/verify-reset-otp', verifyResetOtp);
 adminRouter.post('/admin/reset-password', resetPassword);
+
+// Public route for app branding/settings
+adminRouter.get('/admin/general-settings/:category', getGeneralSettingsCategory);
+
 adminRouter.use('/admin', authenticate(['admin']));
 
 adminRouter.get('/admin/permissions', getAdminPermissions);
@@ -451,7 +455,6 @@ adminRouter.patch('/admin/integration-settings/map', updateMapSettings);
 adminRouter.get('/admin/integration-settings/mail', getMailSettings);
 adminRouter.patch('/admin/integration-settings/mail', updateMailSettings);
 
-adminRouter.get('/admin/general-settings/:category', getGeneralSettingsCategory);
 adminRouter.patch('/admin/general-settings/:category', updateGeneralSettingsCategory);
 
 adminRouter.get('/on-boarding', getUserOnboarding);
