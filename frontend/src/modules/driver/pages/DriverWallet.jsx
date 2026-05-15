@@ -211,6 +211,14 @@ const DriverWallet = () => {
         setError('');
 
         try {
+            const token = getLocalDriverToken();
+            if (!token) {
+                setLoading(false);
+                setRefreshing(false);
+                navigate('/taxi/driver/login', { replace: true });
+                return;
+            }
+
             const authConfig = withDriverAuthorization();
             const [walletResponse, profileResponse] = await Promise.all([
                 api.get('/drivers/wallet', authConfig),
@@ -232,12 +240,13 @@ const DriverWallet = () => {
             setLoading(false);
             setRefreshing(false);
         }
-    }, []);
+    }, [navigate]);
 
     useEffect(() => {
         loadWallet({ quiet: true });
 
-        const socket = socketService.connect({ role: 'driver' });
+        const token = getLocalDriverToken();
+        const socket = token ? socketService.connect({ role: 'driver' }) : null;
         const onWalletUpdated = (payload) => {
             if (payload?.wallet) setWallet(payload.wallet);
             if (payload?.transaction) {

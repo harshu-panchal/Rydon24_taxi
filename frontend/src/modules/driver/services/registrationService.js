@@ -56,6 +56,7 @@ export const clearDriverAuthState = () => {
 
 export const persistDriverAuthSession = ({ token = "", role = "driver" } = {}) => {
   const normalizedRole = String(role || "driver").toLowerCase();
+  const chatRole = normalizedRole === "owner" ? "owner" : "driver";
 
   if (token) {
     writeSessionValue("token", token);
@@ -66,10 +67,10 @@ export const persistDriverAuthSession = ({ token = "", role = "driver" } = {}) =
 
   writeSessionValue("role", normalizedRole);
   writeSessionValue("driverRole", normalizedRole);
-  writeSessionValue("chatRole", normalizedRole === "owner" ? "owner" : "driver");
+  writeSessionValue("chatRole", chatRole);
   localStorage.setItem("role", normalizedRole);
   localStorage.setItem("driverRole", normalizedRole);
-  localStorage.setItem("chatRole", normalizedRole === "owner" ? "owner" : "driver");
+  localStorage.setItem("chatRole", chatRole);
 };
 
 export const normalizeDriverPortalRole = (role) => {
@@ -144,12 +145,12 @@ const getTokenPayload = (token) => {
 
 const getPersistedDriverToken = () => {
   const persistedDriverToken = String(localStorage.getItem("driverToken") || "");
-  if (DRIVER_PORTAL_ROLES.includes(getTokenPayload(persistedDriverToken)?.role)) {
+  if (persistedDriverToken) {
     return persistedDriverToken;
   }
 
   const persistedGenericToken = String(localStorage.getItem("token") || "");
-  if (DRIVER_PORTAL_ROLES.includes(getTokenPayload(persistedGenericToken)?.role)) {
+  if (DRIVER_PORTAL_ROLES.includes(normalizeDriverPortalRole(getTokenPayload(persistedGenericToken)?.role))) {
     return persistedGenericToken;
   }
 
@@ -214,7 +215,7 @@ const readLocalDriverToken = () => {
   if (direct) return direct;
 
   const fallback = readSessionValue("token");
-  if (DRIVER_PORTAL_ROLES.includes(getTokenPayload(fallback)?.role)) {
+  if (DRIVER_PORTAL_ROLES.includes(normalizeDriverPortalRole(getTokenPayload(fallback)?.role))) {
     return fallback;
   }
 

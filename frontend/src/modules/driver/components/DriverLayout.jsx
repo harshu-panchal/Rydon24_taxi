@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-    clearDriverAuthState,
     getAuthenticatedDriverRole,
     getCurrentDriver,
     getLocalDriverToken,
@@ -78,7 +77,6 @@ const softEntryRoutes = new Set([
 ]);
 
 const redirectToDriverLogin = (navigate, pathname = '', role = '') => {
-    clearDriverAuthState();
     navigate(`${getPortalPrefix(pathname, role)}/login`, { replace: true });
 };
 
@@ -270,7 +268,7 @@ const DriverLayout = () => {
         return () => {
             active = false;
         };
-    }, [isAllowed, location.pathname, navigate]);
+    }, [isAllowed, location.pathname, location.state, navigate]);
 
     return (
         <div className="driver-theme min-h-screen">
