@@ -20,6 +20,12 @@ import { useSettings } from '../../../shared/context/SettingsContext';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import { getOwnerFleetDashboard } from '../services/registrationService';
 
+const isEnabledFlag = (value) => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  return ['1', 'true', 'yes', 'on', 'enabled'].includes(String(value || '').trim().toLowerCase());
+};
+
 const money = (value) =>
   `₹${Number(value || 0).toLocaleString('en-IN', {
     minimumFractionDigits: 0,
@@ -127,7 +133,7 @@ const OwnerDashboard = () => {
   const busOverview = dashboard?.busOverview || {};
   const recentRides = dashboard?.recentRides || [];
   const transportBreakdown = dashboard?.transportBreakdown || [];
-  const busEnabled = String(settings.transportRide?.enable_bus_service || '0') === '1';
+  const busEnabled = isEnabledFlag(settings.transportRide?.enable_bus_service);
 
   const businessSubtitle = useMemo(() => {
     const ownerName = profile.ownerName || profile.companyName || 'Owner';
