@@ -20,7 +20,6 @@ import {
     Info,
     Gift,
     Shield,
-    Languages,
     BadgePercent,
     Check,
     Mail,
@@ -311,7 +310,6 @@ Processing Time: Refunds are typically credited back to the original payment met
         {
             title: 'Preferences',
             items: [
-                { id: 'languages', label: 'App Language', icon: <Languages size={20} />, path: `${routePrefix}/lang-select`, state: { allowAuthenticated: true } },
                 { id: 'routeBooking', label: 'My Route Booking', sub: routeBookingSubtitle, icon: <Route size={20} />, type: 'toggle' },
             ]
         },

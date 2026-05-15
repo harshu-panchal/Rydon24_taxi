@@ -123,8 +123,6 @@ const UserSubscriptions = lazy(() => import('./modules/user/pages/profile/Subscr
 import DriverLayout from './modules/driver/components/DriverLayout';
 
 // Driver Module - Registration
-const LanguageSelect = lazy(() => import('./modules/driver/pages/registration/LanguageSelect'));
-const DriverWelcome = lazy(() => import('./modules/driver/pages/registration/DriverWelcome'));
 const PhoneRegistration = lazy(() => import('./modules/driver/pages/registration/PhoneRegistration'));
 const OTPVerification = lazy(() => import('./modules/driver/pages/registration/OTPVerification'));
 const RegistrationStatus = lazy(() => import('./modules/driver/pages/registration/RegistrationStatus'));
@@ -969,12 +967,12 @@ function App() {
                   index
                   element={<DriverEntryRedirect />}
                 />
-                <Route path="lang-select" element={<LanguageSelect />} />
-                  <Route path="welcome" element={<DriverWelcome />} />
+                <Route path="lang-select" element={<Navigate to="/taxi/driver/login" replace />} />
+                  <Route path="welcome" element={<Navigate to="/taxi/driver/login" replace />} />
                   <Route path="login" element={<PhoneRegistration />} />
                   <Route path="terms" element={<LegalPage />} />
                   <Route path="privacy" element={<LegalPage />} />
-                  <Route path="reg-phone" element={<PhoneRegistration />} />
+                  <Route path="reg-phone" element={<Navigate to="/taxi/driver/login" replace />} />
                 <Route path="otp-verify" element={<OTPVerification />} />
                 <Route path="step-personal" element={<StepPersonal />} />
                 <Route path="step-referral" element={<StepReferral />} />
@@ -1036,9 +1034,9 @@ function App() {
                   <Route path="login" element={<PhoneRegistration />} />
                   <Route path="terms" element={<LegalPage />} />
                   <Route path="privacy" element={<LegalPage />} />
-                  <Route path="reg-phone" element={<PhoneRegistration />} />
+                  <Route path="reg-phone" element={<Navigate to="/taxi/owner/login" replace />} />
                 <Route path="otp-verify" element={<OTPVerification />} />
-                <Route path="lang-select" element={<LanguageSelect />} />
+                <Route path="lang-select" element={<Navigate to="/taxi/owner/login" replace />} />
                 <Route path="step-personal" element={<StepPersonal />} />
                 <Route path="step-referral" element={<StepReferral />} />
                 <Route path="step-vehicle" element={<StepVehicle />} />
