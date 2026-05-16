@@ -473,9 +473,12 @@ const UserAccountInvalidationListener = () => {
       });
     };
 
-    const socket = socketService.connect({ role: 'user' });
-    socketService.on('account:deleted', handleLogout);
-    socketService.on('chat:message', handleAdminChatMessage);
+    let socket = null;
+    if (getLocalUserToken()) {
+        socket = socketService.connect({ role: 'user' });
+        socketService.on('account:deleted', handleLogout);
+        socketService.on('chat:message', handleAdminChatMessage);
+    }
 
     const handleAuthStale = (event) => {
       const staleToken = event.detail?.token || '';

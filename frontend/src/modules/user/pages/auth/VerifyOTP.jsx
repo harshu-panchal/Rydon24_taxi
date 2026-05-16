@@ -1,95 +1,82 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import AuthLayout from '../../components/AuthLayout';
-import { ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, ChevronRight, MessageSquare } from 'lucide-react';
 import { userAuthService } from '../../services/authService';
+import { useSettings } from '../../../../shared/context/SettingsContext';
+import loginIllustration from '../../../../assets/images/login-illustration.png';
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
 const PENDING_SIGNUP_PHONE_KEY = 'pendingUserSignupPhone';
 const PENDING_OTP_PHONE_KEY = 'pendingUserOtpPhone';
 const PENDING_SIGNUP_REFERRAL_CODE_KEY = 'pendingUserSignupReferralCode';
 const RESEND_OTP_COOLDOWN_SECONDS = 60;
+
 const syncPushTokens = () => {
   window.__flushNativeFcmToken?.().catch?.(() => {});
   window.__registerBrowserFcmToken?.({ interactive: true }).catch?.(() => {});
 };
-const maskPhone = (phone) => {
-  const digits = String(phone || '').replace(/\D/g, '').slice(-10);
-  if (digits.length !== 10) {
-    return '';
-  }
-
-  return `${digits.slice(0, 2)}XXXXXX${digits.slice(-2)}`;
-};
 
 const VerifyOTP = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { settings } = useSettings();
+  const inputs = useRef([]);
+  
   const phone = String(
     location.state?.phone ||
     sessionStorage.getItem(PENDING_OTP_PHONE_KEY) ||
     sessionStorage.getItem(PENDING_SIGNUP_PHONE_KEY) ||
     '',
   ).replace(/\D/g, '').slice(-10);
+  
   const referralCode = String(
     location.state?.referralCode ||
     sessionStorage.getItem(PENDING_SIGNUP_REFERRAL_CODE_KEY) ||
     '',
   ).trim().toUpperCase();
+
   const [otp, setOtp] = useState(['', '', '', '']);
   const [timer, setTimer] = useState(RESEND_OTP_COOLDOWN_SECONDS);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const [appName, setAppName] = useState('App');
-  const inputs = useRef([]);
 
-  const navigate = useNavigate();
-  const maskedPhone = maskPhone(phone);
-
-  useEffect(() => {
-    const title = document.title;
-    if (title && title !== 'App') {
-      setAppName(title);
-    }
-  }, []);
+  const appName = settings.general?.app_name || 'Rydon24';
+  const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
 
   useEffect(() => {
     if (!phone) {
       navigate('/taxi/user/signup', { replace: true });
       return;
     }
-
     sessionStorage.setItem(PENDING_OTP_PHONE_KEY, phone);
-    sessionStorage.setItem(PENDING_SIGNUP_PHONE_KEY, phone);
-    if (referralCode) {
-      sessionStorage.setItem(PENDING_SIGNUP_REFERRAL_CODE_KEY, referralCode);
-    }
-  }, [navigate, phone, referralCode]);
+  }, [navigate, phone]);
 
   useEffect(() => {
     let interval = null;
     if (timer > 0) {
       interval = setInterval(() => setTimer((prev) => prev - 1), 1000);
-    } else {
-      clearInterval(interval);
     }
     return () => clearInterval(interval);
   }, [timer]);
+
+  useEffect(() => {
+    const focusTimer = window.setTimeout(() => {
+      inputs.current[0]?.focus();
+    }, 500);
+    return () => window.clearTimeout(focusTimer);
+  }, []);
 
   const handleChange = (index, value) => {
     if (isNaN(value)) return;
     const newOtp = [...otp];
     newOtp[index] = value.substring(value.length - 1);
     setOtp(newOtp);
-
     if (value && index < 3) {
       inputs.current[index + 1]?.focus();
     }
-
-    setError(false);
-    setErrorMessage('');
+    setError('');
   };
 
   const handleKeyDown = (index, e) => {
@@ -98,27 +85,12 @@ const VerifyOTP = () => {
     }
   };
 
-  const handlePaste = (e) => {
-    e.preventDefault();
-    const data = e.clipboardData.getData('text').slice(0, 4);
-    if (!/^\d+$/.test(data)) return;
-
-    const newOtp = [...otp];
-    data.split('').forEach((char, i) => {
-      newOtp[i] = char;
-      if (inputs.current[i]) inputs.current[i].value = char;
-    });
-    setOtp(newOtp);
-    if (data.length === 4) inputs.current[3]?.focus();
-  };
-
   const handleVerify = async () => {
     const fullOtp = otp.join('');
-    if (fullOtp.length < 4) return;
+    if (fullOtp.length < 4 || loading) return;
 
     setLoading(true);
-    setError(false);
-    setErrorMessage('');
+    setError('');
 
     try {
       const response = await userAuthService.verifyOtp(phone, fullOtp);
@@ -133,21 +105,13 @@ const VerifyOTP = () => {
         localStorage.setItem('userInfo', JSON.stringify(payload.user || {}));
         syncPushTokens();
         sessionStorage.removeItem(PENDING_OTP_PHONE_KEY);
-        sessionStorage.removeItem(PENDING_SIGNUP_PHONE_KEY);
-        sessionStorage.removeItem(PENDING_SIGNUP_REFERRAL_CODE_KEY);
-        setTimeout(() => navigate('/taxi/user', { replace: true }), 1200);
+        setTimeout(() => navigate('/taxi/user', { replace: true }), 1000);
         return;
       }
 
-      sessionStorage.setItem(PENDING_OTP_PHONE_KEY, String(phone || ''));
-      sessionStorage.setItem(PENDING_SIGNUP_PHONE_KEY, String(phone || ''));
-      if (referralCode) {
-        sessionStorage.setItem(PENDING_SIGNUP_REFERRAL_CODE_KEY, referralCode);
-      }
-      setTimeout(() => navigate('/taxi/user/signup', { state: { phone, otpVerified: true, referralCode } }), 1200);
+      setTimeout(() => navigate('/taxi/user/signup', { state: { phone, otpVerified: true, referralCode } }), 1000);
     } catch (err) {
-      setError(true);
-      setErrorMessage(err?.message || 'The OTP you entered is incorrect. Please try again.');
+      setError(err?.message || 'Invalid code. Please try again.');
       setOtp(['', '', '', '']);
       inputs.current[0]?.focus();
     } finally {
@@ -157,129 +121,169 @@ const VerifyOTP = () => {
 
   const handleResend = async () => {
     if (timer > 0 || loading) return;
-
     setLoading(true);
-    setError(false);
-    setErrorMessage('');
-
+    setError('');
     try {
       await userAuthService.startOtp(phone);
       setOtp(['', '', '', '']);
       setTimer(RESEND_OTP_COOLDOWN_SECONDS);
       inputs.current[0]?.focus();
     } catch (err) {
-      setError(true);
-      setErrorMessage(err?.message || 'Unable to resend OTP. Please try again.');
+      setError(err?.message || 'Failed to resend code');
     } finally {
       setLoading(false);
     }
   };
 
-  const isFilled = otp.every((digit) => digit !== '');
-
   return (
-    <AuthLayout
-      title=""
-      subtitle=""
-    >
-      <div className="mb-6">
-        <div className="flex items-start gap-4">
-          <button
-            onClick={() => navigate(-1)}
-            className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-900 shadow-sm transition-all hover:bg-gray-50"
-          >
-            <ArrowLeft size={20} className="text-gray-900" />
-          </button>
-          <div className="text-left">
-            <h1 className="text-2xl md:text-3xl font-black text-gray-900 leading-tight tracking-tight">
-              Verify your number
-            </h1>
-            <p className="mt-2 text-[15px] font-medium leading-snug text-gray-500">
-              Enter the 4-digit code sent to <span className="text-black font-bold whitespace-nowrap">+91 {maskedPhone || phone}</span>
-            </p>
-          </div>
-        </div>
+    <div className="min-h-screen bg-[#E7F5E8] flex flex-col font-['Outfit'] select-none overflow-hidden relative">
+      {/* Top Background Illustration - Full Cover */}
+      <div className="absolute top-0 left-0 right-0 h-[65%] z-0">
+        <motion.img 
+          initial={{ opacity: 0, scale: 1.05 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 1.2, ease: "easeOut" }}
+          src={loginIllustration} 
+          alt="Travel background" 
+          className="w-full h-full object-cover object-bottom"
+        />
+        <div className="absolute inset-0 bg-black/5" />
       </div>
 
-      <div className="space-y-10">
-        <div className="flex justify-between gap-1 md:gap-3 py-4">
-          {otp.map((digit, index) => (
-            <motion.input
-              key={index}
-              ref={(el) => {
-                inputs.current[index] = el;
-              }}
-              type="tel"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              autoComplete={index === 0 ? 'one-time-code' : 'off'}
-              maxLength={1}
-              value={digit}
-              onChange={(e) => handleChange(index, e.target.value)}
-              onKeyDown={(e) => handleKeyDown(index, e)}
-              onPaste={handlePaste}
-              animate={error ? { x: [0, -10, 10, -10, 10, 0] } : {}}
-              transition={{ duration: 0.4 }}
-              className={`w-full h-12 md:h-14 bg-[#F6F6F6] rounded-2xl text-center text-xl md:text-2xl font-bold transition-all border-2 outline-none focus:bg-white
-                ${error ? 'border-red-500 text-red-500 ring-2 ring-red-50' : 'border-transparent focus:border-black/10 focus:ring-4 focus:ring-black/5 text-gray-900'}
-              `}
-            />
-          ))}
-        </div>
-
-        <div className="text-center">
-          {timer > 0 ? (
-            <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">
-              Resend OTP in <span className="text-black">{timer}s</span>
-            </p>
-          ) : (
-            <button
-              onClick={handleResend}
-              className="text-black text-xs font-bold hover:opacity-70 underline underline-offset-4 decoration-2 tracking-widest uppercase transition-all"
-            >
-              Resend OTP
-            </button>
-          )}
-        </div>
-
-        <AnimatePresence>
-          {error && (
-            <motion.p
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="text-red-500 text-center font-bold text-sm"
-            >
-              {errorMessage || 'The OTP you entered is incorrect. Please try again.'}
-            </motion.p>
-          )}
-        </AnimatePresence>
-
-        <motion.button
-          whileTap={{ scale: 0.98 }}
-          onClick={handleVerify}
-          disabled={!isFilled || loading || success}
-          className={`w-full py-4 rounded-xl text-lg font-bold shadow-xl transition-all flex items-center justify-center gap-3 ${
-            isFilled && !loading && !success
-              ? 'bg-black text-white shadow-black/10'
-              : success
-                ? 'bg-green-600 text-white shadow-green-100'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
-          }`}
+      {/* Top Header Section */}
+      <header className="p-6 pt-10 flex items-center justify-between z-20">
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="flex items-center gap-3 bg-white/10 backdrop-blur-md p-2 pr-4 rounded-full border border-white/20 shadow-xl"
         >
-          {loading ? (
-            <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-          ) : success ? (
-            <div className="flex items-center gap-2">
-              <CheckCircle2 size={24} />
-              <span>Verified Successfully</span>
-            </div>
+          {appLogo ? (
+            <img 
+              src={appLogo} 
+              alt={appName} 
+              className="h-8 w-8 object-contain rounded-full bg-black p-1.5"
+            />
           ) : (
-            <span>Verify & Proceed</span>
+            <div className="h-8 w-8 bg-black rounded-full flex items-center justify-center">
+               <div className="w-3 h-3 bg-white rounded-sm" />
+            </div>
           )}
+          <span className="text-lg font-black tracking-tighter text-black uppercase">{appName}</span>
+        </motion.div>
+
+        <motion.button 
+          whileTap={{ scale: 0.9 }}
+          onClick={() => navigate(-1)}
+          className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-black shadow-xl"
+        >
+          <ArrowLeft size={20} strokeWidth={3} />
         </motion.button>
-      </div>
-    </AuthLayout>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col justify-end">
+        {/* Text and Actions Section */}
+        <motion.div 
+          initial={{ y: 100 }}
+          animate={{ y: 0 }}
+          transition={{ type: "spring", damping: 25, stiffness: 120 }}
+          className="bg-white rounded-t-[40px] px-8 pt-10 pb-12 shadow-[0_-20px_60px_rgba(0,0,0,0.1)] z-20 relative"
+        >
+          <div className="space-y-8">
+            <div className="space-y-2 text-center">
+               <h2 className="text-[30px] font-black text-slate-900 leading-[1.1] tracking-tight">
+                 Verify Number
+               </h2>
+               <p className="text-slate-400 font-medium text-sm">
+                 We've sent a code to <span className="text-slate-900 font-bold">+91 {phone}</span>
+               </p>
+            </div>
+
+            {/* OTP Inputs */}
+            <div className="flex justify-between gap-3">
+              {otp.map((digit, index) => (
+                <input
+                  key={index}
+                  ref={(el) => (inputs.current[index] = el)}
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(e) => handleChange(index, e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(index, e)}
+                  className={`h-16 w-full rounded-2xl border-2 text-center text-3xl font-black transition-all outline-none ${
+                    digit 
+                      ? 'border-slate-900 bg-slate-50 text-slate-900 shadow-lg shadow-slate-100' 
+                      : 'border-slate-50 bg-slate-50 text-slate-900 focus:border-slate-200 focus:bg-white'
+                  }`}
+                />
+              ))}
+            </div>
+
+            <div className="space-y-6">
+              <AnimatePresence>
+                {error && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="bg-rose-50 border border-rose-100 rounded-2xl p-4 text-center"
+                  >
+                    <p className="text-rose-500 text-xs font-bold">{error}</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="flex flex-col items-center gap-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
+                  Didn't receive the code?
+                </p>
+                <button
+                  onClick={handleResend}
+                  disabled={timer > 0 || loading}
+                  className={`flex items-center gap-2 text-xs font-black uppercase tracking-widest transition-all ${
+                    timer > 0 
+                      ? 'text-slate-200' 
+                      : 'text-slate-900 hover:opacity-70 underline underline-offset-4 decoration-2'
+                  }`}
+                >
+                  <MessageSquare size={14} />
+                  {timer > 0 ? `Retry in ${timer}s` : 'Resend Code'}
+                </button>
+              </div>
+            </div>
+
+            <motion.button 
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleVerify}
+              disabled={loading || otp.join('').length !== 4 || success}
+              className={`w-full py-5 rounded-2xl text-[16px] font-bold transition-all flex items-center justify-center gap-3 ${
+                otp.join('').length === 4 && !success
+                  ? 'bg-slate-900 text-white shadow-2xl shadow-slate-900/30'
+                  : success
+                  ? 'bg-emerald-500 text-white shadow-emerald-500/20'
+                  : 'bg-slate-100 text-slate-300 pointer-events-none'
+              }`}
+            >
+              {loading ? (
+                <div className="h-6 w-6 border-4 border-white/20 border-t-white rounded-full animate-spin" />
+              ) : success ? (
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 size={24} />
+                  <span className="uppercase tracking-[0.1em]">Verified</span>
+                </div>
+              ) : (
+                <>
+                  <span className="uppercase tracking-[0.2em]">Verify & Continue</span>
+                  <ChevronRight size={24} strokeWidth={4} />
+                </>
+              )}
+            </motion.button>
+          </div>
+        </motion.div>
+      </main>
+    </div>
   );
 };
 
