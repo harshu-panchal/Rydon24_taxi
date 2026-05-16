@@ -16,187 +16,140 @@ import {
   UserPlus,
   Users,
   Wallet,
+  Activity,
+  ChevronRight,
 } from 'lucide-react';
 import { adminService } from '../../services/adminService';
 import { BACKEND_LABEL } from '../../../../shared/api/runtimeConfig';
 
-const currency = (value) => Number(value || 0).toFixed(2);
-const DASHBOARD_REFRESH_INTERVAL_MS = 20000;
+const currency = (value) => Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+const DASHBOARD_REFRESH_INTERVAL_MS = 30000;
 
-const TopStatCard = ({ label, value, trend, icon: Icon, accentClass, iconClass, isLoading, onClick, clickable = false }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    disabled={!clickable}
-    className={`w-full overflow-hidden rounded-[24px] border border-gray-100 bg-white p-5 text-left shadow-sm ${
-      clickable ? 'cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md' : 'cursor-default'
-    }`}
-  >
-    {isLoading ? (
-      <div className="animate-pulse space-y-4">
-        <div className="h-4 w-1/2 rounded bg-gray-100" />
-        <div className="h-8 w-3/4 rounded bg-gray-100" />
-      </div>
-    ) : (
-      <>
-        <div className="mb-3 flex items-start justify-between">
-          <div>
-            <p className="mb-1.5 text-[10px] font-semibold uppercase leading-none tracking-wider text-gray-400">{label}</p>
-            <h4 className="text-2xl font-semibold leading-none tracking-tight text-gray-950">{value}</h4>
-          </div>
-          {trend !== undefined ? (
-            <div className={`flex items-center gap-1 text-[10px] font-semibold ${trend > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-              {trend > 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-              {Math.abs(trend)}%
-            </div>
-          ) : null}
-        </div>
-        <div className="flex justify-end">
-          <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${accentClass} ${iconClass}`}>
-            <Icon size={18} strokeWidth={2.5} />
-          </div>
-        </div>
-      </>
-    )}
-  </button>
+const CardWrapper = ({ children, className = "" }) => (
+  <div className={`bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden ${className}`}>
+    {children}
+  </div>
 );
 
-const MiniStat = ({ label, value, icon: Icon, accentClass, iconClass, isLoading }) => (
-  <div className="flex min-h-[64px] cursor-default items-center justify-between rounded-[20px] border border-gray-100 bg-gray-50/50 p-4 transition-all hover:bg-white">
+const SectionHeader = ({ title, subtitle }) => (
+  <div className="mb-4">
+    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">{title}</h3>
+    {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+  </div>
+);
+
+const TopStatCard = ({ label, value, trend, icon: Icon, colorClass, isLoading, onClick, clickable = false }) => (
+  <CardWrapper className={clickable ? 'hover:border-slate-300 transition-all cursor-pointer' : ''}>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!clickable}
+      className="w-full p-5 text-left focus:outline-none"
+    >
+      {isLoading ? (
+        <div className="animate-pulse space-y-3">
+          <div className="h-3 w-20 bg-slate-100 rounded" />
+          <div className="h-6 w-32 bg-slate-100 rounded" />
+        </div>
+      ) : (
+        <div className="flex justify-between items-start">
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{label}</p>
+            <div className="flex items-baseline gap-2">
+              <h4 className="text-2xl font-bold text-slate-900">{value}</h4>
+              {trend !== undefined && (
+                <span className={`text-[10px] font-bold flex items-center ${trend >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  {trend >= 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+                  {Math.abs(trend)}%
+                </span>
+              )}
+            </div>
+          </div>
+          <div className={`p-2.5 rounded-lg bg-slate-50 ${colorClass}`}>
+            <Icon size={18} />
+          </div>
+        </div>
+      )}
+    </button>
+  </CardWrapper>
+);
+
+const MiniStat = ({ label, value, icon: Icon, colorClass, isLoading }) => (
+  <CardWrapper className="p-4 flex items-center justify-between group hover:bg-slate-50 transition-colors">
     {isLoading ? (
-      <div className="h-4 w-full animate-pulse rounded bg-gray-100" />
+      <div className="h-8 w-full animate-pulse bg-slate-50 rounded-lg" />
     ) : (
       <>
         <div>
-          <p className="mb-1 text-[9px] font-semibold uppercase leading-none tracking-wider text-gray-400">{label}</p>
-          <p className="text-[15px] font-semibold leading-none tracking-tight text-gray-950">Rs {value}</p>
+          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1.5">{label}</p>
+          <p className="text-[15px] font-bold text-slate-900 leading-none">₹ {value}</p>
         </div>
-        <div className={`flex h-8 w-8 items-center justify-center rounded-lg border ${accentClass} ${iconClass}`}>
+        <div className={`p-2 rounded-lg bg-slate-50 group-hover:bg-white transition-colors ${colorClass}`}>
           <Icon size={14} strokeWidth={2.5} />
         </div>
       </>
     )}
-  </div>
+  </CardWrapper>
 );
 
-const SimpleDonut = ({ data, colors }) => {
-  const total = data.reduce((sum, value) => sum + Number(value || 0), 0);
+const SimpleDonut = ({ data, colors, totalLabel = "Total" }) => {
+  const total = data.reduce((sum, val) => sum + Number(val || 0), 0);
   let cumulative = 0;
 
   return (
-    <div className="relative mx-auto flex h-48 w-48 items-center justify-center">
-      <svg viewBox="0 0 36 36" className="h-full w-full -rotate-90 transform">
-        {data.map((rawValue, index) => {
-          const value = Number(rawValue || 0);
-          const percent = total > 0 ? (value / total) * 100 : 0;
+    <div className="relative flex items-center justify-center h-40 w-40">
+      <svg viewBox="0 0 36 36" className="h-full w-full -rotate-90">
+        {data.map((val, i) => {
+          const percent = total > 0 ? (val / total) * 100 : 0;
           const offset = total > 0 ? (cumulative / total) * 100 : 0;
-          cumulative += value;
-
+          cumulative += val;
           return (
             <circle
-              key={colors[index] || index}
-              cx="18"
-              cy="18"
-              r="15.915"
+              key={i}
+              cx="18" cy="18" r="15.915"
               fill="transparent"
-              stroke={colors[index]}
-              strokeWidth="4"
+              stroke={colors[i]}
+              strokeWidth="3.5"
               strokeDasharray={`${percent} ${100 - percent}`}
               strokeDashoffset={-offset}
-              className="transition-all duration-1000 ease-out"
+              className="transition-all duration-700 ease-in-out"
             />
           );
         })}
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Total</p>
-        <p className="text-xl font-bold leading-none tracking-tight text-gray-950">{total}</p>
+        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{totalLabel}</span>
+        <span className="text-xl font-bold text-slate-900">{total}</span>
       </div>
     </div>
   );
 };
 
-const SimpleBarChart = ({ data, color = '#10B981' }) => {
-  const values = data.map((item) => Number(item?.total || 0));
-  const maxValue = Math.max(...values, 0);
-
-  return (
-    <div className="flex h-48 w-full items-end justify-between gap-3 px-4">
-      {data.map((item) => {
-        const heightPercent = maxValue > 0 ? (Number(item?.total || 0) / maxValue) * 100 : 0;
-
-        return (
-          <div key={item.label} className="group flex flex-1 flex-col items-center gap-2">
-            <div className="relative flex h-full w-full items-end overflow-hidden rounded-lg bg-gray-50">
-              <div
-                style={{ height: `${heightPercent}%`, backgroundColor: color }}
-                className="w-full rounded-t-sm transition-all duration-500 group-hover:opacity-90"
-                title={`${item.label}: ${item.total}`}
-              />
-            </div>
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">{item.label}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-};
-
 const EarningsLineChart = ({ points }) => {
-  const [hoveredPoint, setHoveredPoint] = useState(null);
   const safePoints = Array.isArray(points) && points.length ? points : [];
-  const maxValue = Math.max(...safePoints.map((item) => Number(item?.amount || 0)), 0);
+  const maxValue = Math.max(...safePoints.map(p => Number(p?.amount || 0)), 1);
+  
+  const chartPoints = safePoints.map((p, i) => ({
+    ...p,
+    x: safePoints.length === 1 ? 200 : (i / (safePoints.length - 1)) * 400,
+    y: 90 - (Number(p?.amount || 0) / maxValue) * 70
+  }));
 
-  const chartPoints = safePoints.map((item, index) => {
-    const x = safePoints.length === 1 ? 200 : (index / (safePoints.length - 1)) * 400;
-    const y = maxValue > 0 ? 90 - (Number(item?.amount || 0) / maxValue) * 60 : 90;
-    return { ...item, x, y };
-  });
-
-  const linePath = chartPoints
-    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
-    .join(' ');
-
-  const areaPath = chartPoints.length
-    ? `${linePath} L ${chartPoints[chartPoints.length - 1].x} 100 L ${chartPoints[0].x} 100 Z`
-    : '';
+  const linePath = chartPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
 
   return (
-    <div className="relative mt-auto h-48 w-full">
-      {hoveredPoint ? (
-        <div className="absolute left-0 top-0 z-10 rounded-xl border border-emerald-100 bg-white/95 px-3 py-2 text-[11px] font-bold text-slate-700 shadow-lg">
-          <p className="uppercase tracking-wider text-slate-400">{hoveredPoint.label}</p>
-          <p>Rs {currency(hoveredPoint.amount)}</p>
-        </div>
-      ) : null}
-
-      <svg viewBox="0 0 400 100" className="h-full w-full">
-        <defs>
-          <linearGradient id="dashboardLineFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#27AE60" stopOpacity="0.24" />
-            <stop offset="100%" stopColor="#27AE60" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path d={areaPath} fill="url(#dashboardLineFill)" />
-        <path d={linePath} fill="transparent" stroke="#27AE60" strokeWidth="3" />
-        {chartPoints.map((point) => (
-          <circle
-            key={point.label}
-            cx={point.x}
-            cy={point.y}
-            r="4.5"
-            fill="#27AE60"
-            className="cursor-pointer"
-            onMouseEnter={() => setHoveredPoint(point)}
-            onMouseLeave={() => setHoveredPoint(null)}
-          />
-        ))}
-      </svg>
-      <div className="mt-4 flex items-center justify-between px-2">
-        {safePoints.map((point) => (
-          <span key={point.label} className="text-[9px] font-semibold uppercase tracking-wider text-gray-400">
-            {point.label}
-          </span>
+    <div className="w-full">
+      <div className="relative h-32 w-full mt-4">
+        <svg viewBox="0 0 400 100" className="h-full w-full preserve-3d" preserveAspectRatio="none">
+          <path d={linePath} fill="transparent" stroke="#0F172A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          {chartPoints.map((p, i) => (
+            <circle key={i} cx={p.x} cy={p.y} r="3" fill="#0F172A" className="hover:r-4 transition-all cursor-crosshair" />
+          ))}
+        </svg>
+      </div>
+      <div className="flex justify-between mt-4 px-1">
+        {safePoints.map((p, i) => (
+          <span key={i} className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{p.label}</span>
         ))}
       </div>
     </div>
@@ -213,337 +166,185 @@ const MainDashboard = () => {
 
   useEffect(() => {
     let isMounted = true;
-
-    const fetchDashboardData = async ({ silent = false } = {}) => {
+    const fetch = async (silent = false) => {
       try {
-        if (silent) {
-          setIsRefreshing(true);
-        } else {
-          setIsLoading(true);
-        }
-        const response = await adminService.getDashboardData();
-        const data = response?.data || response;
-        if (!isMounted) {
-          return;
-        }
-
-        setDashboard(data || {});
+        silent ? setIsRefreshing(true) : setIsLoading(true);
+        const res = await adminService.getDashboardData();
+        if (!isMounted) return;
+        setDashboard(res?.data || res || {});
         setDashboardError('');
         setLastUpdatedAt(new Date());
       } catch (err) {
-        console.error('Dashboard Fetch Error:', err);
-        if (!isMounted) {
-          return;
-        }
-
-        setDashboardError(`Dashboard data is unavailable right now. Start the backend on ${BACKEND_LABEL} to load live metrics.`);
+        if (!isMounted) return;
+        setDashboardError(`System offline. Connection to ${BACKEND_LABEL} failed.`);
       } finally {
-        if (!isMounted) {
-          return;
-        }
-
+        if (!isMounted) return;
         setIsLoading(false);
         setIsRefreshing(false);
       }
     };
 
-    fetchDashboardData();
-
-    const intervalId = window.setInterval(() => {
-      fetchDashboardData({ silent: true });
-    }, DASHBOARD_REFRESH_INTERVAL_MS);
-
-    const handleWindowFocus = () => {
-      fetchDashboardData({ silent: true });
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        fetchDashboardData({ silent: true });
-      }
-    };
-
-    window.addEventListener('focus', handleWindowFocus);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      isMounted = false;
-      window.clearInterval(intervalId);
-      window.removeEventListener('focus', handleWindowFocus);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
+    fetch();
+    const interval = setInterval(() => fetch(true), DASHBOARD_REFRESH_INTERVAL_MS);
+    return () => { isMounted = false; clearInterval(interval); };
   }, []);
 
   const todayTrips = dashboard?.todayTrips || {};
   const overallTrips = dashboard?.overallTrips || {};
   const todayEarnings = dashboard?.todayEarnings || {};
   const overallEarnings = dashboard?.overallEarnings || {};
-  const cancelChart = dashboard?.cancelChart || {};
   const notifiedSos = dashboard?.notifiedSos || {};
 
-  const todayTripSeries = useMemo(
-    () => [todayTrips.completed || 0, todayTrips.cancelled || 0, todayTrips.scheduled || 0],
-    [todayTrips.cancelled, todayTrips.completed, todayTrips.scheduled],
-  );
-  const overallTripSeries = useMemo(
-    () => [overallTrips.completed || 0, overallTrips.cancelled || 0, overallTrips.scheduled || 0],
-    [overallTrips.cancelled, overallTrips.completed, overallTrips.scheduled],
-  );
-  const earningsChartPoints = useMemo(() => overallEarnings.chart || [], [overallEarnings.chart]);
-  const cancelChartPoints = useMemo(() => cancelChart.chart || [], [cancelChart.chart]);
-
   return (
-    <div className="min-h-screen -m-8 space-y-8 bg-[#f8fbff] p-8 font-sans text-gray-950 animate-in fade-in duration-700">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold uppercase leading-none tracking-tight text-gray-900">Dashboard</h1>
-        </div>
-        <div className="flex items-center gap-3">
-          {lastUpdatedAt ? (
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-              Updated {lastUpdatedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-            </p>
-          ) : null}
-          {isRefreshing ? (
-            <div className="flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-700">
-              <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              Live Refresh
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      {dashboardError ? (
-        <div className="flex items-start gap-3 rounded-[24px] border border-amber-200 bg-amber-50 p-5">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
-            <CircleAlert size={18} />
-          </div>
+    <div className="min-h-screen bg-slate-50/50 p-6 lg:p-8 font-['Inter']">
+      <div className="max-w-7xl mx-auto space-y-8">
+        {/* Simplified Header */}
+        <div className="flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-800">Backend Offline</p>
-            <p className="mt-1 text-sm font-semibold text-amber-900">{dashboardError}</p>
-          </div>
-        </div>
-      ) : null}
-
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <TopStatCard
-          label="Drivers Registered"
-          value={dashboard?.totalDrivers?.total || 0}
-          icon={UserPlus}
-          accentClass="border-emerald-100 bg-emerald-50"
-          iconClass="text-emerald-500"
-          isLoading={isLoading}
-          clickable
-          onClick={() => navigate('/admin/drivers')}
-        />
-        <TopStatCard
-          label="Approved Drivers"
-          value={dashboard?.totalDrivers?.approved || 0}
-          icon={ShieldCheck}
-          accentClass="border-blue-100 bg-blue-50"
-          iconClass="text-blue-500"
-          isLoading={isLoading}
-          clickable
-          onClick={() => navigate('/admin/drivers')}
-        />
-        <TopStatCard
-          label="Waiting Approval"
-          value={dashboard?.totalDrivers?.declined || 0}
-          icon={Clock}
-          accentClass="border-amber-100 bg-amber-50"
-          iconClass="text-amber-500"
-          isLoading={isLoading}
-          clickable
-          onClick={() => navigate('/admin/drivers/pending')}
-        />
-        <TopStatCard
-          label="Users Registered"
-          value={dashboard?.totalUsers || 0}
-          icon={Users}
-          accentClass="border-indigo-100 bg-indigo-50"
-          iconClass="text-indigo-500"
-          isLoading={isLoading}
-          clickable
-          onClick={() => navigate('/admin/users')}
-        />
-      </div>
-
-      <button
-        type="button"
-        onClick={() => navigate('/admin/safety')}
-        className="w-full overflow-hidden rounded-[28px] border border-gray-100 bg-white p-8 text-center shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-      >
-        <h3 className="mb-4 text-left text-[14px] font-semibold uppercase tracking-wider text-gray-400">Notified SOS</h3>
-        <div className="flex flex-col items-center py-6">
-          <div className="relative mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-blue-50/50">
-            <div className="absolute inset-0 rounded-full border-2 border-dashed border-blue-200 animate-[spin_10s_linear_infinite]" />
-            <div className="relative z-10 rounded-2xl border border-blue-50 bg-white p-4 shadow-xl">
-              <div className="relative">
-                <History size={32} className="text-blue-500" />
-                <Search size={16} className="absolute -bottom-1 -right-1 rounded-full border border-gray-100 bg-white p-0.5 font-semibold text-gray-950" />
-              </div>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Executive Overview</h1>
+            <div className="flex items-center gap-3 mt-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Platform Metrics</span>
+              {isRefreshing && (
+                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[9px] font-black uppercase tracking-widest">Live Syncing</span>
+                </div>
+              )}
             </div>
           </div>
-          <p className="text-[34px] font-black leading-none tracking-tight text-gray-950">
-            {isLoading ? '--' : notifiedSos.total || 0}
-          </p>
-          <p className="mt-2 text-[16px] font-semibold uppercase tracking-tight text-gray-950">
-            {Number(notifiedSos.total || 0) > 0 ? 'Pending safety/support alerts' : 'No active alerts'}
-          </p>
-          <p className="mt-2 text-[12px] font-semibold text-gray-500">
-            Assigned: {notifiedSos.assigned || 0} | Closed: {notifiedSos.closed || 0}
-          </p>
+          {lastUpdatedAt && (
+             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+               Refreshed {lastUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+             </p>
+          )}
         </div>
-      </button>
 
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-        <div className="flex flex-col rounded-[32px] border border-gray-100 bg-white p-8 shadow-sm">
-          <h3 className="mb-10 text-[14px] font-semibold uppercase tracking-wider text-gray-400">Today Trips</h3>
-          <div className="flex flex-1 flex-col items-center gap-10 md:flex-row">
-            <div className="flex-1">
-              <SimpleDonut data={todayTripSeries} colors={['#3B4687', '#EB5757', '#2D9CDB']} />
-            </div>
-            <div className="min-w-[180px] space-y-4">
-              {[
-                { label: 'Completed Rides', color: '#3B4687', value: todayTrips.completed || 0 },
-                { label: 'Cancelled Rides', color: '#EB5757', value: todayTrips.cancelled || 0 },
-                { label: 'Scheduled Rides', color: '#2D9CDB', value: todayTrips.scheduled || 0 },
-              ].map((item) => (
-                <div key={item.label} className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-3 w-3 rounded-sm" style={{ backgroundColor: item.color }} />
-                    <span className="text-[12px] font-semibold uppercase leading-none tracking-tight text-gray-600">{item.label}</span>
+        {dashboardError && (
+          <div className="bg-rose-50 border border-rose-100 p-4 rounded-xl flex items-center gap-4">
+            <div className="p-2 bg-rose-100 text-rose-600 rounded-lg"><CircleAlert size={18} /></div>
+            <p className="text-sm font-semibold text-rose-900">{dashboardError}</p>
+          </div>
+        )}
+
+        {/* Top KPI Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <TopStatCard label="Registered Fleet" value={dashboard?.totalDrivers?.total || 0} icon={Car} colorClass="text-slate-600" isLoading={isLoading} clickable onClick={() => navigate('/admin/drivers')} />
+          <TopStatCard label="Verified Operators" value={dashboard?.totalDrivers?.approved || 0} icon={ShieldCheck} colorClass="text-emerald-600" isLoading={isLoading} clickable onClick={() => navigate('/admin/drivers')} />
+          <TopStatCard label="Pending Onboarding" value={dashboard?.totalDrivers?.declined || 0} icon={Clock} colorClass="text-amber-600" isLoading={isLoading} clickable onClick={() => navigate('/admin/drivers/pending')} />
+          <TopStatCard label="Platform Users" value={dashboard?.totalUsers || 0} icon={Users} colorClass="text-blue-600" isLoading={isLoading} clickable onClick={() => navigate('/admin/users')} />
+        </div>
+
+        {/* Secondary Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Left: SOS & Safety */}
+          <div className="lg:col-span-4 space-y-6">
+             <button 
+               onClick={() => navigate('/admin/safety')}
+               className="w-full text-left bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6 h-full flex flex-col justify-between hover:border-slate-900 transition-all cursor-pointer group"
+             >
+                <SectionHeader title="SOS Monitor" subtitle="Active safety and support alerts" />
+                <div className="py-8 flex flex-col items-center w-full">
+                   <div className="w-20 h-20 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-rose-500 group-hover:bg-rose-50 transition-all relative">
+                      <Activity size={40} strokeWidth={1.5} />
+                      {Number(notifiedSos.total || 0) > 0 && (
+                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 rounded-full border-2 border-white animate-pulse" />
+                      )}
+                   </div>
+                   <div className="mt-6 text-center">
+                      <p className="text-4xl font-bold text-slate-900 leading-none">{notifiedSos.total || 0}</p>
+                      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-2">Active Alerts</p>
+                   </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-slate-50 w-full">
+                   <div className="text-center">
+                      <p className="text-sm font-bold text-slate-700">{notifiedSos.assigned || 0}</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Assigned</p>
+                   </div>
+                   <div className="text-center">
+                      <p className="text-sm font-bold text-slate-700">{notifiedSos.closed || 0}</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Closed</p>
+                   </div>
+                </div>
+             </button>
+          </div>
+
+          {/* Right: Revenue Breakdown */}
+          <div className="lg:col-span-8">
+             <CardWrapper className="p-6">
+                <SectionHeader title="Revenue Insights" subtitle="Daily transaction breakdown" />
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-6">
+                   <MiniStat label="Total Volume" value={currency(todayEarnings.total)} icon={IndianRupee} colorClass="text-slate-900" isLoading={isLoading} />
+                   <MiniStat label="Cash Flows" value={currency(todayEarnings.by_cash)} icon={Wallet} colorClass="text-emerald-600" isLoading={isLoading} />
+                   <MiniStat label="Digital Wallet" value={currency(todayEarnings.by_wallet)} icon={Wallet} colorClass="text-blue-600" isLoading={isLoading} />
+                   <MiniStat label="Card/Online" value={currency(todayEarnings.by_card)} icon={CreditCard} colorClass="text-indigo-600" isLoading={isLoading} />
+                   <MiniStat label="Net Commission" value={currency(todayEarnings.admin_commission)} icon={ShieldCheck} colorClass="text-amber-600" isLoading={isLoading} />
+                   <MiniStat label="Driver Payouts" value={currency(todayEarnings.driver_earnings)} icon={UserCheck} colorClass="text-slate-400" isLoading={isLoading} />
+                </div>
+                <div className="mt-10">
+                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Performance Curve</p>
+                   <EarningsLineChart points={overallEarnings.chart || []} />
+                </div>
+             </CardWrapper>
+          </div>
+        </div>
+
+        {/* Lower Grid: Trips Analysis */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <CardWrapper className="p-6">
+             <div className="flex items-center justify-between mb-8">
+                <SectionHeader title="Daily Activity" subtitle="Real-time ride distribution" />
+                <div className="flex gap-4">
+                   <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-slate-900" /><span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Completed</span></div>
+                   <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-rose-500" /><span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Cancelled</span></div>
+                </div>
+             </div>
+             <div className="flex flex-col sm:flex-row items-center gap-12">
+                <SimpleDonut data={[todayTrips.completed || 0, todayTrips.cancelled || 0, todayTrips.scheduled || 0]} colors={['#0F172A', '#F43F5E', '#38BDF8']} totalLabel="Rides" />
+                <div className="flex-1 w-full space-y-4">
+                   {[
+                     { label: 'Successful Rides', val: todayTrips.completed || 0, color: 'bg-slate-900' },
+                     { label: 'User/Driver Cancellations', val: todayTrips.cancelled || 0, color: 'bg-rose-500' },
+                     { label: 'Advance Bookings', val: todayTrips.scheduled || 0, color: 'bg-sky-400' },
+                   ].map((item, i) => (
+                     <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-slate-50/50">
+                        <div className="flex items-center gap-3">
+                           <div className={`w-2 h-2 rounded-full ${item.color}`} />
+                           <span className="text-xs font-semibold text-slate-600">{item.label}</span>
+                        </div>
+                        <span className="text-sm font-bold text-slate-900">{item.val}</span>
+                     </div>
+                   ))}
+                </div>
+             </div>
+          </CardWrapper>
+
+          <CardWrapper className="p-6">
+             <SectionHeader title="Platform Health" subtitle="Overall fleet performance metrics" />
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+                {[
+                  { label: 'Overall Revenue', val: overallEarnings.total, icon: IndianRupee, color: 'text-slate-900' },
+                  { label: 'Platform Commission', val: overallEarnings.admin_commission, icon: ShieldCheck, color: 'text-amber-600' },
+                  { label: 'Total Fleet Payouts', val: overallEarnings.driver_earnings, icon: UserCheck, color: 'text-slate-400' },
+                  { label: 'Overall Completed', val: overallTrips.completed || 0, icon: History, color: 'text-emerald-600', isCurrency: false },
+                ].map((item, i) => (
+                  <div key={i} className="p-4 rounded-xl border border-slate-100 bg-slate-50/30 flex items-center justify-between">
+                     <div>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{item.label}</p>
+                        <p className="text-lg font-bold text-slate-900">{item.isCurrency === false ? item.val : `₹ ${currency(item.val)}`}</p>
+                     </div>
+                     <div className={`p-2 bg-white rounded-lg border border-slate-100 ${item.color}`}><item.icon size={16} /></div>
                   </div>
-                  <span className="text-[14px] font-black text-gray-950">{item.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid h-full grid-cols-2 gap-4">
-          <MiniStat label="Today Earnings" value={currency(todayEarnings.total)} icon={IndianRupee} accentClass="border-blue-200/50 bg-blue-200/20" iconClass="text-blue-600" isLoading={isLoading} />
-          <MiniStat label="By Cash" value={currency(todayEarnings.by_cash)} icon={Wallet} accentClass="border-emerald-200/50 bg-emerald-200/20" iconClass="text-emerald-600" isLoading={isLoading} />
-          <MiniStat label="By Wallet" value={currency(todayEarnings.by_wallet)} icon={Wallet} accentClass="border-amber-200/50 bg-amber-200/20" iconClass="text-amber-600" isLoading={isLoading} />
-          <MiniStat label="By Card/Online" value={currency(todayEarnings.by_card)} icon={CreditCard} accentClass="border-rose-200/50 bg-rose-200/20" iconClass="text-rose-600" isLoading={isLoading} />
-          <MiniStat label="Admin Commission" value={currency(todayEarnings.admin_commission)} icon={ShieldCheck} accentClass="border-indigo-200/50 bg-indigo-200/20" iconClass="text-indigo-600" isLoading={isLoading} />
-          <MiniStat label="Drivers Earnings" value={currency(todayEarnings.driver_earnings)} icon={UserCheck} accentClass="border-gray-200/70 bg-gray-200/30" iconClass="text-gray-700" isLoading={isLoading} />
-        </div>
-      </div>
-
-      <div className="w-full rounded-[32px] border border-gray-100 bg-white p-8 shadow-sm">
-        <h3 className="mb-10 text-[14px] font-semibold uppercase tracking-wider text-gray-400">Overall Trips</h3>
-        <div className="flex flex-col items-center gap-10 md:flex-row">
-          <div className="flex w-full justify-center md:w-auto md:flex-1">
-            <SimpleDonut data={overallTripSeries} colors={['#2D9CDB', '#EB5757', '#27AE60']} />
-          </div>
-          <div className="min-w-[180px] space-y-4 md:pr-10">
-            {[
-              { label: 'Completed Rides', color: '#2D9CDB', value: overallTrips.completed || 0 },
-              { label: 'Cancelled Rides', color: '#EB5757', value: overallTrips.cancelled || 0 },
-              { label: 'Scheduled Rides', color: '#27AE60', value: overallTrips.scheduled || 0 },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="h-3 w-3 rounded-sm" style={{ backgroundColor: item.color }} />
-                  <span className="text-[12px] font-semibold uppercase leading-none tracking-tight text-gray-600">{item.label}</span>
-                </div>
-                <span className="text-[14px] font-black text-gray-950">{item.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-        <div className="flex flex-col rounded-[32px] border border-gray-100 bg-white p-8 shadow-sm">
-          <h3 className="mb-10 text-[14px] font-semibold uppercase tracking-wider text-gray-400">Overall Earnings</h3>
-          <EarningsLineChart points={earningsChartPoints} />
-        </div>
-
-        <div className="grid h-full grid-cols-2 gap-4">
-          <MiniStat label="Overall Earnings" value={currency(overallEarnings.total)} icon={IndianRupee} accentClass="border-rose-200/50 bg-rose-200/20" iconClass="text-rose-600" isLoading={isLoading} />
-          <MiniStat label="By Cash" value={currency(overallEarnings.by_cash)} icon={Wallet} accentClass="border-amber-200/50 bg-amber-200/20" iconClass="text-amber-600" isLoading={isLoading} />
-          <MiniStat label="By Wallet" value={currency(overallEarnings.by_wallet)} icon={Wallet} accentClass="border-emerald-200/50 bg-emerald-200/20" iconClass="text-emerald-600" isLoading={isLoading} />
-          <MiniStat label="By Card/Online" value={currency(overallEarnings.by_card)} icon={CreditCard} accentClass="border-blue-200/50 bg-blue-200/20" iconClass="text-blue-600" isLoading={isLoading} />
-          <MiniStat label="Admin Commission" value={currency(overallEarnings.admin_commission)} icon={ShieldCheck} accentClass="border-indigo-200/50 bg-indigo-200/20" iconClass="text-indigo-600" isLoading={isLoading} />
-          <MiniStat label="Drivers Earnings" value={currency(overallEarnings.driver_earnings)} icon={UserCheck} accentClass="border-gray-200/70 bg-gray-200/30" iconClass="text-gray-700" isLoading={isLoading} />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-        <div className="flex flex-col rounded-[32px] border border-gray-100 bg-white p-8 shadow-sm">
-          <h3 className="mb-10 text-[14px] font-semibold uppercase tracking-wider text-gray-400">Cancellation Chart</h3>
-          <div className="h-48 w-full mt-auto">
-            <SimpleBarChart data={cancelChartPoints} color="#10B981" />
-          </div>
-          <div className="mt-8 flex flex-wrap justify-center gap-4">
-            {[
-              { label: 'Cancelled Due to No Drivers', color: '#3F51B5' },
-              { label: 'Cancelled By Users', color: '#FFB300' },
-              { label: 'Cancelled By Drivers', color: '#009688' },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center gap-2">
-                <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                <span className="text-[9px] font-semibold uppercase tracking-tight text-gray-400">{item.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid h-full grid-cols-2 gap-4">
-          <button
-            type="button"
-            onClick={() => navigate('/admin/trips')}
-            className="flex w-full items-center justify-between rounded-[28px] border border-gray-50 bg-white p-6 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-          >
-            <div>
-              <p className="mb-1 text-[9px] font-semibold uppercase leading-none tracking-wider text-gray-400">Total Request Cancelled</p>
-              <p className="text-2xl font-semibold leading-none tracking-tight text-gray-950">{cancelChart.total || 0}</p>
-            </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-500">
-              <Bell size={18} />
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/admin/trips')}
-            className="flex w-full items-center justify-between rounded-[28px] border border-gray-50 bg-white p-6 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-          >
-            <div>
-              <p className="mb-1 text-[9px] font-semibold uppercase leading-none tracking-widest text-gray-400">Cancelled By Users</p>
-              <p className="text-2xl font-semibold leading-none tracking-tight text-gray-950">{cancelChart.byUser || 0}</p>
-            </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-50 text-amber-500">
-              <CircleAlert size={18} />
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/admin/drivers')}
-            className="flex w-full items-center justify-between rounded-[28px] border border-gray-50 bg-white p-6 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-          >
-            <div>
-              <p className="mb-1 text-[9px] font-semibold uppercase leading-none tracking-widest text-gray-400">Cancelled By Drivers</p>
-              <p className="text-2xl font-semibold leading-none tracking-tight text-gray-950">{cancelChart.byDriver || 0}</p>
-            </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-500">
-              <Car size={18} />
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/admin/ongoing')}
-            className="flex w-full items-center justify-between rounded-[28px] border border-gray-50 bg-white p-6 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-          >
-            <div>
-              <p className="mb-1 text-[9px] font-semibold uppercase leading-none tracking-wider text-gray-400">Cancelled By No Driver</p>
-              <p className="text-2xl font-semibold leading-none tracking-tight text-gray-950">{cancelChart.noDriver || 0}</p>
-            </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-50 text-cyan-500">
-              <UserPlus size={18} />
-            </div>
-          </button>
+                ))}
+             </div>
+             <div className="mt-8">
+                <button 
+                  onClick={() => navigate('/admin/trips')}
+                  className="w-full py-3 rounded-xl border border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+                >
+                   View Detailed Analytics <ChevronRight size={14} />
+                </button>
+             </div>
+          </CardWrapper>
         </div>
       </div>
     </div>

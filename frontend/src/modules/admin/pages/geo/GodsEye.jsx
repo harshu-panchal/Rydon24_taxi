@@ -18,6 +18,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAppGoogleMapsLoader, HAS_VALID_GOOGLE_MAPS_KEY } from '../../utils/googleMaps';
 import { adminService } from '../../services/adminService';
 import { motion, AnimatePresence } from 'framer-motion';
+import CarIcon from '@/assets/icons/car.png';
+import BikeIcon from '@/assets/icons/bike.png';
+import AutoIcon from '@/assets/icons/auto.png';
 
 const INDIA_CENTER = { lat: 22.7196, lng: 75.8577 };
 const MAP_CONTAINER_STYLE = { width: '100%', height: '400px' };
@@ -33,6 +36,14 @@ const mapOptions = {
     { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
     { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#e5e7eb' }] }
   ]
+};
+
+const getMapIconForVehicle = (iconType = '') => {
+  const value = String(iconType || '').trim().toLowerCase();
+
+  if (value.includes('bike')) return BikeIcon;
+  if (value.includes('auto')) return AutoIcon;
+  return CarIcon;
 };
 
 const GodsEye = () => {
@@ -77,11 +88,13 @@ const GodsEye = () => {
       const coord = zone.coordinates?.[0]?.[0] || [75.8577, 22.7196];
       const lat = Number(coord[1]);
       const lng = Number(coord[0]);
+      const driverVehicleType = idx % 3 === 0 ? 'car' : idx % 3 === 1 ? 'bike' : 'auto';
+      const activeVehicleType = idx % 2 === 0 ? 'car' : 'bike';
       
       // Mock drivers and demand for visualization
       return [
-        { id: `${zone._id}-d1`, type: 'driver', pos: { lat: lat + 0.01, lng: lng - 0.01 }, title: `Driver ${idx + 1}`, status: 'Online' },
-        { id: `${zone._id}-d2`, type: 'driver', pos: { lat: lat - 0.01, lng: lng + 0.01 }, title: `Driver ${idx + 10}`, status: 'On Ride' },
+        { id: `${zone._id}-d1`, type: 'driver', vehicleType: driverVehicleType, pos: { lat: lat + 0.01, lng: lng - 0.01 }, title: `Driver ${idx + 1}`, status: 'Online' },
+        { id: `${zone._id}-d2`, type: 'driver', vehicleType: activeVehicleType, pos: { lat: lat - 0.01, lng: lng + 0.01 }, title: `Driver ${idx + 10}`, status: 'On Ride' },
         { id: `${zone._id}-r1`, type: 'demand', pos: { lat: lat + 0.005, lng: lng + 0.005 }, title: `Request ${idx + 1}`, status: 'Pending' }
       ];
     });
@@ -187,11 +200,20 @@ const GodsEye = () => {
                        <MarkerF 
                           key={m.id} position={m.pos} title={m.title}
                           onClick={() => setSelectedMarker(m)}
-                          icon={{
-                             path: window.google.maps.SymbolPath.CIRCLE, scale: 8,
-                             fillColor: m.type === 'driver' ? '#00BFA5' : '#FB923C',
-                             fillOpacity: 1, strokeColor: '#fff', strokeWeight: 3
-                          }}
+                          icon={m.type === 'driver'
+                            ? {
+                                url: getMapIconForVehicle(m.vehicleType),
+                                scaledSize: new window.google.maps.Size(36, 36),
+                                anchor: new window.google.maps.Point(18, 18),
+                              }
+                            : {
+                                path: window.google.maps.SymbolPath.CIRCLE,
+                                scale: 8,
+                                fillColor: '#FB923C',
+                                fillOpacity: 1,
+                                strokeColor: '#fff',
+                                strokeWeight: 3,
+                              }}
                        />
                     ))}
 

@@ -9,32 +9,12 @@ import {
   Search,
   Shield,
   Trash2,
+  UserCheck,
+  Users,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { adminService } from '../../services/adminService';
-
-const inputClass =
-  'w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#1D4ED8] focus:ring-4 focus:ring-blue-100';
-
-const ScopeBadgeList = ({ items = [], emptyLabel }) => {
-  if (!items.length) {
-    return <span className="text-xs font-semibold text-slate-400">{emptyLabel}</span>;
-  }
-
-  return (
-    <div className="flex flex-wrap gap-2">
-      {items.map((item) => (
-        <span
-          key={item.id}
-          className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-blue-700"
-        >
-          {item.name}
-        </span>
-      ))}
-    </div>
-  );
-};
 
 const Admins = () => {
   const navigate = useNavigate();
@@ -61,9 +41,7 @@ const Admins = () => {
 
   const filteredAdmins = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
-    if (!query) {
-      return admins;
-    }
+    if (!query) return admins;
 
     return admins.filter((item) =>
       [
@@ -72,9 +50,9 @@ const Admins = () => {
         item.phone,
         item.role,
         item.admin_type,
-        ...(item.service_locations || []).map((location) => location.name),
+        ...(item.service_locations || []).map((loc) => loc.name),
         ...(item.zones || []).map((zone) => zone.name),
-      ].some((value) => String(value || '').toLowerCase().includes(query)),
+      ].some((value) => String(value || '').toLowerCase().includes(query))
     );
   }, [admins, searchTerm]);
 
@@ -82,214 +60,166 @@ const Admins = () => {
     const superadmins = admins.filter((item) => item.admin_type === 'superadmin').length;
     const subadmins = admins.filter((item) => item.admin_type === 'subadmin').length;
     const activeAdmins = admins.filter((item) => item.active !== false).length;
-
-    return { superadmins, subadmins, activeAdmins };
+    return { superadmins, subadmins, activeAdmins, total: admins.length };
   }, [admins]);
 
   const handleDelete = async (admin) => {
-    if (!window.confirm(`Delete ${admin.name || 'this admin'}?`)) {
-      return;
-    }
+    if (!window.confirm(`Permanently delete ${admin.name || 'this admin'}?`)) return;
 
-    setDeletingId(String(admin.id || admin._id || ''));
+    setDeletingId(String(admin.id || admin._id));
     try {
       await adminService.deleteAdminAccount(admin.id || admin._id);
-      toast.success('Admin removed.');
-      await loadAdmins();
+      toast.success('Admin deleted successfully');
+      loadAdmins();
     } catch (error) {
-      toast.error(error?.response?.data?.message || error?.message || 'Unable to delete admin.');
+      toast.error(error?.response?.data?.message || 'Delete failed');
     } finally {
       setDeletingId('');
     }
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#E0F2FE,_#F8FAFC_42%)] p-6 lg:p-8">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="min-h-screen bg-slate-50/50 p-6 font-['Inter']">
+      <div className="mx-auto max-w-7xl space-y-8">
+        {/* Simplified Header */}
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.22em] text-slate-400">
-              <span>Admin Management</span>
-              <ChevronRight size={12} />
-              <span className="text-slate-700">Subadmins</span>
-            </div>
-            <h1 className="text-3xl font-black tracking-tight text-slate-950">Scoped Admin Control</h1>
-            <p className="mt-2 max-w-2xl text-sm font-semibold text-slate-500">
-              Create subadmins, assign sidebar permissions, and lock them to specific service locations and zones.
-            </p>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Admin Accounts</h1>
+            <p className="text-sm text-slate-500 mt-1">Manage platform administrators and their access levels.</p>
           </div>
-
           <button
-            type="button"
             onClick={() => navigate('/admin/management/admins/create')}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1D4ED8] px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-200 transition-all hover:-translate-y-0.5 hover:bg-[#1E40AF]"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 transition-all shadow-sm"
           >
             <Plus size={18} />
-            Add Subadmin
+            <span>Add Administrator</span>
           </button>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        {/* Minimal Stats Section */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            {
-              label: 'Superadmins',
-              value: stats.superadmins,
-              icon: Crown,
-              tone: 'from-amber-500/15 to-orange-500/5 text-amber-700 border-amber-100',
-            },
-            {
-              label: 'Subadmins',
-              value: stats.subadmins,
-              icon: Shield,
-              tone: 'from-blue-500/15 to-cyan-500/5 text-blue-700 border-blue-100',
-            },
-            {
-              label: 'Active Accounts',
-              value: stats.activeAdmins,
-              icon: Crown,
-              tone: 'from-emerald-500/15 to-teal-500/5 text-emerald-700 border-emerald-100',
-            },
-          ].map((card) => (
-            <div
-              key={card.label}
-              className={`rounded-[28px] border bg-gradient-to-br ${card.tone} p-5 shadow-sm`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">{card.label}</p>
-                  <p className="mt-2 text-3xl font-black text-slate-950">{card.value}</p>
+            { label: 'Total Admins', value: stats.total, icon: Users, color: 'text-slate-600' },
+            { label: 'Superadmins', value: stats.superadmins, icon: Crown, color: 'text-amber-600' },
+            { label: 'Subadmins', value: stats.subadmins, icon: Shield, color: 'text-blue-600' },
+            { label: 'Active Now', value: stats.activeAdmins, icon: UserCheck, color: 'text-emerald-600' },
+          ].map((stat) => (
+            <div key={stat.label} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+              <div className="flex items-center gap-4">
+                <div className={`p-2.5 rounded-xl bg-slate-50 ${stat.color}`}>
+                  <stat.icon size={20} />
                 </div>
-                <div className="rounded-2xl bg-white/80 p-3 shadow-sm">
-                  <card.icon size={20} />
+                <div>
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">{stat.label}</p>
+                  <p className="text-xl font-bold text-slate-900">{stat.value}</p>
                 </div>
               </div>
             </div>
           ))}
         </div>
 
-        <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
-          <div className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/80 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+        {/* Refined Data Table Container */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          {/* Table Toolbar */}
+          <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row gap-4 items-center justify-between bg-slate-50/30">
             <div className="relative w-full max-w-md">
-              <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Search by name, email, role, location, or zone"
-                className={`${inputClass} pl-11`}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search admins..."
+                className="w-full pl-10 pr-4 py-2 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-900/5 focus:border-slate-400 transition-all"
               />
             </div>
-            <div className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">
-              {filteredAdmins.length} visible accounts
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+              {filteredAdmins.length} Results
             </div>
           </div>
 
           <div className="overflow-x-auto">
             {loading ? (
-              <div className="flex flex-col items-center justify-center gap-3 px-6 py-24">
-                <Loader2 size={30} className="animate-spin text-blue-600" />
-                <p className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">Loading admin matrix</p>
+              <div className="py-32 flex flex-col items-center justify-center gap-4">
+                <Loader2 size={32} className="animate-spin text-slate-300" />
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">Synchronizing...</span>
               </div>
             ) : filteredAdmins.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-3 px-6 py-24 text-center">
-                <div className="rounded-3xl border border-slate-100 bg-slate-50 p-5 text-slate-300">
-                  <FileSearch size={34} strokeWidth={1.5} />
+              <div className="py-32 flex flex-col items-center text-center px-6">
+                <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-200 mb-4">
+                  <FileSearch size={32} />
                 </div>
-                <p className="text-sm font-bold text-slate-900">No admin accounts matched your search.</p>
-                <p className="max-w-md text-xs font-semibold text-slate-500">
-                  Create a new subadmin and assign their sidebar permissions, service locations, and zones here.
-                </p>
+                <h3 className="text-sm font-bold text-slate-900">No admins found</h3>
+                <p className="text-xs text-slate-500 mt-1">Try adjusting your search filters.</p>
               </div>
             ) : (
-              <table className="min-w-full text-left">
-                <thead className="bg-white">
-                  <tr className="border-b border-slate-100 text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
-                    <th className="px-6 py-4">Admin</th>
-                    <th className="px-6 py-4">Type</th>
-                    <th className="px-6 py-4">Permissions</th>
-                    <th className="px-6 py-4">Service Locations</th>
-                    <th className="px-6 py-4">Zones</th>
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-100 text-[10px] font-bold uppercase tracking-widest text-slate-400 bg-slate-50/50">
+                    <th className="px-6 py-4">User Details</th>
+                    <th className="px-6 py-4">Account Type</th>
+                    <th className="px-6 py-4">Access Scope</th>
                     <th className="px-6 py-4">Status</th>
                     <th className="px-6 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-50 text-sm">
                   {filteredAdmins.map((admin) => {
-                    const isSuperadmin = admin.admin_type === 'superadmin';
-                    const isDeleting = deletingId === String(admin.id || admin._id || '');
-
+                    const isSuper = admin.admin_type === 'superadmin';
+                    const isActive = admin.active !== false;
+                    const id = admin.id || admin._id;
+                    
                     return (
-                      <tr key={admin.id || admin._id} className="align-top transition-colors hover:bg-slate-50/80">
-                        <td className="px-6 py-5">
-                          <div className="flex items-start gap-3">
-                            <div className={`rounded-2xl p-3 ${isSuperadmin ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'}`}>
-                              {isSuperadmin ? <Crown size={18} /> : <Shield size={18} />}
+                      <tr key={id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${isSuper ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-600'}`}>
+                              {admin.name?.[0]?.toUpperCase() || <Shield size={16} />}
                             </div>
                             <div>
-                              <p className="text-sm font-black text-slate-950">{admin.name || '-'}</p>
-                              <p className="mt-1 text-xs font-semibold text-slate-500">{admin.email || '-'}</p>
-                              <p className="mt-1 text-xs font-semibold text-slate-400">{admin.phone || 'No phone'}</p>
+                              <p className="font-semibold text-slate-900">{admin.name}</p>
+                              <p className="text-xs text-slate-500">{admin.email}</p>
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-5">
-                          <span
-                            className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${
-                              isSuperadmin
-                                ? 'bg-amber-50 text-amber-700'
-                                : 'bg-blue-50 text-blue-700'
-                            }`}
-                          >
-                            {isSuperadmin ? 'Superadmin' : admin.role || 'Subadmin'}
+                        <td className="px-6 py-4">
+                          <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${isSuper ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'}`}>
+                            {isSuper ? 'Superadmin' : admin.role || 'Subadmin'}
                           </span>
                         </td>
-                        <td className="px-6 py-5">
-                          <p className="text-sm font-bold text-slate-900">
-                            {isSuperadmin ? 'Full sidebar access' : `${(admin.permissions || []).length} modules`}
-                          </p>
-                          <p className="mt-1 text-xs font-semibold text-slate-500">
-                            {isSuperadmin ? 'Every menu, every API scope.' : (admin.permissions || []).slice(0, 3).join(', ') || 'No modules'}
-                          </p>
+                        <td className="px-6 py-4 max-w-[300px]">
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-slate-700">
+                              {isSuper ? 'Unlimited Access' : `${(admin.permissions || []).length} Permission Modules`}
+                            </p>
+                            <p className="text-[11px] text-slate-400 truncate">
+                              {isSuper ? 'Full administrative control' : (admin.permissions || []).join(', ') || 'No specific modules'}
+                            </p>
+                          </div>
                         </td>
-                        <td className="px-6 py-5">
-                          <ScopeBadgeList
-                            items={admin.service_locations || []}
-                            emptyLabel={isSuperadmin ? 'All service locations' : 'No service location scope'}
-                          />
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                            <span className={`text-xs font-semibold ${isActive ? 'text-emerald-700' : 'text-slate-500'}`}>
+                              {isActive ? 'Active' : 'Disabled'}
+                            </span>
+                          </div>
                         </td>
-                        <td className="px-6 py-5">
-                          <ScopeBadgeList
-                            items={admin.zones || []}
-                            emptyLabel={isSuperadmin ? 'All zones' : 'All zones in assigned service locations'}
-                          />
-                        </td>
-                        <td className="px-6 py-5">
-                          <span
-                            className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${
-                              admin.active !== false
-                                ? 'bg-emerald-50 text-emerald-700'
-                                : 'bg-rose-50 text-rose-700'
-                            }`}
-                          >
-                            {admin.active !== false ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-5">
-                          <div className="flex items-center justify-end gap-2">
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-1">
                             <button
-                              type="button"
-                              onClick={() => navigate(`/admin/management/admins/edit/${admin.id || admin._id}`)}
-                              className="rounded-2xl border border-slate-200 p-2.5 text-slate-500 transition-all hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                              onClick={() => navigate(`/admin/management/admins/edit/${id}`)}
+                              className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all"
+                              title="Edit Admin"
                             >
-                              <Pencil size={15} />
+                              <Pencil size={16} />
                             </button>
-                            {!isSuperadmin && (
+                            {!isSuper && (
                               <button
-                                type="button"
-                                disabled={isDeleting}
+                                disabled={deletingId === String(id)}
                                 onClick={() => handleDelete(admin)}
-                                className="rounded-2xl border border-slate-200 p-2.5 text-slate-500 transition-all hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                                title="Delete Admin"
                               >
-                                {isDeleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                                {deletingId === String(id) ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
                               </button>
                             )}
                           </div>

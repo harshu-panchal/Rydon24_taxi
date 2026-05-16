@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Fuel, Shield, ChevronRight, Star, Info, Car, Search, X } from 'lucide-react';
 import { userService } from '../../services/userService';
-
 const DURATION_TABS = ['Hourly', 'Half-Day', 'Daily'];
 const RENTAL_SELECTED_VEHICLE_STORAGE_KEY = 'selectedRentalVehicleDetail';
 const RENTAL_PAGE_SIZE = 10;
