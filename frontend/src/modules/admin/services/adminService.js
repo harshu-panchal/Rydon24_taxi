@@ -107,6 +107,7 @@ export const adminService = {
   getServiceStores: () => api.get('/admin/service-stores'),
   createServiceStore: (data) => api.post('/admin/service-stores', data),
   updateServiceStore: (id, data) => api.patch(`/admin/service-stores/${id}`, data),
+  createServiceStoreStaff: (id, data) => api.post(`/admin/service-stores/${id}/staff`, data),
   deleteServiceStore: (id) => api.delete(`/admin/service-stores/${id}`),
   getCountries: () => api.get('/countries'),
   getVehicleTypes: (transportType) => api.get(`/admin/types/vehicle-types/list${transportType ? `?transport_type=${transportType}` : ''}`),

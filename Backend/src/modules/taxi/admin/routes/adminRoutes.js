@@ -23,6 +23,7 @@ import {
   createPoolingRoute,
   createServiceLocation,
   createServiceStore,
+  createServiceStoreStaff,
   createRentalVehicleType,
   createSetPrice,
   createSubscriptionPlan,
@@ -304,6 +305,7 @@ adminRouter.delete('/admin/service-locations/:id', deleteServiceLocation);
 adminRouter.get('/admin/service-stores', getServiceStores);
 adminRouter.post('/admin/service-stores', createServiceStore);
 adminRouter.patch('/admin/service-stores/:id', updateServiceStore);
+adminRouter.post('/admin/service-stores/:id/staff', createServiceStoreStaff);
 adminRouter.delete('/admin/service-stores/:id', deleteServiceStore);
 adminRouter.get('/common/ride_modules', getRideModules);
 adminRouter.get('/admin/types/vehicle-types/list', getVehicleTypes);

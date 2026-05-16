@@ -119,6 +119,11 @@ const biometricSourceOptions = [
   },
 ];
 
+const thumbCodeOptions = [
+  { value: 'LEFT_THUMB', label: 'Left Thumb' },
+  { value: 'RIGHT_THUMB', label: 'Right Thumb' },
+];
+
 const BIOMETRIC_BRIDGE_TIMEOUT_MS = 25000;
 const BIOMETRIC_MIN_MATCH_SCORE = 80;
 
@@ -149,6 +154,33 @@ const buildBiometricDraft = (booking) => ({
       : String(booking.biometrics.requiredFingerCount),
   notes: String(booking?.biometrics?.notes || ''),
 });
+
+const buildThumbParticipantKey = (participantType = 'co_passenger') =>
+  `${participantType}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
+
+const buildThumbParticipantsDraft = (booking) => {
+  const participants = Array.isArray(booking?.biometrics?.thumbParticipants) ? booking.biometrics.thumbParticipants : [];
+  return participants.map((item, index) => ({
+    participantKey: String(item?.participantKey || buildThumbParticipantKey(item?.participantType || 'co_passenger')),
+    participantType: String(item?.participantType || 'co_passenger'),
+    participantLabel: String(item?.participantLabel || item?.name || 'Participant'),
+    userType: String(item?.userType || item?.participantType || 'participant'),
+    name: String(item?.name || ''),
+    phone: String(item?.phone || ''),
+    linkedUserId: String(item?.linkedUserId || ''),
+    linkedStaffId: String(item?.linkedStaffId || ''),
+    isPrimary: item?.isPrimary === true,
+    sortOrder: Number.isFinite(Number(item?.sortOrder)) ? Number(item.sortOrder) : index,
+  }));
+};
+
+const readFileAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Unable to read selected image'));
+    reader.onloadend = () => resolve(String(reader.result || ''));
+    reader.readAsDataURL(file);
+  });
 
 const getBiometricTargetCount = (biometrics = {}, draft = null) => {
   if (draft) {
@@ -195,6 +227,12 @@ const getBiometricBridgeBadge = (status, preferredSource = 'usb_scanner') => {
 
 const getBiometricSourceActionLabel = (source = 'usb_scanner') =>
   source === 'phone_sensor' ? 'Phone sensor' : 'USB scanner';
+
+const isRdServiceTemplateFormat = (templateFormat = '') =>
+  ['uidai-pid-xml', 'rd-pid-xml', 'rd_service_pid_xml'].includes(String(templateFormat || '').trim().toLowerCase());
+
+const isRdServiceFingerRecord = (fingerRecord = {}) =>
+  isRdServiceTemplateFormat(fingerRecord?.templateFormat);
 
 const getBiometricModeStorageKey = (bookingId = '') =>
   `service-center-biometric-source:${String(bookingId || 'global')}`;
@@ -1119,6 +1157,7 @@ const ServiceCenterDashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [biometricDraft, setBiometricDraft] = useState(buildBiometricDraft());
+  const [thumbParticipantsDraft, setThumbParticipantsDraft] = useState([]);
   const [biometricAction, setBiometricAction] = useState('');
   const [biometricSource, setBiometricSource] = useState(() => readStoredBiometricSource());
   const [biometricStatus, setBiometricStatus] = useState({
@@ -1127,6 +1166,7 @@ const ServiceCenterDashboard = () => {
     fingerCode: '',
     action: '',
   });
+  const [thumbAction, setThumbAction] = useState('');
   const bookingsPerPage = 8;
 
   const role = String(profile?.onboarding?.role || '').toLowerCase();
@@ -1507,6 +1547,7 @@ Processing Time: Refunds are typically credited back to the original payment met
         serviceCenterNote: '',
       });
       setBiometricDraft(buildBiometricDraft());
+      setThumbParticipantsDraft([]);
       setBiometricSource(readStoredBiometricSource());
       setBiometricStatus({
         tone: 'idle',
@@ -1523,6 +1564,7 @@ Processing Time: Refunds are typically credited back to the original payment met
       serviceCenterNote: String(selectedBooking.serviceCenterNote || ''),
     });
     setBiometricDraft(buildBiometricDraft(selectedBooking));
+    setThumbParticipantsDraft(buildThumbParticipantsDraft(selectedBooking));
     setBiometricSource(readStoredBiometricSource(selectedBooking.id || selectedBooking._id));
     setBiometricStatus({
       tone: 'idle',
@@ -2027,6 +2069,319 @@ Processing Time: Refunds are typically credited back to the original payment met
     return null;
   };
 
+  const persistThumbParticipants = async (nextParticipants) => {
+    if (!selectedBooking) {
+      return null;
+    }
+
+    const payload = nextParticipants.map((item, index) => ({
+      participantKey: String(item?.participantKey || buildThumbParticipantKey(item?.participantType || 'co_passenger')),
+      participantType: String(item?.participantType || 'co_passenger'),
+      participantLabel: String(item?.participantLabel || item?.name || 'Participant'),
+      userType: String(item?.userType || item?.participantType || 'participant'),
+      name: String(item?.name || '').trim(),
+      phone: String(item?.phone || '').replace(/\D/g, '').slice(0, 10),
+      linkedUserId: String(item?.linkedUserId || ''),
+      linkedStaffId: String(item?.linkedStaffId || ''),
+      isPrimary: item?.isPrimary === true,
+      sortOrder: Number.isFinite(Number(item?.sortOrder)) ? Number(item.sortOrder) : index,
+    }));
+
+    const response = await updateServiceCenterBookingBiometrics(selectedBooking.id || selectedBooking._id, {
+      thumbParticipants: payload,
+    });
+    const updated = unwrap(response)?.booking || unwrap(response);
+    if (updated?.id || updated?._id) {
+      patchBookingLocal(selectedBooking.id || selectedBooking._id, updated);
+      setThumbParticipantsDraft(buildThumbParticipantsDraft(updated));
+      return updated;
+    }
+    return refreshBookingBiometrics(selectedBooking.id || selectedBooking._id);
+  };
+
+  const addCoPassengerParticipant = async () => {
+    const nextParticipants = [
+      ...thumbParticipantsDraft,
+      {
+        participantKey: buildThumbParticipantKey('co_passenger'),
+        participantType: 'co_passenger',
+        participantLabel: `Co-passenger ${thumbParticipantsDraft.filter((item) => item.participantType === 'co_passenger').length + 1}`,
+        userType: 'co_passenger',
+        name: '',
+        phone: '',
+        linkedUserId: '',
+        linkedStaffId: '',
+        isPrimary: false,
+        sortOrder: thumbParticipantsDraft.length,
+      },
+    ];
+    setThumbParticipantsDraft(nextParticipants);
+    await persistThumbParticipants(nextParticipants);
+  };
+
+  const handleThumbParticipantFieldBlur = async (participantKey, field, value) => {
+    const nextParticipants = thumbParticipantsDraft.map((item) =>
+      item.participantKey === participantKey
+        ? {
+            ...item,
+            [field]: field === 'phone' ? String(value || '').replace(/\D/g, '').slice(0, 10) : value,
+          }
+        : item,
+    );
+    setThumbParticipantsDraft(nextParticipants);
+    await persistThumbParticipants(nextParticipants);
+  };
+
+  const invokeThumbCaptureBridge = async (payload = {}, preferredSource = biometricSource) => {
+    const bridgePayload = {
+      ...payload,
+      preferredSource,
+      biometricSource: preferredSource,
+      mode: 'raw_image_only',
+      imageOnly: true,
+      allowedFormats: ['png', 'jpg', 'jpeg', 'bmp'],
+      runtime: window?.flutter_inappwebview?.callHandler ? 'flutter-webview' : 'browser',
+    };
+
+    if (window?.ServiceCenterBiometricBridge?.captureThumbImage) {
+      return window.ServiceCenterBiometricBridge.captureThumbImage(bridgePayload);
+    }
+
+    if (window?.flutter_inappwebview?.callHandler) {
+      const attempts = [
+        ['thumbCapture', [`thumb-capture:${preferredSource}`, bridgePayload]],
+        ['thumbCapture', [bridgePayload]],
+        ['biometricThumbCapture', [bridgePayload]],
+        ['fingerprint', [`fingerprint:${preferredSource}:capture-image`, bridgePayload]],
+      ];
+
+      for (const [handlerName, args] of attempts) {
+        try {
+          const result = await withBridgeTimeout(window.flutter_inappwebview.callHandler(handlerName, ...args));
+          if (result) {
+            return parseBridgeObject(result);
+          }
+        } catch {
+          // Try the next native bridge signature.
+        }
+      }
+    }
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/png,image/jpeg,image/bmp';
+    const selectedFile = await new Promise((resolve) => {
+      input.onchange = () => resolve(input.files?.[0] || null);
+      input.click();
+    });
+
+    if (!selectedFile) {
+      throw new Error('Thumb capture was cancelled.');
+    }
+
+    const imageBase64 = await readFileAsDataUrl(selectedFile);
+    return {
+      imageBase64,
+      mimeType: selectedFile.type || 'image/png',
+      fileName: selectedFile.name || '',
+      captureSource: preferredSource || 'manual',
+      deviceLabel: preferredSource === 'phone_sensor' ? 'Phone Capture' : 'Manual Upload',
+    };
+  };
+
+  const handleThumbCapture = async (participant, thumbCode) => {
+    if (!selectedBooking || !participant?.participantKey) {
+      return;
+    }
+
+    if (!biometricDraft.consentAccepted && !selectedBooking?.biometrics?.consentAccepted) {
+      setBiometricStatus({
+        tone: 'error',
+        message: 'Save customer consent before capturing thumb images.',
+        fingerCode: thumbCode,
+        action: 'capture',
+      });
+      return;
+    }
+
+    const actionKey = `thumb:${participant.participantKey}:${thumbCode}`;
+    setThumbAction(actionKey);
+    setBiometricStatus({
+      tone: 'loading',
+      message: `Waiting for ${participant.participantLabel} ${thumbCode === 'LEFT_THUMB' ? 'left' : 'right'} thumb capture...`,
+      fingerCode: thumbCode,
+      action: 'capture',
+    });
+
+    try {
+      await saveBiometricDraft();
+
+      const bridgeResult = await invokeThumbCaptureBridge({
+        bookingId: selectedBooking.id || selectedBooking._id,
+        participantKey: participant.participantKey,
+        participantType: participant.participantType,
+        participantLabel: participant.participantLabel,
+        userType: participant.userType,
+        thumbCode,
+      }, biometricSource);
+
+      const imageBase64 = pickFirstBiometricPreviewValue(
+        bridgeResult?.imageBase64,
+        bridgeResult?.base64Image,
+        bridgeResult?.previewImage,
+        bridgeResult?.image,
+        bridgeResult?.imageUrl,
+        bridgeResult?.path,
+      );
+
+      if (!imageBase64) {
+        throw new Error('The scanner did not return a thumb image.');
+      }
+
+      const uploadResult = imageBase64.startsWith('data:image/')
+        ? await uploadService.uploadImage(imageBase64, `service-center/booking-${selectedBooking.id || selectedBooking._id}/thumbs`)
+        : { data: { url: imageBase64 }, url: imageBase64 };
+      const uploadedUrl = uploadResult?.data?.url || uploadResult?.url || uploadResult?.secureUrl || '';
+
+      if (!uploadedUrl) {
+        throw new Error('Unable to upload the captured thumb image.');
+      }
+
+      const existingCaptures = Array.isArray(selectedBooking?.biometrics?.thumbCaptures) ? selectedBooking.biometrics.thumbCaptures : [];
+      const nextCaptures = [
+        ...existingCaptures.filter(
+          (item) => !(String(item?.participantKey || '') === String(participant.participantKey) && String(item?.thumbCode || '') === String(thumbCode)),
+        ),
+        {
+          captureId: `${participant.participantKey}:${thumbCode}`,
+          participantKey: participant.participantKey,
+          participantType: participant.participantType,
+          participantLabel: participant.participantLabel,
+          userType: participant.userType,
+          thumbCode,
+          imageUrl: uploadedUrl,
+          mimeType: bridgeResult?.mimeType || 'image/png',
+          fileName: bridgeResult?.fileName || '',
+          captureSource: normalizeBiometricCaptureSource(bridgeResult?.captureSource, biometricSource),
+          deviceLabel: bridgeResult?.deviceLabel || '',
+          scannerSerial: bridgeResult?.scannerSerial || '',
+          notes: bridgeResult?.notes || '',
+          capturedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ];
+
+      const response = await updateServiceCenterBookingBiometrics(selectedBooking.id || selectedBooking._id, {
+        thumbParticipants: thumbParticipantsDraft,
+        thumbCaptures: nextCaptures,
+      });
+      const updated = unwrap(response)?.booking || unwrap(response);
+      if (updated?.id || updated?._id) {
+        patchBookingLocal(selectedBooking.id || selectedBooking._id, updated);
+      } else {
+        await refreshBookingBiometrics(selectedBooking.id || selectedBooking._id);
+      }
+
+      setBiometricStatus({
+        tone: 'success',
+        message: `${participant.participantLabel} ${thumbCode === 'LEFT_THUMB' ? 'left' : 'right'} thumb captured successfully.`,
+        fingerCode: thumbCode,
+        action: 'capture',
+      });
+    } catch (err) {
+      setBiometricStatus({
+        tone: 'error',
+        message: err?.message || 'Unable to capture thumb image.',
+        fingerCode: thumbCode,
+        action: 'capture',
+      });
+    } finally {
+      setThumbAction('');
+    }
+  };
+
+  const handleDeleteThumbCapture = async (captureId) => {
+    if (!selectedBooking || !captureId) {
+      return;
+    }
+
+    const existingCaptures = Array.isArray(selectedBooking?.biometrics?.thumbCaptures) ? selectedBooking.biometrics.thumbCaptures : [];
+    const nextCaptures = existingCaptures.filter((item) => String(item?.captureId || '') !== String(captureId));
+    const response = await updateServiceCenterBookingBiometrics(selectedBooking.id || selectedBooking._id, {
+      thumbParticipants: thumbParticipantsDraft,
+      thumbCaptures: nextCaptures,
+    });
+    const updated = unwrap(response)?.booking || unwrap(response);
+    if (updated?.id || updated?._id) {
+      patchBookingLocal(selectedBooking.id || selectedBooking._id, updated);
+    } else {
+      await refreshBookingBiometrics(selectedBooking.id || selectedBooking._id);
+    }
+  };
+
+  const handlePrintAgreement = () => {
+    if (!selectedBooking) {
+      return;
+    }
+
+    const captures = Array.isArray(selectedBooking?.biometrics?.thumbCaptures) ? selectedBooking.biometrics.thumbCaptures : [];
+    const participants = Array.isArray(selectedBooking?.biometrics?.thumbParticipants) ? selectedBooking.biometrics.thumbParticipants : [];
+    const groupedCaptures = participants.map((participant) => ({
+      participant,
+      captures: captures.filter((item) => String(item?.participantKey || '') === String(participant.participantKey)),
+    }));
+
+    const html = `<!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Rental Agreement ${selectedBooking.bookingReference || ''}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; color: #0f172a; }
+            h1,h2,h3 { margin: 0 0 8px; }
+            .card { border: 1px solid #cbd5e1; border-radius: 16px; padding: 16px; margin: 16px 0; }
+            .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+            .thumb { border: 1px solid #cbd5e1; border-radius: 12px; padding: 12px; text-align: center; }
+            .thumb img { max-width: 100%; max-height: 180px; object-fit: contain; display: block; margin: 0 auto 8px; }
+            .muted { color: #64748b; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <h1>Rental Agreement</h1>
+          <p class="muted">Booking ${selectedBooking.bookingReference || ''}</p>
+          <div class="card">
+            <h3>Customer</h3>
+            <p>${selectedBooking.customer?.name || 'N/A'} | ${selectedBooking.customer?.phone || 'N/A'}</p>
+            <p>${selectedBooking.vehicleName || 'Vehicle'} | ${selectedBooking.pickupDateTime ? new Date(selectedBooking.pickupDateTime).toLocaleString() : 'N/A'}</p>
+          </div>
+          ${groupedCaptures.map(({ participant, captures: participantCaptures }) => `
+            <div class="card">
+              <h3>${participant.participantLabel || 'Participant'}</h3>
+              <p class="muted">${participant.name || ''} ${participant.phone ? `| ${participant.phone}` : ''}</p>
+              <div class="grid">
+                ${participantCaptures.map((capture) => `
+                  <div class="thumb">
+                    <img src="${capture.imageUrl || capture.previewImage || ''}" alt="${capture.thumbCode || 'Thumb'}" />
+                    <div><strong>${capture.thumbCode === 'LEFT_THUMB' ? 'Left Thumb' : capture.thumbCode === 'RIGHT_THUMB' ? 'Right Thumb' : 'Thumb'}</strong></div>
+                    <div class="muted">${capture.captureSource || 'unknown'}${capture.capturedAt ? ` | ${new Date(capture.capturedAt).toLocaleString()}` : ''}</div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `).join('')}
+          <script>window.onload = () => { window.print(); };</script>
+        </body>
+      </html>`;
+
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=980,height=720');
+    if (!printWindow) {
+      return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   const saveBiometricDraft = async () => {
     if (!selectedBooking) {
       return null;
@@ -2078,6 +2433,18 @@ Processing Time: Refunds are typically credited back to the original payment met
 
     if (action === 'verifyFinger' && !enrolled) {
       return `Capture ${finger.label} before trying to verify it.`;
+    }
+
+    if (action === 'verifyFinger') {
+      const enrolledFingers = Array.isArray(selectedBooking?.biometrics?.fingers)
+        ? selectedBooking.biometrics.fingers
+        : [];
+      const enrolledRecord = enrolledFingers.find(
+        (item) => String(item?.fingerCode || '').trim().toUpperCase() === String(finger.code).toUpperCase(),
+      );
+      if (isRdServiceFingerRecord(enrolledRecord)) {
+        return 'This finger was enrolled through IDEMIA RD Service. RD capture returns secured PID XML for authentication, so local re-verify is not available in this flow. Use Rescan if you need to refresh the enrolled capture.';
+      }
     }
 
     if (biometricSource === 'usb_scanner' && bridgeStatus === 'demo-mode') {
@@ -2145,7 +2512,7 @@ Processing Time: Refunds are typically credited back to the original payment met
 
       if (window.isBiometricBridgeAvailable === true) {
         throw new Error(
-          `The ${getBiometricSourceActionLabel(preferredSource).toLowerCase()} bridge is connected, but the APK did not return any scan result. Check the Flutter WebView handler names and make sure it returns template data for ${bridgeAction}.`,
+          `The ${getBiometricSourceActionLabel(preferredSource).toLowerCase()} bridge is connected, but the APK did not return any scan result. Check the Flutter WebView handler names and make sure it returns ${action === 'verifyFinger' ? 'a verification result' : 'capture data'} for ${bridgeAction}.`,
         );
       }
     }
@@ -2300,9 +2667,12 @@ Processing Time: Refunds are typically credited back to the original payment met
       } else {
         await refreshBookingBiometrics(selectedBooking.id || selectedBooking._id);
       }
+      const resolvedTemplateFormat = String(bridgeResult?.templateFormat || '').trim().toLowerCase();
       setBiometricStatus({
         tone: 'success',
-        message: `${finger.label} captured successfully from ${getBiometricSourceLabel(biometricSource)}.`,
+        message: isRdServiceTemplateFormat(resolvedTemplateFormat)
+          ? `${finger.label} captured successfully from the IDEMIA RD USB scanner. This enrollment is stored as RD PID XML, so local verify is disabled in this flow.`
+          : `${finger.label} captured successfully from ${getBiometricSourceLabel(biometricSource)}.`,
         fingerCode: finger.code,
         action: 'capture',
       });
@@ -2909,6 +3279,15 @@ Processing Time: Refunds are typically credited back to the original payment met
                  const fingerDetailMap = new Map(
                    (Array.isArray(biometrics.fingers) ? biometrics.fingers : []).map((item) => [item.fingerCode, item]),
                  );
+                 const thumbCaptureMap = new Map(
+                   (Array.isArray(biometrics.thumbCaptures) ? biometrics.thumbCaptures : []).map((item) => [
+                     `${item.participantKey}:${item.thumbCode}`,
+                     item,
+                   ]),
+                 );
+                 const thumbParticipants = thumbParticipantsDraft.length > 0
+                   ? thumbParticipantsDraft
+                   : buildThumbParticipantsDraft(selectedBooking);
                  const bridgeStatus = getBiometricBridgeStatus(biometricSource);
                  const customerDocumentCards = getCustomerDocumentCards(selectedBooking);
                  const getPossessionTime = () => {
@@ -2972,9 +3351,11 @@ Processing Time: Refunds are typically credited back to the original payment met
                            <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-4">
                              <p className="text-sm font-bold text-amber-900">Current status</p>
                              <p className="mt-1 text-sm text-amber-800">
-                               {selectedFingerprintRecord.previewImage
+                                {selectedFingerprintRecord.previewImage
                                  ? 'Preview image received from the capture or verify bridge.'
-                                 : 'Template is stored, but this saved finger record still has no visual preview attached from the scanner bridge.'}
+                                 : isRdServiceFingerRecord(selectedFingerprintRecord)
+                                   ? 'This RD enrollment stores secured PID XML and device metadata. The RD response does not provide a reusable fingerprint impression image to this app.'
+                                   : 'Template is stored, but this saved finger record still has no visual preview attached from the scanner bridge.'}
                              </p>
                            </div>
 
@@ -3176,7 +3557,7 @@ Processing Time: Refunds are typically credited back to the original payment met
 
                                 {biometricSource === 'phone_sensor' ? (
                                   <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
-                                    Phone fingerprint on Android usually verifies the user but does not expose a raw fingerprint template. In the Flutter APK, the phone mode will only enroll if your native bridge returns `templateData`; otherwise use it for verification and use the USB scanner for enrollment.
+                                    This flow runs in raw thumb image mode only. The Android WebView bridge should return a capture image as base64 or file path. Do not use Aadhaar, RD service auth, or fingerprint template matching here.
                                   </p>
                                 ) : null}
                               </div>
@@ -3189,7 +3570,7 @@ Processing Time: Refunds are typically credited back to the original payment met
                                     </p>
                                     <p className="mt-1 text-sm font-bold text-slate-900">{getBiometricBridgeBadge(bridgeStatus, biometricSource)}</p>
                                     <p className="mt-1 text-xs text-slate-500">
-                                      The website flow is ready now. Flutter can answer either `fingerprint:{'{source}'}:{'{action}'}` or the existing `fingerprint:{'{action}'}` handler names inside the WebView bridge.
+                                      Flutter can return a raw thumb image payload to the WebView for each participant capture request. The MERN app stores the uploaded image against this booking.
                                     </p>
                                   </div>
                                   <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700 shadow-sm">
@@ -3237,7 +3618,7 @@ Processing Time: Refunds are typically credited back to the original payment met
                                     />
                                     <div>
                                       <p className="text-sm font-bold text-slate-900">Customer consent collected</p>
-                                      <p className="mt-1 text-xs text-slate-500">Only needed if you plan to capture or verify fingerprints for this booking.</p>
+                                      <p className="mt-1 text-xs text-slate-500">Required before capturing customer, co-passenger, or employee thumb images.</p>
                                     </div>
                                   </div>
                                 </label>
@@ -3273,7 +3654,7 @@ Processing Time: Refunds are typically credited back to the original payment met
                                   </select>
                                 </div>
                                 <div>
-                                  <label className={labelClass}>Target Finger Count (Optional)</label>
+                                  <label className={labelClass}>Target Thumb Count (Optional)</label>
                                   <input
                                     type="number"
                                     min={0}
@@ -3284,7 +3665,7 @@ Processing Time: Refunds are typically credited back to the original payment met
                                     placeholder="0"
                                   />
                                   <p className="mt-1 text-xs text-slate-500">
-                                    Leave this blank or set it to 0 if no fingerprint enrollment is needed for this booking.
+                                    Leave this blank or set it to 0 if no minimum thumb image count is required for this booking.
                                   </p>
                                 </div>
                               </div>
@@ -3307,7 +3688,7 @@ Processing Time: Refunds are typically credited back to the original payment met
                                     value={biometricDraft.notes}
                                     onChange={(event) => setBiometricDraft((current) => ({ ...current, notes: event.target.value }))}
                                     className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                                    placeholder="Example: customer gave thumbs now, remaining fingers later at return desk."
+                                    placeholder="Example: customer left thumb captured, co-passenger right thumb pending."
                                   />
                                 </div>
                               </div>
@@ -3322,6 +3703,122 @@ Processing Time: Refunds are typically credited back to the original payment met
                                 Save Enrollment Setup
                               </button>
 
+                              <div className="flex flex-wrap gap-3">
+                                <button
+                                  type="button"
+                                  onClick={addCoPassengerParticipant}
+                                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                                >
+                                  <Plus size={16} />
+                                  Add Co-passenger
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handlePrintAgreement}
+                                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100"
+                                >
+                                  <FileText size={16} />
+                                  Print Agreement PDF
+                                </button>
+                              </div>
+
+                              <div className="space-y-4">
+                                {thumbParticipants.map((participant, participantIndex) => (
+                                  <div key={participant.participantKey} className="rounded-3xl border border-slate-200 bg-slate-50/60 p-4">
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                      <div>
+                                        <label className={labelClass}>Section Label</label>
+                                        <input
+                                          type="text"
+                                          defaultValue={participant.participantLabel}
+                                          readOnly={participant.participantType !== 'co_passenger'}
+                                          onBlur={(event) => handleThumbParticipantFieldBlur(participant.participantKey, 'participantLabel', event.target.value)}
+                                          className={`${inputClass} ${participant.participantType !== 'co_passenger' ? 'bg-slate-100 text-slate-500' : ''}`}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className={labelClass}>Person Name</label>
+                                        <input
+                                          type="text"
+                                          defaultValue={participant.name}
+                                          readOnly={participant.participantType !== 'co_passenger'}
+                                          onBlur={(event) => handleThumbParticipantFieldBlur(participant.participantKey, 'name', event.target.value)}
+                                          className={`${inputClass} ${participant.participantType !== 'co_passenger' ? 'bg-slate-100 text-slate-500' : ''}`}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className={labelClass}>Phone</label>
+                                        <input
+                                          type="tel"
+                                          defaultValue={participant.phone}
+                                          readOnly={participant.participantType !== 'co_passenger'}
+                                          onBlur={(event) => handleThumbParticipantFieldBlur(participant.participantKey, 'phone', event.target.value)}
+                                          className={`${inputClass} ${participant.participantType !== 'co_passenger' ? 'bg-slate-100 text-slate-500' : ''}`}
+                                        />
+                                      </div>
+                                      <div className="flex items-end">
+                                        <div className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 shadow-sm">
+                                          {participant.participantType === 'co_passenger' ? `Co-passenger ${participantIndex + 1}` : participant.participantLabel}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                                      {thumbCodeOptions.map((thumb) => {
+                                        const capture = thumbCaptureMap.get(`${participant.participantKey}:${thumb.value}`);
+                                        const busy = thumbAction === `thumb:${participant.participantKey}:${thumb.value}`;
+                                        return (
+                                          <div key={`${participant.participantKey}:${thumb.value}`} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                            <div className="flex items-start justify-between gap-3">
+                                              <div>
+                                                <p className="text-sm font-bold text-slate-900">{thumb.label}</p>
+                                                <p className="mt-1 text-xs text-slate-500">
+                                                  {capture?.capturedAt ? `Captured ${formatDateTime(capture.capturedAt)}` : 'No image captured yet'}
+                                                </p>
+                                              </div>
+                                              <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${capture?.imageUrl ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                                                {capture?.imageUrl ? 'Saved' : 'Pending'}
+                                              </span>
+                                            </div>
+                                            <div className="mt-4 overflow-hidden rounded-2xl border border-dashed border-slate-200 bg-slate-50">
+                                              {capture?.imageUrl ? (
+                                                <img src={capture.imageUrl} alt={`${participant.participantLabel} ${thumb.label}`} className="h-44 w-full object-contain bg-white p-3" />
+                                              ) : (
+                                                <div className="flex h-44 flex-col items-center justify-center px-4 text-center text-slate-400">
+                                                  <ShieldCheck size={28} />
+                                                  <p className="mt-2 text-xs font-bold uppercase tracking-[0.18em]">Awaiting Capture</p>
+                                                </div>
+                                              )}
+                                            </div>
+                                            <div className="mt-4 grid grid-cols-2 gap-2">
+                                              <button
+                                                type="button"
+                                                onClick={() => handleThumbCapture(participant, thumb.value)}
+                                                disabled={Boolean(thumbAction && !busy)}
+                                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                                              >
+                                                {busy ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
+                                                {busy ? 'Capturing...' : capture?.imageUrl ? 'Retake' : 'Capture'}
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleDeleteThumbCapture(capture?.captureId)}
+                                                disabled={!capture?.captureId || Boolean(thumbAction)}
+                                                className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-white px-3 py-2.5 text-xs font-bold text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
+                                              >
+                                                <Trash2 size={14} />
+                                                Remove
+                                              </button>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {false && (
                               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                 {biometricFingerOptions.map((finger) => {
                                   const enrolled = enrolledFingerSet.has(finger.code);
@@ -3329,6 +3826,7 @@ Processing Time: Refunds are typically credited back to the original payment met
                                   const captureBusy = biometricAction === `capture:${finger.code}`;
                                   const verifyBusy = biometricAction === `verify:${finger.code}`;
                                   const deleteBusy = biometricAction === `delete:${finger.code}`;
+                                  const rdServiceFlow = isRdServiceFingerRecord(fingerInfo);
 
                                   return (
                                     <div key={finger.code} className={`rounded-2xl border p-4 ${enrolled ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200 bg-slate-50'}`}>
@@ -3343,6 +3841,11 @@ Processing Time: Refunds are typically credited back to the original payment met
                                           {fingerInfo?.captureSource ? (
                                             <p className="mt-1 text-[11px] font-semibold text-slate-500">
                                               Source {getBiometricSourceLabel(fingerInfo.captureSource)}
+                                            </p>
+                                          ) : null}
+                                          {rdServiceFlow ? (
+                                            <p className="mt-1 text-[11px] font-semibold text-sky-700">
+                                              IDEMIA RD Service enrollment
                                             </p>
                                           ) : null}
                                           {fingerInfo?.qualityScore ? (
@@ -3369,11 +3872,12 @@ Processing Time: Refunds are typically credited back to the original payment met
                                         <button
                                           type="button"
                                           onClick={() => handleVerifyFinger(finger)}
-                                          disabled={!enrolled || Boolean(biometricAction && biometricAction !== `verify:${finger.code}`)}
+                                          disabled={!enrolled || rdServiceFlow || Boolean(biometricAction && biometricAction !== `verify:${finger.code}`)}
                                           className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                                          title={rdServiceFlow ? 'IDEMIA RD Service captures are stored as secured PID XML. Local verify is not available in this flow.' : ''}
                                         >
                                           {verifyBusy ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                                          {verifyBusy ? 'Verifying…' : 'Verify'}
+                                          {verifyBusy ? 'Verifying...' : rdServiceFlow ? 'RD Flow' : 'Verify'}
                                         </button>
                                         <button
                                           type="button"
@@ -3400,6 +3904,12 @@ Processing Time: Refunds are typically credited back to the original payment met
                                         </p>
                                       ) : null}
 
+                                      {rdServiceFlow ? (
+                                        <p className="mt-2 text-[11px] font-medium text-slate-500">
+                                          This finger was captured through the IDEMIA registered-device flow. Use Rescan to refresh the stored RD capture. Local verify is intentionally disabled for this device path.
+                                        </p>
+                                      ) : null}
+
                                       {enrolled ? (
                                         <button
                                           type="button"
@@ -3414,6 +3924,7 @@ Processing Time: Refunds are typically credited back to the original payment met
                                   );
                                 })}
                               </div>
+                              )}
 
                               {Array.isArray(biometrics.auditLogs) && biometrics.auditLogs.length > 0 ? (
                                 <div className="rounded-2xl border border-slate-200 bg-white p-4">

@@ -25,6 +25,7 @@ import { CustomerBiometricProfile } from "../../admin/models/CustomerBiometricPr
 import { AdminBusinessSetting } from "../../admin/models/AdminBusinessSetting.js";
 import { Notification } from "../../admin/promotions/models/Notification.js";
 import { FleetVehicle } from "../../admin/models/FleetVehicle.js";
+import { uploadDataUrlToCloudinary } from "../../../../utils/cloudinaryUpload.js";
 import {
   comparePassword,
   hashPassword,
@@ -1775,6 +1776,11 @@ const isValidBiometricTemplate = (template) => {
   return true;
 };
 
+const isRdServiceTemplateFormat = (templateFormat = "") =>
+  ["uidai-pid-xml", "rd-pid-xml", "rd_service_pid_xml"].includes(
+    String(templateFormat || "").trim().toLowerCase(),
+  );
+
 const normalizeBiometricPreviewImage = (value = "") => {
   const trimmed = String(value || "").trim();
   if (!trimmed) {
@@ -1829,8 +1835,136 @@ const buildGeneratedBiometricPreview = (finger = {}) => {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 };
 
+const normalizePhoneDigits = (value = "") =>
+  String(value || "").replace(/\D/g, "").slice(-10);
+
+const buildDefaultThumbParticipantKey = (participantType = "", linkedId = "", fallback = "") => {
+  const normalizedType = String(participantType || "other").trim().toLowerCase() || "other";
+  const normalizedId = String(linkedId || "").trim();
+  return normalizedId ? `${normalizedType}:${normalizedId}` : `${normalizedType}:${String(fallback || "manual").trim()}`;
+};
+
+const getDefaultThumbParticipantsForBooking = (booking = {}) => {
+  const customerId = booking?.userId?._id || booking?.userId || "";
+  const participants = [
+    {
+      participantKey: buildDefaultThumbParticipantKey("customer", customerId, booking?._id || "booking"),
+      participantType: "customer",
+      participantLabel: "Customer",
+      userType: "customer",
+      name: booking?.userId?.name || booking?.contactName || "",
+      phone: booking?.userId?.phone || booking?.contactPhone || "",
+      linkedUserId: customerId || null,
+      linkedStaffId: null,
+      isPrimary: true,
+      sortOrder: 0,
+    },
+  ];
+
+  if (booking?.assignedStaffId || booking?.assignedStaffName || booking?.assignedStaffPhone) {
+    participants.push({
+      participantKey: buildDefaultThumbParticipantKey("employee", booking?.assignedStaffId || "", booking?._id || "employee"),
+      participantType: "employee",
+      participantLabel: "Employee",
+      userType: "employee",
+      name: booking?.assignedStaffName || "Service Center Staff",
+      phone: booking?.assignedStaffPhone || "",
+      linkedUserId: null,
+      linkedStaffId: booking?.assignedStaffId || null,
+      isPrimary: false,
+      sortOrder: 1,
+    });
+  }
+
+  return participants;
+};
+
+const mergeThumbParticipantsForBooking = (profile = {}, booking = {}) => {
+  const next = [];
+  const seen = new Set();
+  const entries = [
+    ...getDefaultThumbParticipantsForBooking(booking),
+    ...(Array.isArray(profile?.thumbParticipants) ? profile.thumbParticipants : []),
+  ];
+
+  entries.forEach((item, index) => {
+    const participantKey = String(
+      item?.participantKey ||
+      buildDefaultThumbParticipantKey(
+        item?.participantType,
+        item?.linkedUserId || item?.linkedStaffId,
+        `${booking?._id || "booking"}-${index}`,
+      ),
+    ).trim();
+
+    if (!participantKey || seen.has(participantKey)) {
+      return;
+    }
+
+    seen.add(participantKey);
+    next.push({
+      participantKey,
+      participantType: String(item?.participantType || "other").trim().toLowerCase() || "other",
+      participantLabel: String(item?.participantLabel || item?.name || "Participant").trim(),
+      userType: String(item?.userType || item?.participantType || "participant").trim().toLowerCase(),
+      name: String(item?.name || "").trim(),
+      phone: normalizePhoneDigits(item?.phone || ""),
+      linkedUserId: item?.linkedUserId || null,
+      linkedStaffId: item?.linkedStaffId || null,
+      isPrimary: item?.isPrimary === true,
+      sortOrder: Number.isFinite(Number(item?.sortOrder)) ? Number(item.sortOrder) : index,
+    });
+  });
+
+  return next.sort((first, second) => Number(first.sortOrder || 0) - Number(second.sortOrder || 0));
+};
+
+const normalizeThumbCode = (value = "") => {
+  const normalized = String(value || "").trim().toUpperCase();
+  return normalized === "LEFT_THUMB" || normalized === "RIGHT_THUMB" ? normalized : "UNKNOWN_THUMB";
+};
+
+const normalizeThumbImageMimeType = (value = "", fallbackUrl = "") => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (["image/png", "image/jpeg", "image/jpg", "image/bmp", "image/webp"].includes(normalized)) {
+    return normalized === "image/jpg" ? "image/jpeg" : normalized;
+  }
+
+  const rawUrl = String(fallbackUrl || "").toLowerCase();
+  if (rawUrl.includes(".bmp")) return "image/bmp";
+  if (rawUrl.includes(".jpg") || rawUrl.includes(".jpeg")) return "image/jpeg";
+  if (rawUrl.includes(".webp")) return "image/webp";
+  return "image/png";
+};
+
+const normalizeThumbCaptureRecord = (item = {}, participantMap = new Map(), index = 0) => {
+  const participantKey = String(item?.participantKey || "").trim();
+  const participant = participantMap.get(participantKey) || {};
+  const imageUrl = normalizeBiometricPreviewImage(item?.imageUrl || item?.previewImage || "");
+
+  return {
+    captureId: String(item?.captureId || `capture-${Date.now()}-${index}`).trim(),
+    participantKey,
+    participantType: String(item?.participantType || participant?.participantType || "other").trim().toLowerCase() || "other",
+    participantLabel: String(item?.participantLabel || participant?.participantLabel || participant?.name || "Participant").trim(),
+    userType: String(item?.userType || participant?.userType || participant?.participantType || "participant").trim().toLowerCase(),
+    thumbCode: normalizeThumbCode(item?.thumbCode || item?.fingerCode),
+    imageUrl,
+    fileName: String(item?.fileName || "").trim(),
+    mimeType: normalizeThumbImageMimeType(item?.mimeType, imageUrl),
+    captureSource: String(item?.captureSource || "unknown").trim().toLowerCase() || "unknown",
+    deviceLabel: String(item?.deviceLabel || "").trim(),
+    scannerSerial: String(item?.scannerSerial || "").trim(),
+    notes: String(item?.notes || "").trim(),
+    capturedAt: item?.capturedAt || new Date(),
+    updatedAt: item?.updatedAt || new Date(),
+  };
+};
+
 const serializeBiometricProfile = (profile = {}) => {
   const fingers = Array.isArray(profile?.fingers) ? profile.fingers : [];
+  const thumbParticipants = Array.isArray(profile?.thumbParticipants) ? profile.thumbParticipants : [];
+  const thumbCaptures = Array.isArray(profile?.thumbCaptures) ? profile.thumbCaptures : [];
   const normalizedRequiredFingerCount = Number(profile?.requiredFingerCount);
   return {
     id: String(profile?._id || ""),
@@ -1842,6 +1976,8 @@ const serializeBiometricProfile = (profile = {}) => {
     requiredFingerCount: Number.isInteger(normalizedRequiredFingerCount) && normalizedRequiredFingerCount >= 0 ? normalizedRequiredFingerCount : 0,
     enrolledFingerCount: fingers.length,
     enrolledFingerCodes: fingers.map((item) => String(item?.fingerCode || "")).filter(Boolean),
+    thumbParticipantCount: thumbParticipants.length,
+    thumbCaptureCount: thumbCaptures.length,
     notes: profile?.notes || "",
     verificationSummary: {
       lastVerifiedAt: profile?.verificationSummary?.lastVerifiedAt || null,
@@ -1851,6 +1987,36 @@ const serializeBiometricProfile = (profile = {}) => {
     },
     updatedAt: profile?.updatedAt || null,
     createdAt: profile?.createdAt || null,
+    thumbParticipants: thumbParticipants.map((item, index) => ({
+      participantKey: String(item?.participantKey || "").trim() || `participant-${index + 1}`,
+      participantType: String(item?.participantType || "other").trim().toLowerCase() || "other",
+      participantLabel: item?.participantLabel || item?.name || "Participant",
+      userType: item?.userType || item?.participantType || "participant",
+      name: item?.name || "",
+      phone: item?.phone || "",
+      linkedUserId: item?.linkedUserId ? String(item.linkedUserId) : "",
+      linkedStaffId: item?.linkedStaffId ? String(item.linkedStaffId) : "",
+      isPrimary: item?.isPrimary === true,
+      sortOrder: Number.isFinite(Number(item?.sortOrder)) ? Number(item.sortOrder) : index,
+    })),
+    thumbCaptures: thumbCaptures.map((item, index) => ({
+      captureId: String(item?.captureId || `capture-${index + 1}`).trim(),
+      participantKey: String(item?.participantKey || "").trim(),
+      participantType: String(item?.participantType || "other").trim().toLowerCase() || "other",
+      participantLabel: item?.participantLabel || "Participant",
+      userType: item?.userType || item?.participantType || "participant",
+      thumbCode: normalizeThumbCode(item?.thumbCode || item?.fingerCode),
+      imageUrl: normalizeBiometricPreviewImage(item?.imageUrl || item?.previewImage || ""),
+      previewImage: normalizeBiometricPreviewImage(item?.imageUrl || item?.previewImage || ""),
+      fileName: item?.fileName || "",
+      mimeType: normalizeThumbImageMimeType(item?.mimeType, item?.imageUrl || item?.previewImage || ""),
+      captureSource: item?.captureSource || "unknown",
+      deviceLabel: item?.deviceLabel || "",
+      scannerSerial: item?.scannerSerial || "",
+      notes: item?.notes || "",
+      capturedAt: item?.capturedAt || null,
+      updatedAt: item?.updatedAt || null,
+    })),
     fingers: fingers.map((item) => ({
       fingerCode: String(item?.fingerCode || "").toUpperCase(),
       displayName: item?.displayName || getBiometricFingerDisplayName(item?.fingerCode),
@@ -2012,6 +2178,8 @@ const serializeServiceCenterBooking = (item = {}, biometricProfile = null) => ({
         requiredFingerCount: 0,
         enrolledFingerCount: 0,
         enrolledFingerCodes: [],
+        thumbParticipantCount: 0,
+        thumbCaptureCount: 0,
         notes: "",
         verificationSummary: {
           lastVerifiedAt: null,
@@ -2021,6 +2189,8 @@ const serializeServiceCenterBooking = (item = {}, biometricProfile = null) => ({
         },
         updatedAt: null,
         createdAt: null,
+        thumbParticipants: [],
+        thumbCaptures: [],
         fingers: [],
         auditLogs: [],
       },
@@ -3644,7 +3814,17 @@ const ensureBiometricProfileForBooking = async ({ booking, center, access }) => 
       serviceCenterId: center._id,
       capturedByStaffId: access.staff?._id || null,
       status: "not_started",
+      thumbParticipants: getDefaultThumbParticipantsForBooking(booking.toObject ? booking.toObject() : booking),
     });
+  }
+
+  const mergedParticipants = mergeThumbParticipantsForBooking(
+    profile.toObject ? profile.toObject() : profile,
+    booking.toObject ? booking.toObject() : booking,
+  );
+  const currentParticipants = Array.isArray(profile.thumbParticipants) ? profile.thumbParticipants : [];
+  if (JSON.stringify(currentParticipants) !== JSON.stringify(mergedParticipants)) {
+    profile.thumbParticipants = mergedParticipants;
   }
 
   return profile;
@@ -3768,12 +3948,109 @@ export const updateServiceCenterBookingBiometrics = async (req, res) => {
     profile.notes = String(req.body.notes || "").trim();
   }
 
+  if (req.body?.thumbParticipants !== undefined) {
+    if (!Array.isArray(req.body.thumbParticipants)) {
+      throw new ApiError(400, "thumbParticipants must be an array");
+    }
+
+    const nextParticipants = req.body.thumbParticipants.map((item, index) => ({
+      participantKey: String(
+        item?.participantKey ||
+        buildDefaultThumbParticipantKey(
+          item?.participantType,
+          item?.linkedUserId || item?.linkedStaffId,
+          `${booking._id}-${index}`,
+        ),
+      ).trim(),
+      participantType: String(item?.participantType || "other").trim().toLowerCase() || "other",
+      participantLabel: String(item?.participantLabel || item?.name || "Participant").trim(),
+      userType: String(item?.userType || item?.participantType || "participant").trim().toLowerCase(),
+      name: String(item?.name || "").trim(),
+      phone: normalizePhoneDigits(item?.phone || ""),
+      linkedUserId: item?.linkedUserId && mongoose.Types.ObjectId.isValid(item.linkedUserId) ? item.linkedUserId : null,
+      linkedStaffId: item?.linkedStaffId && mongoose.Types.ObjectId.isValid(item.linkedStaffId) ? item.linkedStaffId : null,
+      isPrimary: item?.isPrimary === true,
+      sortOrder: Number.isFinite(Number(item?.sortOrder)) ? Number(item.sortOrder) : index,
+    })).filter((item) => item.participantKey);
+
+    profile.thumbParticipants = mergeThumbParticipantsForBooking(
+      { thumbParticipants: nextParticipants },
+      booking.toObject(),
+    );
+  }
+
+  if (req.body?.thumbCaptures !== undefined) {
+    if (!Array.isArray(req.body.thumbCaptures)) {
+      throw new ApiError(400, "thumbCaptures must be an array");
+    }
+
+    const participantMap = new Map(
+      (Array.isArray(profile.thumbParticipants) ? profile.thumbParticipants : []).map((item) => [String(item?.participantKey || "").trim(), item]),
+    );
+
+    const nextCaptures = [];
+    for (const [index, item] of req.body.thumbCaptures.entries()) {
+      const rawImage = String(
+        item?.imageUrl ||
+        item?.previewImage ||
+        item?.imageBase64 ||
+        item?.base64Image ||
+        "",
+      ).trim();
+
+      let imageUrl = normalizeBiometricPreviewImage(rawImage);
+      if (imageUrl.startsWith("data:image/")) {
+        const uploaded = await uploadDataUrlToCloudinary({
+          dataUrl: imageUrl,
+          folder: `${env.cloudinary.folder}/service-center/booking-${String(booking._id || "").trim()}/thumbs`,
+          publicIdPrefix: `thumb-${String(item?.participantKey || "participant").replace(/[^a-z0-9_-]/gi, "-").toLowerCase()}-${String(item?.thumbCode || "thumb").toLowerCase()}`,
+        });
+        imageUrl = uploaded.secureUrl;
+      }
+
+      const normalized = normalizeThumbCaptureRecord(
+        {
+          ...item,
+          imageUrl,
+          updatedAt: new Date(),
+        },
+        participantMap,
+        index,
+      );
+
+      if (!normalized.participantKey) {
+        throw new ApiError(400, "Each thumb capture must include participantKey");
+      }
+
+      if (!normalized.imageUrl) {
+        throw new ApiError(400, "Each thumb capture must include an image");
+      }
+
+      nextCaptures.push(normalized);
+    }
+
+    profile.thumbCaptures = nextCaptures;
+  }
+
   if (req.body?.status !== undefined) {
     const nextStatus = String(req.body.status || "").trim().toLowerCase();
     if (!BIOMETRIC_STATUSES.includes(nextStatus)) {
       throw new ApiError(400, "Invalid biometric status");
     }
     profile.status = nextStatus;
+  } else if (req.body?.thumbCaptures !== undefined) {
+    const thumbCaptureCount = Array.isArray(profile.thumbCaptures) ? profile.thumbCaptures.length : 0;
+    const requiredFingerCount = Number(profile.requiredFingerCount);
+    const normalizedRequiredFingerCount =
+      Number.isInteger(requiredFingerCount) && requiredFingerCount >= 0 ? requiredFingerCount : 0;
+
+    if (thumbCaptureCount === 0) {
+      profile.status = "not_started";
+    } else if (normalizedRequiredFingerCount > 0 && thumbCaptureCount >= normalizedRequiredFingerCount) {
+      profile.status = "completed";
+    } else {
+      profile.status = "in_progress";
+    }
   }
 
   if (access.staff?._id) {
@@ -4050,6 +4327,12 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
 
   let resolvedVerificationStatus = verificationStatus;
   const enrolledFinger = profile.fingers[fingerIndex];
+  if (isRdServiceTemplateFormat(enrolledFinger?.templateFormat)) {
+    throw new ApiError(
+      400,
+      "This finger was enrolled through RD Service PID XML capture. Local fingerprint re-verification is not supported in this flow.",
+    );
+  }
   const hasNumericMatchScore = Number.isFinite(matchScore) && matchScore >= 0;
   const hasTemplateData = Boolean(templateData);
   const templateHashMatched =

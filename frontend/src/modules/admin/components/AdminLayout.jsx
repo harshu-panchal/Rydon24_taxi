@@ -32,6 +32,7 @@ import {
   Settings,
   Settings2,
   Share2,
+  ShieldAlert,
   ShieldCheck,
   Smartphone,
   Star,
@@ -559,57 +560,76 @@ const NestedGroup = ({
 
 const ModeSwitcher = ({ mode, setMode }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
 
   const options = [
-    { id: ADMIN_MODE, label: 'Admin Terminal', subtitle: 'Core System' },
-    { id: OWNER_MODE, label: 'Fleet Console', subtitle: 'Owner Ops' },
+    { id: ADMIN_MODE, label: 'Admin Terminal', subtitle: 'Platform Core', icon: Monitor },
+    { id: OWNER_MODE, label: 'Fleet Console', subtitle: 'Owner Ops', icon: Briefcase },
   ];
 
-  const active = options.find((option) => option.id === mode) || options[0];
+  const active = options.find((o) => o.id === mode) || options[0];
+
+  useEffect(() => {
+    const clickOut = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setIsOpen(false);
+    };
+    document.addEventListener('mousedown', clickOut);
+    return () => document.removeEventListener('mousedown', clickOut);
+  }, []);
 
   return (
-    <div className="relative">
+    <div className="relative" ref={dropdownRef}>
       <button
         type="button"
-        onClick={() => setIsOpen((current) => !current)}
-        className="group flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 shadow-sm transition-all hover:border-slate-900 active:scale-[0.98]"
+        onClick={() => setIsOpen(!isOpen)}
+        className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm transition-all hover:border-slate-900 active:scale-[0.98]"
       >
-        <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-50 text-slate-400 group-hover:text-slate-900 transition-colors">
-          <Briefcase size={14} strokeWidth={2.5} />
+        <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-slate-900 text-white shadow-lg shadow-slate-900/10">
+          {active.id === ADMIN_MODE ? <Monitor size={14} strokeWidth={2.5} /> : <Briefcase size={14} strokeWidth={2.5} />}
         </div>
-        <span className="text-[12px] font-bold text-slate-900 tracking-tight">{active.label}</span>
+        <div className="text-left hidden sm:block">
+           <p className="text-[11px] font-black text-slate-900 leading-tight uppercase tracking-tight">{active.label}</p>
+           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{active.subtitle}</p>
+        </div>
         <ChevronDown size={14} className={`text-slate-300 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
-      {isOpen && (
-        <div className="absolute right-0 top-full z-50 mt-3 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="px-3 py-2 border-b border-slate-50 mb-1">
-             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">Switch Context</p>
-          </div>
-          {options.map((option) => {
-            const selected = option.id === mode;
-            return (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => {
-                  setMode(option.id);
-                  setIsOpen(false);
-                }}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all ${
-                  selected ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/10' : 'hover:bg-slate-50 text-slate-600'
-                }`}
-              >
-                <div className={`h-1.5 w-1.5 rounded-full transition-all ${selected ? 'bg-white' : 'bg-slate-300'}`} />
-                <div className="flex-1">
-                  <p className={`text-[12px] font-bold leading-none ${selected ? 'text-white' : 'text-slate-900'}`}>{option.label}</p>
-                  <p className={`text-[9px] font-bold uppercase tracking-widest mt-1.5 ${selected ? 'text-slate-400' : 'text-slate-400'}`}>{option.subtitle}</p>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            className="absolute right-0 top-full z-50 mt-4 w-60 overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-2.5 shadow-2xl"
+          >
+            <div className="px-4 py-3 border-b border-slate-50 mb-1.5">
+               <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Switch Workspace</p>
+            </div>
+            {options.map((option) => {
+              const selected = option.id === mode;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => {
+                    setMode(option.id);
+                    setIsOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-3.5 rounded-2xl px-4 py-3.5 text-left transition-all ${
+                    selected ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/10' : 'hover:bg-slate-50 text-slate-600'
+                  }`}
+                >
+                  <div className={`h-1.5 w-1.5 rounded-full ${selected ? 'bg-white' : 'bg-slate-300'}`} />
+                  <div>
+                    <p className={`text-[12px] font-black tracking-tight ${selected ? 'text-white' : 'text-slate-900'}`}>{option.label}</p>
+                    <p className={`text-[9px] font-bold uppercase tracking-widest mt-1.5 ${selected ? 'text-slate-400' : 'text-slate-400'}`}>{option.subtitle}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -877,6 +897,7 @@ const AdminLayout = () => {
               { label: 'Peak Zone', path: '/admin/geo/peak-zone', permission: 'geofencing.view' },
             ],
           },
+          { icon: ShieldAlert, label: 'SOS', path: '/admin/safety', permission: 'dashboard.view' },
           { icon: Car, label: 'Trip Requests', path: '/admin/trips', permission: 'trips.view' },
           { icon: Package, label: 'Delivery Requests', path: '/admin/deliveries', permission: 'deliveries.view' },
           { icon: Clock, label: 'Ongoing Requests', path: '/admin/ongoing', permission: 'ongoing.view' },
@@ -1550,51 +1571,49 @@ const AdminLayout = () => {
                 </button>
 
                 <div
-                  className={`absolute right-0 top-full z-50 mt-2 w-[360px] overflow-hidden rounded-[24px] border border-slate-100 bg-white shadow-2xl transition-all ${
-                    isNotificationsOpen ? 'pointer-events-auto scale-100 opacity-100' : 'pointer-events-none scale-95 opacity-0'
+                  className={`absolute right-0 top-full z-50 mt-4 w-[380px] overflow-hidden rounded-[2.5rem] border border-slate-200 bg-white shadow-2xl transition-all duration-300 ${
+                    isNotificationsOpen ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0 pointer-events-none'
                   }`}
                 >
-                  <div className="border-b border-slate-100 px-4 py-4">
+                  <div className="border-b border-slate-50 px-6 py-6 bg-slate-50/50">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-sm font-extrabold text-slate-900">Notifications</p>
-                        <p className="mt-1 text-[11px] font-semibold text-slate-500">
-                          Latest bookings, ride requests, and support chats
+                        <p className="text-[14px] font-black text-slate-900 tracking-tight">Intelligence Feed</p>
+                        <p className="mt-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          Real-time system alerts
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-3">
                         {currentNotificationCount > 0 ? (
                           <button
                             type="button"
                             onClick={dismissCurrentNotifications}
-                            className="rounded-full border border-slate-200 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500 transition-all hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+                            className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-rose-600 transition-colors"
                           >
-                            Clear
+                            Flush
                           </button>
                         ) : null}
-                        <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700">
+                        <div className="h-6 w-1 border-l border-slate-200" />
+                        <span className="flex h-6 min-w-[24px] items-center justify-center rounded-full bg-slate-900 px-1.5 text-[10px] font-black text-white">
                           {totalNotificationItems}
                         </span>
                       </div>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-slate-50 p-1">
+                    <div className="mt-6 flex gap-1 rounded-2xl bg-white p-1 border border-slate-100">
                       <button
                         type="button"
                         onClick={() => {
                           setNotificationTab('ride_requests');
                           setRideRequestPage(1);
                         }}
-                        className={`rounded-xl px-3 py-2 text-xs font-bold transition-all ${
+                        className={`flex-1 rounded-xl px-2 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ${
                           notificationTab === 'ride_requests'
-                            ? 'bg-white text-slate-900 shadow-sm'
-                            : 'text-slate-500 hover:text-slate-900'
+                            ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/10'
+                            : 'text-slate-400 hover:text-slate-900'
                         }`}
                       >
-                        <span className="flex items-center justify-center gap-1.5">
-                          <span>Ride Requests</span>
-                          <NotificationTabBadge count={rideRequestUnreadCount} isActive={notificationTab === 'ride_requests'} />
-                        </span>
+                        Trips
                       </button>
                       <button
                         type="button"
@@ -1602,32 +1621,26 @@ const AdminLayout = () => {
                           setNotificationTab('bookings');
                           setBookingPage(1);
                         }}
-                        className={`rounded-xl px-3 py-2 text-xs font-bold transition-all ${
+                        className={`flex-1 rounded-xl px-2 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ${
                           notificationTab === 'bookings'
-                            ? 'bg-white text-slate-900 shadow-sm'
-                            : 'text-slate-500 hover:text-slate-900'
+                            ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/10'
+                            : 'text-slate-400 hover:text-slate-900'
                         }`}
                       >
-                        <span className="flex items-center justify-center gap-1.5">
-                          <span>Bookings</span>
-                          <NotificationTabBadge count={bookingUnreadCount} isActive={notificationTab === 'bookings'} />
-                        </span>
+                        Bookings
                       </button>
                       <button
                         type="button"
                         onClick={() => {
                           setNotificationTab('chats');
                         }}
-                        className={`rounded-xl px-3 py-2 text-xs font-bold transition-all ${
+                        className={`flex-1 rounded-xl px-2 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ${
                           notificationTab === 'chats'
-                            ? 'bg-white text-slate-900 shadow-sm'
-                            : 'text-slate-500 hover:text-slate-900'
+                            ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/10'
+                            : 'text-slate-400 hover:text-slate-900'
                         }`}
                       >
-                        <span className="flex items-center justify-center gap-1.5">
-                          <span>Chats</span>
-                          <NotificationTabBadge count={effectiveChatUnreadCount} isActive={notificationTab === 'chats'} />
-                        </span>
+                        Chats
                       </button>
                     </div>
                   </div>
@@ -1639,12 +1652,15 @@ const AdminLayout = () => {
                       </div>
                     ) : notificationTab === 'ride_requests' ? (
                       visibleRideRequestResults.length === 0 ? (
-                        <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-8 text-center">
-                          <p className="text-sm font-bold text-slate-900">No ride requests found</p>
-                          <p className="mt-1 text-xs font-semibold text-slate-500">New ride requests will show up here.</p>
+                        <div className="px-6 py-12 text-center">
+                          <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-200 mx-auto mb-4">
+                             <Zap size={24} />
+                          </div>
+                          <p className="text-[13px] font-black text-slate-900 tracking-tight">Zero Traffic</p>
+                          <p className="mt-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">No active ride requests</p>
                         </div>
                       ) : (
-                        <div className="space-y-2">
+                        <div className="space-y-1">
                           {visibleRideRequestResults.map((item) => (
                             <button
                               key={item.id || item.requestId}
@@ -1654,48 +1670,22 @@ const AdminLayout = () => {
                                 navigate('/admin/trips');
                                 setIsNotificationsOpen(false);
                               }}
-                              className="relative w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
+                              className="relative w-full rounded-2xl p-4 text-left transition-all hover:bg-slate-50 group"
                             >
-                              <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start justify-between gap-4">
                                 <div className="min-w-0">
-                                  <p className="truncate text-sm font-bold text-slate-900">
+                                  <p className="truncate text-[13px] font-black text-slate-900 tracking-tight">
                                     {item.requestId} · {item.userName}
                                   </p>
-                                  <p className="mt-1 truncate text-xs font-semibold text-slate-500">
-                                    Pickup: {formatAdminNotificationLocation(item.pickupLabel, 'Pickup location set')}
+                                  <p className="mt-1 truncate text-[10px] font-black text-slate-400 uppercase tracking-tighter">
+                                    {formatAdminNotificationLocation(item.pickupLabel, 'Pickup...')} → {formatAdminNotificationLocation(item.dropLabel, 'Drop...')}
                                   </p>
                                 </div>
-                                <span className="shrink-0 rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
-                                  {item.tripStatus || 'Upcoming'}
+                                <span className="shrink-0 text-[10px] font-black text-slate-300 group-hover:text-slate-900">
+                                  {formatRelativeAdminTime(item.date)}
                                 </span>
                               </div>
-                            <div className="mt-2 flex items-center justify-between gap-3 text-[11px] font-semibold text-slate-400">
-                              <span>
-                                Destination: {formatAdminNotificationLocation(item.dropLabel, 'Destination set')}
-                              </span>
-                              <span>{formatRelativeAdminTime(item.date)}</span>
-                            </div>
-                            <span
-                              role="button"
-                              tabIndex={0}
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                dismissNotification('ride_requests', item);
-                              }}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter' || event.key === ' ') {
-                                  event.preventDefault();
-                                  event.stopPropagation();
-                                  dismissNotification('ride_requests', item);
-                                }
-                              }}
-                              className="absolute right-3 top-3 inline-flex rounded-lg p-1.5 text-slate-400 transition-all hover:bg-rose-50 hover:text-rose-600"
-                              aria-label="Delete notification"
-                            >
-                              <Trash2 size={14} />
-                            </span>
-                          </button>
+                            </button>
                           ))}
                         </div>
                       )
@@ -1858,42 +1848,66 @@ const AdminLayout = () => {
             <div ref={userMenuRef} className="relative border-l border-slate-100 pl-4 h-8 flex items-center">
               <button
                 type="button"
-                className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-sm transition-all hover:border-slate-900 hover:shadow-md active:scale-[0.98]"
+                className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-2 shadow-sm transition-all hover:border-slate-900 hover:shadow-xl hover:shadow-slate-200/40 active:scale-[0.98]"
                 onClick={() => setIsUserMenuOpen((current) => !current)}
               >
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white shadow-lg shadow-slate-900/20">
-                  <Users size={16} />
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white shadow-lg shadow-slate-900/20">
+                  <Users size={18} strokeWidth={2.5} />
                 </div>
                 <div className="text-left hidden sm:block">
-                  <p className="text-[12px] font-bold text-slate-900 leading-none">{adminProfile?.name || 'Admin'}</p>
-                  <p className="mt-1.5 text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400 leading-none">
-                    {adminProfile?.admin_type === 'subadmin' ? adminProfile?.role || 'Subadmin' : 'Superadmin'}
+                  <p className="text-[13px] font-black text-slate-900 leading-tight tracking-tight">{adminProfile?.name || 'Terminal'}</p>
+                  <p className="mt-1 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 leading-none">
+                    {adminProfile?.admin_type === 'subadmin' ? adminProfile?.role || 'Access Restricted' : 'Master Authority'}
                   </p>
                 </div>
-                <ChevronDown size={14} className={`text-slate-300 transition-transform duration-300 ${isUserMenuOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown size={14} className={`text-slate-300 transition-all duration-300 ${isUserMenuOpen ? 'rotate-180 text-slate-900' : ''}`} />
               </button>
 
-              <div
-                className={`absolute right-0 top-full z-50 mt-3 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl transition-all duration-300 ${
-                  isUserMenuOpen ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0 pointer-events-none'
-                }`}
-              >
-                <div className="px-4 py-3 border-b border-slate-50 mb-1">
-                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Active Identity</p>
-                   <p className="text-xs font-bold text-slate-900 truncate">{adminProfile?.email || 'admin@rydon24.com'}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    handleLogout();
-                  }}
-                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-rose-600 transition-all hover:bg-rose-50"
-                >
-                  <LogOut size={16} />
-                  <span className="text-[11px] font-bold uppercase tracking-widest">Logout Session</span>
-                </button>
-              </div>
+              <AnimatePresence>
+                {isUserMenuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute right-0 top-full z-50 mt-4 w-64 overflow-hidden rounded-[2.5rem] border border-slate-200 bg-white p-3 shadow-2xl"
+                  >
+                    <div className="px-5 py-4 border-b border-slate-50 mb-2 bg-slate-50/50 rounded-t-[1.5rem]">
+                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-1.5">Cryptographic Identity</p>
+                       <p className="text-[13px] font-bold text-slate-900 truncate leading-tight">{adminProfile?.email || 'root@rydon24.cloud'}</p>
+                    </div>
+                    
+                    <div className="p-1 space-y-1">
+                       <button
+                         type="button"
+                         onClick={() => {
+                           navigate('/admin/profile');
+                           setIsUserMenuOpen(false);
+                         }}
+                         className="flex w-full items-center gap-3.5 rounded-2xl px-4 py-3.5 text-slate-600 transition-all hover:bg-slate-50 hover:text-slate-900 group"
+                       >
+                         <div className="p-1.5 rounded-lg bg-slate-50 text-slate-400 group-hover:text-slate-900 transition-colors">
+                            <Settings2 size={16} strokeWidth={2.5} />
+                         </div>
+                         <span className="text-[11px] font-black uppercase tracking-widest">Global Profile</span>
+                       </button>
+
+                       <button
+                         type="button"
+                         onClick={(event) => {
+                           event.stopPropagation();
+                           handleLogout();
+                         }}
+                         className="flex w-full items-center gap-3.5 rounded-2xl px-4 py-3.5 text-rose-600 transition-all hover:bg-rose-50 group"
+                       >
+                         <div className="p-1.5 rounded-lg bg-rose-50 text-rose-400 group-hover:text-rose-600 transition-colors">
+                            <LogOut size={16} strokeWidth={2.5} />
+                         </div>
+                         <span className="text-[11px] font-black uppercase tracking-widest">Logout Session</span>
+                       </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </header>

@@ -606,6 +606,9 @@ export const updateServiceLocation = asyncHandler(async (req, res) =>
 export const updateServiceStore = asyncHandler(async (req, res) =>
   ok(res, await adminService.updateServiceStore(req.params.id, req.body, req.auth?.admin)),
 );
+export const createServiceStoreStaff = asyncHandler(async (req, res) =>
+  ok(res, await adminService.createServiceStoreStaff(req.params.id, req.body, req.auth?.admin)),
+);
 export const deleteServiceLocation = asyncHandler(async (req, res) => {
   await adminService.deleteServiceLocation(req.params.id, req.auth?.admin);
   ok(res, { deleted: true });

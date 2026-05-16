@@ -60,36 +60,39 @@ const getMapCenter = (alert) =>
 const SOSCard = ({ alert, isActive, onClick }) => (
   <div
     onClick={onClick}
-    className={`p-4 rounded-2xl border transition-all cursor-pointer group relative overflow-hidden ${
-      isActive ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100 hover:border-red-100'
+    className={`p-5 rounded-[2rem] border-2 transition-all cursor-pointer group relative overflow-hidden ${
+      isActive 
+        ? 'bg-rose-50 border-rose-500 shadow-xl shadow-rose-200/50' 
+        : 'bg-white border-slate-50 hover:border-rose-200'
     }`}
   >
-    {isActive ? <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-red-600" /> : null}
-
-    <div className="flex justify-between items-start mb-2 gap-3">
-      <span className="text-[10px] font-black text-red-600 bg-red-100 px-2 py-0.5 rounded uppercase tracking-widest animate-pulse">
-        Live SOS
+    <div className="flex justify-between items-start mb-3 gap-3">
+      <span className={`text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-[0.15em] ${isActive ? 'bg-rose-600 text-white animate-pulse' : 'bg-rose-100 text-rose-600'}`}>
+        Emergency
       </span>
-      <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400">
-        <Clock size={12} /> {formatRelativeTime(alert?.createdAt)}
+      <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-400">
+        <Clock size={12} strokeWidth={2.5} /> {formatRelativeTime(alert?.createdAt)}
       </div>
     </div>
 
-    <h4 className="text-[14px] font-black text-gray-900 tracking-tight leading-none mb-1">
+    <h4 className="text-[15px] font-black text-slate-900 tracking-tight leading-tight mb-1">
       {getParticipantTitle(alert)}
     </h4>
-    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-tighter mb-3">
-      {alert?.tripCode || alert?.rideId || 'GENERAL-SOS'}
+    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">
+      {alert?.tripCode || alert?.rideId || 'GEN-SOS-INT'}
     </p>
 
-    <div className="space-y-1 border-t border-gray-50 pt-3">
-      <p className="text-[12px] font-bold text-gray-700">{getDriverLabel(alert)}</p>
-      <p className="text-[10px] font-medium text-gray-400 uppercase">
-        {alert?.vehicleLabel || alert?.serviceType || 'Unknown vehicle'}
+    <div className="space-y-1.5 border-t border-slate-100 pt-4">
+      <p className="text-[12px] font-black text-slate-700 leading-none">{getDriverLabel(alert)}</p>
+      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+        {alert?.vehicleLabel || alert?.serviceType || 'Unknown Fleet Unit'}
       </p>
-      <p className="text-[10px] font-bold text-gray-400 truncate">
-        {alert?.locationLabel || alert?.pickupAddress || 'Location unavailable'}
-      </p>
+      <div className="flex items-center gap-1.5 mt-2">
+         <MapPin size={12} className="text-rose-500" />
+         <p className="text-[10px] font-black text-slate-900 truncate uppercase tracking-tighter">
+            {alert?.locationLabel || alert?.pickupAddress || 'Locating...'}
+         </p>
+      </div>
     </div>
   </div>
 );
@@ -122,7 +125,7 @@ const SafetyCenter = () => {
       setSelectedAlertId((current) => current || results[0]?.id || '');
     } catch (error) {
       console.error('Failed to load safety alerts:', error);
-      toast.error(error?.message || 'Unable to load safety alerts');
+      toast.error(error?.message || 'Terminal: SOS Sync Failed');
       setAlerts([]);
     } finally {
       setIsLoading(false);
@@ -137,7 +140,10 @@ const SafetyCenter = () => {
     const handleNewAlert = (payload = {}) => {
       setAlerts((current) => [payload, ...current.filter((item) => item.id !== payload.id)]);
       setSelectedAlertId((current) => current || payload.id || '');
-      toast.error(`${getParticipantTitle(payload)} triggered SOS`, { duration: 4500 });
+      toast.error(`SOS TRIGGERED: ${getParticipantTitle(payload)}`, { 
+        duration: 5000,
+        style: { background: '#991B1B', color: '#fff', fontWeight: '900', fontSize: '12px', textTransform: 'uppercase' } 
+      });
     };
 
     const handleUpdatedAlert = (payload = {}) => {
@@ -175,201 +181,240 @@ const SafetyCenter = () => {
       setAlerts((current) => current.filter((item) => item.id !== selectedAlert.id));
       setSelectedAlertId('');
       setLogDraft('');
-      toast.success('Incident marked as resolved');
+      toast.success('INCIDENT RESOLVED & ARCHIVED');
     } catch (error) {
       console.error('Failed to resolve safety alert:', error);
-      toast.error(error?.message || 'Unable to resolve incident');
+      toast.error(error?.message || 'Resolution failed');
     } finally {
       setIsResolving(false);
     }
   };
 
   return (
-    <div className="flex h-[calc(100vh-140px)] gap-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="w-80 shrink-0 flex flex-col space-y-6 overflow-y-auto no-scrollbar pb-10">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight text-red-600 flex items-center gap-3">
-            <ShieldAlert size={28} strokeWidth={2.5} className="animate-bounce" /> Safety Center
-          </h1>
-          <p className="text-gray-400 font-bold text-[11px] mt-1 uppercase tracking-widest leading-none">
-            Real-time Emergency Monitoring
-          </p>
+    <div className="flex h-[calc(100vh-140px)] gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="w-96 shrink-0 flex flex-col space-y-6 overflow-y-auto no-scrollbar pb-10">
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+             <div className="h-10 w-10 bg-rose-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-rose-200">
+                <ShieldAlert size={24} strokeWidth={2.5} className="animate-pulse" />
+             </div>
+             <div>
+                <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-none">SOS Terminal</h1>
+                <p className="text-rose-600 font-black text-[10px] mt-1 uppercase tracking-[0.2em] leading-none">
+                  Critical Response Interface
+                </p>
+             </div>
+          </div>
         </div>
 
-        <div className="flex-1 space-y-3">
-          <div className="flex items-center justify-between px-1 mb-4">
-            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-              <Radio size={14} className="text-red-500" /> Active Alerts ({alerts.length})
+        <div className="flex-1 space-y-4">
+          <div className="flex items-center justify-between px-2 mb-2">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+              <Radio size={14} className="text-rose-600 animate-ping" /> Active Incidents ({alerts.length})
             </span>
-            <button onClick={loadAlerts} className="text-[10px] font-bold text-primary uppercase">
+            <button 
+              onClick={loadAlerts} 
+              className="text-[10px] font-black text-slate-900 uppercase tracking-widest bg-slate-100 px-3 py-1 rounded-full hover:bg-slate-200 transition-colors"
+            >
               Refresh
             </button>
           </div>
 
           {isLoading ? (
-            <div className="rounded-2xl border border-gray-100 bg-white p-5 text-[12px] font-bold text-gray-400">
-              Loading live safety alerts...
+            <div className="rounded-[2rem] border-2 border-slate-50 bg-white p-8 text-center">
+               <div className="w-8 h-8 border-4 border-slate-200 border-t-rose-600 rounded-full animate-spin mx-auto mb-4" />
+               <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest">Syncing Encrypted Feed...</p>
             </div>
           ) : null}
 
           {!isLoading && alerts.length === 0 ? (
-            <div className="rounded-2xl border border-gray-100 bg-white p-5 text-[12px] font-bold text-gray-400">
-              No active SOS incidents right now.
+            <div className="rounded-[2.5rem] border-2 border-slate-50 bg-white p-12 text-center shadow-sm">
+              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mx-auto mb-4">
+                 <CheckCircle2 size={32} />
+              </div>
+              <p className="text-[14px] font-black text-slate-900 tracking-tight">System Status: All Clear</p>
+              <p className="mt-1 text-[11px] font-bold text-slate-400 uppercase tracking-widest">No active distress signals</p>
             </div>
           ) : null}
 
-          {alerts.map((alert) => (
-            <SOSCard
-              key={alert.id}
-              alert={alert}
-              isActive={selectedAlert?.id === alert.id}
-              onClick={() => setSelectedAlertId(alert.id)}
-            />
-          ))}
+          <div className="space-y-4">
+            {alerts.map((alert) => (
+              <SOSCard
+                key={alert.id}
+                alert={alert}
+                isActive={selectedAlert?.id === alert.id}
+                onClick={() => setSelectedAlertId(alert.id)}
+              />
+            ))}
+          </div>
         </div>
 
-        <div className="bg-gray-900 rounded-2xl p-4 text-white">
-          <div className="flex items-center gap-3 mb-3">
-            <LifeBuoy size={18} className="text-primary" />
-            <h5 className="text-[12px] font-black uppercase tracking-widest">SOP Support</h5>
+        <div className="bg-slate-900 rounded-[2.5rem] p-6 text-white shadow-2xl shadow-slate-900/20">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="h-8 w-8 bg-white/10 rounded-xl flex items-center justify-center">
+               <LifeBuoy size={18} className="text-rose-500" />
+            </div>
+            <h5 className="text-[12px] font-black uppercase tracking-[0.2em]">Response Protocol</h5>
           </div>
-          <p className="text-[10px] font-bold text-gray-400 leading-relaxed uppercase">
-            Response time must be below <span className="text-white">60 Seconds</span>. Verify the rider and driver first, then escalate to local authorities if contact is lost.
+          <p className="text-[11px] font-bold text-slate-400 leading-relaxed uppercase tracking-tight">
+            Target response time: <span className="text-white font-black underline decoration-rose-500 decoration-2">{"<"} 30s</span>. 
+            Initiate communication immediately. If unresponsive for 120s, escalate to authorities.
           </p>
         </div>
       </div>
 
-      <div className="flex-1 space-y-6 overflow-y-auto no-scrollbar pr-2">
+      <div className="flex-1 space-y-8 overflow-y-auto no-scrollbar pr-2 pb-10">
         {selectedAlert ? (
           <>
-            <div className="bg-white border-2 border-red-100 rounded-3xl p-6 flex items-center justify-between gap-6 shadow-xl shadow-red-50">
-              <div className="flex items-center gap-6">
-                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center text-red-600 border-4 border-red-50 relative">
-                  <ShieldAlert size={32} />
-                  <div className="absolute -top-1 -right-1 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center text-[10px] font-black tracking-tighter">
-                    RED
+            <div className="bg-white border-2 border-rose-100 rounded-[3rem] p-8 flex items-center justify-between gap-8 shadow-2xl shadow-rose-200/20">
+              <div className="flex items-center gap-8">
+                <div className="w-20 h-20 bg-rose-600 rounded-[2rem] flex items-center justify-center text-white shadow-2xl shadow-rose-600/30 relative border-4 border-rose-50">
+                  <ShieldAlert size={36} strokeWidth={2.5} className="animate-bounce" />
+                  <div className="absolute -top-2 -right-2 px-2.5 py-1 bg-slate-900 text-white rounded-full text-[9px] font-black tracking-[0.2em]">
+                    PRIO-1
                   </div>
                 </div>
                 <div>
-                  <h2 className="text-2xl font-black text-gray-900 tracking-tight leading-none mb-2">
-                    {getParticipantTitle(selectedAlert)} raised SOS
+                  <h2 className="text-3xl font-black text-slate-900 tracking-tighter leading-none mb-3">
+                    {getParticipantTitle(selectedAlert)} triggered SOS
                   </h2>
-                  <p className="text-[13px] font-bold text-gray-500 flex items-center gap-2">
-                    <MapPin size={16} className="text-red-500" />
-                    Last Known Location: {selectedAlert.locationLabel || selectedAlert.pickupAddress || 'Location unavailable'}
-                  </p>
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-2xl border border-slate-100">
+                      <MapPin size={16} className="text-rose-600" />
+                      <p className="text-[13px] font-black text-slate-900 uppercase tracking-tighter">
+                        {selectedAlert.locationLabel || selectedAlert.pickupAddress || 'Locating distress source...'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 bg-rose-50 px-3 py-2 rounded-2xl border border-rose-100">
+                       <Clock size={14} className="text-rose-600" />
+                       <p className="text-[11px] font-black text-rose-700 uppercase">{formatRelativeTime(selectedAlert.createdAt)}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="flex gap-3">
+              <div className="flex flex-col gap-3">
                 <button
                   onClick={() => window.open('tel:100', '_self')}
-                  className="bg-red-600 text-white px-8 py-3 rounded-2xl text-[14px] font-black hover:bg-red-700 transition-all shadow-xl shadow-red-200 flex items-center gap-2"
+                  className="bg-rose-600 text-white px-8 py-4 rounded-[1.5rem] text-[15px] font-black hover:bg-rose-700 transition-all shadow-xl shadow-rose-600/20 flex items-center justify-center gap-3 active:scale-95"
                 >
-                  <PhoneCall size={18} strokeWidth={2.5} /> DIAL POLICE (100)
+                  <PhoneCall size={20} strokeWidth={3} /> EMERGENCY (100)
                 </button>
                 <button
                   onClick={handleResolve}
                   disabled={isResolving}
-                  className="bg-white border-2 border-gray-100 text-gray-900 px-6 py-3 rounded-2xl text-[14px] font-black hover:bg-gray-50 transition-all flex items-center gap-2 disabled:opacity-60"
+                  className="bg-slate-900 text-white px-8 py-4 rounded-[1.5rem] text-[13px] font-black hover:bg-slate-800 transition-all flex items-center justify-center gap-3 disabled:opacity-60 active:scale-95 uppercase tracking-widest"
                 >
-                  <CheckCircle2 size={18} /> {isResolving ? 'RESOLVING...' : 'RESOLVE INCIDENT'}
+                  <CheckCircle2 size={18} /> {isResolving ? 'Archiving...' : 'Close Incident'}
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-6">
-                <div className="bg-white rounded-[32px] border border-gray-100 p-8 shadow-sm">
-                  <h4 className="text-[12px] font-black text-gray-400 tracking-widest uppercase mb-8 flex items-center justify-between">
-                    Distress Context <MoreHorizontal size={16} />
-                  </h4>
+            <div className="grid grid-cols-2 gap-8">
+              <div className="space-y-8">
+                <div className="bg-white rounded-[3rem] border-2 border-slate-50 p-10 shadow-sm">
+                  <div className="flex items-center justify-between mb-10">
+                    <h4 className="text-[11px] font-black text-slate-400 tracking-[0.3em] uppercase">Distress Analytics</h4>
+                    <MoreHorizontal size={20} className="text-slate-200" />
+                  </div>
 
-                  <div className="grid grid-cols-2 gap-4 mb-8">
-                    <div className="rounded-2xl bg-gray-50 p-4">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
-                        {selectedAlert.sourceApp === 'driver' ? 'Driver SOS' : 'User SOS'}
-                      </p>
-                      <p className="mt-2 text-[16px] font-black text-gray-900">{getParticipantTitle(selectedAlert)}</p>
-                      <p className="mt-1 text-[12px] font-bold text-gray-500">
+                  <div className="grid grid-cols-2 gap-6 mb-10">
+                    <div className="rounded-[2rem] bg-slate-50 p-6 border border-slate-100">
+                      <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">Subject Source</p>
+                      <p className="text-[18px] font-black text-slate-900 tracking-tight leading-none mb-1">{getParticipantTitle(selectedAlert)}</p>
+                      <p className="text-[12px] font-bold text-slate-500 uppercase tracking-tighter">
                         {selectedAlert.sourceApp === 'driver' ? selectedAlert.driverPhone || '--' : selectedAlert.riderPhone || '--'}
                       </p>
                     </div>
-                    <div className="rounded-2xl bg-gray-50 p-4">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Counterpart</p>
-                      <p className="mt-2 text-[16px] font-black text-gray-900">
+                    <div className="rounded-[2rem] bg-slate-50 p-6 border border-slate-100">
+                      <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">Linked Counterpart</p>
+                      <p className="text-[18px] font-black text-slate-900 tracking-tight leading-none mb-1">
                         {selectedAlert.sourceApp === 'driver' ? getRiderLabel(selectedAlert) : getDriverLabel(selectedAlert)}
                       </p>
-                      <p className="mt-1 text-[12px] font-bold text-gray-500">
+                      <p className="text-[12px] font-bold text-slate-500 uppercase tracking-tighter">
                         {selectedAlert.sourceApp === 'driver' ? selectedAlert.riderPhone || '--' : selectedAlert.driverPhone || '--'}
                       </p>
                     </div>
                   </div>
 
-                  <div className="bg-gray-50 p-6 rounded-2xl space-y-3">
-                    <div className="flex justify-between items-center text-[13px] font-bold">
-                      <span className="text-gray-400">Service:</span>
-                      <span className="text-gray-900 uppercase">{selectedAlert.serviceType || 'general'}</span>
+                  <div className="bg-slate-900 rounded-[2.5rem] p-8 space-y-4">
+                    <div className="flex justify-between items-center text-[13px] font-black uppercase tracking-widest border-b border-white/5 pb-4">
+                      <span className="text-slate-500">Service Class</span>
+                      <span className="text-white bg-white/10 px-3 py-1 rounded-full">{selectedAlert.serviceType || 'Standard'}</span>
                     </div>
-                    <div className="flex justify-between items-center text-[13px] font-bold">
-                      <span className="text-gray-400">Trip/Alert ID:</span>
-                      <span className="text-gray-900">{selectedAlert.tripCode || selectedAlert.id}</span>
+                    <div className="flex justify-between items-center text-[13px] font-black uppercase tracking-widest border-b border-white/5 pb-4">
+                      <span className="text-slate-500">Incident Reference</span>
+                      <span className="text-white">{selectedAlert.tripCode || selectedAlert.id.slice(-8).toUpperCase()}</span>
                     </div>
-                    <div className="flex justify-between items-center text-[13px] font-bold">
-                      <span className="text-gray-400">Vehicle:</span>
-                      <span className="text-gray-900">{selectedAlert.vehicleLabel || '--'}</span>
-                    </div>
-                    <div className="pt-2 text-[12px] font-bold text-gray-600">
-                      <div>{selectedAlert.pickupAddress || 'Pickup unavailable'}</div>
-                      <div className="mt-1 text-gray-400">{selectedAlert.dropAddress || 'Drop unavailable'}</div>
+                    <div className="flex justify-between items-center text-[13px] font-black uppercase tracking-widest">
+                      <span className="text-slate-500">Fleet Identifier</span>
+                      <span className="text-white">{selectedAlert.vehicleLabel || 'UN-IDENTIFIED'}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-white rounded-[32px] border border-gray-100 p-8 shadow-sm">
-                  <h4 className="text-[12px] font-black text-gray-900 tracking-widest uppercase mb-6 flex items-center gap-2">
-                    <AlertCircle size={18} className="text-blue-500" /> Dispatch SOP Checklist
+                <div className="bg-white rounded-[3rem] border-2 border-slate-50 p-10 shadow-sm">
+                  <h4 className="text-[11px] font-black text-slate-900 tracking-[0.2em] uppercase mb-8 flex items-center gap-3">
+                    <div className="h-6 w-6 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
+                       <AlertCircle size={16} strokeWidth={2.5} />
+                    </div>
+                    Mandatory Response Checklist
                   </h4>
-                  <div className="space-y-4">
+                  <div className="space-y-5">
                     {[
-                      { id: 'pcall', label: `Call ${selectedAlert.sourceApp === 'driver' ? 'driver' : 'rider'} to verify status` },
-                      { id: 'dcall', label: `Call ${selectedAlert.sourceApp === 'driver' ? 'rider' : 'driver'} to confirm situation` },
-                      { id: 'police', label: 'Notify nearest police hub' },
-                      { id: 'nearby', label: 'Dispatch nearby driver partners / responders' },
+                      { id: 'pcall', label: `Establish comms with ${selectedAlert.sourceApp === 'driver' ? 'Driver' : 'Rider'}` },
+                      { id: 'dcall', label: `Verify status with ${selectedAlert.sourceApp === 'driver' ? 'Rider' : 'Driver'}` },
+                      { id: 'police', label: 'Alert local law enforcement dispatch' },
+                      { id: 'nearby', label: 'Signal nearby units for perimeter support' },
                     ].map((step) => (
-                      <div key={step.id} className="flex items-center gap-4">
-                        <input
-                          type="checkbox"
-                          checked={checklist[step.id]}
-                          onChange={() => setChecklist((prev) => ({ ...prev, [step.id]: !prev[step.id] }))}
-                          className="w-5 h-5 rounded-md border-gray-200 text-primary focus:ring-primary/20"
-                        />
-                        <span className={`text-[13px] font-bold ${checklist[step.id] ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
+                      <button 
+                        key={step.id} 
+                        onClick={() => setChecklist((prev) => ({ ...prev, [step.id]: !prev[step.id] }))}
+                        className={`flex items-center gap-5 w-full text-left p-4 rounded-2xl transition-all ${checklist[step.id] ? 'bg-slate-50' : 'bg-white hover:bg-slate-50'}`}
+                      >
+                        <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${checklist[step.id] ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-200 bg-white'}`}>
+                           {checklist[step.id] && <CheckCircle2 size={14} strokeWidth={3} />}
+                        </div>
+                        <span className={`text-[14px] font-black uppercase tracking-tighter ${checklist[step.id] ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
                           {step.label}
                         </span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-6">
-                <div className="bg-white h-[320px] rounded-[32px] border border-gray-100 shadow-sm overflow-hidden relative">
+              <div className="space-y-8">
+                <div className="bg-white h-[400px] rounded-[3rem] border-2 border-slate-50 shadow-2xl shadow-slate-200/20 overflow-hidden relative group">
                   {loadError ? (
-                    <div className="absolute inset-0 flex items-center justify-center p-6 text-center bg-slate-50">
+                    <div className="absolute inset-0 flex items-center justify-center p-10 text-center bg-slate-50">
                       <div>
-                        <p className="text-[12px] font-black text-rose-600 uppercase tracking-widest">Map unavailable</p>
-                        <p className="text-sm text-gray-500 mt-2">Google Maps could not be loaded for Safety Center.</p>
+                        <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center text-rose-500 mx-auto mb-4">
+                           <MapPin size={32} />
+                        </div>
+                        <p className="text-[12px] font-black text-rose-600 uppercase tracking-[0.2em]">Map Feed Offline</p>
+                        <p className="text-sm font-bold text-slate-400 mt-2 uppercase tracking-tight">Encryption layer failed to decrypt spatial data</p>
                       </div>
                     </div>
                   ) : HAS_VALID_GOOGLE_MAPS_KEY && isLoaded ? (
                     <GoogleMap
                       mapContainerStyle={mapContainerStyle}
                       center={getMapCenter(selectedAlert)}
-                      zoom={15}
+                      zoom={16}
                       options={{
                         streetViewControl: false,
                         mapTypeControl: false,
                         fullscreenControl: true,
+                        styles: [
+                           { "elementType": "geometry", "stylers": [{ "color": "#f5f5f5" }] },
+                           { "elementType": "labels.icon", "stylers": [{ "visibility": "off" }] },
+                           { "elementType": "labels.text.fill", "stylers": [{ "color": "#616161" }] },
+                           { "elementType": "labels.text.stroke", "stylers": [{ "color": "#f5f5f5" }] },
+                           { "featureType": "administrative.land_parcel", "elementType": "labels.text.fill", "stylers": [{ "color": "#bdbdbd" }] },
+                           { "featureType": "poi", "elementType": "geometry", "stylers": [{ "color": "#eeeeee" }] },
+                           { "featureType": "poi", "elementType": "labels.text.fill", "stylers": [{ "color": "#757575" }] },
+                           { "featureType": "road", "elementType": "geometry", "stylers": [{ "color": "#ffffff" }] },
+                           { "featureType": "road.active", "elementType": "geometry.fill", "stylers": [{ "color": "#dc2626" }] },
+                        ]
                       }}
                     >
                       {selectedAlert?.location ? (
@@ -378,70 +423,83 @@ const SafetyCenter = () => {
                           title={`${getParticipantTitle(selectedAlert)} distress location`}
                           icon={{
                             path: window.google.maps.SymbolPath.CIRCLE,
-                            scale: 10,
-                            fillColor: '#DC2626',
+                            scale: 12,
+                            fillColor: '#E11D48',
                             fillOpacity: 1,
                             strokeColor: '#ffffff',
-                            strokeWeight: 3,
+                            strokeWeight: 4,
                           }}
                         />
                       ) : null}
                     </GoogleMap>
                   ) : (
-                    <div className="absolute inset-0 flex items-center justify-center p-6 text-center bg-[linear-gradient(135deg,#fee2e2_0%,#fff1f2_100%)]">
-                      <div>
-                        <p className="text-[12px] font-black text-red-600 uppercase tracking-widest">Add Google Maps key</p>
-                        <p className="text-sm text-gray-500 mt-2">Safety Center will show the live incident map after `VITE_GOOGLE_MAPS_API_KEY` is set.</p>
+                    <div className="absolute inset-0 flex items-center justify-center p-12 text-center bg-slate-50">
+                      <div className="max-w-[280px]">
+                        <div className="w-16 h-16 bg-slate-100 rounded-[1.5rem] flex items-center justify-center text-slate-300 mx-auto mb-6">
+                           <Globe size={32} />
+                        </div>
+                        <p className="text-[12px] font-black text-slate-900 uppercase tracking-[0.2em] mb-3">Spatial Data Restricted</p>
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-tight">Active API key required to visualize SOS coordinates in the terminal.</p>
                       </div>
                     </div>
                   )}
 
-                  <div className="absolute top-4 right-4 flex flex-col gap-2">
-                    <button className="bg-white/90 backdrop-blur-md p-2 rounded-xl shadow-lg border border-white text-gray-500 hover:text-black transition-all">
-                      <MoreHorizontal size={18} />
+                  <div className="absolute top-6 right-6 flex flex-col gap-3">
+                    <button className="bg-white/90 backdrop-blur-md p-3 rounded-[1.25rem] shadow-xl border border-white text-slate-900 hover:scale-105 transition-all">
+                      <MoreHorizontal size={20} strokeWidth={2.5} />
                     </button>
-                    <button className="bg-white/90 backdrop-blur-md p-2 rounded-xl shadow-lg border border-white text-primary hover:scale-105 transition-all">
-                      <MapPin size={18} />
+                    <button className="bg-rose-600 p-3 rounded-[1.25rem] shadow-xl border border-rose-500 text-white hover:scale-110 transition-all animate-pulse">
+                      <MapPin size={20} strokeWidth={2.5} />
                     </button>
                   </div>
                 </div>
 
-                <div className="bg-[#0F172A] rounded-[32px] p-8 text-white h-[calc(100%-344px)] flex flex-col">
-                  <h4 className="text-[12px] font-black text-gray-500 tracking-widest uppercase mb-6 flex items-center justify-between">
-                    Live Incident Log <History size={16} />
-                  </h4>
-                  <div className="flex-1 space-y-5 overflow-y-auto no-scrollbar">
+                <div className="bg-slate-900 rounded-[3.5rem] p-10 text-white h-[calc(100%-432px)] flex flex-col shadow-2xl shadow-slate-900/40">
+                  <div className="flex items-center justify-between mb-8">
+                     <h4 className="text-[11px] font-black text-slate-500 tracking-[0.3em] uppercase flex items-center gap-3">
+                       <History size={18} /> Incident Log
+                     </h4>
+                     <div className="h-2 w-2 bg-rose-600 rounded-full animate-ping" />
+                  </div>
+                  
+                  <div className="flex-1 space-y-6 overflow-y-auto no-scrollbar">
                     {[
                       {
                         createdAt: selectedAlert.createdAt,
-                        message: `SOS alert triggered by ${selectedAlert.sourceApp} app.`,
+                        message: `DISTRESS SIGNAL RECEIVED VIA ${selectedAlert.sourceApp.toUpperCase()} GATEWAY.`,
                       },
                       ...(Array.isArray(selectedAlert.logs) ? selectedAlert.logs : []),
                     ].map((log, index) => (
-                      <div key={`${log.createdAt || 'log'}-${index}`} className="flex gap-4 group">
-                        <span className="text-[11px] font-black text-gray-600 whitespace-nowrap mt-0.5">
-                          {formatDateTime(log.createdAt)}
-                        </span>
-                        <p className="text-[13px] font-bold text-gray-300 tracking-tight leading-snug uppercase tracking-tighter">
-                          {log.message}
-                          {index === 0 ? <span className="inline-block w-2 h-2 bg-red-600 rounded-full animate-pulse ml-2" /> : null}
-                        </p>
+                      <div key={`${log.createdAt || 'log'}-${index}`} className="flex gap-5 group">
+                        <div className="flex flex-col items-center">
+                           <div className={`h-2.5 w-2.5 rounded-full border-2 ${index === 0 ? 'bg-rose-600 border-rose-400 animate-pulse' : 'bg-slate-700 border-slate-600'}`} />
+                           {index < (selectedAlert.logs?.length || 0) && <div className="w-0.5 flex-1 bg-slate-800 my-1" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                           <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest leading-none mb-1.5">
+                             {formatDateTime(log.createdAt)}
+                           </p>
+                           <p className="text-[13px] font-black text-slate-300 tracking-tight leading-tight uppercase">
+                             {log.message}
+                           </p>
+                        </div>
                       </div>
                     ))}
                   </div>
-                  <div className="mt-8 relative">
+
+                  <div className="mt-10 relative">
                     <input
                       type="text"
                       value={logDraft}
                       onChange={(event) => setLogDraft(event.target.value)}
-                      placeholder="Add resolution note..."
-                      className="w-full bg-white/5 border border-white/5 rounded-2xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-white/20 transition-all"
+                      placeholder="Add cryptographic entry..."
+                      className="w-full bg-white/5 border border-white/10 rounded-[1.5rem] py-4 px-6 text-[13px] font-bold text-white placeholder:text-slate-600 focus:ring-2 focus:ring-rose-500/50 outline-none transition-all uppercase tracking-tight"
                     />
                     <button
                       onClick={handleResolve}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 bg-white rounded-lg text-black hover:bg-white/90"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 h-10 w-10 bg-white rounded-xl text-slate-900 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all shadow-lg active:scale-95"
                     >
-                      <ArrowRight size={16} />
+                      <ArrowRight size={18} strokeWidth={3} />
                     </button>
                   </div>
                 </div>
@@ -449,14 +507,14 @@ const SafetyCenter = () => {
             </div>
           </>
         ) : (
-          <div className="h-full flex items-center justify-center flex-col text-center space-y-4">
-            <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center text-gray-300">
-              <ShieldAlert size={40} />
+          <div className="h-full flex items-center justify-center flex-col text-center p-20">
+            <div className="w-32 h-32 bg-slate-50 rounded-[3rem] flex items-center justify-center text-slate-200 mb-8 border-4 border-white shadow-inner">
+              <ShieldAlert size={64} strokeWidth={1.5} />
             </div>
             <div>
-              <h3 className="text-xl font-black text-gray-900 tracking-tight">No Active Incidents</h3>
-              <p className="text-gray-400 font-bold text-[12px] uppercase">
-                The safety center will show live SOS alerts from user and driver apps here
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight mb-3 uppercase">Standby Mode</h3>
+              <p className="text-slate-400 font-bold text-[12px] uppercase tracking-[0.2em] max-w-[320px] leading-relaxed">
+                Terminal is polling for emergency distress signals. Select an active incident to initiate SOP.
               </p>
             </div>
           </div>

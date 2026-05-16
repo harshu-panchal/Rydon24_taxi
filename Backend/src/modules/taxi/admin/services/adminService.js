@@ -7311,7 +7311,7 @@ export const getDashboardData = async () => {
     });
   };
 
-  export const updateServiceStore = async (id, payload, currentAdmin = null) => {
+export const updateServiceStore = async (id, payload, currentAdmin = null) => {
     const store = await ServiceStore.findById(id);
     if (!store) {
       throw new ApiError(404, 'Service store not found');
@@ -7385,6 +7385,53 @@ export const getDashboardData = async () => {
       ...populatedStore,
       staff,
     });
+  };
+
+  export const createServiceStoreStaff = async (storeId, payload, currentAdmin = null) => {
+    const store = await ServiceStore.findById(storeId).select('_id service_location_id').lean();
+    if (!store) {
+      throw new ApiError(404, 'Service store not found');
+    }
+
+    if (currentAdmin) {
+      assertAdminPermission(currentAdmin, 'service_stores.view', 'service stores');
+      assertServiceLocationAccess(currentAdmin, store.service_location_id);
+    }
+
+    const name = String(payload?.name || '').trim();
+    const phone = String(payload?.phone || '').replace(/\D/g, '').slice(-10);
+
+    if (!name) {
+      throw new ApiError(400, 'Staff name is required');
+    }
+
+    if (!/^\d{10}$/.test(phone)) {
+      throw new ApiError(400, 'Staff login number must be a valid 10-digit number');
+    }
+
+    const existing = await ServiceCenterStaff.findOne({ phone }).lean();
+    if (existing) {
+      throw new ApiError(409, 'A staff account already exists with this number');
+    }
+
+    const created = await ServiceCenterStaff.create({
+      serviceCenterId: store._id,
+      name,
+      phone,
+      active: true,
+      status: 'active',
+    });
+
+    return {
+      _id: created._id,
+      id: created._id,
+      name: created.name || '',
+      phone: created.phone || '',
+      active: created.active !== false,
+      status: created.status || (created.active === false ? 'inactive' : 'active'),
+      createdAt: created.createdAt || null,
+      updatedAt: created.updatedAt || null,
+    };
   };
 
   export const deleteServiceStore = async (id, currentAdmin = null) => {
