@@ -303,34 +303,23 @@ const SidebarItem = ({ icon, label, path, isCollapsed, sidebarTextColor, unreadC
     to={path}
     end
     className={({ isActive }) =>
-      `group relative flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300 ${
-        isActive
-          ? 'text-white'
-          : 'hover:text-white'
+      `group relative flex items-center gap-3.5 px-4 py-2 rounded-xl transition-all duration-200 ${
+        isActive ? 'text-white bg-white/10' : 'hover:bg-white/5'
       }`
     }
     style={({ isActive }) => ({
       color: isActive ? '#FFFFFF' : sidebarTextColor,
-      backgroundColor: isActive ? 'rgba(255, 255, 255, 0.12)' : 'transparent',
     })}
   >
     {({ isActive }) => (
       <>
-        {isActive && (
-          <motion.div
-            layoutId="sidebar-active-indicator"
-            className="absolute left-0 h-6 w-1 rounded-r-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.6)]"
-            initial={{ opacity: 0, x: -4 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-          />
-        )}
         {React.createElement(icon, { 
           size: 18, 
-          className: `shrink-0 transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}` 
+          strokeWidth: isActive ? 2.5 : 2,
+          className: `shrink-0 transition-all duration-300 ${isActive ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'}` 
         })}
         {!isCollapsed && (
-          <span className={`min-w-0 flex-1 text-[13.5px] tracking-tight transition-all duration-300 ${isActive ? 'font-bold' : 'font-medium opacity-80 group-hover:opacity-100'}`}>
+          <span className={`min-w-0 flex-1 text-[13px] tracking-tight transition-all duration-200 ${isActive ? 'font-bold' : 'font-medium opacity-60 group-hover:opacity-100'}`}>
             {label}
           </span>
         )}
@@ -365,8 +354,6 @@ const SidebarGroup = ({
       if (current.includes(groupKey)) {
         return current.filter((key) => key !== groupKey);
       }
-      
-      // Accordion logic: close siblings and only keep parents
       const parts = groupKey.split(':');
       const newExpanded = [];
       let currentPath = '';
@@ -383,21 +370,22 @@ const SidebarGroup = ({
       <button
         type="button"
         onClick={toggleGroup}
-        className={`group relative w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-300 ${
-          isActive || isExpanded ? 'text-white' : 'hover:text-white'
+        className={`group relative w-full flex items-center justify-between px-4 py-2 rounded-xl transition-all duration-200 ${
+          isActive || isExpanded ? 'text-white' : 'hover:bg-white/5'
         }`}
         style={{
           color: (isActive || isExpanded) ? '#FFFFFF' : sidebarTextColor,
-          backgroundColor: (isActive || isExpanded) ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+          backgroundColor: (isActive || isExpanded) ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
         }}
       >
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3.5">
           {React.createElement(icon, {
             size: 18,
-            className: `shrink-0 transition-all duration-300 ${(isActive || isExpanded) ? 'scale-110' : 'group-hover:scale-110 opacity-70 group-hover:opacity-100'}`,
+            strokeWidth: (isActive || isExpanded) ? 2.5 : 2,
+            className: `shrink-0 transition-all duration-300 ${(isActive || isExpanded) ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'}`,
           })}
           {!isCollapsed && (
-            <span className={`truncate text-[13.5px] tracking-tight transition-all duration-300 ${(isActive || isExpanded) ? 'font-bold' : 'font-medium opacity-80 group-hover:opacity-100'}`}>
+            <span className={`truncate text-[13px] tracking-tight transition-all duration-200 ${(isActive || isExpanded) ? 'font-bold' : 'font-medium opacity-60 group-hover:opacity-100'}`}>
               {label}
             </span>
           )}
@@ -406,8 +394,8 @@ const SidebarGroup = ({
           <div className="ml-3 flex items-center gap-2">
             <SidebarBadge count={unreadCount} isActive={isActive || isExpanded} />
             <ChevronRight 
-              size={14} 
-              className={`transition-transform duration-300 ease-out ${(isActive || isExpanded) ? 'opacity-100' : 'opacity-40'} ${isExpanded ? 'rotate-90' : ''}`} 
+              size={12} 
+              className={`transition-transform duration-300 ease-out ${(isActive || isExpanded) ? 'opacity-100' : 'opacity-20'} ${isExpanded ? 'rotate-90' : ''}`} 
             />
           </div>
         )}
@@ -419,10 +407,10 @@ const SidebarGroup = ({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+            transition={{ duration: 0.2, ease: 'linear' }}
             className="overflow-hidden"
           >
-            <div className="pl-6 pr-2 py-1 space-y-1 border-l-2 border-white/5 ml-6">
+            <div className="pl-11 pr-2 py-0.5 space-y-0.5">
               {subItems.map((item) =>
                 item.subItems ? (
                   <NestedGroup
@@ -443,19 +431,17 @@ const SidebarGroup = ({
                     to={item.path}
                     end
                     className={({ isActive: childActive }) => 
-                      `group flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-all duration-200 ${
-                        childActive ? 'text-white' : 'hover:text-slate-200'
+                      `group flex items-center gap-3 px-3 py-1.5 rounded-lg text-[12.5px] transition-all duration-200 ${
+                        childActive ? 'text-white bg-white/5' : 'hover:text-white'
                       }`
                     }
                     style={({ isActive: childActive }) => ({
                       color: childActive ? '#FFFFFF' : sidebarTextColor,
-                      backgroundColor: childActive ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
                     })}
                   >
                     {({ isActive: childActive }) => (
                       <>
-                        <div className={`h-1.5 w-1.5 shrink-0 rounded-full transition-all duration-300 ${childActive ? 'bg-indigo-400 scale-125 shadow-[0_0_8px_rgba(129,140,248,0.6)]' : 'bg-slate-600'}`} />
-                        <span className={`min-w-0 flex-1 transition-all duration-200 ${childActive ? 'font-bold' : 'font-medium opacity-70 group-hover:opacity-100'}`}>{item.label}</span>
+                        <span className={`min-w-0 flex-1 transition-all duration-200 ${childActive ? 'font-bold' : 'font-medium opacity-50 group-hover:opacity-100'}`}>{item.label}</span>
                         <SidebarBadge count={getSidebarItemCount(item, unreadCountsByPath)} isActive={childActive} />
                       </>
                     )}
@@ -575,8 +561,8 @@ const ModeSwitcher = ({ mode, setMode }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   const options = [
-    { id: ADMIN_MODE, label: 'Admin', subtitle: 'Core control panel' },
-    { id: OWNER_MODE, label: 'Owner', subtitle: 'Owner management modules' },
+    { id: ADMIN_MODE, label: 'Admin Terminal', subtitle: 'Core System' },
+    { id: OWNER_MODE, label: 'Fleet Console', subtitle: 'Owner Ops' },
   ];
 
   const active = options.find((option) => option.id === mode) || options[0];
@@ -586,20 +572,20 @@ const ModeSwitcher = ({ mode, setMode }) => {
       <button
         type="button"
         onClick={() => setIsOpen((current) => !current)}
-        className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-2 shadow-sm transition-all hover:border-indigo-400/30 hover:shadow-md active:scale-95"
+        className="group flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 shadow-sm transition-all hover:border-slate-900 active:scale-[0.98]"
       >
-        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all">
-          <Briefcase size={16} />
+        <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-50 text-slate-400 group-hover:text-slate-900 transition-colors">
+          <Briefcase size={14} strokeWidth={2.5} />
         </div>
-        <div className="text-left leading-tight">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Panel Mode</p>
-          <p className="text-[13px] font-extrabold text-slate-900">{active.label}</p>
-        </div>
-        <ChevronDown size={14} className="text-slate-300 transition-transform group-hover:text-indigo-400" />
+        <span className="text-[12px] font-bold text-slate-900 tracking-tight">{active.label}</span>
+        <ChevronDown size={14} className={`text-slate-300 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-2xl border border-slate-100 bg-white p-2 shadow-2xl ring-1 ring-black/5 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="absolute right-0 top-full z-50 mt-3 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="px-3 py-2 border-b border-slate-50 mb-1">
+             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">Switch Context</p>
+          </div>
           {options.map((option) => {
             const selected = option.id === mode;
             return (
@@ -610,24 +596,15 @@ const ModeSwitcher = ({ mode, setMode }) => {
                   setMode(option.id);
                   setIsOpen(false);
                 }}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-all ${
-                  selected ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'hover:bg-slate-50'
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all ${
+                  selected ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/10' : 'hover:bg-slate-50 text-slate-600'
                 }`}
               >
-                <span
-                  className={`h-2.5 w-2.5 rounded-full transition-all ${
-                    selected ? 'bg-white' : 'bg-slate-300'
-                  }`}
-                />
-                <span className="flex-1">
-                  <span className={`block text-[13px] font-bold ${selected ? 'text-white' : 'text-slate-900'}`}>
-                    {option.label}
-                  </span>
-                  <span className={`block text-[11px] ${selected ? 'text-indigo-100' : 'text-slate-500'}`}>
-                    {option.subtitle}
-                  </span>
-                </span>
-                {selected && <div className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />}
+                <div className={`h-1.5 w-1.5 rounded-full transition-all ${selected ? 'bg-white' : 'bg-slate-300'}`} />
+                <div className="flex-1">
+                  <p className={`text-[12px] font-bold leading-none ${selected ? 'text-white' : 'text-slate-900'}`}>{option.label}</p>
+                  <p className={`text-[9px] font-bold uppercase tracking-widest mt-1.5 ${selected ? 'text-slate-400' : 'text-slate-400'}`}>{option.subtitle}</p>
+                </div>
               </button>
             );
           })}
@@ -1540,33 +1517,35 @@ const AdminLayout = () => {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f0f4f8]">
-        <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-gray-100 bg-white px-6 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="h-6 w-1 rounded-full bg-indigo-600" />
-            <h2 className="text-[15px] font-bold tracking-tight text-slate-800">{pageTitle}</h2>
+        <header className="sticky top-0 z-40 flex h-20 items-center justify-between border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-8 shadow-sm">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3">
+              <div className="h-4 w-1 rounded-full bg-slate-900" />
+              <h2 className="text-[17px] font-bold tracking-tight text-slate-900">{pageTitle}</h2>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <ModeSwitcher mode={mode} setMode={setMode} />
 
-            <div className="mr-1 flex items-center gap-1 border-r border-gray-100 pr-4 leading-none">
+            <div className="flex items-center gap-2 border-l border-slate-100 pl-4 h-8">
               <button
                 type="button"
                 onClick={() => setIsSearchOpen((current) => !current)}
-                className="rounded-lg p-2 text-gray-400 transition-all hover:bg-indigo-50 hover:text-indigo-600"
+                className="group flex items-center justify-center rounded-xl h-10 w-10 text-slate-400 transition-all hover:bg-slate-50 hover:text-slate-900"
               >
-                <Search size={18} />
+                <Search size={20} strokeWidth={2.5} />
               </button>
 
               <div ref={notificationsMenuRef} className="relative">
                 <button
                   type="button"
                   onClick={() => setIsNotificationsOpen((current) => !current)}
-                  className="relative rounded-lg p-2 text-gray-400 transition-all hover:bg-indigo-50 hover:text-indigo-600"
+                  className="relative group flex items-center justify-center rounded-xl h-10 w-10 text-slate-400 transition-all hover:bg-slate-50 hover:text-slate-900"
                 >
-                  <Bell size={18} />
+                  <Bell size={20} strokeWidth={2.5} />
                   {totalNotificationItems > 0 ? (
-                    <span className="absolute right-1.5 top-1.5 inline-flex h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" />
+                    <span className="absolute right-2 top-2 inline-flex h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white animate-pulse" />
                   ) : null}
                 </button>
 
@@ -1876,41 +1855,43 @@ const AdminLayout = () => {
               </div>
             </div>
 
-            <div ref={userMenuRef} className="relative">
+            <div ref={userMenuRef} className="relative border-l border-slate-100 pl-4 h-8 flex items-center">
               <button
                 type="button"
-                className="group flex cursor-pointer items-center gap-3 rounded-full border border-gray-100 bg-gray-50 px-3 py-1.5 transition-all hover:bg-gray-100"
+                className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-sm transition-all hover:border-slate-900 hover:shadow-md active:scale-[0.98]"
                 onClick={() => setIsUserMenuOpen((current) => !current)}
               >
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition-all group-hover:bg-primary group-hover:text-white">
-                  <Users size={14} />
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white shadow-lg shadow-slate-900/20">
+                  <Users size={16} />
                 </div>
-                <div className="text-left leading-tight">
-                  <span className="block text-[11px] font-black text-gray-950">
-                    {adminProfile?.name || 'Admin'}
-                  </span>
-                  <span className="block text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">
+                <div className="text-left hidden sm:block">
+                  <p className="text-[12px] font-bold text-slate-900 leading-none">{adminProfile?.name || 'Admin'}</p>
+                  <p className="mt-1.5 text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400 leading-none">
                     {adminProfile?.admin_type === 'subadmin' ? adminProfile?.role || 'Subadmin' : 'Superadmin'}
-                  </span>
+                  </p>
                 </div>
-                <ChevronDown size={14} className="text-gray-300" />
+                <ChevronDown size={14} className={`text-slate-300 transition-transform duration-300 ${isUserMenuOpen ? 'rotate-180' : ''}`} />
               </button>
 
               <div
-                className={`absolute right-0 top-full z-50 mt-2 w-48 rounded-2xl border border-gray-100 bg-white p-2 shadow-xl transition-all ${
-                  isUserMenuOpen ? 'pointer-events-auto scale-100 opacity-100' : 'pointer-events-none scale-95 opacity-0'
+                className={`absolute right-0 top-full z-50 mt-3 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl transition-all duration-300 ${
+                  isUserMenuOpen ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0 pointer-events-none'
                 }`}
               >
+                <div className="px-4 py-3 border-b border-slate-50 mb-1">
+                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Active Identity</p>
+                   <p className="text-xs font-bold text-slate-900 truncate">{adminProfile?.email || 'admin@rydon24.com'}</p>
+                </div>
                 <button
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
                     handleLogout();
                   }}
-                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-red-600 transition-all hover:bg-red-50"
+                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-rose-600 transition-all hover:bg-rose-50"
                 >
                   <LogOut size={16} />
-                  <span className="text-[12px] font-bold">Logout Session</span>
+                  <span className="text-[11px] font-bold uppercase tracking-widest">Logout Session</span>
                 </button>
               </div>
             </div>
