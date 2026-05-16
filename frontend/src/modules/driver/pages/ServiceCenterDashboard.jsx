@@ -321,6 +321,14 @@ const pickFirstBiometricPreviewValue = (...values) =>
     values.find((value) => value !== undefined && value !== null && String(value).trim() !== '') || '',
   );
 
+const escapePrintHtml = (value = '') =>
+  String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
 const parseBridgeObject = (result) => {
   if (!result) return result;
   if (typeof result === 'string') {
@@ -2325,17 +2333,34 @@ Processing Time: Refunds are typically credited back to the original payment met
     }
 
     const captures = Array.isArray(selectedBooking?.biometrics?.thumbCaptures) ? selectedBooking.biometrics.thumbCaptures : [];
-    const participants = Array.isArray(selectedBooking?.biometrics?.thumbParticipants) ? selectedBooking.biometrics.thumbParticipants : [];
+    const participants = thumbParticipantsDraft.length > 0
+      ? thumbParticipantsDraft
+      : (Array.isArray(selectedBooking?.biometrics?.thumbParticipants) ? selectedBooking.biometrics.thumbParticipants : []);
     const groupedCaptures = participants.map((participant) => ({
       participant,
       captures: captures.filter((item) => String(item?.participantKey || '') === String(participant.participantKey)),
     }));
+    const matchedParticipantKeys = new Set(groupedCaptures.map((entry) => String(entry?.participant?.participantKey || '')));
+    const orphanCaptures = captures.filter(
+      (item) => !matchedParticipantKeys.has(String(item?.participantKey || '')),
+    );
+    if (orphanCaptures.length > 0) {
+      groupedCaptures.push({
+        participant: {
+          participantKey: 'unmatched-captures',
+          participantLabel: 'Additional Thumb Captures',
+          name: '',
+          phone: '',
+        },
+        captures: orphanCaptures,
+      });
+    }
 
     const html = `<!doctype html>
       <html>
         <head>
           <meta charset="utf-8" />
-          <title>Rental Agreement ${selectedBooking.bookingReference || ''}</title>
+          <title>Rental Agreement ${escapePrintHtml(selectedBooking.bookingReference || '')}</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 24px; color: #0f172a; }
             h1,h2,h3 { margin: 0 0 8px; }
@@ -2344,37 +2369,72 @@ Processing Time: Refunds are typically credited back to the original payment met
             .thumb { border: 1px solid #cbd5e1; border-radius: 12px; padding: 12px; text-align: center; }
             .thumb img { max-width: 100%; max-height: 180px; object-fit: contain; display: block; margin: 0 auto 8px; }
             .muted { color: #64748b; font-size: 12px; }
+            @media print {
+              body { padding: 12px; }
+              .card { break-inside: avoid; }
+              .thumb { break-inside: avoid; }
+            }
           </style>
         </head>
         <body>
           <h1>Rental Agreement</h1>
-          <p class="muted">Booking ${selectedBooking.bookingReference || ''}</p>
+          <p class="muted">Booking ${escapePrintHtml(selectedBooking.bookingReference || '')}</p>
           <div class="card">
             <h3>Customer</h3>
-            <p>${selectedBooking.customer?.name || 'N/A'} | ${selectedBooking.customer?.phone || 'N/A'}</p>
-            <p>${selectedBooking.vehicleName || 'Vehicle'} | ${selectedBooking.pickupDateTime ? new Date(selectedBooking.pickupDateTime).toLocaleString() : 'N/A'}</p>
+            <p>${escapePrintHtml(selectedBooking.customer?.name || 'N/A')} | ${escapePrintHtml(selectedBooking.customer?.phone || 'N/A')}</p>
+            <p>${escapePrintHtml(selectedBooking.vehicleName || 'Vehicle')} | ${escapePrintHtml(selectedBooking.pickupDateTime ? new Date(selectedBooking.pickupDateTime).toLocaleString() : 'N/A')}</p>
           </div>
           ${groupedCaptures.map(({ participant, captures: participantCaptures }) => `
             <div class="card">
-              <h3>${participant.participantLabel || 'Participant'}</h3>
-              <p class="muted">${participant.name || ''} ${participant.phone ? `| ${participant.phone}` : ''}</p>
+              <h3>${escapePrintHtml(participant.participantLabel || 'Participant')}</h3>
+              <p class="muted">${escapePrintHtml(participant.name || '')} ${participant.phone ? `| ${escapePrintHtml(participant.phone)}` : ''}</p>
               <div class="grid">
-                ${participantCaptures.map((capture) => `
+                ${participantCaptures.length > 0 ? participantCaptures.map((capture) => `
                   <div class="thumb">
-                    <img src="${capture.imageUrl || capture.previewImage || ''}" alt="${capture.thumbCode || 'Thumb'}" />
+                    <img src="${escapePrintHtml(capture.imageUrl || capture.previewImage || '')}" alt="${escapePrintHtml(capture.thumbCode || 'Thumb')}" />
                     <div><strong>${capture.thumbCode === 'LEFT_THUMB' ? 'Left Thumb' : capture.thumbCode === 'RIGHT_THUMB' ? 'Right Thumb' : 'Thumb'}</strong></div>
-                    <div class="muted">${capture.captureSource || 'unknown'}${capture.capturedAt ? ` | ${new Date(capture.capturedAt).toLocaleString()}` : ''}</div>
+                    <div class="muted">${escapePrintHtml(capture.captureSource || 'unknown')}${capture.capturedAt ? ` | ${escapePrintHtml(new Date(capture.capturedAt).toLocaleString())}` : ''}</div>
                   </div>
-                `).join('')}
+                `).join('') : '<p class="muted">No thumb capture saved yet.</p>'}
               </div>
             </div>
           `).join('')}
-          <script>window.onload = () => { window.print(); };</script>
+          <script>
+            (function () {
+              const images = Array.from(document.images || []);
+              const done = () => {
+                setTimeout(() => {
+                  window.focus();
+                  window.print();
+                }, 250);
+              };
+              if (!images.length) {
+                if (document.readyState === 'complete') done();
+                else window.addEventListener('load', done, { once: true });
+                return;
+              }
+              let settled = 0;
+              const finish = () => {
+                settled += 1;
+                if (settled >= images.length) done();
+              };
+              images.forEach((img) => {
+                if (img.complete) {
+                  finish();
+                } else {
+                  img.addEventListener('load', finish, { once: true });
+                  img.addEventListener('error', finish, { once: true });
+                }
+              });
+              setTimeout(done, 3000);
+            })();
+          </script>
         </body>
       </html>`;
 
-    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=980,height=720');
+    const printWindow = window.open('', '_blank', 'width=980,height=720');
     if (!printWindow) {
+      setError('Popup blocked by the browser. Allow popups for this page and try printing again.');
       return;
     }
     printWindow.document.open();
