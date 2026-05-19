@@ -50,6 +50,9 @@ const hasFlutterBridge = () => {
 export const isEmbeddedCheckoutWebView = () =>
   isAndroidWebView() || isIosWebView() || hasFlutterBridge();
 
+export const isMobileOrWebView = () =>
+  /Android|iPhone|iPad|iPod/i.test(String(globalThis.navigator?.userAgent || '')) || isEmbeddedCheckoutWebView();
+
 const isMobileBrowser = () => (isAndroid() || isIos()) && !isAndroidWebView() && !isIosWebView();
 
 const buildCheckoutPayload = (targetUrl) => {

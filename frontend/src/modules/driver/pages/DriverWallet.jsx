@@ -18,7 +18,7 @@ import api from '../../../shared/api/axiosInstance';
 import { API_BASE_URL } from '../../../shared/api/runtimeConfig';
 import { socketService } from '../../../shared/api/socket';
 import { useSettings } from '../../../shared/context/SettingsContext';
-import { isEmbeddedCheckoutWebView, openExternalCheckout } from '../../../shared/utils/externalNavigation';
+import { isMobileOrWebView, openExternalCheckout } from '../../../shared/utils/externalNavigation';
 import { rememberPendingPhonePeRedirect } from '../../../shared/utils/phonePeResume';
 import { getLocalDriverToken } from '../services/registrationService';
 
@@ -443,17 +443,17 @@ const DriverWallet = () => {
             // UPI intents work properly. After payment, Razorpay POSTs to our
             // backend callback endpoint which verifies the payment and redirects
             // the user back to the /razorpay/status frontend page.
-            if (isEmbeddedCheckoutWebView()) {
+            if (isMobileOrWebView()) {
                 const callbackUrl = orderData.callbackUrl
                     || `${API_BASE_URL}/drivers/wallet/top-up/razorpay/callback`;
 
                 if (callbackUrl.startsWith('http://')) {
-                    console.warn('[Razorpay] Warning: Using cleartext HTTP callback URL in WebView. This will fail with ERR_CLEARTEXT_NOT_PERMITTED on Android unless cleartext traffic is explicitly permitted in AndroidManifest.xml.');
+                    console.warn('[Razorpay] Warning: Using cleartext HTTP callback URL on mobile/WebView. This will fail with ERR_CLEARTEXT_NOT_PERMITTED on Android unless cleartext traffic is explicitly permitted.');
                 }
 
                 // Initialize the Razorpay JS SDK with redirect mode (callback_url + redirect: true).
-                // Because our new robust WebView detection is active, the SDK successfully enters
-                // full-page redirect mode, restoring all UPI options (GPay, PhonePe, Paytm) inside the WebView.
+                // Using redirect mode for all mobile devices guarantees native UPI app intent launching
+                // across all mobile browsers and WebView containers alike.
                 const rzp = new window.Razorpay({
                     key: orderData.keyId,
                     amount: orderData.amount,
