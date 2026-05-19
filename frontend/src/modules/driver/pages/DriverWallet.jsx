@@ -19,17 +19,9 @@ import { socketService } from '../../../shared/api/socket';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import { openExternalCheckout } from '../../../shared/utils/externalNavigation';
 import { rememberPendingPhonePeRedirect } from '../../../shared/utils/phonePeResume';
-import { BACKEND_ORIGIN } from '../../../shared/api/runtimeConfig';
 import { getLocalDriverToken } from '../services/registrationService';
 
 const PHONEPE_DRIVER_WALLET_FLOW_KEY = 'driver-wallet-topup';
-
-const isEmbeddedWebView = () => {
-    const userAgent = String(globalThis.navigator?.userAgent || '');
-    const isAndroidWebView = /; wv\)/i.test(userAgent) || /Version\/[\d.]+.*Chrome\/[\d.]+.*Mobile Safari/i.test(userAgent);
-    const isIosWebView = /iPhone|iPad|iPod/i.test(userAgent) && /AppleWebKit/i.test(userAgent) && !/Safari/i.test(userAgent);
-    return isAndroidWebView || isIosWebView;
-};
 
 const emptyWallet = {
     balance: 0,
@@ -427,6 +419,13 @@ const DriverWallet = () => {
                 throw new Error('Could not initiate payment. Please try again.');
             }
 
+            let driverInfo = {};
+            try {
+                driverInfo = JSON.parse(localStorage.getItem('driverInfo') || '{}');
+            } catch {
+                driverInfo = {};
+            }
+
             // 2. Open Razorpay checkout
             const options = {
                 key: orderData.keyId,
@@ -435,6 +434,13 @@ const DriverWallet = () => {
                 name: appName,
                 description: 'Wallet Top-up',
                 order_id: orderData.orderId,
+                prefill: {
+                    name: driverInfo?.name || driverInfo?.full_name || '',
+                    email: driverInfo?.email || '',
+                    contact: driverInfo?.phone || driverInfo?.mobile
+                        ? `+91${String(driverInfo?.phone || driverInfo?.mobile).replace(/^\+?91/, '')}`
+                        : '',
+                },
                 modal: {
                     ondismiss: () => {
                         setProcessingTopUp(false);
@@ -443,13 +449,7 @@ const DriverWallet = () => {
                 theme: {
                     color: '#0F172A',
                 },
-            };
-
-            if (isEmbeddedWebView()) {
-                options.redirect = true;
-                options.callback_url = `${BACKEND_ORIGIN}/api/v1/drivers/wallet/top-up/razorpay/callback`;
-            } else {
-                options.handler = async (response) => {
+                handler: async (response) => {
                     try {
                         setProcessingTopUp(true);
                         // 3. Verify payment on backend
@@ -481,8 +481,8 @@ const DriverWallet = () => {
                     } finally {
                         setProcessingTopUp(false);
                     }
-                };
-            }
+                },
+            };
 
             const rzp = new window.Razorpay(options);
             rzp.on('payment.failed', (response) => {
