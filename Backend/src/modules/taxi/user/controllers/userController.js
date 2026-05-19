@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import mongoose from 'mongoose';
-import { Env, StandardCheckoutClient, StandardCheckoutPayRequest } from '@phonepe-pg/pg-sdk-node';
+import { Env, StandardCheckoutClient, StandardCheckoutPayRequest, PrefillUserLoginDetails } from '@phonepe-pg/pg-sdk-node';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { User } from '../models/User.js';
 import { UserWallet } from '../models/UserWallet.js';
@@ -413,12 +413,28 @@ const phonePeRequest = async ({
         throw new ApiError(400, 'PhonePe merchant order id, amount, and redirect URL are required');
       }
 
-      const request = StandardCheckoutPayRequest.builder()
+      const builder = StandardCheckoutPayRequest.builder()
         .merchantOrderId(merchantOrderId)
         .amount(amount)
-        .redirectUrl(redirectUrl)
-        .build();
+        .redirectUrl(redirectUrl);
 
+      if (body?.paymentFlow?.message) {
+        builder.message(String(body.paymentFlow.message));
+      }
+      if (body?.expireAfter) {
+        builder.expireAfter(Number(body.expireAfter));
+      }
+      if (body?.prefillUserLoginDetails?.phoneNumber) {
+        const prefill = PrefillUserLoginDetails.builder()
+          .phoneNumber(String(body.prefillUserLoginDetails.phoneNumber))
+          .build();
+        builder.prefillUserLoginDetails(prefill);
+      }
+      if (body?.metaInfo) {
+        builder.metaInfo(body.metaInfo);
+      }
+
+      const request = builder.build();
       payload = await client.pay(request);
     } else if (normalizedMethod === 'GET' && path.includes('/checkout/v2/order/')) {
       const orderMatch = path.match(/\/checkout\/v2\/order\/([^/]+)\/status/i);
