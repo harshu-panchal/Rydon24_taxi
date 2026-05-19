@@ -7,8 +7,20 @@ const withTimeout = (promise, timeoutMs = 1500) =>
   ]);
 
 const isAndroidWebView = () => {
-  const userAgent = String(globalThis.navigator?.userAgent || '');
-  return /; wv\)/i.test(userAgent) || /Version\/[\d.]+.*Chrome\/[\d.]+.*Mobile Safari/i.test(userAgent);
+  const ua = String(globalThis.navigator?.userAgent || '');
+  // Standard Android WebView marker: "; wv)" in the user agent.
+  if (/; wv\)/i.test(ua)) return true;
+  // Older WebViews: "Version/X.X Chrome/... Mobile Safari/..."
+  if (/Version\/[\d.]+.*Chrome\/[\d.]+.*Mobile Safari/i.test(ua)) return true;
+  // Some Flutter WebViews strip the wv marker but still have Android + Chrome.
+  // Detect via the standalone property (WebViews are not standalone PWAs).
+  if (/Android/i.test(ua) && globalThis.navigator?.standalone === undefined
+      && typeof globalThis.matchMedia === 'function'
+      && !globalThis.matchMedia('(display-mode: standalone)').matches
+      && !globalThis.matchMedia('(display-mode: browser)').matches) {
+    return true;
+  }
+  return false;
 };
 
 const isAndroid = () => /Android/i.test(String(globalThis.navigator?.userAgent || ''));
@@ -20,7 +32,23 @@ const isIosWebView = () => {
   return /iPhone|iPad|iPod/i.test(userAgent) && /AppleWebKit/i.test(userAgent) && !/Safari/i.test(userAgent);
 };
 
-export const isEmbeddedCheckoutWebView = () => isAndroidWebView() || isIosWebView();
+// Detect Flutter-specific bridge globals that confirm we're inside a WebView.
+const hasFlutterBridge = () => {
+  try {
+    return Boolean(
+      globalThis.flutter_inappwebview
+      || globalThis.FlutterBridge
+      || globalThis.Flutter
+      || globalThis._flutter_web_set_location_strategy
+      || (typeof globalThis.webkit?.messageHandlers?.callHandler?.postMessage === 'function'),
+    );
+  } catch {
+    return false;
+  }
+};
+
+export const isEmbeddedCheckoutWebView = () =>
+  isAndroidWebView() || isIosWebView() || hasFlutterBridge();
 
 const isMobileBrowser = () => (isAndroid() || isIos()) && !isAndroidWebView() && !isIosWebView();
 
