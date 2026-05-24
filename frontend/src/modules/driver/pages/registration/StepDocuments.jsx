@@ -144,6 +144,20 @@ const optimizeImageFileForUpload = async (
   return compressed;
 };
 
+const prepareImageFileForUpload = async (file) => {
+  const originalDataUrl = await fileToDataUrl(file);
+  if (!String(originalDataUrl || '').startsWith('data:image/')) {
+    throw new Error('Please upload an image file');
+  }
+
+  try {
+    return await optimizeImageFileForUpload(file);
+  } catch (error) {
+    console.warn('Image optimization skipped; uploading original image instead.', error);
+    return originalDataUrl;
+  }
+};
+
 const normalizeSignupRole = (role) =>
   String(role || 'driver').toLowerCase() === 'owner' ? 'owner' : 'driver';
 
@@ -381,7 +395,7 @@ const StepDocuments = () => {
 
     try {
       const dataUrl = isImageLikeFile(file)
-        ? await optimizeImageFileForUpload(file)
+        ? await prepareImageFileForUpload(file)
         : await fileToDataUrl(file);
 
       const { fileName, mimeType } = inferImageMeta(file, dataUrl);
