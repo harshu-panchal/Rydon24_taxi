@@ -275,7 +275,7 @@ const DriverWallet = () => {
         const minimumTransferAmount = toNumber(wallet.minimumTransferAmount, toNumber(settings.minimum_wallet_amount_for_transfer, 0));
         const walletEnabled = wallet.isWalletEnabled ?? isEnabled(settings.show_wallet_feature_for_driver, true);
         const transferEnabled = wallet.isTransferEnabled ?? isEnabled(settings.enable_wallet_transfer_driver, true);
-        const canReceiveOrders = walletEnabled && !wallet.isBlocked && availableForOrders > 0;
+        const canReceiveOrders = walletEnabled && !wallet.isBlocked && availableForOrders >= 0;
 
         return {
             minimumBalance,
@@ -823,7 +823,7 @@ const DriverWallet = () => {
                                 </div>
                                 <div className="rounded-2xl bg-white/10 p-3">
                                     <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Available cash limit</p>
-                                    <p className={`mt-1 text-lg font-black ${rules.availableForOrders > 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                    <p className={`mt-1 text-lg font-black ${rules.availableForOrders >= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
                                         {money(rules.availableForOrders)}
                                     </p>
                                 </div>

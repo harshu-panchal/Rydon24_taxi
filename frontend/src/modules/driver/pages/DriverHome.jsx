@@ -331,7 +331,7 @@ const getWalletAlertState = (wallet = {}, { ignoreRestrictions = false } = {}) =
     const warningThreshold = cashLimit > 0
         ? Math.min(cashLimit, Math.max(50, cashLimit * 0.15))
         : 0;
-    const belowMinimumBalance = balance <= minimumBalanceForOrders;
+    const belowMinimumBalance = balance < minimumBalanceForOrders;
     const cashLimitExceeded = cashLimit > 0 && remainingCashLimit <= 0;
     const rawBlocked = Boolean(wallet.isBlocked) || belowMinimumBalance || cashLimitExceeded;
     const isBlocked = ignoreRestrictions ? false : rawBlocked;
@@ -641,7 +641,7 @@ const DriverHome = () => {
             return {
                 title: walletAlertState.belowMinimumBalance ? 'Top up to go online' : 'Cash limit reached',
                 message: walletAlertState.belowMinimumBalance
-                    ? 'Keep your wallet above Rs 0 to receive orders.'
+                    ? `Keep your wallet at or above Rs ${Math.max(0, walletAlertState.minimumBalanceForOrders)} to receive orders.`
                     : 'Add money to keep receiving ride requests.',
                 tone: 'danger',
             };
