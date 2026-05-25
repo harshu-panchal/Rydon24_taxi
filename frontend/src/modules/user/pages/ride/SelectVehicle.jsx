@@ -1260,15 +1260,22 @@ const SelectVehicle = () => {
           ),
         });
 
+        const calculatedPrice = calculateEstimatedFare({
+          vehicle,
+          pricingRule,
+          distanceMeters: tripMetrics.distanceMeters,
+          durationMinutes: tripMetrics.durationMinutes,
+        });
+
+        // Dynamically scale max bidding steps to a realistic 15% of the actual calculated price
+        const stepAmount = Number(vehicle.bidStepAmount || 10);
+        const dynamicMaxBidSteps = Math.max(2, Math.round((calculatedPrice * 0.15) / stepAmount));
+
         return {
           ...vehicle,
           pricingRule,
-          price: calculateEstimatedFare({
-            vehicle,
-            pricingRule,
-            distanceMeters: tripMetrics.distanceMeters,
-            durationMinutes: tripMetrics.durationMinutes,
-          }),
+          price: calculatedPrice,
+          maxBidSteps: dynamicMaxBidSteps,
         };
       }),
     [pricingRules, serviceLocationId, tripMetrics.distanceMeters, tripMetrics.durationMinutes, vehicles],
