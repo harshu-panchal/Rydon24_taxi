@@ -507,7 +507,10 @@ export const startDriverOnboarding = async ({ phone, role = 'driver' }) => {
         })
       : null;
 
-  if (existingDriver || existingOwner) {
+  const hasExistingAccount =
+    normalizedRole === 'owner' ? Boolean(existingOwner) : Boolean(existingDriver);
+
+  if (hasExistingAccount) {
     const loginResult = await startDriverLoginOtp({
       phone: normalizedPhone,
       role: normalizedRole,

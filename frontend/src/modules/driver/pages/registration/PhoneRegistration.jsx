@@ -215,7 +215,7 @@ const PhoneRegistration = () => {
                         : await sendDriverOtp({ phone, role: requestRole });
                     loginMode = isLoginPage;
                 } catch (requestError) {
-                    if (isLoginPage && requestRole === 'driver') {
+                    if (isLoginPage && ['driver', 'owner', 'bus_driver', 'service_center', 'service_center_staff'].includes(requestRole)) {
                         if (!isAccountNotFoundError(requestError)) throw requestError;
 
                         response = await sendDriverOtp({ phone, role: requestRole });
@@ -232,7 +232,7 @@ const PhoneRegistration = () => {
                     response = isLoginPage ? await sendDriverLoginOtp({ phone, role: requestRole }) : await sendDriverOtp({ phone, role: requestRole });
                     loginMode = isLoginPage;
                 } catch (requestError) {
-                    if (isLoginPage && requestRole === 'driver') {
+                    if (isLoginPage && ['driver', 'owner', 'bus_driver', 'service_center', 'service_center_staff'].includes(requestRole)) {
                         if (!isAccountNotFoundError(requestError)) throw requestError;
 
                         response = await sendDriverOtp({ phone, role: requestRole });
