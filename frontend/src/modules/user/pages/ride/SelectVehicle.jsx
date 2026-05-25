@@ -1253,7 +1253,11 @@ const SelectVehicle = () => {
           rules: pricingRules,
           vehicleTypeId: vehicle.vehicleTypeId,
           serviceLocationId,
-          transportType: vehicle.transportType || routeState.transport_type || routeState.transportType || 'taxi',
+          transportType: resolveRideTransportType(
+            routeState.transport_type,
+            routeState.transportType,
+            vehicle.transportType,
+          ),
         });
 
         return {
