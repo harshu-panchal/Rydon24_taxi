@@ -53,17 +53,31 @@ const ServiceGrid = () => {
   };
 
   const getPath = (module) => {
-    if (module.transport_type === 'delivery') return '/taxi/user/parcel/type';
-    if (module.service_type === 'rental') return '/taxi/user/rental';
-    if (module.service_type === 'outstation') return '/taxi/user/intercity';
-    if (module.service_type === 'pooling' || module.name.toLowerCase().includes('pooling')) {
+    const serviceType = String(module?.service_type || '').trim().toLowerCase();
+    const transportType = String(module?.transport_type || '').trim().toLowerCase();
+    const moduleName = String(module?.name || '').trim().toLowerCase();
+
+    if (transportType === 'delivery') return '/taxi/user/parcel/type';
+    if (serviceType === 'rental') return '/taxi/user/rental';
+    if (serviceType === 'outstation') return '/taxi/user/intercity';
+    if (serviceType === 'pooling' || moduleName.includes('pooling')) {
       return '/taxi/user/pooling';
     }
-    
-    // Default taxi paths based on name/keywords if needed, or just generic select-location
-    if (module.name.toLowerCase().includes('cab') || module.name.toLowerCase().includes('taxi')) {
-        return '/taxi/user/cab';
+
+    if (serviceType === 'bus' || transportType === 'bus' || moduleName.includes('bus')) {
+      return '/taxi/user/bus';
     }
+
+    // Regular ride-hailing modules should always start from location selection.
+    if (
+      ['normal', 'taxi', 'ride', 'ride_hailing', 'ride-hailing'].includes(serviceType) ||
+      ['taxi', 'both'].includes(transportType) ||
+      moduleName.includes('taxi') ||
+      moduleName.includes('cab')
+    ) {
+      return '/taxi/user/ride/select-location';
+    }
+
     return '/taxi/user/ride/select-location';
   };
 
