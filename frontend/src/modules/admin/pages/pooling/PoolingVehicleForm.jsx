@@ -27,7 +27,13 @@ const VEHICLE_TYPES = [
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50';
 const labelClass = 'mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400';
 
-const PoolingVehicleForm = ({ mode: propMode }) => {
+const PoolingVehicleForm = ({
+  mode: propMode,
+  service = adminService,
+  backPath = '/admin/pooling/vehicles',
+  backLabel = 'Back to Fleet',
+  pageLabel = '',
+}) => {
   const navigate = useNavigate();
   const { id } = useParams();
   const isViewMode = propMode === 'view';
@@ -39,6 +45,8 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
     name: '',
     vehicleModel: '',
     vehicleNumber: '',
+    driverName: '',
+    driverPhone: '',
     capacity: 4,
     adminCommissionPercentage: 0,
     serviceTaxPercentage: 0,
@@ -85,13 +93,15 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
   const loadVehicle = async () => {
     setLoading(true);
     try {
-      const response = await adminService.getPoolingVehicles();
+      const response = await service.getPoolingVehicles();
       const vehicle = response.data.find(v => v._id === id);
       if (vehicle) {
         setFormData({
           name: vehicle.name || '',
           vehicleModel: vehicle.vehicleModel || '',
           vehicleNumber: vehicle.vehicleNumber || '',
+          driverName: vehicle.driverName || '',
+          driverPhone: vehicle.driverPhone || '',
           capacity: vehicle.capacity || 4,
           adminCommissionPercentage: Number(vehicle.adminCommissionPercentage ?? 0),
           serviceTaxPercentage: Number(vehicle.serviceTaxPercentage ?? 0),
@@ -161,13 +171,13 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
       };
 
       if (isEditMode) {
-        await adminService.updatePoolingVehicle(id, payload);
+        await service.updatePoolingVehicle(id, payload);
         toast.success('Vehicle updated successfully');
       } else {
-        await adminService.createPoolingVehicle(payload);
+        await service.createPoolingVehicle(payload);
         toast.success('Vehicle created successfully');
       }
-      navigate('/admin/pooling/vehicles');
+      navigate(backPath);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Save failed');
     } finally {
@@ -189,16 +199,16 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
         {/* Header */}
         <div className="mb-8">
           <button
-            onClick={() => navigate('/admin/pooling/vehicles')}
+            onClick={() => navigate(backPath)}
             className="mb-4 flex items-center gap-2 text-sm font-bold text-slate-400 transition hover:text-slate-900"
           >
             <ArrowLeft size={16} />
-            Back to Fleet
+            {backLabel}
           </button>
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-black text-slate-900">
-                {isViewMode ? 'View Vehicle' : isEditMode ? 'Edit Vehicle' : 'Add New Vehicle'}
+                {pageLabel || (isViewMode ? 'View Vehicle' : isEditMode ? 'Edit Vehicle' : 'Add New Vehicle')}
               </h1>
               <p className="text-sm font-medium text-slate-500">
                 {isViewMode ? 'Review vehicle details and seat layout blueprint' : 'Configure vehicle details and seat layout blueprint'}
@@ -206,7 +216,7 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
             </div>
             {isViewMode ? (
               <button
-                onClick={() => navigate(`/admin/pooling/vehicles/edit/${id}`)}
+                onClick={() => navigate(`${backPath}/edit/${id}`)}
                 className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-black text-white shadow-xl shadow-indigo-200 transition-all hover:bg-indigo-700 active:scale-95"
               >
                 <Save size={18} />
@@ -287,6 +297,30 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
                     readOnly={isViewMode}
                   />
                 </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className={labelClass}>Driver Name</label>
+                    <input
+                      type="text"
+                      value={formData.driverName}
+                      onChange={(e) => setFormData({ ...formData, driverName: e.target.value })}
+                      placeholder="e.g. Ramesh Kumar"
+                      className={inputClass}
+                      readOnly={isViewMode}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Driver Phone</label>
+                    <input
+                      type="tel"
+                      value={formData.driverPhone}
+                      onChange={(e) => setFormData({ ...formData, driverPhone: e.target.value })}
+                      placeholder="e.g. 9876543210"
+                      className={inputClass}
+                      readOnly={isViewMode}
+                    />
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className={labelClass}>Capacity</label>
@@ -366,7 +400,7 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
                           const base64 = reader.result;
                           const loadingToast = toast.loading('Uploading image...');
                           try {
-                            const res = await adminService.uploadImage(base64);
+                            const res = await service.uploadImage(base64);
                             setFormData(prev => ({
                               ...prev,
                               images: [...prev.images, res.data.url]

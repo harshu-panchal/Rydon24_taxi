@@ -8,7 +8,7 @@ import { restoreScheduledDispatches } from './src/modules/taxi/services/dispatch
 
 const bootstrap = async () => {
   await connectDatabase();
-  await User.deleteOne({ phone: '9998887776', name: 'Demo User' });
+ 
 
   const app = createApp();
   const httpServer = createServer(app);

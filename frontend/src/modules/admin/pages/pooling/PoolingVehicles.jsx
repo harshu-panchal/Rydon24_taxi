@@ -12,6 +12,7 @@ import {
   PencilLine,
   List,
   CalendarDays,
+  Phone,
 } from 'lucide-react';
 import { adminService } from '../../services/adminService';
 import { useNavigate } from 'react-router-dom';
@@ -55,7 +56,7 @@ const PoolingVehicles = () => {
       vehicles.filter((vehicle) => {
         const query = searchTerm.trim().toLowerCase();
         if (!query) return true;
-        return [vehicle.name, vehicle.vehicleModel, vehicle.vehicleNumber, vehicle.color, vehicle.vehicleType]
+        return [vehicle.name, vehicle.vehicleModel, vehicle.vehicleNumber, vehicle.driverName, vehicle.driverPhone, vehicle.color, vehicle.vehicleType]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(query));
       }),
@@ -147,7 +148,7 @@ const PoolingVehicles = () => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input
             type="text"
-            placeholder="Search by name, type, model, color, or plate number..."
+            placeholder="Search by vehicle, driver, phone, type, model, color, or plate number..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-12 pr-4 text-sm font-medium outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
@@ -219,6 +220,12 @@ const PoolingVehicles = () => {
                             <div className="mt-1 flex items-center gap-2 text-[11px] font-medium text-slate-400">
                               <CalendarDays size={12} />
                               <span>{vehicle.color || 'No color'}</span>
+                            </div>
+                            <div className="mt-1 flex items-center gap-2 text-[11px] font-semibold text-slate-500">
+                              <Phone size={12} />
+                              <span className="truncate">
+                                {vehicle.driverName || 'No driver'}{vehicle.driverPhone ? ` - ${vehicle.driverPhone}` : ''}
+                              </span>
                             </div>
                           </div>
                         </div>

@@ -15,6 +15,7 @@ import { BusBooking } from "../../user/models/BusBooking.js";
 import { BusSeatHold } from "../../user/models/BusSeatHold.js";
 import { Owner } from "../../admin/models/Owner.js";
 import { BusService } from "../../admin/models/BusService.js";
+import { PoolingVehicle } from "../../admin/models/PoolingVehicle.js";
 import { ServiceLocation } from "../../admin/models/ServiceLocation.js";
 import { ServiceStore } from "../../admin/models/ServiceStore.js";
 import { ServiceCenterStaff } from "../../admin/models/ServiceCenterStaff.js";
@@ -7159,6 +7160,102 @@ export const deleteOwnerFleetVehicle = async (req, res) => {
     success: true,
     message: "Vehicle deleted successfully",
     data: { deleted: true },
+  });
+};
+
+export const getOwnerPoolingVehicles = async (req, res) => {
+  const owner = await resolveAuthenticatedOwner(req);
+
+  if (!owner?._id) {
+    throw new ApiError(
+      403,
+      "Pooling vehicle access is only available for owner accounts",
+    );
+  }
+
+  const vehicles = await PoolingVehicle.find({ ownerId: owner._id })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  res.json({
+    success: true,
+    data: vehicles,
+    message: "Owner pooling vehicles fetched successfully",
+  });
+};
+
+export const createOwnerPoolingVehicle = async (req, res) => {
+  const owner = await resolveAuthenticatedOwner(req);
+
+  if (!owner?._id) {
+    throw new ApiError(
+      403,
+      "Pooling vehicle access is only available for owner accounts",
+    );
+  }
+
+  const vehicle = await PoolingVehicle.create({
+    ...(req.body || {}),
+    ownerId: owner._id,
+  });
+
+  res.status(201).json({
+    success: true,
+    data: vehicle,
+    message: "Pooling vehicle created successfully",
+  });
+};
+
+export const updateOwnerPoolingVehicle = async (req, res) => {
+  const owner = await resolveAuthenticatedOwner(req);
+
+  if (!owner?._id) {
+    throw new ApiError(
+      403,
+      "Pooling vehicle access is only available for owner accounts",
+    );
+  }
+
+  const vehicle = await PoolingVehicle.findOneAndUpdate(
+    { _id: req.params.vehicleId, ownerId: owner._id },
+    { ...(req.body || {}), ownerId: owner._id },
+    { new: true, runValidators: true },
+  );
+
+  if (!vehicle) {
+    throw new ApiError(404, "Pooling vehicle not found");
+  }
+
+  res.json({
+    success: true,
+    data: vehicle,
+    message: "Pooling vehicle updated successfully",
+  });
+};
+
+export const deleteOwnerPoolingVehicle = async (req, res) => {
+  const owner = await resolveAuthenticatedOwner(req);
+
+  if (!owner?._id) {
+    throw new ApiError(
+      403,
+      "Pooling vehicle access is only available for owner accounts",
+    );
+  }
+
+  const vehicle = await PoolingVehicle.findOneAndDelete({
+    _id: req.params.vehicleId,
+    ownerId: owner._id,
+  });
+
+  if (!vehicle) {
+    throw new ApiError(404, "Pooling vehicle not found");
+  }
+
+  res.json({
+    success: true,
+    data: { deleted: true },
+    message: "Pooling vehicle deleted successfully",
   });
 };
 

@@ -39,7 +39,7 @@ export const getPoolingBookings = asyncHandler(async (req, res) => {
   const bookings = await PoolingBooking.find()
     .populate('user', 'name phone email')
     .populate('route', 'routeName originLabel destinationLabel')
-    .populate('vehicle', 'name vehicleNumber')
+    .populate('vehicle', 'name vehicleNumber driverName driverPhone')
     .sort({ createdAt: -1 });
   return ok(res, bookings, 'Pooling bookings fetched successfully');
 });

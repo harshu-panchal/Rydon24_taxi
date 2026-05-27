@@ -167,6 +167,13 @@ export const saveDriverDocuments = (payload) =>
 export const completeDriverOnboarding = (payload) =>
   api.post("/drivers/onboarding/complete", payload);
 
+export const ownerPoolingVehicleService = {
+  getPoolingVehicles: () => api.get("/drivers/fleet/pooling-vehicles"),
+  createPoolingVehicle: (data) => api.post("/drivers/fleet/pooling-vehicles", data),
+  updatePoolingVehicle: (id, data) => api.patch(`/drivers/fleet/pooling-vehicles/${id}`, data),
+  deletePoolingVehicle: (id) => api.delete(`/drivers/fleet/pooling-vehicles/${id}`),
+};
+
 export const buildDriverOnboardingSessionSnapshot = (payload = {}, fallbackSession = {}) => {
   const serverSession = payload?.session || {};
   const personal = payload?.personal || {};

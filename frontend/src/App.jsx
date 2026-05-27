@@ -139,6 +139,7 @@ const DriverHome = lazy(() => import('./modules/driver/pages/DriverHome'));
 const OwnerDashboard = lazy(() => import('./modules/driver/pages/OwnerDashboard'));
 const OwnerBusServicePage = lazy(() => import('./modules/driver/pages/OwnerBusServicePage'));
 const OwnerBusBookingsPage = lazy(() => import('./modules/driver/pages/OwnerBusBookingsPage'));
+const OwnerPoolingVehicleForm = lazy(() => import('./modules/driver/pages/OwnerPoolingVehicleForm'));
 const ActiveTrip = lazy(() => import('./modules/driver/pages/ActiveTrip'));
 const DriverWallet = lazy(() => import('./modules/driver/pages/DriverWallet'));
 const DriverProfile = lazy(() => import('./modules/driver/pages/DriverProfile'));
@@ -1061,6 +1062,8 @@ function App() {
                 <Route path="bus-service/edit/:id" element={<OwnerBusServicePage />} />
                 <Route path="bus-service/:id" element={<OwnerBusServicePage />} />
                 <Route path="bus-bookings" element={<OwnerBusBookingsPage />} />
+                <Route path="pooling-vehicles" element={<OwnerPoolingVehicleForm />} />
+                <Route path="pooling-vehicles/create" element={<OwnerPoolingVehicleForm />} />
                 <Route path="profile" element={<DriverProfile />} />
                 <Route path="profile/bank-details" element={<DriverBankDetailsPage />} />
                 <Route path="wallet" element={<DriverWallet />} />

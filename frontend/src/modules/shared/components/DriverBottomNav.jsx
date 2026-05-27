@@ -45,6 +45,11 @@ const DriverBottomNav = () => {
           label: "Vehicle",
           path: `${routePrefix}/vehicle-fleet`,
         },
+        {
+          icon: <Briefcase size={22} />,
+          label: "Pooling",
+          path: `${routePrefix}/pooling-vehicles`,
+        },
         ...(busEnabled
           ? [
               {

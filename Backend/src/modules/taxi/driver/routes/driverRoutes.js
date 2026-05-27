@@ -15,7 +15,9 @@ import {
   createServiceCenterVehicle,
   captureServiceCenterBookingFingerprint,
   createOwnerFleetDriver,
+  createOwnerPoolingVehicle,
   updateOwnerFleetDriver,
+  updateOwnerPoolingVehicle,
   updateOwnerFleetVehicle,
   deleteServiceCenterBookingFingerprint,
   deleteCurrentDriverAccount,
@@ -50,6 +52,7 @@ import {
   getServiceCenterStaffMembers,
   getServiceCenterVehicles,
   listOwnerBusServices,
+  getOwnerPoolingVehicles,
   saveDriverFcmToken,
   getOwnerFleetDrivers,
   getOwnerFleetDashboard,
@@ -83,6 +86,7 @@ import {
   verifyDriverLoginOtpRequest,
   addOwnerVehicle,
   deleteOwnerBusService,
+  deleteOwnerPoolingVehicle,
   getOwnerFleetVehicles,
   deleteOwnerFleetVehicle,
   updateCurrentDriverDocument,
@@ -353,6 +357,26 @@ driverRouter.delete(
   "/fleet/vehicles/:vehicleId",
   authenticate(["driver", "owner"]),
   asyncHandler(deleteOwnerFleetVehicle),
+);
+driverRouter.get(
+  "/fleet/pooling-vehicles",
+  authenticate(["owner"]),
+  asyncHandler(getOwnerPoolingVehicles),
+);
+driverRouter.post(
+  "/fleet/pooling-vehicles",
+  authenticate(["owner"]),
+  asyncHandler(createOwnerPoolingVehicle),
+);
+driverRouter.patch(
+  "/fleet/pooling-vehicles/:vehicleId",
+  authenticate(["owner"]),
+  asyncHandler(updateOwnerPoolingVehicle),
+);
+driverRouter.delete(
+  "/fleet/pooling-vehicles/:vehicleId",
+  authenticate(["owner"]),
+  asyncHandler(deleteOwnerPoolingVehicle),
 );
 driverRouter.get(
   "/service-center/staff",

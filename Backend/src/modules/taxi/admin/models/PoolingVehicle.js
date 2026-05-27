@@ -2,6 +2,12 @@ import mongoose from 'mongoose';
 
 const poolingVehicleSchema = new mongoose.Schema(
   {
+    ownerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Owner',
+      default: null,
+      index: true,
+    },
     name: {
       type: String,
       required: true,
@@ -17,6 +23,16 @@ const poolingVehicleSchema = new mongoose.Schema(
       required: true,
       unique: true,
       trim: true,
+    },
+    driverName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    driverPhone: {
+      type: String,
+      trim: true,
+      default: '',
     },
     color: {
       type: String,
