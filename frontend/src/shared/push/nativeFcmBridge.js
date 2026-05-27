@@ -230,6 +230,7 @@ export const installNativeFcmBridge = () => {
 
   window.addEventListener('focus', retryPending);
   window.addEventListener('pageshow', retryPending);
+  window.addEventListener('app:auth-ready', retryPending);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       retryPending();

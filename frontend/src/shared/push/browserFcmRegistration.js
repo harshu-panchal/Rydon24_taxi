@@ -179,6 +179,7 @@ export const installBrowserFcmRegistration = () => {
 
   window.addEventListener('focus', retryPassiveRegistration);
   window.addEventListener('pageshow', retryPassiveRegistration);
+  window.addEventListener('app:auth-ready', retryPassiveRegistration);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       retryPassiveRegistration();

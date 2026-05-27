@@ -17,6 +17,16 @@ const syncPushTokens = () => {
   window.__registerBrowserFcmToken?.({ interactive: true }).catch?.(() => {});
 };
 
+const notifyAuthReady = () => {
+  window.dispatchEvent(new CustomEvent('app:auth-ready', {
+    detail: {
+      role: 'user',
+      hasToken: true,
+      source: 'user',
+    },
+  }));
+};
+
 const VerifyOTP = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -103,6 +113,7 @@ const VerifyOTP = () => {
         localStorage.setItem('userToken', payload.token || '');
         localStorage.setItem('role', 'user');
         localStorage.setItem('userInfo', JSON.stringify(payload.user || {}));
+        notifyAuthReady();
         syncPushTokens();
         sessionStorage.removeItem(PENDING_OTP_PHONE_KEY);
         setTimeout(() => navigate('/taxi/user', { replace: true }), 1000);

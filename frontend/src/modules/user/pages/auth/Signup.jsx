@@ -20,6 +20,16 @@ const syncPushTokens = () => {
   window.__registerBrowserFcmToken?.({ interactive: true }).catch?.(() => {});
 };
 
+const notifyAuthReady = () => {
+  window.dispatchEvent(new CustomEvent('app:auth-ready', {
+    detail: {
+      role: 'user',
+      hasToken: true,
+      source: 'user',
+    },
+  }));
+};
+
 const Signup = () => {
   const location = useLocation();
   const { settings } = useSettings();
@@ -295,6 +305,7 @@ const Signup = () => {
       localStorage.setItem('userToken', payload.token || '');
       localStorage.setItem('role', 'user');
       localStorage.setItem('userInfo', JSON.stringify(payload.user || {}));
+      notifyAuthReady();
       syncPushTokens();
       sessionStorage.removeItem(PENDING_SIGNUP_PHONE_KEY);
       sessionStorage.removeItem(PENDING_SIGNUP_REFERRAL_CODE_KEY);

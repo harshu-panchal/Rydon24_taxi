@@ -114,6 +114,16 @@ export const persistDriverAuthSession = ({ token = "", role = "driver" } = {}) =
   localStorage.setItem("role", normalizedRole);
   localStorage.setItem("driverRole", normalizedRole);
   localStorage.setItem("chatRole", chatRole);
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("app:auth-ready", {
+      detail: {
+        role: normalizedRole,
+        hasToken: Boolean(token || readLocalDriverToken()),
+        source: "driver",
+      },
+    }));
+  }
 };
 
 export const normalizeDriverPortalRole = (role) => {
