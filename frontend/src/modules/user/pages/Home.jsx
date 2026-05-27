@@ -270,15 +270,15 @@ const Home = () => {
     let cancelled = false;
     const scheduleDeferredSections = window.requestIdleCallback
       ? window.requestIdleCallback(() => {
-          if (!cancelled) {
-            setShowDeferredSections(true);
-          }
-        }, { timeout: DEFERRED_SECTION_DELAY_MS })
+        if (!cancelled) {
+          setShowDeferredSections(true);
+        }
+      }, { timeout: DEFERRED_SECTION_DELAY_MS })
       : window.setTimeout(() => {
-          if (!cancelled) {
-            setShowDeferredSections(true);
-          }
-        }, DEFERRED_SECTION_DELAY_MS);
+        if (!cancelled) {
+          setShowDeferredSections(true);
+        }
+      }, DEFERRED_SECTION_DELAY_MS);
 
     return () => {
       cancelled = true;
@@ -372,41 +372,41 @@ const Home = () => {
           }
         }
 
-      try {
-        const rentalResponse = await userService.getActiveRentalBooking();
-        const rentalRide = rentalResponse?.id ? rentalResponse : (rentalResponse?.data || null);
+        try {
+          const rentalResponse = await userService.getActiveRentalBooking();
+          const rentalRide = rentalResponse?.id ? rentalResponse : (rentalResponse?.data || null);
 
-        if (rentalRide?.id) {
-          const status = String(rentalRide.status || '').toLowerCase();
-          const isTerminal = ['completed', 'cancelled', 'delivered'].includes(status);
+          if (rentalRide?.id) {
+            const status = String(rentalRide.status || '').toLowerCase();
+            const isTerminal = ['completed', 'cancelled', 'delivered'].includes(status);
 
-          if (isTerminal) {
+            if (isTerminal) {
+              if (cancelled) return;
+              clearCurrentRide();
+              currentRideRef.current = null;
+              return;
+            }
+
             if (cancelled) return;
-            clearCurrentRide();
-            currentRideRef.current = null;
+            const previousRentalRide = currentRideRef.current && String(currentRideRef.current.serviceType || '').toLowerCase() === 'rental'
+              ? currentRideRef.current
+              : {};
+            const nextRentalRide = normalizeRentalCurrentRideSnapshot({
+              ...rentalRide,
+              pickup: rentalRide.serviceLocation?.name || rentalRide.serviceLocation?.address || 'Rental pickup',
+              drop: rentalRide.assignedVehicle?.name || rentalRide.vehicleName || 'Assigned vehicle',
+            }, previousRentalRide);
+            persistCurrentRide(nextRentalRide);
+            currentRideRef.current = nextRentalRide;
             return;
           }
-
-          if (cancelled) return;
-          const previousRentalRide = currentRideRef.current && String(currentRideRef.current.serviceType || '').toLowerCase() === 'rental'
-            ? currentRideRef.current
-            : {};
-          const nextRentalRide = normalizeRentalCurrentRideSnapshot({
-            ...rentalRide,
-            pickup: rentalRide.serviceLocation?.name || rentalRide.serviceLocation?.address || 'Rental pickup',
-            drop: rentalRide.assignedVehicle?.name || rentalRide.vehicleName || 'Assigned vehicle',
-          }, previousRentalRide);
-          persistCurrentRide(nextRentalRide);
-          currentRideRef.current = nextRentalRide;
-          return;
+        } catch (error) {
+          const status = Number(error?.response?.status || 0);
+          if (status !== 404) {
+            // Keep the previous card on transient failures, but don't block normal cleanup on 404/not found.
+            return;
+          }
         }
-      } catch (error) {
-        const status = Number(error?.response?.status || 0);
-        if (status !== 404) {
-          // Keep the previous card on transient failures, but don't block normal cleanup on 404/not found.
-          return;
-        }
-      }
 
         if (cancelled) return;
         persistCurrentRide(null);
@@ -465,12 +465,12 @@ const Home = () => {
       : rideStage === 'started'
         ? serviceType === 'parcel' ? 'Parcel in transit' : 'Ride in progress'
         : rideStage === 'arrived'
-        ? serviceType === 'parcel' ? 'Parcel reached destination' : `${driverName} reached destination`
-        : rideStage === 'arriving'
-        ? serviceType === 'parcel' ? `${driverName} reached sender` : `${driverName} has arrived`
-        : serviceType === 'parcel'
-          ? 'Parcel booked'
-          : 'Ride booked';
+          ? serviceType === 'parcel' ? 'Parcel reached destination' : `${driverName} reached destination`
+          : rideStage === 'arriving'
+            ? serviceType === 'parcel' ? `${driverName} reached sender` : `${driverName} has arrived`
+            : serviceType === 'parcel'
+              ? 'Parcel booked'
+              : 'Ride booked';
   const rideStageContextLabel = isScheduledAcceptedRide
     ? 'Driver assigned for your scheduled trip'
     : rideStageLabel;
@@ -525,14 +525,14 @@ const Home = () => {
   const footerIllustrationBg = {
     backgroundImage: `url(${indiaGateRealImg})`,
     backgroundRepeat: 'no-repeat',
-    backgroundPosition: 'center calc(100% + 65px)',
+    backgroundPosition: 'center bottom',
     backgroundSize: 'cover',
   };
   const footerIllustrationFadeMask = {
     WebkitMaskImage:
-      'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 22%, rgba(0,0,0,1) 88%, rgba(0,0,0,0) 100%)',
+      'linear-gradient(to bottom, rgba(0,0,0,0.04) 0%, rgba(0,0,0,0.2) 20%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0.85) 70%, rgba(0,0,0,1) 85%, rgba(0,0,0,0) 100%)',
     maskImage:
-      'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 22%, rgba(0,0,0,1) 88%, rgba(0,0,0,0) 100%)',
+      'linear-gradient(to bottom, rgba(0,0,0,0.04) 0%, rgba(0,0,0,0.2) 20%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0.85) 70%, rgba(0,0,0,1) 85%, rgba(0,0,0,0) 100%)',
     WebkitMaskRepeat: 'no-repeat',
     maskRepeat: 'no-repeat',
     WebkitMaskSize: '100% 100%',
@@ -628,20 +628,20 @@ const Home = () => {
             </div>
           </motion.button>
         )}
-        
+
         {/* Active Rental Dashboard - Only visible during active rentals */}
         {serviceType === 'rental' && (() => {
           const rentalH = Math.floor(rentalElapsedSeconds / 3600);
           const rentalM = Math.floor((rentalElapsedSeconds % 3600) / 60);
           const rentalS = rentalElapsedSeconds % 60;
-          
+
           const includedHours = Math.max(
             Number(currentRide?.includedHours || 0),
             Number(currentRide?.selectedPackage?.durationHours || 0),
             Number(currentRide?.requestedHours || 0) > 0 && Number(currentRide?.extraHourRate || 0) <= 0 ? Number(currentRide.requestedHours) : 0,
             1,
           );
-          
+
           const packageName = currentRide?.selectedPackage?.name || `${includedHours} hrs Package`;
           const isExtraTime = (rentalElapsedSeconds / 3600) > includedHours;
           const progressPercentage = Math.min(100, ((rentalElapsedSeconds / 3600) / includedHours) * 100);
@@ -678,16 +678,16 @@ const Home = () => {
                 <div className="grid grid-cols-12 gap-3 items-center">
                   {/* Left Side: Vehicle Pedestal */}
                   <div className="col-span-5 flex flex-col items-center">
-                    <motion.div 
+                    <motion.div
                       animate={{ y: [0, -4, 0] }}
                       transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
                       className="relative h-20 w-full rounded-2xl bg-gradient-to-b from-slate-50 to-slate-100/80 border border-slate-200/40 flex items-center justify-center p-2 shadow-inner overflow-hidden group"
                     >
                       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(244,63,94,0.05)_0%,transparent_70%)]" />
-                      <img 
-                        src={currentRideIcon} 
-                        alt="" 
-                        className="h-full w-full object-contain scale-110 relative z-10 transition-transform duration-300 group-hover:scale-125" 
+                      <img
+                        src={currentRideIcon}
+                        alt=""
+                        className="h-full w-full object-contain scale-110 relative z-10 transition-transform duration-300 group-hover:scale-125"
                       />
                     </motion.div>
                     <p className="mt-2 text-center text-[11px] font-bold text-slate-800 truncate w-full">
@@ -699,7 +699,7 @@ const Home = () => {
                   <div className="col-span-7 pl-2 flex flex-col justify-center space-y-2">
                     <div className="space-y-1">
                       <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-400">Duration Elapsed</p>
-                      
+
                       {/* Premium stopwatch display */}
                       <div className="flex items-center gap-1">
                         <div className="flex flex-col items-center">
@@ -734,7 +734,7 @@ const Home = () => {
                         </span>
                       </div>
                       <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200/30">
-                        <motion.div 
+                        <motion.div
                           className={`h-full rounded-full ${isExtraTime ? 'bg-gradient-to-r from-orange-500 to-rose-500' : 'bg-gradient-to-r from-emerald-400 to-teal-500'}`}
                           initial={{ width: 0 }}
                           animate={{ width: `${progressPercentage}%` }}
@@ -815,7 +815,7 @@ const Home = () => {
           }}
         >
           <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-white via-white/40 to-transparent" />
+            <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-[#EEF2F7]/20 via-[#EEF2F7]/5 to-transparent" />
             <div className="relative z-10 flex h-full items-start justify-center px-6 pt-10 text-left">
               <div className="flex max-w-[340px] flex-col items-start px-2 py-2 -translate-x-4">
                 <div className="text-[48px] font-semibold tracking-[-0.03em] text-[#FFB300] drop-shadow-[0_10px_30px_rgba(255,179,0,0.4)] leading-none">
