@@ -98,9 +98,9 @@ const saveTokenForRole = async (role, token) => {
   await userAuthService.saveFcmToken(token, platform);
 };
 
-const shouldSkipRegistration = (role, token) => {
+const shouldSkipRegistration = (role, token, platform) => {
   const stored = getStoredRegistration();
-  return stored?.role === role && stored?.token === token;
+  return stored?.role === role && stored?.token === token && stored?.platform === platform;
 };
 
 const registerBrowserFcmToken = async ({ interactive = false } = {}) => {
@@ -153,9 +153,9 @@ const registerBrowserFcmToken = async ({ interactive = false } = {}) => {
     return { ok: false, reason: 'missing-token' };
   }
 
-  const rolesToSave = roles.filter((role) => !shouldSkipRegistration(role, token));
-  await Promise.all(rolesToSave.map((role) => saveTokenForRole(role, token)));
   const platform = getPushPlatform();
+  const rolesToSave = roles.filter((role) => !shouldSkipRegistration(role, token, platform));
+  await Promise.all(rolesToSave.map((role) => saveTokenForRole(role, token)));
 
   roles.forEach((role) => {
     persistRegistration({ role, token, platform });
