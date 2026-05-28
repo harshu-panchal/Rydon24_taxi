@@ -13,6 +13,35 @@ const notifyCurrentRideChange = () => {
   window.dispatchEvent(new Event(CURRENT_RIDE_UPDATED_EVENT));
 };
 
+const buildComparableRideSnapshot = (ride = null) => {
+  if (!ride?.rideId) {
+    return null;
+  }
+
+  return {
+    rideId: ride.rideId,
+    status: ride.status || '',
+    liveStatus: ride.liveStatus || '',
+    serviceType: ride.serviceType || ride.type || '',
+    pickup: ride.pickup || '',
+    drop: ride.drop || '',
+    fare: Number(ride.fare || 0),
+    updatedAt: ride.updatedAt || '',
+    scheduledAt: ride.scheduledAt || '',
+    assignedAt: ride.assignedAt || '',
+    driverId: ride.driver?._id || ride.driver?.id || '',
+    driverName: ride.driver?.name || '',
+    vehicleIconUrl: ride.vehicleIconUrl || ride.vehicle?.vehicleIconUrl || '',
+    finalCharge: Number(ride.finalCharge || 0),
+    finalElapsedMinutes: Number(ride.finalElapsedMinutes || 0),
+  };
+};
+
+export const getCurrentRideSignature = (ride = null) => {
+  const snapshot = buildComparableRideSnapshot(ride);
+  return snapshot ? JSON.stringify(snapshot) : '';
+};
+
 export const getCurrentRide = () => {
   if (typeof window === 'undefined') {
     return null;
@@ -53,12 +82,21 @@ export const saveCurrentRide = (ride) => {
     updatedAt: Date.now(),
   };
 
+  const previousRide = getCurrentRide();
+  if (getCurrentRideSignature(previousRide) === getCurrentRideSignature(nextRide)) {
+    return;
+  }
+
   window.localStorage.setItem(CURRENT_RIDE_STORAGE_KEY, JSON.stringify(nextRide));
   notifyCurrentRideChange();
 };
 
 export const clearCurrentRide = () => {
   if (typeof window === 'undefined') {
+    return;
+  }
+
+  if (!window.localStorage.getItem(CURRENT_RIDE_STORAGE_KEY)) {
     return;
   }
 

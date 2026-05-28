@@ -207,6 +207,7 @@ driverRouter.post(
   authenticate([
     "driver",
     "owner",
+    "pooling_driver",
     "bus_driver",
     "service_center",
     "service_center_staff",

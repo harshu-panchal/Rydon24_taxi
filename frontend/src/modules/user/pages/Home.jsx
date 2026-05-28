@@ -21,15 +21,17 @@ import { userService } from '../services/userService';
 import {
   CURRENT_RIDE_UPDATED_EVENT,
   getCurrentRide,
+  getCurrentRideSignature,
   isActiveCurrentRide,
   saveCurrentRide,
   clearCurrentRide,
 } from '../services/currentRideService';
 
 const Motion = motion;
-const ACTIVE_RIDE_SYNC_INTERVAL_MS = 12000;
-const IDLE_RIDE_SYNC_INTERVAL_MS = 30000;
+const ACTIVE_RIDE_SYNC_INTERVAL_MS = 15000;
+const IDLE_RIDE_SYNC_INTERVALS_MS = [60000, 120000, 180000];
 const DEFERRED_SECTION_DELAY_MS = 250;
+const FORCED_SYNC_COOLDOWN_MS = 10000;
 
 const getCurrentRideIcon = (ride) => {
   const customIcon = String(
@@ -202,9 +204,19 @@ const Home = () => {
   const [showDeferredSections, setShowDeferredSections] = useState(false);
   const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
   const currentRideRef = useRef(currentRide);
+  const lastSyncAtRef = useRef(0);
+  const consecutiveIdleMissesRef = useRef(0);
+  const lastRideSignatureRef = useRef(getCurrentRideSignature(currentRide));
 
   const persistCurrentRide = (ride) => {
     const normalizedRide = isActiveCurrentRide(ride) ? ride : null;
+    const nextSignature = getCurrentRideSignature(normalizedRide);
+
+    if (lastRideSignatureRef.current === nextSignature) {
+      return;
+    }
+
+    lastRideSignatureRef.current = nextSignature;
     setCurrentRide(normalizedRide);
 
     if (normalizedRide) {
@@ -216,6 +228,7 @@ const Home = () => {
 
   useEffect(() => {
     currentRideRef.current = currentRide;
+    lastRideSignatureRef.current = getCurrentRideSignature(currentRide);
   }, [currentRide]);
 
   const handleEndRide = async () => {
@@ -296,10 +309,14 @@ const Home = () => {
       const ride = getCurrentRide();
       if (String(ride?.serviceType || '').toLowerCase() === 'rental') {
         const normalizedRentalRide = normalizeRentalCurrentRideSnapshot(ride, currentRideRef.current || {});
-        setCurrentRide(isActiveCurrentRide(normalizedRentalRide) ? normalizedRentalRide : null);
+        const nextRide = isActiveCurrentRide(normalizedRentalRide) ? normalizedRentalRide : null;
+        lastRideSignatureRef.current = getCurrentRideSignature(nextRide);
+        setCurrentRide(nextRide);
         return;
       }
-      setCurrentRide(isActiveCurrentRide(ride) ? ride : null);
+      const nextRide = isActiveCurrentRide(ride) ? ride : null;
+      lastRideSignatureRef.current = getCurrentRideSignature(nextRide);
+      setCurrentRide(nextRide);
     };
 
     refreshCurrentRide();
@@ -315,20 +332,38 @@ const Home = () => {
         return;
       }
 
-      const nextInterval = currentRideRef.current ? ACTIVE_RIDE_SYNC_INTERVAL_MS : IDLE_RIDE_SYNC_INTERVAL_MS;
+      const nextInterval = currentRideRef.current
+        ? ACTIVE_RIDE_SYNC_INTERVAL_MS
+        : IDLE_RIDE_SYNC_INTERVALS_MS[Math.min(consecutiveIdleMissesRef.current, IDLE_RIDE_SYNC_INTERVALS_MS.length - 1)];
       syncTimer = window.setTimeout(() => {
         syncCurrentRide();
       }, nextInterval);
     };
 
-    const syncCurrentRide = async () => {
+    const syncCurrentRide = async (reason = 'timer') => {
       if (cancelled || syncInFlight || document.visibilityState === 'hidden') {
         scheduleNextSync();
         return;
       }
 
+      if (
+        reason !== 'timer' &&
+        Date.now() - lastSyncAtRef.current < FORCED_SYNC_COOLDOWN_MS
+      ) {
+        return;
+      }
+
       syncInFlight = true;
+      lastSyncAtRef.current = Date.now();
       try {
+        const token = localStorage.getItem('userToken') || localStorage.getItem('token');
+        if (!token) {
+          persistCurrentRide(null);
+          currentRideRef.current = null;
+          consecutiveIdleMissesRef.current = 0;
+          return;
+        }
+
         let rideData = null;
 
         try {
@@ -366,6 +401,7 @@ const Home = () => {
           };
           if (isActiveCurrentRide(normalizedRide)) {
             if (cancelled) return;
+            consecutiveIdleMissesRef.current = 0;
             persistCurrentRide(normalizedRide);
             currentRideRef.current = normalizedRide;
             return;
@@ -382,12 +418,17 @@ const Home = () => {
 
             if (isTerminal) {
               if (cancelled) return;
+              consecutiveIdleMissesRef.current = Math.min(
+                consecutiveIdleMissesRef.current + 1,
+                IDLE_RIDE_SYNC_INTERVALS_MS.length - 1,
+              );
               clearCurrentRide();
               currentRideRef.current = null;
               return;
             }
 
             if (cancelled) return;
+            consecutiveIdleMissesRef.current = 0;
             const previousRentalRide = currentRideRef.current && String(currentRideRef.current.serviceType || '').toLowerCase() === 'rental'
               ? currentRideRef.current
               : {};
@@ -409,6 +450,10 @@ const Home = () => {
         }
 
         if (cancelled) return;
+        consecutiveIdleMissesRef.current = Math.min(
+          consecutiveIdleMissesRef.current + 1,
+          IDLE_RIDE_SYNC_INTERVALS_MS.length - 1,
+        );
         persistCurrentRide(null);
         currentRideRef.current = null;
       } finally {
@@ -419,11 +464,11 @@ const Home = () => {
 
     const handleWindowFocus = () => {
       if (document.visibilityState !== 'hidden') {
-        syncCurrentRide();
+        syncCurrentRide('focus');
       }
     };
 
-    syncCurrentRide();
+    syncCurrentRide('mount');
     window.addEventListener('focus', handleWindowFocus);
     document.addEventListener('visibilitychange', handleWindowFocus);
 

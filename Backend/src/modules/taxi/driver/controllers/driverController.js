@@ -3083,6 +3083,7 @@ export const cancelDriverScheduledRide = async (req, res) => {
 const DRIVER_PUSH_ROLE_MODEL_MAP = {
   driver: Driver,
   owner: Owner,
+  pooling_driver: PoolingVehicle,
   bus_driver: BusDriver,
   service_center: ServiceStore,
   service_center_staff: ServiceCenterStaff,

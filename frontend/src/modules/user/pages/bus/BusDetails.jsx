@@ -66,7 +66,7 @@ const BusDetails = () => {
       }
     })();
 
-    const applyProfile = (profile = {}) => {
+    const applyProfile = (profile = {}, mode = travellerMode) => {
       if (!active) {
         return;
       }
@@ -79,14 +79,14 @@ const BusDetails = () => {
 
       setProfileData(nextProfile);
 
-      if (travellerMode === 'self') {
+      if (mode === 'self') {
         setName(nextProfile.name || '');
         setEmail(nextProfile.email || '');
         setPhone(nextProfile.phone || '');
       }
     };
 
-    applyProfile(storedProfile);
+    applyProfile(storedProfile, travellerMode);
 
     const loadProfile = async () => {
       try {
@@ -102,9 +102,9 @@ const BusDetails = () => {
           ...storedProfile,
           ...user,
         }));
-        applyProfile(normalizedUser);
+        applyProfile(normalizedUser, travellerMode);
       } catch {
-        applyProfile(storedProfile);
+        applyProfile(storedProfile, travellerMode);
       } finally {
         if (active) {
           setProfileLoading(false);
@@ -117,7 +117,15 @@ const BusDetails = () => {
     return () => {
       active = false;
     };
-  }, [travellerMode]);
+  }, []);
+
+  useEffect(() => {
+    if (travellerMode === 'self' && profileData) {
+      setName(profileData.name || '');
+      setEmail(profileData.email || '');
+      setPhone(profileData.phone || '');
+    }
+  }, [travellerMode, profileData]);
 
   const applySelfProfile = () => {
     setTravellerMode('self');
