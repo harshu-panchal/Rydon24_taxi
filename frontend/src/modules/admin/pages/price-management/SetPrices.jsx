@@ -35,6 +35,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { API_BASE_URL } from '../../../../shared/api/runtimeConfig';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTaxiTransportTypes } from '../../../../shared/hooks/useTaxiTransportTypes';
+import { adminService } from '../../services/adminService';
 
 const inputClass = "w-full border border-gray-200 rounded-md px-4 py-3 text-sm text-gray-800 bg-white focus:border-indigo-500 transition-all outline-none";
 const labelClass = "block text-[13px] font-semibold text-gray-700 mb-2.5";
@@ -135,7 +136,6 @@ const SetPrices = ({ mode }) => {
   const editingId = id || null;
 
   const [prizes, setPrizes] = useState([]);
-  const [prizesFull, setPrizesFull] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -184,9 +184,46 @@ const SetPrices = ({ mode }) => {
   }, [id]);
 
   useEffect(() => {
-    if (mode === 'edit' && id && prizesFull.length > 0) {
-      const pData = prizesFull.find(d => (String(d._id || '') === String(id) || String(d.id || '') === String(id)));
-      if (pData) {
+    if (mode === 'create') {
+      setFormData({ ...initialFormState });
+    }
+  }, [mode]);
+
+  const fetchInitialData = async () => {
+    setLoading(true);
+    try {
+      const auth = { 'Authorization': `Bearer ${token}` };
+      const requests = [
+        fetch(`${baseUrl}/zones`, { headers: auth }),
+        fetch(`${baseUrl}/types/vehicle-types`, { headers: auth }),
+      ];
+
+      if (view === 'list') {
+        requests.unshift(fetch(`${baseUrl}/types/set-prices?scope=ride`, { headers: auth }));
+      }
+
+      const responses = await Promise.all(requests);
+      const payloads = await Promise.all(responses.map((response) => response.json()));
+
+      const [prizesData, zonesData, vehiclesData] = view === 'list'
+        ? payloads
+        : [null, payloads[0], payloads[1]];
+
+      if (prizesData?.success) {
+        const items = prizesData.results || prizesData.data?.results || [];
+        setPrizes(items);
+      }
+      
+      const zItems = zonesData.results || zonesData.data?.zones || JSON.parse(JSON.stringify(zonesData.data?.results || []));
+      setZones(Array.isArray(zItems) ? zItems : []);
+      
+      const vItems = vehiclesData.results || vehiclesData.data?.vehicle_types || JSON.parse(JSON.stringify(vehiclesData.data?.results || []));
+      setVehicleTypes(Array.isArray(vItems) ? vItems : []);
+
+      if (mode === 'edit' && editingId) {
+        const detailResponse = await adminService.getSetPriceById(editingId);
+        const pData = detailResponse?.data?.data || detailResponse?.data || {};
+
         setFormData({
           ...initialFormState,
           ...pData,
@@ -205,37 +242,6 @@ const SetPrices = ({ mode }) => {
           driver_cancellation_fee_type: pData.driver_cancellation_fee_type || 'percentage',
         });
       }
-    } else if (mode === 'create') {
-      setFormData({ ...initialFormState });
-    }
-  }, [mode, id, prizesFull]);
-
-  const fetchInitialData = async () => {
-    setLoading(true);
-    try {
-      const auth = { 'Authorization': `Bearer ${token}` };
-      const [prizesRes, zonesRes, vehiclesRes] = await Promise.all([
-        fetch(`${baseUrl}/types/set-prices?scope=ride`, { headers: auth }),
-        fetch(`${baseUrl}/zones`, { headers: auth }),
-        fetch(`${baseUrl}/types/vehicle-types`, { headers: auth })
-      ]);
-
-      const [prizesData, zonesData, vehiclesData] = await Promise.all([
-        prizesRes.json(), zonesRes.json(), vehiclesRes.json()
-      ]);
-
-      if (prizesData.success) {
-        const items = prizesData.results || prizesData.data?.results || [];
-        const fullItems = prizesData.paginator?.data || items || [];
-        setPrizes(items);
-        setPrizesFull(fullItems);
-      }
-      
-      const zItems = zonesData.results || zonesData.data?.zones || JSON.parse(JSON.stringify(zonesData.data?.results || []));
-      setZones(Array.isArray(zItems) ? zItems : []);
-      
-      const vItems = vehiclesData.results || vehiclesData.data?.vehicle_types || JSON.parse(JSON.stringify(vehiclesData.data?.results || []));
-      setVehicleTypes(Array.isArray(vItems) ? vItems : []);
       
     } catch (error) { 
       console.error("Fetch Data Error:", error);

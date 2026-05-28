@@ -123,6 +123,7 @@ import {
   getReferralSettings,
   updateReferralSettings,
   getReferralDashboard,
+  getSetPriceById,
   getSetPrices,
   getServiceLocations,
   getServiceStores,
@@ -314,6 +315,7 @@ adminRouter.post('/admin/types/vehicle-types', createVehicleType);
 adminRouter.patch('/admin/types/vehicle-types/:id', updateVehicleType);
 adminRouter.delete('/admin/types/vehicle-types/:id', deleteVehicleType);
 adminRouter.get('/admin/types/set-prices', getSetPrices);
+adminRouter.get('/admin/types/set-prices/:id', getSetPriceById);
 adminRouter.post('/admin/types/set-prices', createSetPrice);
 adminRouter.patch('/admin/types/set-prices/:id', updateSetPrice);
 adminRouter.delete('/admin/types/set-prices/:id', deleteSetPrice);

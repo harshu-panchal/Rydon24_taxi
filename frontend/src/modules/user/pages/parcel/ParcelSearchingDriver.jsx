@@ -287,6 +287,31 @@ const findVehiclesByIds = (types = [], vehicleIds = []) => {
   return types.filter((type) => wantedIds.has(String(type?._id || type?.id || '')));
 };
 
+const formatParcelFareLabel = (estimatedFare, fallbackFare) => {
+  const minFare = Number(estimatedFare?.min);
+  const maxFare = Number(estimatedFare?.max);
+  const approxFare = Number(estimatedFare?.approx);
+  const singleFare = Number(fallbackFare);
+
+  if (Number.isFinite(minFare) && Number.isFinite(maxFare) && maxFare > minFare) {
+    return `Rs ${Math.round(minFare)} - Rs ${Math.round(maxFare)}`;
+  }
+
+  if (Number.isFinite(approxFare)) {
+    return `Rs ${Math.round(approxFare)}`;
+  }
+
+  if (Number.isFinite(minFare)) {
+    return `Rs ${Math.round(minFare)}`;
+  }
+
+  if (Number.isFinite(singleFare)) {
+    return `Rs ${Math.round(singleFare)}`;
+  }
+
+  return '--';
+};
+
 const isVehicleCompatibleWithGoodsType = (vehicle, goodsTypeFor = '') => {
   const allowedLabels = String(goodsTypeFor || 'both')
     .split(',')
@@ -368,6 +393,18 @@ const ParcelSearchingDriver = () => {
     () => buildAvailableVehicleMarkers(pickupPos, nearbyVehicleCount),
     [nearbyVehicleCount, pickupPos],
   );
+  const expectedFareLabel = useMemo(
+    () => formatParcelFareLabel(routeState.estimatedFare, routeState.fare),
+    [routeState.estimatedFare, routeState.fare],
+  );
+  const expectedFareMeta = useMemo(() => {
+    const distanceKm = Number(routeState.estimatedDistanceKm);
+    if (Number.isFinite(distanceKm) && distanceKm > 0) {
+      return `Estimated for about ${distanceKm.toFixed(1)} km`;
+    }
+
+    return 'Based on the current parcel route';
+  }, [routeState.estimatedDistanceKm]);
 
   useEffect(() => {
     driverRef.current = driver;
@@ -876,6 +913,12 @@ const ParcelSearchingDriver = () => {
               <div className="text-center space-y-1.5">
                 <h1 className="text-[22px] font-extrabold text-slate-950 tracking-tight">Finding your delivery captain</h1>
                 <p className="text-[13px] font-semibold text-slate-400 max-w-[260px] mx-auto leading-normal">{searchStatus}</p>
+              </div>
+
+              <div className="rounded-[24px] border border-orange-100 bg-gradient-to-r from-orange-50 via-white to-amber-50 px-5 py-4 text-center">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-500">Expected Price</p>
+                <p className="mt-1 text-[24px] font-extrabold tracking-tight text-slate-950">{expectedFareLabel}</p>
+                <p className="mt-1 text-[11px] font-semibold text-slate-400">{expectedFareMeta}</p>
               </div>
 
               <div className="flex justify-center gap-2.5 py-1">

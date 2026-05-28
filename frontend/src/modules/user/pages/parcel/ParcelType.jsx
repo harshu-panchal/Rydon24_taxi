@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, 
@@ -9,6 +9,8 @@ import {
   Megaphone
 } from 'lucide-react';
 import api from '../../../../shared/api/axiosInstance';
+import { useAppGoogleMapsLoader } from '../../../admin/utils/googleMaps';
+import { getSavedLocation, getSavedLocationCoords, saveLocation } from '../../services/locationStore';
 
 import trucksImg from '@/assets/images/delivery/trucks.png';
 import bikeImg from '@/assets/images/delivery/bike.png';
@@ -16,6 +18,7 @@ import moversImg from '@/assets/images/delivery/movers.png';
 
 const Motion = motion;
 const PARCEL_BOOKING_DRAFT_KEY = 'parcelBookingDraft';
+const FALLBACK_PICKUP_LABEL = 'Choose your location';
 
 const DELIVERY_CATEGORY_OPTIONS = [
   {
@@ -39,10 +42,18 @@ const DELIVERY_CATEGORY_OPTIONS = [
 ];
 
 const ParcelType = () => {
+  const location = useLocation();
+  const routeState = location.state || {};
+  const savedLocation = getSavedLocation();
+  const savedPickupLabel = String(savedLocation?.address || '').trim();
+  const savedPickupCoords = getSavedLocationCoords();
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [pickupAddress, setPickupAddress] = useState('1A, Vandana Nagar Main Rd, Rajshri Palace Colon...');
+  const [pickupAddress, setPickupAddress] = useState(() => routeState.pickup || savedPickupLabel || FALLBACK_PICKUP_LABEL);
+  const [pickupCoords, setPickupCoords] = useState(() => routeState.pickupCoords || savedPickupCoords || null);
+  const geolocationRequestedRef = useRef(false);
   const navigate = useNavigate();
+  const { isLoaded: isGoogleMapsLoaded } = useAppGoogleMapsLoader();
 
   useEffect(() => {
     const fetchVehicles = async () => {
@@ -60,6 +71,86 @@ const ParcelType = () => {
 
     fetchVehicles();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      const draft = JSON.parse(window.sessionStorage.getItem(PARCEL_BOOKING_DRAFT_KEY) || '{}');
+
+      if (!routeState.pickup && !savedPickupLabel && draft?.pickup) {
+        setPickupAddress(String(draft.pickup || '').trim() || FALLBACK_PICKUP_LABEL);
+      }
+
+      if (!routeState.pickupCoords && !savedPickupCoords && Array.isArray(draft?.pickupCoords) && draft.pickupCoords.length === 2) {
+        setPickupCoords(draft.pickupCoords);
+      }
+    } catch {
+      // ignore invalid draft state
+    }
+  }, [routeState.pickup, routeState.pickupCoords, savedPickupCoords, savedPickupLabel]);
+
+  useEffect(() => {
+    if (geolocationRequestedRef.current || !navigator.geolocation) {
+      return;
+    }
+
+    geolocationRequestedRef.current = true;
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const nextCoords = [position.coords.longitude, position.coords.latitude];
+        setPickupCoords(nextCoords);
+        saveLocation({
+          lon: position.coords.longitude,
+          lat: position.coords.latitude,
+          updatedAt: Date.now(),
+        });
+      },
+      () => {
+        // keep saved or route-based location when geolocation fails
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!isGoogleMapsLoaded || !window.google?.maps?.Geocoder || !Array.isArray(pickupCoords) || pickupCoords.length !== 2) {
+      return;
+    }
+
+    let active = true;
+    const geocoder = new window.google.maps.Geocoder();
+    const [lng, lat] = pickupCoords;
+
+    geocoder.geocode({ location: { lat: Number(lat), lng: Number(lng) } }, (results, status) => {
+      if (!active) {
+        return;
+      }
+
+      const nextAddress = status === 'OK' && results?.[0]?.formatted_address
+        ? results[0].formatted_address
+        : '';
+
+      if (!nextAddress) {
+        return;
+      }
+
+      setPickupAddress(nextAddress);
+      saveLocation({
+        address: nextAddress,
+        lon: Number(lng),
+        lat: Number(lat),
+        updatedAt: Date.now(),
+      });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [isGoogleMapsLoaded, pickupCoords]);
 
   const handleCategorySelect = (category) => {
     const filteredVehicles = vehicleTypes.filter((vehicle) => {
@@ -90,6 +181,7 @@ const ParcelType = () => {
       category: category.id,
       deliveryCategory: category.id,
       pickup: pickupAddress,
+      pickupCoords,
     };
 
     if (typeof window !== 'undefined') {
@@ -118,8 +210,8 @@ const ParcelType = () => {
            <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-[24px] p-4 flex items-center gap-4 shadow-lg border border-white/50"
-            onClick={() => navigate('/taxi/user/parcel/details', { state: { editPickup: true } })}
+           className="bg-white rounded-[24px] p-4 flex items-center gap-4 shadow-lg border border-white/50"
+            onClick={() => navigate('/taxi/user/parcel/details', { state: { editPickup: true, pickup: pickupAddress, pickupCoords } })}
            >
              <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
                <MapPin size={20} className="text-emerald-500 fill-emerald-500/20" />

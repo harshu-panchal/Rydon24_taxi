@@ -219,6 +219,7 @@ export const adminService = {
   updateRentalPackageType: (id, data) => api.patch(`/admin/types/rental-packages/${id}`, data),
   deleteRentalPackageType: (id) => api.delete(`/admin/types/rental-packages/${id}`),
   getSetPrices: (params = {}) => api.get('/admin/types/set-prices', { params }),
+  getSetPriceById: (id) => api.get(`/admin/types/set-prices/${id}`),
   createSetPrice: (data) => api.post('/admin/types/set-prices', data),
   updateSetPrice: (id, data) => api.patch(`/admin/types/set-prices/${id}`, data),
   deleteSetPrice: (id) => api.delete(`/admin/types/set-prices/${id}`),

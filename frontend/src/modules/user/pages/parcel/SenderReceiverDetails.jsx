@@ -14,6 +14,7 @@ import {
   PackageCheck,
   Phone,
   Plus,
+  Search,
   User,
   X,
 } from 'lucide-react';
@@ -230,18 +231,33 @@ const MapPickerSheet = ({ open, title, confirmLabel, value, initialCoords, onClo
   const { isLoaded, loadError } = useAppGoogleMapsLoader();
   const [center, setCenter] = useState(coordPairToLatLng(initialCoords));
   const [selectedAddress, setSelectedAddress] = useState(value || formatCoordLabel(initialCoords));
+  const [customAddress, setCustomAddress] = useState(value || formatCoordLabel(initialCoords));
+  const [searchQuery, setSearchQuery] = useState(value || '');
+  const [searchSuggestions, setSearchSuggestions] = useState([]);
+  const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [isResolvingAddress, setIsResolvingAddress] = useState(false);
   const mapRef = useRef(null);
   const draggingRef = useRef(false);
   const geocodeTimerRef = useRef(null);
+  const suggestionTimerRef = useRef(null);
+  const autocompleteServiceRef = useRef(null);
+  const autocompleteSessionTokenRef = useRef(null);
+  const placesServiceRef = useRef(null);
+  const suggestionCacheRef = useRef(new Map());
+  const lastResolvedAddressRef = useRef(value || formatCoordLabel(initialCoords));
 
   useEffect(() => {
     if (!open) return undefined;
 
     const resetTimer = setTimeout(() => {
       setCenter(coordPairToLatLng(initialCoords));
-      setSelectedAddress(value || formatCoordLabel(initialCoords));
+      const nextValue = value || formatCoordLabel(initialCoords);
+      setSelectedAddress(nextValue);
+      setCustomAddress(nextValue);
+      setSearchQuery(nextValue);
+      setSearchSuggestions([]);
+      lastResolvedAddressRef.current = nextValue;
     }, 0);
 
     return () => clearTimeout(resetTimer);
@@ -259,16 +275,215 @@ const MapPickerSheet = ({ open, title, confirmLabel, value, initialCoords, onClo
         setIsResolvingAddress(false);
 
         if (status === 'OK' && results?.[0]?.formatted_address) {
-          setSelectedAddress(results[0].formatted_address);
+          const nextAddress = results[0].formatted_address;
+          const previousResolvedAddress = lastResolvedAddressRef.current;
+          lastResolvedAddressRef.current = nextAddress;
+          setSelectedAddress(nextAddress);
+          setCustomAddress((current) => {
+            const trimmedCurrent = String(current || '').trim();
+            if (!trimmedCurrent || trimmedCurrent === previousResolvedAddress || isCoordinateLabel(trimmedCurrent)) {
+              return nextAddress;
+            }
+            return current;
+          });
           return;
         }
 
-        setSelectedAddress(formatLatLngLabel(center));
+        const fallbackAddress = formatLatLngLabel(center);
+        const previousResolvedAddress = lastResolvedAddressRef.current;
+        lastResolvedAddressRef.current = fallbackAddress;
+        setSelectedAddress(fallbackAddress);
+        setCustomAddress((current) => {
+          const trimmedCurrent = String(current || '').trim();
+          if (!trimmedCurrent || trimmedCurrent === previousResolvedAddress || isCoordinateLabel(trimmedCurrent)) {
+            return fallbackAddress;
+          }
+          return current;
+        });
       });
     }, 450);
 
     return () => clearTimeout(geocodeTimerRef.current);
   }, [center, isLoaded, open]);
+
+  useEffect(() => {
+    if (!open) {
+      clearTimeout(suggestionTimerRef.current);
+      return undefined;
+    }
+
+    const trimmedQuery = String(searchQuery || '').trim();
+    clearTimeout(suggestionTimerRef.current);
+
+    if (!isLoaded || !window.google?.maps?.places?.AutocompleteService || trimmedQuery.length < 3) {
+      setSearchSuggestions([]);
+      setIsFetchingSuggestions(false);
+      return undefined;
+    }
+
+    const cacheKey = `${trimmedQuery.toLowerCase()}|${center.lat.toFixed(4)},${center.lng.toFixed(4)}`;
+    const cachedSuggestions = suggestionCacheRef.current.get(cacheKey);
+    if (cachedSuggestions) {
+      setSearchSuggestions(cachedSuggestions);
+      setIsFetchingSuggestions(false);
+      return undefined;
+    }
+
+    let active = true;
+    suggestionTimerRef.current = setTimeout(() => {
+      if (!autocompleteServiceRef.current) {
+        autocompleteServiceRef.current = new window.google.maps.places.AutocompleteService();
+      }
+
+      if (!autocompleteSessionTokenRef.current && window.google?.maps?.places?.AutocompleteSessionToken) {
+        autocompleteSessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken();
+      }
+
+      setIsFetchingSuggestions(true);
+      const request = {
+        input: trimmedQuery,
+        componentRestrictions: { country: 'in' },
+        sessionToken: autocompleteSessionTokenRef.current || undefined,
+      };
+
+      if (window.google?.maps?.Circle) {
+        request.locationBias = new window.google.maps.Circle({
+          center,
+          radius: 10000,
+        });
+      }
+
+      autocompleteServiceRef.current.getPlacePredictions(request, (predictions = [], status) => {
+        if (!active) {
+          return;
+        }
+
+        const normalizedSuggestions =
+          status === 'OK'
+            ? predictions.slice(0, 5).map((prediction) => ({
+                id: prediction.place_id || prediction.description,
+                label: prediction.structured_formatting?.main_text || prediction.description,
+                secondaryText: prediction.structured_formatting?.secondary_text || '',
+                description: prediction.description || '',
+                placeId: prediction.place_id || '',
+              }))
+            : [];
+
+        suggestionCacheRef.current.set(cacheKey, normalizedSuggestions);
+        setSearchSuggestions(normalizedSuggestions);
+        setIsFetchingSuggestions(false);
+      });
+    }, 250);
+
+    return () => {
+      active = false;
+      clearTimeout(suggestionTimerRef.current);
+    };
+  }, [center, isLoaded, open, searchQuery]);
+
+  const resolveCoordsFromPlaceId = async (placeId) =>
+    new Promise((resolve) => {
+      const trimmedPlaceId = String(placeId || '').trim();
+
+      if (!trimmedPlaceId || !isLoaded) {
+        resolve(null);
+        return;
+      }
+
+      if (window.google?.maps?.places?.PlacesService) {
+        if (!placesServiceRef.current) {
+          placesServiceRef.current = new window.google.maps.places.PlacesService(document.createElement('div'));
+        }
+
+        placesServiceRef.current.getDetails(
+          {
+            placeId: trimmedPlaceId,
+            sessionToken: autocompleteSessionTokenRef.current || undefined,
+            fields: ['formatted_address', 'geometry.location', 'name'],
+          },
+          (place, status) => {
+            const locationPoint = place?.geometry?.location;
+            if (status === 'OK' && locationPoint) {
+              resolve({
+                lat: locationPoint.lat(),
+                lng: locationPoint.lng(),
+                address: place.formatted_address || place.name || '',
+              });
+              return;
+            }
+
+            if (!window.google?.maps?.Geocoder) {
+              resolve(null);
+              return;
+            }
+
+            const geocoder = new window.google.maps.Geocoder();
+            geocoder.geocode({ placeId: trimmedPlaceId }, (results, geocodeStatus) => {
+              if (geocodeStatus !== 'OK' || !results?.[0]?.geometry?.location) {
+                resolve(null);
+                return;
+              }
+
+              const fallbackLocation = results[0].geometry.location;
+              resolve({
+                lat: fallbackLocation.lat(),
+                lng: fallbackLocation.lng(),
+                address: results[0].formatted_address || '',
+              });
+            });
+          },
+        );
+        return;
+      }
+
+      if (!window.google?.maps?.Geocoder) {
+        resolve(null);
+        return;
+      }
+
+      const geocoder = new window.google.maps.Geocoder();
+      geocoder.geocode({ placeId: trimmedPlaceId }, (results, status) => {
+        if (status !== 'OK' || !results?.[0]?.geometry?.location) {
+          resolve(null);
+          return;
+        }
+
+        const locationPoint = results[0].geometry.location;
+        resolve({
+          lat: locationPoint.lat(),
+          lng: locationPoint.lng(),
+          address: results[0].formatted_address || '',
+        });
+      });
+    });
+
+  const applySearchSuggestion = async (suggestion) => {
+    if (!suggestion?.placeId) {
+      return;
+    }
+
+    const nextCenter = await resolveCoordsFromPlaceId(suggestion.placeId);
+    if (!nextCenter) {
+      return;
+    }
+
+    const resolvedAddress = nextCenter.address || suggestion.description || suggestion.label;
+    setCenter({ lat: nextCenter.lat, lng: nextCenter.lng });
+    setSelectedAddress(resolvedAddress);
+    setCustomAddress(resolvedAddress);
+    setSearchQuery(resolvedAddress);
+    setSearchSuggestions([]);
+    lastResolvedAddressRef.current = resolvedAddress;
+
+    if (autocompleteSessionTokenRef.current && window.google?.maps?.places?.AutocompleteSessionToken) {
+      autocompleteSessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken();
+    }
+
+    if (mapRef.current) {
+      mapRef.current.panTo({ lat: nextCenter.lat, lng: nextCenter.lng });
+      mapRef.current.setZoom(17);
+    }
+  };
 
   const commitMapCenter = () => {
     if (!mapRef.current) return;
@@ -369,12 +584,60 @@ const MapPickerSheet = ({ open, title, confirmLabel, value, initialCoords, onClo
               </div>
             )}
 
-            <div className="pointer-events-none absolute inset-x-0 top-0 px-4 pt-4">
+            <div className="absolute inset-x-0 top-0 px-4 pt-4">
               <div className="rounded-[22px] border border-white bg-white/92 px-4 py-4 shadow-xl backdrop-blur-md">
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
                   {isResolvingAddress ? 'Resolving address...' : 'Selected location'}
                 </p>
                 <p className="mt-1 text-[13px] font-semibold text-slate-700">{selectedAddress}</p>
+                <label className="mt-3 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                  Search address
+                </label>
+                <div className="relative mt-2">
+                  <Search size={14} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Search pickup area, street or landmark"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-10 py-3 text-[13px] font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+                {searchSuggestions.length > 0 ? (
+                  <div className="mt-2 max-h-44 overflow-y-auto rounded-2xl border border-slate-100 bg-slate-50/80 p-2">
+                    {searchSuggestions.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => applySearchSuggestion(item)}
+                        className="flex w-full items-start gap-3 rounded-xl px-3 py-2 text-left hover:bg-white"
+                      >
+                        <Navigation size={14} className="mt-0.5 shrink-0 text-blue-500" />
+                        <div className="min-w-0">
+                          <p className="truncate text-[12px] font-black text-slate-800">{item.label}</p>
+                          {item.secondaryText ? (
+                            <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">{item.secondaryText}</p>
+                          ) : null}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {Boolean(searchQuery) && isFetchingSuggestions ? (
+                  <p className="mt-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                    Finding nearby address suggestions...
+                  </p>
+                ) : null}
+                <label className="mt-3 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                  Custom address
+                </label>
+                <input
+                  type="text"
+                  value={customAddress}
+                  onChange={(event) => setCustomAddress(event.target.value)}
+                  placeholder="Type pickup address"
+                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[13px] font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                />
               </div>
             </div>
 
@@ -397,7 +660,7 @@ const MapPickerSheet = ({ open, title, confirmLabel, value, initialCoords, onClo
           <div className="bg-white px-5 pb-8 pt-5">
             <button
               type="button"
-              onClick={() => onConfirm(latLngToCoordPair(center), selectedAddress)}
+              onClick={() => onConfirm(latLngToCoordPair(center), String(customAddress || selectedAddress || '').trim())}
               className="flex h-14 w-full items-center justify-center gap-2 rounded-[20px] bg-slate-900 text-sm font-black text-white shadow-[0_14px_28px_rgba(15,23,42,0.18)]"
             >
               {confirmLabel}
@@ -1217,23 +1480,24 @@ const SenderReceiverDetails = () => {
                    )}
                 </div>
                 <p className="text-[13px] font-medium text-slate-500 truncate mt-1">{pickup || 'Pickup location'}</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setActiveMapPicker('pickup')}
-                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-100 bg-white text-emerald-600 shadow-sm"
-                  aria-label="Change pickup location"
-                >
-                  <LocateFixed size={18} />
-                </button>
                 <button
                   type="button"
                   onClick={() => setIsContactSheetOpen(true)}
-                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-100 bg-white text-slate-400 shadow-sm"
-                  aria-label="Open sender details"
+                  className="mt-3 inline-flex items-center gap-1 text-[11px] font-black uppercase tracking-[0.12em] text-slate-500"
                 >
-                  <ChevronRight size={16} />
+                  Edit sender details
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+              <div className="shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setActiveMapPicker('pickup')}
+                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-emerald-100 bg-white px-3 text-[11px] font-black uppercase tracking-[0.12em] text-emerald-600 shadow-sm"
+                  aria-label="Choose pickup on map"
+                >
+                  <LocateFixed size={16} />
+                  <span>Choose on map</span>
                 </button>
               </div>
             </div>

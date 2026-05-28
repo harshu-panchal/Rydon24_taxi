@@ -761,6 +761,9 @@ export const getSetPrices = asyncHandler(async (req, res) => {
   const data = await adminService.listSetPrices(req.query || {}, req.auth?.admin);
   res.json({ success: true, ...data });
 });
+export const getSetPriceById = asyncHandler(async (req, res) =>
+  ok(res, await adminService.getSetPriceById(req.params.id, req.auth?.admin)),
+);
 export const createSetPrice = asyncHandler(async (req, res) =>
   ok(res, await adminService.createSetPrice(req.body, req.auth?.admin)),
 );

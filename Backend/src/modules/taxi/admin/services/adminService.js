@@ -6192,6 +6192,34 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
   };
 };
 
+export const getSetPriceById = async (id, currentAdmin = null) => {
+  const item = await SetPrice.findById(id)
+    .populate('vehicle_type')
+    .populate('service_location_id')
+    .populate('package_type_id')
+    .populate('package_vehicle_prices.vehicle_type')
+    .populate({
+      path: 'zone_id',
+      populate: { path: 'service_location_id' },
+    })
+    .lean();
+
+  if (!item) {
+    throw new ApiError(404, 'Set Price not found');
+  }
+
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'set_prices.view', 'set prices');
+    if (item.zone_id?._id || item.zone_id) {
+      await assertZoneAccess(currentAdmin, item.zone_id?._id || item.zone_id);
+    } else {
+      assertServiceLocationAccess(currentAdmin, item.service_location_id?._id || item.service_location_id);
+    }
+  }
+
+  return serializeSetPrice(item);
+};
+
 export const createSetPrice = async (payload, currentAdmin = null) => {
   if (currentAdmin) {
     assertAdminPermission(currentAdmin, 'set_prices.view', 'set prices');

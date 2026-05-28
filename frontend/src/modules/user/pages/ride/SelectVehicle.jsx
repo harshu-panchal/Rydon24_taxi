@@ -995,7 +995,15 @@ const SelectVehicle = () => {
       };
     }
 
-    return { distanceMeters: 0, durationMinutes: 0 };
+    const fallbackDistanceMeters = calculateDistanceMeters(
+      routeState?.pickupCoords || [75.9048, 22.7039],
+      routeState?.dropCoords || [75.8937, 22.7533],
+    );
+
+    return {
+      distanceMeters: fallbackDistanceMeters,
+      durationMinutes: estimateDurationMinutes(fallbackDistanceMeters),
+    };
   });
   const [isResolvingTripMetrics, setIsResolvingTripMetrics] = useState(true);
   const [showScrollArrow, setShowScrollArrow] = useState(false);
@@ -1014,6 +1022,8 @@ const SelectVehicle = () => {
   );
   const routeServiceLocationId = routeState.service_location_id || routeState.serviceLocationId || '';
   const [resolvedServiceLocationId, setResolvedServiceLocationId] = useState(routeServiceLocationId);
+  const [isResolvingServiceLocation, setIsResolvingServiceLocation] = useState(!routeServiceLocationId);
+  const [hasLoadedAvailability, setHasLoadedAvailability] = useState(false);
   const serviceLocationId = resolvedServiceLocationId || routeServiceLocationId || '';
   const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
   const pickupPosition = useMemo(() => toLatLng(pickupCoords), [pickupCoords]);
@@ -1024,6 +1034,7 @@ const SelectVehicle = () => {
 
   useEffect(() => {
     setResolvedServiceLocationId(routeServiceLocationId);
+    setIsResolvingServiceLocation(!routeServiceLocationId);
   }, [routeServiceLocationId]);
 
   useEffect(() => {
@@ -1031,11 +1042,21 @@ const SelectVehicle = () => {
 
     const resolveServiceLocationFromPickup = async () => {
       if (routeServiceLocationId) {
+        if (active) {
+          setIsResolvingServiceLocation(false);
+        }
         return;
       }
 
       if (!Array.isArray(pickupCoords) || pickupCoords.length !== 2) {
+        if (active) {
+          setIsResolvingServiceLocation(false);
+        }
         return;
+      }
+
+      if (active) {
+        setIsResolvingServiceLocation(true);
       }
 
       try {
@@ -1064,6 +1085,10 @@ const SelectVehicle = () => {
       } catch {
         if (active) {
           setResolvedServiceLocationId('');
+        }
+      } finally {
+        if (active) {
+          setIsResolvingServiceLocation(false);
         }
       }
     };
@@ -1286,6 +1311,10 @@ const SelectVehicle = () => {
   const hasAvailabilityResults = Object.keys(availabilityByVehicleId).length > 0;
 
   const displayedVehicles = useMemo(() => {
+    if (!hasLoadedAvailability) {
+      return [];
+    }
+
     if (!hasAvailabilityResults) {
       return pricedVehicles;
     }
@@ -1327,7 +1356,7 @@ const SelectVehicle = () => {
     }
 
     return rankedVehicles.map(({ vehicle }) => vehicle);
-  }, [availabilityByVehicleId, hasAvailabilityResults, pricedVehicles, rideMode]);
+  }, [availabilityByVehicleId, hasAvailabilityResults, hasLoadedAvailability, pricedVehicles, rideMode]);
 
   const selectedVehicle = useMemo(() => pricedVehicles.find((v) => v.id === selected), [pricedVehicles, selected]);
   const previewVehicle = useMemo(
@@ -1599,6 +1628,11 @@ const SelectVehicle = () => {
     let active = true;
     let intervalId;
 
+    if (isResolvingServiceLocation) {
+      setHasLoadedAvailability(false);
+      return undefined;
+    }
+
     const fetchVehicleAvailabilities = async (vehicleSubset, { replace = false, silent = false } = {}) => {
       const fetchableVehicles = (Array.isArray(vehicleSubset) ? vehicleSubset : []).filter((vehicle) => vehicle?.vehicleTypeId);
 
@@ -1606,6 +1640,9 @@ const SelectVehicle = () => {
         if (replace) {
           availabilityHistoryRef.current = {};
           setAvailabilityByVehicleId({});
+        }
+        if (active) {
+          setHasLoadedAvailability(true);
         }
         return;
       }
@@ -1661,8 +1698,11 @@ const SelectVehicle = () => {
           setDriverLoadError(error.message || 'Could not load online drivers.');
         }
       } finally {
-        if (active && !silent) {
-          setIsLoadingDrivers(false);
+        if (active) {
+          if (!silent) {
+            setIsLoadingDrivers(false);
+          }
+          setHasLoadedAvailability(true);
         }
       }
     };
@@ -1670,9 +1710,11 @@ const SelectVehicle = () => {
     if (!vehicles.length) {
       availabilityHistoryRef.current = {};
       setAvailabilityByVehicleId({});
+      setHasLoadedAvailability(false);
       return undefined;
     }
 
+    setHasLoadedAvailability(false);
     fetchVehicleAvailabilities(vehicles, { replace: true });
 
     const pollSelectedVehicle = () => {
@@ -1706,7 +1748,12 @@ const SelectVehicle = () => {
       clearInterval(intervalId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [pickupCoords, routeState.transportType, routeState.transport_type, selected, serviceLocationId, vehicles]);
+  }, [isResolvingServiceLocation, pickupCoords, routeState.transportType, routeState.transport_type, selected, serviceLocationId, vehicles]);
+
+  const isInitialVehicleResultsLoading =
+    isLoadingVehicles ||
+    isResolvingServiceLocation ||
+    (vehicles.length > 0 && !hasLoadedAvailability && !driverLoadError);
 
   const openPicker = (inputRef) => {
     if (typeof inputRef.current?.showPicker === 'function') {
@@ -1901,28 +1948,28 @@ const SelectVehicle = () => {
             onScroll={handleScroll}
             className="flex-1 overflow-y-auto no-scrollbar px-3 pt-3 pb-2 space-y-2.5"
           >
-            {isLoadingVehicles && (
+            {isInitialVehicleResultsLoading && (
               <div className="min-h-[180px] flex flex-col items-center justify-center gap-3 text-slate-400">
                 <LoaderCircle size={26} className="animate-spin" />
                 <p className="text-[11px] font-bold uppercase tracking-widest">Finding available rides</p>
               </div>
             )}
 
-            {!isLoadingVehicles && vehicleLoadError && (
+            {!isInitialVehicleResultsLoading && vehicleLoadError && (
               <div className="rounded-[18px] border border-red-50 bg-white px-4 py-5 text-center">
                 <p className="text-[12px] font-black text-red-500">{vehicleLoadError}</p>
                 <p className="mt-1 text-[10px] font-bold text-slate-400">Please try again later.</p>
               </div>
             )}
 
-            {!isLoadingVehicles && !vehicleLoadError && displayedVehicles.length === 0 && (
+            {!isInitialVehicleResultsLoading && !vehicleLoadError && displayedVehicles.length === 0 && (
               <div className="rounded-[18px] border border-slate-100 bg-white px-4 py-5 text-center">
                 <p className="text-[13px] font-bold text-slate-900">No vehicles available</p>
                 <p className="mt-1 text-[11px] font-bold text-slate-400">Try changing your location or method.</p>
               </div>
             )}
 
-            {!isLoadingVehicles && !vehicleLoadError && displayedVehicles.map((v, i) => {
+            {!isInitialVehicleResultsLoading && !vehicleLoadError && displayedVehicles.map((v, i) => {
               const isSelected = selected === v.id;
               const availability = availabilityByVehicleId[v.id] || DEFAULT_AVAILABILITY;
               const isUnavailable = !availability.totalDrivers;
