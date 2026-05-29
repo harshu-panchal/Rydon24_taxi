@@ -17,6 +17,7 @@ import { adminService } from '../../services/adminService';
 
 const INDIA_CENTER = { lat: 22.7196, lng: 75.8577 };
 const MAP_CONTAINER_STYLE = { width: '100%', height: '400px' };
+const ONE_HOUR_MS = 60 * 60 * 1000;
 
 const mapOptions = {
   disableDefaultUI: false,
@@ -32,54 +33,58 @@ const mapOptions = {
   ]
 };
 
-const OVERLAY_STYLES = {
-  default: {
-    fillColor: '#f97316',
-    strokeColor: '#ea580c',
-  },
-  spectral: {
-    fillColor: '#8b5cf6',
-    strokeColor: '#2563eb',
-  },
-  density: {
-    fillColor: '#14b8a6',
-    strokeColor: '#0f766e',
-  },
+const FIRE_OVERLAY_STYLE = {
+  fillColor: '#ef4444',
+  strokeColor: '#b91c1c',
 };
 
-const getOverlayStyle = (mode) => {
-  const normalizedMode = String(mode || '').toLowerCase();
+const hasUsableCoordinates = (latitude, longitude) => {
+  const lat = Number(latitude);
+  const lng = Number(longitude);
 
-  if (normalizedMode.includes('spectral')) {
-    return OVERLAY_STYLES.spectral;
-  }
-
-  if (normalizedMode.includes('density')) {
-    return OVERLAY_STYLES.density;
-  }
-
-  return OVERLAY_STYLES.default;
+  return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
 };
+
+const isFreshWithinLastHour = (value) => {
+  if (!value) return false;
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return false;
+  return Date.now() - timestamp <= ONE_HOUR_MS;
+};
+
+const getPickupCoordinates = (rideRequest = {}) => {
+  const coords = rideRequest?.pickupLocation?.coordinates;
+  const longitude = Number(Array.isArray(coords) ? coords[0] : null);
+  const latitude = Number(Array.isArray(coords) ? coords[1] : null);
+
+  if (!hasUsableCoordinates(latitude, longitude)) {
+    return null;
+  }
+
+  return { latitude, longitude };
+};
+
+const toHeatBucketKey = (latitude, longitude) =>
+  `${Number(latitude).toFixed(3)}:${Number(longitude).toFixed(3)}`;
 
 const HeatMap = () => {
   const navigate = useNavigate();
-  const [zones, setZones] = useState([]);
+  const [rideRequests, setRideRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [opacity, setOpacity] = useState(0.7);
   const [radius, setRadius] = useState(40);
-  const [gradient, setGradient] = useState('Default');
 
   const { isLoaded, loadError } = useAppGoogleMapsLoader();
 
   const inputClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors";
   const labelClass = "block text-xs font-semibold text-gray-500 mb-1.5";
 
-  const fetchZones = async () => {
+  const fetchRushPoints = async () => {
     setLoading(true);
     try {
-      const response = await adminService.getZones();
+      const response = await adminService.getRideRequests({ page: 1, limit: 500, tab: 'all', search: '' });
       const results = response?.data?.results || response?.data || [];
-      setZones(results);
+      setRideRequests(Array.isArray(results) ? results : []);
     } catch (error) {
       console.error('Failed to fetch heatmap data', error);
     } finally {
@@ -88,41 +93,41 @@ const HeatMap = () => {
   };
 
   useEffect(() => {
-    fetchZones();
+    fetchRushPoints();
   }, []);
 
-  const overlayStyle = useMemo(() => getOverlayStyle(gradient), [gradient]);
+  const requestOverlays = useMemo(() => {
+    const buckets = new Map();
 
-  const zoneOverlays = useMemo(() => {
-    if (!zones.length) return [];
+    rideRequests
+      .filter((rideRequest) => isFreshWithinLastHour(rideRequest.date))
+      .forEach((rideRequest) => {
+        const pickup = getPickupCoordinates(rideRequest);
+        if (!pickup) {
+          return;
+        }
 
-    return zones.map((zone, index) => {
-      const coord = zone.coordinates?.[0]?.[0] || [75.8577, 22.7196];
-      const lat = Number(coord[1]);
-      const lng = Number(coord[0]);
+        const key = toHeatBucketKey(pickup.latitude, pickup.longitude);
+        const current = buckets.get(key) || {
+          id: key,
+          center: { lat: pickup.latitude, lng: pickup.longitude },
+          count: 0,
+        };
 
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        return null;
-      }
+        current.count += 1;
+        buckets.set(key, current);
+      });
 
-      const rawWeight = Number(
-        zone.demandScore ??
-        zone.weight ??
-        zone.intensity ??
-        zone.tripCount ??
-        zone.requests ??
-        zone.count ??
-        1,
-      );
-      const weight = Number.isFinite(rawWeight) && rawWeight > 0 ? rawWeight : 1;
+    return [...buckets.values()];
+  }, [rideRequests]);
 
-      return {
-        id: String(zone._id || zone.id || `${lat}-${lng}-${index}`),
-        center: { lat, lng },
-        weight,
-      };
-    });
-  }, [zones]);
+  const mapCenter = useMemo(() => {
+    if (requestOverlays.length > 0) {
+      return requestOverlays[0].center;
+    }
+
+    return INDIA_CENTER;
+  }, [requestOverlays]);
 
   const circleRadiusMeters = Math.max(250, radius * 140);
 
@@ -156,19 +161,19 @@ const HeatMap = () => {
                  <div className="h-[400px] flex items-center justify-center bg-gray-50 text-rose-500 font-semibold">Map Error</div>
               ) : HAS_VALID_GOOGLE_MAPS_KEY && isLoaded ? (
                  <GoogleMap
-                    mapContainerStyle={MAP_CONTAINER_STYLE} center={INDIA_CENTER} zoom={11} options={mapOptions}
+                    mapContainerStyle={MAP_CONTAINER_STYLE} center={mapCenter} zoom={11} options={mapOptions}
                  >
-                    {zoneOverlays.filter(Boolean).map((overlay) => (
+                    {requestOverlays.map((overlay) => (
                       <Circle
                         key={overlay.id}
                         center={overlay.center}
-                        radius={circleRadiusMeters * Math.max(1, Math.min(overlay.weight, 5))}
+                        radius={circleRadiusMeters * Math.max(1, Math.min(overlay.count, 6))}
                         options={{
-                          fillColor: overlayStyle.fillColor,
-                          fillOpacity: Math.max(0.1, Math.min(opacity * 0.45, 0.7)),
-                          strokeColor: overlayStyle.strokeColor,
+                          fillColor: FIRE_OVERLAY_STYLE.fillColor,
+                          fillOpacity: Math.max(0.18, Math.min(opacity * 0.6, 0.82)),
+                          strokeColor: FIRE_OVERLAY_STYLE.strokeColor,
                           strokeOpacity: Math.max(0.2, Math.min(opacity, 0.9)),
-                          strokeWeight: 1,
+                          strokeWeight: 2,
                           clickable: false,
                         }}
                       />
@@ -183,7 +188,7 @@ const HeatMap = () => {
               
               {/* Floating Action Badge */}
               <div className="absolute top-6 right-6 flex items-center gap-2">
-                 <button onClick={fetchZones} className="w-10 h-10 bg-white rounded-lg shadow-xl flex items-center justify-center text-gray-400 hover:text-indigo-600 transition-colors border border-gray-100">
+                 <button onClick={fetchRushPoints} className="w-10 h-10 bg-white rounded-lg shadow-xl flex items-center justify-center text-gray-400 hover:text-indigo-600 transition-colors border border-gray-100">
                     <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
                  </button>
               </div>
@@ -206,13 +211,13 @@ const HeatMap = () => {
               <div className="max-w-md">
                  <label className={labelClass}>
                     <Settings2 size={12} className="inline mr-1 text-indigo-500" />
-                    Overlay Color Mode
+                    Heat Source
                  </label>
-                 <select value={gradient} onChange={e => setGradient(e.target.value)} className={inputClass}>
-                    <option>Default (Thermal)</option>
-                    <option>Spectral View</option>
-                    <option>Density Focus</option>
-                 </select>
+                 <input
+                   readOnly
+                   value="Pickup lat/lng from ride requests in last 1 hour"
+                   className={inputClass + " bg-slate-50 text-slate-500"}
+                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-10 border-t border-gray-50 pt-10">
@@ -251,7 +256,7 @@ const HeatMap = () => {
               </div>
               <div>
                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-0.5">Coverage</p>
-                 <p className="text-lg font-black text-gray-900 tracking-tight leading-none">{zones.length} Units</p>
+                 <p className="text-lg font-black text-gray-900 tracking-tight leading-none">{requestOverlays.length} Hotspots</p>
               </div>
            </div>
 
@@ -261,7 +266,7 @@ const HeatMap = () => {
               </div>
               <div>
                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-0.5">Live Traffic</p>
-                 <p className="text-lg font-black text-gray-900 tracking-tight leading-none">Active Feed</p>
+                 <p className="text-lg font-black text-gray-900 tracking-tight leading-none">{rideRequests.filter((rideRequest) => isFreshWithinLastHour(rideRequest.date)).length} Recent Requests</p>
               </div>
            </div>
 
@@ -271,7 +276,7 @@ const HeatMap = () => {
               </div>
               <div>
                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-0.5">Sync State</p>
-                 <p className="text-lg font-black text-emerald-600 tracking-tight leading-none">Synchronized</p>
+                 <p className="text-lg font-black text-emerald-600 tracking-tight leading-none">Manual Snapshot</p>
               </div>
            </div>
         </div>
