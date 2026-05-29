@@ -43,6 +43,7 @@ const paymentTypeOptions = [
   { value: 'online', label: 'Online' },
   { value: 'wallet', label: 'Wallet' },
 ];
+const ALL_ZONES_OPTION_VALUE = '__all_zones__';
 
 const normalizePaymentTypes = (value) => {
   const items = Array.isArray(value)
@@ -299,22 +300,62 @@ const SetPrices = ({ mode }) => {
     if(e) e.preventDefault();
     setSaving(true);
     try {
+      const normalizedPaymentTypes = normalizePaymentTypes(formData.payment_type).length
+        ? normalizePaymentTypes(formData.payment_type)
+        : ['cash'];
+      const basePayload = {
+        ...formData,
+        enable_ride_sharing: false,
+        enable_shared_ride: 0,
+        price_per_seat: 0,
+        shared_price_per_distance: 0,
+        shared_cancel_fee: 0,
+        pricing_scope: 'ride',
+        transport_type: derivedTransportType || normalizeTransportType(formData.transport_type),
+        payment_type: normalizedPaymentTypes,
+      };
+
+      if (!editingId && formData.zone_id === ALL_ZONES_OPTION_VALUE) {
+        if (!zones.length) {
+          alert('No zones found to apply this pricing rule.');
+          return;
+        }
+
+        const zoneRequests = zones.map((zone) =>
+          fetch(`${baseUrl}/types/set-prices`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ...basePayload,
+              zone_id: zone._id || zone.id,
+            }),
+          }).then(async (response) => ({
+            ok: response.ok,
+            body: await response.json(),
+            zoneName: zone.name || zone.zone_name || 'Unnamed Zone',
+          })),
+        );
+
+        const zoneResults = await Promise.all(zoneRequests);
+        const failures = zoneResults.filter((result) => !result.ok || !result.body?.success);
+
+        if (failures.length === 0) {
+          navigate('/admin/pricing/set-price');
+          fetchInitialData();
+          return;
+        }
+
+        const failedZoneNames = failures.map((result) => result.zoneName).join(', ');
+        alert(`Pricing could not be applied to these zones: ${failedZoneNames}`);
+        return;
+      }
+
       const method = editingId ? 'PATCH' : 'POST';
       const url = editingId ? `${baseUrl}/types/set-prices/${editingId}` : `${baseUrl}/types/set-prices`;
       const res = await fetch(url, {
         method,
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          enable_ride_sharing: false,
-          enable_shared_ride: 0,
-          price_per_seat: 0,
-          shared_price_per_distance: 0,
-          shared_cancel_fee: 0,
-          pricing_scope: 'ride',
-          transport_type: derivedTransportType || normalizeTransportType(formData.transport_type),
-          payment_type: normalizePaymentTypes(formData.payment_type).length ? normalizePaymentTypes(formData.payment_type) : ['cash']
-        })
+        body: JSON.stringify(basePayload)
       });
       const data = await res.json();
       if (data.success) {
@@ -477,10 +518,16 @@ const SetPrices = ({ mode }) => {
                         <div className="relative">
                            <select required className={inputClass + " appearance-none cursor-pointer"} value={formData.zone_id} onChange={e => setFormData(p=>({...p, zone_id: e.target.value}))}>
                               <option value="">Select Zone</option>
+                              {!editingId && <option value={ALL_ZONES_OPTION_VALUE}>All Zones</option>}
                               {zones.map(z => <option key={z._id || z.id} value={z._id || z.id}>{z.name}</option>)}
                            </select>
                            <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                         </div>
+                        {!editingId && formData.zone_id === ALL_ZONES_OPTION_VALUE && (
+                          <p className="mt-2 text-[11px] font-medium text-slate-400">
+                            Saving with <span className="font-black text-slate-600">All Zones</span> will create this same pricing rule for every zone.
+                          </p>
+                        )}
                      </div>
                      <div>
                         <label className={labelClass}>Vehicle Type <span className="text-rose-500">*</span></label>
