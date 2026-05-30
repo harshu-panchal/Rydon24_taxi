@@ -1017,6 +1017,31 @@ const normalizeVehicleType = (type, index) => {
   };
 };
 
+const createHistorySafeVehicle = (vehicle) => {
+  if (!vehicle) {
+    return null;
+  }
+
+  return {
+    id: vehicle.id,
+    vehicleTypeId: vehicle.vehicleTypeId,
+    transportType: vehicle.transportType,
+    iconType: vehicle.iconType,
+    icon: vehicle.icon,
+    vehicleIconUrl: vehicle.vehicleIconUrl,
+    name: vehicle.name,
+    capacity: vehicle.capacity,
+    badge: vehicle.badge,
+    badgeColor: vehicle.badgeColor,
+    sublabel: vehicle.sublabel,
+    price: vehicle.price,
+    dispatchType: vehicle.dispatchType,
+    supportsBidding: vehicle.supportsBidding,
+    bidStepAmount: vehicle.bidStepAmount,
+    maxBidSteps: vehicle.maxBidSteps,
+  };
+};
+
 const ScrollIndicator = ({ show }) => (
   <AnimatePresence>
     {show && (
@@ -1877,6 +1902,7 @@ const SelectVehicle = () => {
     setShowBidModal(false);
     const baseFare = Number(selectedVehicle.price || 0);
     const finalFare = appliedPromo?.breakdown?.fare_after_discount ?? baseFare;
+    const historySafeVehicle = createHistorySafeVehicle(selectedVehicle);
 
     navigate(`${routePrefix}/ride/searching`, {
       state: {
@@ -1888,10 +1914,10 @@ const SelectVehicle = () => {
         zone_id: zoneId,
         service_location_id: serviceLocationId,
         transport_type: resolvedTransportType,
-        vehicle: selectedVehicle,
-        vehicleTypeId: selectedVehicle.vehicleTypeId,
-        vehicleIconType: selectedVehicle.iconType,
-        vehicleIconUrl: selectedVehicle.vehicleIconUrl || selectedVehicle.icon,
+        vehicle: historySafeVehicle,
+        vehicleTypeId: historySafeVehicle?.vehicleTypeId || '',
+        vehicleIconType: historySafeVehicle?.iconType || '',
+        vehicleIconUrl: historySafeVehicle?.vehicleIconUrl || historySafeVehicle?.icon || '',
         paymentMethod,
         fare: finalFare,
         baseFare,

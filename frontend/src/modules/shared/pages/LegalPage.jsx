@@ -2,6 +2,8 @@ import React from 'react';
 import { ArrowLeft, FileText, IndianRupee, Mail, Phone, ReceiptText, Scale, ScrollText, ShieldCheck } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SUPPORT_INFO } from '../content/supportInfo';
+import termsRawText from '../content/terms-content.txt?raw';
+import privacyRawText from '../content/privacy-content.txt?raw';
 
 const ownerContact = {
   phone: SUPPORT_INFO.phone,
@@ -22,104 +24,16 @@ const legalContent = {
     title: 'Terms & Conditions',
     icon: ScrollText,
     intro:
-      'These Terms & Conditions govern the use of the Rydon24  Trawler website, app, and booking services. By using the platform, you agree to follow these terms whenever you browse, register, book, cancel, or pay for a service.',
-    sections: [
-      {
-        title: 'Use of the platform',
-        body:
-          'Rydon24  Trawler provides technology services for ride booking, vehicle-based transport support, parcel movement, and related mobility services. Availability can vary by city, vehicle type, demand, operating hours, and serviceability.',
-      },
-      {
-        title: 'Eligibility',
-        bullets: [
-          'Users should provide accurate name, phone number, and account details.',
-          'You must use the platform only for lawful purposes.',
-          'For rentals or regulated vehicle services, additional identity or eligibility checks may be required.',
-        ],
-      },
-      {
-        title: 'Bookings and fares',
-        bullets: [
-          'A booking is confirmed only after the system accepts it and a driver, partner, or service unit is assigned when required.',
-          'Displayed fares can change because of distance, traffic, tolls, waiting time, service zone, taxes, or peak demand.',
-          'Final payable amounts shown at checkout or after trip completion are considered binding unless there is a verified billing error.',
-        ],
-      },
-      {
-        title: 'User responsibilities',
-        bullets: [
-          'Do not create fake bookings or misuse payment methods.',
-          'Do not damage vehicles, partner property, or equipment.',
-          'Do not harass drivers, delivery partners, service staff, or support teams.',
-          'Do not use the service for illegal, dangerous, or prohibited goods or activities.',
-        ],
-      },
-      {
-        title: 'Account actions',
-        body:
-          'Rydon24  Trawler may suspend, restrict, or terminate access where there is fraud, abusive conduct, repeated policy violations, non-payment, chargeback misuse, or legal/regulatory risk.',
-      },
-      {
-        title: 'Liability and service interruptions',
-        body:
-          'Rydon24  Trawler works to keep the service reliable, but delays may happen because of traffic, weather, technical downtime, route closures, law-and-order issues, or third-party failures. To the extent permitted by law, Rydon24  Trawler is not responsible for indirect or consequential loss arising from such interruptions.',
-      },
-      {
-        title: 'Contact',
-        body:
-          'For questions about these terms, users can contact the support team through the contact details listed on the website.',
-      },
-    ],
+      'These terms are shown from the latest legal document provided for Rydon24 users and include the applicable bike, package, auto, and cab clauses.',
+    rawText: termsRawText,
   },
   privacy: {
     label: 'Privacy Policy',
     title: 'Privacy Policy',
     icon: ShieldCheck,
     intro:
-      'This website is managed by Rydon24  Trawler. This Privacy Policy explains what information we collect, why we collect it, how we use it, and the steps we take to protect it when you use the Rydon24  Trawler website or connected services.',
-    sections: [
-      {
-        title: 'Information we may collect',
-        bullets: [
-          'Name, mobile number, email address, and account profile details.',
-          'Pickup and drop locations, booking history, cancellation records, and support interactions.',
-          'Device, browser, IP address, app version, and diagnostic information needed for security and service quality.',
-          'Location information during active rides or service requests where needed for dispatch, tracking, and safety.',
-        ],
-      },
-      {
-        title: 'How we use your information',
-        bullets: [
-          'To create and manage your account.',
-          'To process bookings, assignments, payments, and support requests.',
-          'To improve matching, service performance, fraud prevention, and safety monitoring.',
-          'To send OTPs, service alerts, invoices, and important operational communication.',
-        ],
-      },
-      {
-        title: 'Sharing of information',
-        body:
-          'We may share limited information with drivers, delivery or service partners, payment providers, communication vendors, analytics tools, and authorities when required by law or necessary for service delivery.',
-      },
-      {
-        title: 'Payments and data security',
-        body:
-          'Payments may be processed through third-party payment partners. Rydon24  Trawler does not intentionally store full card data on the website. We use reasonable administrative and technical safeguards to protect user information, but no internet-based system can be guaranteed to be fully secure.',
-      },
-      {
-        title: 'Data retention and user rights',
-        bullets: [
-          'We may keep records for customer support, tax, compliance, fraud prevention, and dispute handling.',
-          'Users may request correction of incorrect account information.',
-          'Users may request account deletion or review of stored personal data, subject to legal and operational retention obligations.',
-        ],
-      },
-      {
-        title: 'Policy updates',
-        body:
-          'Rydon24  Trawler may revise this Privacy Policy from time to time. Continued use of the website after an update means you accept the revised policy.',
-      },
-    ],
+      'This privacy policy is shown from the latest legal document provided for Rydon24 users and explains how information is collected, used, processed, stored, and protected.',
+    rawText: privacyRawText,
   },
   refund: {
     label: 'Refund Policy',
@@ -231,11 +145,27 @@ const getDocumentType = (pathname = '') => {
   return 'terms';
 };
 
+const isLegalHeadingLine = (line = '') => {
+  const value = String(line || '').trim();
+  if (!value) return false;
+  if (/^[A-Z\s&()/-]{6,}$/.test(value)) return true;
+  if (/^[A-Z]\.\s+[A-Z]/.test(value)) return true;
+  if (/^[IVXLCDM]+\.\s+[A-Z]/.test(value)) return true;
+  if (/^\([A-Za-z&\s]+\)$/.test(value)) return true;
+  return false;
+};
+
 const LegalPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const content = legalContent[getDocumentType(location.pathname)];
   const Icon = content.icon || FileText;
+  const rawParagraphs = content.rawText
+    ? content.rawText
+        .split(/\r?\n\r?\n/)
+        .map((block) => block.trim())
+        .filter(Boolean)
+    : [];
 
   return (
     <div className="min-h-screen bg-stone-50 text-slate-900">
@@ -285,7 +215,28 @@ const LegalPage = () => {
 
       <section className="px-6 py-16">
         <div className="mx-auto max-w-6xl space-y-8">
-          {content.sections.map((section) => (
+          {content.rawText ? (
+            <div className="rounded-[28px] border border-stone-200 bg-white p-8 shadow-sm">
+              <div className="space-y-5 text-sm leading-8 text-slate-700 md:text-base">
+                {rawParagraphs.map((paragraph, index) => (
+                  <div key={`${index}-${paragraph.slice(0, 24)}`} className="space-y-2">
+                    {paragraph.split(/\r?\n/).filter(Boolean).map((line, lineIndex) => (
+                      <p
+                        key={`${index}-${lineIndex}-${line.slice(0, 16)}`}
+                        className={`break-words whitespace-pre-wrap ${
+                          isLegalHeadingLine(line)
+                            ? 'text-lg font-black tracking-tight text-slate-900'
+                            : 'text-sm font-medium leading-8 text-slate-700 md:text-base'
+                        }`}
+                      >
+                        {line}
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : content.sections.map((section) => (
             <div key={section.title} className="rounded-[28px] border border-stone-200 bg-white p-8 shadow-sm">
               <h2 className="text-xl font-black tracking-tight text-slate-900 md:text-2xl">
                 {section.title}
