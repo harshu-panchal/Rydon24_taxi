@@ -40,7 +40,7 @@ const ContactPage = () => {
                 <p className="text-gray-500 mb-6 leading-relaxed">
                     Call our toll-free line anytime for immediate assistance with your rides or accounts.
                 </p>
-                <p className="text-3xl font-black text-[#1a1a1a]">7409129517</p>
+                <p className="text-3xl font-black text-[#1a1a1a]">91-93-911-911</p>
             </div>
 
             <div className="bg-white p-10 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center text-center">

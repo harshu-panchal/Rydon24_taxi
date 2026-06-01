@@ -76,7 +76,7 @@ function LandingPage() {
           <div className="new-top-contacts">
              <div className="top-contact-item">
                <Phone size={16} />
-               <span>7409129517</span>
+               <span>91-93-911-911</span>
              </div>
              <div className="top-contact-item">
                <Mail size={16} />
