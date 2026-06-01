@@ -210,7 +210,7 @@ const SetPrices = ({ mode }) => {
 
   useEffect(() => {
     fetchInitialData();
-  }, [id]);
+  }, [view, editingId]);
 
   useEffect(() => {
     if (mode === 'create') {
@@ -341,7 +341,6 @@ const SetPrices = ({ mode }) => {
 
         if (failures.length === 0) {
           navigate('/admin/pricing/set-price');
-          fetchInitialData();
           return;
         }
 
@@ -360,7 +359,6 @@ const SetPrices = ({ mode }) => {
       const data = await res.json();
       if (data.success) {
         navigate('/admin/pricing/set-price');
-        fetchInitialData();
       } else alert(data.message || "Failed to save");
     } catch (error) { console.error(error); } finally { setSaving(false); }
   };
@@ -386,7 +384,7 @@ const SetPrices = ({ mode }) => {
 
     try {
       const response = await adminService.deleteSetPrice(priceId);
-      if (response?.success) {
+      if (response?.data?.success) {
         setPrizes((previous) =>
           previous.filter((item) => String(item?.id || item?._id || '') !== String(priceId)),
         );
@@ -394,7 +392,7 @@ const SetPrices = ({ mode }) => {
         return;
       }
 
-      alert(response?.message || 'Failed to delete pricing rule.');
+      alert(response?.data?.message || 'Failed to delete pricing rule.');
     } catch (error) {
       console.error('Delete set price error:', error);
       alert(error?.response?.data?.message || 'Failed to delete pricing rule.');
