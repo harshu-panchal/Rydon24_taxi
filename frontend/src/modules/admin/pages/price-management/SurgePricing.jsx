@@ -29,12 +29,9 @@ const SurgePricing = () => {
     const fetchPriceDetails = async () => {
       try {
         setLoading(true);
-        // axiosInstance interceptor already returns response.data
-        const res = await api.get('/admin/types/set-prices');
-        const items = res.results || res.data?.results || res.data || [];
-        
-        const target = items.find(i => String(i.id || i._id) === String(id));
-        
+        const res = await api.get(`/admin/types/set-prices/${id}`);
+        const target = res.data || res.results || res;
+
         if (target) {
           setDetails({
             zone_name: target.zone_id?.name || target.zone_name || 'Global',

@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from "framer-motion";
 import { API_BASE_URL } from '../../../../shared/api/runtimeConfig';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
 
 const inputClass = "w-full border border-gray-200 rounded-md px-4 py-3 text-sm text-gray-800 bg-white focus:border-indigo-500 transition-all outline-none";
@@ -183,6 +183,7 @@ const initialFormState = {
 
 const SetPrices = ({ mode }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams();
   const isCreateOrEdit = mode === 'create' || mode === 'edit';
   const view = isCreateOrEdit ? 'create' : 'list';
@@ -210,7 +211,7 @@ const SetPrices = ({ mode }) => {
 
   useEffect(() => {
     fetchInitialData();
-  }, [view, editingId]);
+  }, [view, editingId, location.key, location.state?.refreshAt]);
 
   useEffect(() => {
     if (mode === 'create') {
@@ -239,26 +240,26 @@ const SetPrices = ({ mode }) => {
     setLoading(true);
     try {
       const auth = { 'Authorization': `Bearer ${token}` };
+      if (view === 'list') {
+        const response = await fetch(`${baseUrl}/types/set-prices?scope=ride`, { headers: auth });
+        const prizesData = await response.json();
+
+        if (prizesData?.success) {
+          const items = prizesData.results || prizesData.data?.results || [];
+          setPrizes(Array.isArray(items) ? items : []);
+        }
+
+        return;
+      }
+
       const requests = [
         fetch(`${baseUrl}/zones`, { headers: auth }),
         fetch(`${baseUrl}/types/vehicle-types`, { headers: auth }),
       ];
 
-      if (view === 'list') {
-        requests.unshift(fetch(`${baseUrl}/types/set-prices?scope=ride`, { headers: auth }));
-      }
-
       const responses = await Promise.all(requests);
       const payloads = await Promise.all(responses.map((response) => response.json()));
-
-      const [prizesData, zonesData, vehiclesData] = view === 'list'
-        ? payloads
-        : [null, payloads[0], payloads[1]];
-
-      if (prizesData?.success) {
-        const items = prizesData.results || prizesData.data?.results || [];
-        setPrizes(items);
-      }
+      const [zonesData, vehiclesData] = payloads;
       
       const zItems = zonesData.results || zonesData.data?.zones || JSON.parse(JSON.stringify(zonesData.data?.results || []));
       setZones(Array.isArray(zItems) ? zItems : []);
@@ -340,7 +341,9 @@ const SetPrices = ({ mode }) => {
         const failures = zoneResults.filter((result) => !result.ok || !result.body?.success);
 
         if (failures.length === 0) {
-          navigate('/admin/pricing/set-price');
+          navigate('/admin/pricing/set-price', {
+            state: { refreshAt: Date.now() },
+          });
           return;
         }
 
@@ -358,7 +361,9 @@ const SetPrices = ({ mode }) => {
       });
       const data = await res.json();
       if (data.success) {
-        navigate('/admin/pricing/set-price');
+        navigate('/admin/pricing/set-price', {
+          state: { refreshAt: Date.now() },
+        });
       } else alert(data.message || "Failed to save");
     } catch (error) { console.error(error); } finally { setSaving(false); }
   };

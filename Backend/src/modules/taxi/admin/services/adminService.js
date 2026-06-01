@@ -6154,12 +6154,29 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
   }
 
   const items = await SetPrice.find(query)
-    .populate('vehicle_type')
-    .populate('service_location_id')
-    .populate('package_type_id')
-    .populate('package_vehicle_prices.vehicle_type')
+    .select([
+      'pricing_scope',
+      'vehicle_type',
+      'service_location_id',
+      'package_type_id',
+      'package_destination',
+      'package_availability',
+      'package_vehicle_prices',
+      'payment_type',
+      'transport_type',
+      'zone_id',
+      'active',
+      'capacity',
+      'enable_shared_ride',
+      'createdAt',
+    ].join(' '))
+    .populate('vehicle_type', 'name icon capacity')
+    .populate('service_location_id', 'name service_location_name currency_symbol')
+    .populate('package_type_id', 'name')
+    .populate('package_vehicle_prices.vehicle_type', 'name')
     .populate({
       path: 'zone_id',
+      select: 'name unit service_location_id',
       populate: { path: 'service_location_id' }
     })
     .sort({ createdAt: -1 })
