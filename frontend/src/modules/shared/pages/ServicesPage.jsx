@@ -45,27 +45,27 @@ const ServicesPage = () => {
       </div>
 
       {/* Hero Section */}
-      <div className="bg-[#1a1a1a] text-white pt-32 pb-20 px-6">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+      <div className="bg-[#1a1a1a] text-white pt-24 pb-12 sm:pt-32 sm:pb-20 px-4 sm:px-6">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
 
           {/* Hero Left: Copy & Actions */}
           <div className="text-left">
-            <h1 className="text-5xl md:text-6xl font-black tracking-tight mb-6 leading-[1.1]">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black tracking-tight mb-4 sm:mb-6 leading-[1.1]">
               Premium <span className="text-[#FFB300]">Services</span>
             </h1>
-            <p className="text-xl text-gray-400 leading-relaxed mb-8 max-w-xl">
+            <p className="text-base sm:text-lg md:text-xl text-gray-400 leading-relaxed mb-6 sm:mb-8 max-w-xl">
               Discover a wide range of transportation and logistics solutions tailored to meet your everyday needs with comfort, speed, and safety.
             </p>
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <button
                 onClick={() => window.open('https://play.google.com/store/apps/details?id=com.rydon24.user', '_blank')}
-                className="px-6 py-3.5 rounded-xl bg-[#FFB300] hover:bg-[#e09e00] text-gray-900 font-bold uppercase tracking-wider text-xs transition-colors"
+                className="px-6 py-3.5 rounded-xl bg-[#FFB300] hover:bg-[#e09e00] text-gray-900 font-bold uppercase tracking-wider text-xs transition-colors text-center"
               >
                 Book Your Ride
               </button>
               <button
                 onClick={() => navigate('/about')}
-                className="px-6 py-3.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-bold uppercase tracking-wider text-xs transition-colors"
+                className="px-6 py-3.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-bold uppercase tracking-wider text-xs transition-colors text-center"
               >
                 About Us
               </button>
@@ -89,19 +89,19 @@ const ServicesPage = () => {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-6xl mx-auto px-6 py-20">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-20">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
           {services.map((svc, index) => (
             <div
               key={index}
-              className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 group hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between"
+              className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-gray-100 group hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between"
             >
               <div>
                 {/* Refined Icon Block: Soft ambient rounded square with brand colored icon */}
                 <div className="w-12 h-12 bg-amber-50/70 border border-amber-100/50 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-105 transition-transform">
                   {svc.icon}
                 </div>
-                <h3 className="font-bold text-2xl mb-3 text-gray-900">{svc.title}</h3>
+                <h3 className="font-bold text-xl sm:text-2xl mb-3 text-gray-900">{svc.title}</h3>
                 <p className="text-gray-500 leading-relaxed mb-6 text-sm sm:text-base">{svc.desc}</p>
               </div>
               <button

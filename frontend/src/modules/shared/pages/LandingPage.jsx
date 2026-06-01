@@ -102,10 +102,14 @@ function LandingPage() {
               <Link to="/login" className={`new-nav-link ${activeTab === 'login' ? 'active' : ''}`} onClick={() => { setActiveTab('login'); setIsMobileMenuOpen(false); }}>Login</Link>
             </nav>
             <div className="new-nav-actions">
+              <a href="tel:91-93-911-911" className="mobile-phone-link">
+                <Phone size={16} />
+                <span>91-93-911-911</span>
+              </a>
               <button className="new-login-btn hidden-mobile" onClick={() => navigate('/login')}>Login</button>
               <button className="new-book-btn hidden-mobile" onClick={() => window.open('https://play.google.com/store/apps/details?id=com.rydon24.user', '_blank')}>Book a Taxi</button>
               <button className="mobile-menu-btn" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
-                ☰
+                {isMobileMenuOpen ? '✕' : '☰'}
               </button>
             </div>
           </div>
@@ -247,34 +251,26 @@ function LandingPage() {
       </section>
 
       {/* Check Us Out Section */}
-      <section className="check-us-out-section" style={{ padding: '80px 5%' }}>
+      <section className="check-us-out-section">
         <div className="section-header">
           <h2 className="section-title">CHECK US OUT</h2>
           <div className="section-triangle"></div>
         </div>
         
-        <div style={{
-          marginTop: '40px',
-          background: '#fff',
-          borderRadius: '30px',
-          overflow: 'hidden',
-          boxShadow: '0 25px 60px rgba(0,0,0,0.1)',
-          display: 'flex',
-          flexWrap: 'wrap'
-        }}>
-          <div style={{ flex: '1 1 500px', height: '400px', overflow: 'hidden' }}>
-            <img src={checkUsOutImg} alt="Check Us Out" style={{ width: '100%', height: '100%', objectCover: 'cover' }} />
+        <div className="check-us-out-card">
+          <div className="check-us-out-image-wrapper">
+            <img src={checkUsOutImg} alt="Check Us Out" className="check-us-out-img" />
           </div>
-          <div style={{ flex: '1 1 400px', padding: '60px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <h3 style={{ fontSize: '32px', fontWeight: '800', color: '#1a1a1a', marginBottom: '20px' }}>Join the Rydon24 Community</h3>
-            <p style={{ fontSize: '16px', color: '#666', lineHeight: '1.8', marginBottom: '30px' }}>
+          <div className="check-us-out-content">
+            <h3 className="check-us-out-title">Join the Rydon24 Community</h3>
+            <p className="check-us-out-desc">
               Follow us on social media to get the latest updates, exclusive offers, and behind-the-scenes content. 
               Be part of the fastest growing transportation network in the region.
             </p>
-            <div style={{ display: 'flex', gap: '15px', marginBottom: '40px' }}>
-              <a href="#" style={{ width: '50px', height: '50px', borderRadius: '50%', background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#333' }}><Camera size={24} /></a>
-              <a href="#" style={{ width: '50px', height: '50px', borderRadius: '50%', background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#333' }}><PlayCircle size={24} /></a>
-              <a href="#" style={{ width: '50px', height: '50px', borderRadius: '50%', background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#333' }}><Share2 size={24} /></a>
+            <div className="check-us-out-socials">
+              <a href="#" className="check-social-btn"><Camera size={24} /></a>
+              <a href="#" className="check-social-btn"><PlayCircle size={24} /></a>
+              <a href="#" className="check-social-btn"><Share2 size={24} /></a>
             </div>
             <div className="check-us-out-links">
               {appLinks.map((link, index) => (
