@@ -240,6 +240,12 @@ const DELIVERY_CATEGORY_OPTIONS = [
     description: 'Fast lightweight parcel bikes and two-wheel delivery options.',
   },
   {
+    id: 'auto',
+    title: 'Auto',
+    image: '/2_AutoRickshaw.png',
+    description: 'Classic three-wheeler Indian auto rickshaw for fast local parcel delivery.',
+  },
+  {
     id: 'movers',
     title: 'Packers & Movers',
     image: moversImg,

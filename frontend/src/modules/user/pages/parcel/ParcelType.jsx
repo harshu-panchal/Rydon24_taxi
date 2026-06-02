@@ -60,6 +60,12 @@ const DELIVERY_CATEGORY_OPTIONS = [
     searchTokens: ['bike', 'scooter', 'cycle', '2-wheeler'],
   },
   {
+    id: 'auto',
+    title: 'Auto',
+    img: '/2_AutoRickshaw.png',
+    searchTokens: ['auto', 'rickshaw', 'tuk', '3-wheeler', 'three-wheeler'],
+  },
+  {
     id: 'movers',
     title: 'Packers & Movers',
     img: moversImg,
@@ -271,7 +277,7 @@ const ParcelType = () => {
       <main className="flex-1 px-5 -mt-10 z-20 pb-10">
         
         {/* Category Grid */}
-        <div className="grid grid-cols-3 gap-3 mb-8">
+        <div className="grid grid-cols-2 gap-3 mb-8">
           {DELIVERY_CATEGORY_OPTIONS.map((cat, idx) => (
             <motion.button
               key={cat.id}
