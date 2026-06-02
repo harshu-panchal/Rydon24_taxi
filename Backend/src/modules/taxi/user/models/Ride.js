@@ -450,6 +450,14 @@ const rideSchema = new mongoose.Schema(
         type: Number,
         default: 0,
       },
+      admin_commission_type_for_owner: {
+        type: Number,
+        default: 1,
+      },
+      admin_commission_for_owner: {
+        type: Number,
+        default: 0,
+      },
       waiting_charge: {
         type: Number,
         default: 0,

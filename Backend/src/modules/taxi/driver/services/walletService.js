@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { env } from '../../../../config/env.js';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { SetPrice } from '../../admin/models/SetPrice.js';
+import { Vehicle } from '../../admin/models/Vehicle.js';
 import { Driver } from '../models/Driver.js';
 import { WalletTransaction } from '../models/WalletTransaction.js';
 import { Ride } from '../../user/models/Ride.js';
@@ -90,6 +91,21 @@ const resolveCommissionConfigForRide = async (ride, session) => {
           type: Number(setPrice.admin_commission_type_from_driver ?? 1),
           value: Number(setPrice.admin_commission_from_driver ?? 0),
           setPriceId: setPrice._id,
+        };
+      }
+    }
+
+    if (normalizedServiceType === 'parcel') {
+      const vehicle = await Vehicle.findById(ride.vehicleTypeId)
+        .select('admin_commission_type_from_driver admin_commission_from_driver')
+        .session(session)
+        .lean();
+
+      if (vehicle) {
+        return {
+          source: 'vehicle_type_parcel_fallback',
+          type: Number(vehicle.admin_commission_type_from_driver ?? 1),
+          value: Number(vehicle.admin_commission_from_driver ?? 0),
         };
       }
     }

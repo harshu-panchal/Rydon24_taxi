@@ -900,7 +900,7 @@ export const createRideRecord = async ({
 
   const primaryVehicleTypeId = dispatchVehicleTypeIds[0] || null;
   const primaryVehicle = primaryVehicleTypeId
-    ? await Vehicle.findById(primaryVehicleTypeId).select('icon map_icon image dispatch_type').lean()
+    ? await Vehicle.findById(primaryVehicleTypeId).select('icon map_icon image dispatch_type admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner').lean()
     : null;
   const resolvedVehicleIconUrl = String(
     vehicleIconUrl || primaryVehicle?.map_icon || primaryVehicle?.icon || primaryVehicle?.image || '',
@@ -986,10 +986,21 @@ export const createRideRecord = async ({
   const nextFareIncreaseAt = pricingNegotiationMode === 'user_increment_only'
     ? new Date(Date.now() + fareIncreaseWaitMinutes * 60 * 1000)
     : null;
+  const parcelCommissionFallback =
+    normalizedServiceType === 'parcel'
+      ? {
+          admin_commission_type_from_driver: Number(primaryVehicle?.admin_commission_type_from_driver ?? 1),
+          admin_commission_from_driver: Number(primaryVehicle?.admin_commission_from_driver ?? 0),
+          admin_commission_type_for_owner: Number(primaryVehicle?.admin_commission_type_for_owner ?? 1),
+          admin_commission_for_owner: Number(primaryVehicle?.admin_commission_for_owner ?? 0),
+        }
+      : null;
   const pricingSnapshot = {
     setPriceId: pricingRule?._id || null,
-    admin_commission_type_from_driver: Number(pricingRule?.admin_commission_type_from_driver ?? 1),
-    admin_commission_from_driver: Number(pricingRule?.admin_commission_from_driver ?? 0),
+    admin_commission_type_from_driver: Number(pricingRule?.admin_commission_type_from_driver ?? parcelCommissionFallback?.admin_commission_type_from_driver ?? 1),
+    admin_commission_from_driver: Number(pricingRule?.admin_commission_from_driver ?? parcelCommissionFallback?.admin_commission_from_driver ?? 0),
+    admin_commission_type_for_owner: Number(pricingRule?.admin_commission_type_for_owner ?? parcelCommissionFallback?.admin_commission_type_for_owner ?? 1),
+    admin_commission_for_owner: Number(pricingRule?.admin_commission_for_owner ?? parcelCommissionFallback?.admin_commission_for_owner ?? 0),
     waiting_charge: Number(pricingRule?.waiting_charge ?? 0),
     free_waiting_before: Number(pricingRule?.free_waiting_before ?? 0),
     free_waiting_after: Number(pricingRule?.free_waiting_after ?? 0),
@@ -1281,6 +1292,8 @@ export const serializeRideRealtime = (ride) => ({
         setPriceId: ride.pricingSnapshot.setPriceId || null,
         admin_commission_type_from_driver: Number(ride.pricingSnapshot.admin_commission_type_from_driver ?? 1),
         admin_commission_from_driver: Number(ride.pricingSnapshot.admin_commission_from_driver ?? 0),
+        admin_commission_type_for_owner: Number(ride.pricingSnapshot.admin_commission_type_for_owner ?? 1),
+        admin_commission_for_owner: Number(ride.pricingSnapshot.admin_commission_for_owner ?? 0),
         waiting_charge: Number(ride.pricingSnapshot.waiting_charge ?? 0),
         free_waiting_before: Number(ride.pricingSnapshot.free_waiting_before ?? 0),
         free_waiting_after: Number(ride.pricingSnapshot.free_waiting_after ?? 0),

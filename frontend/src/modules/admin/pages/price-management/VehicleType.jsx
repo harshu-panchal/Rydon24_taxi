@@ -169,6 +169,7 @@ const buildVehicleFormData = (selectedVehicle = {}) => ({
   transport_type: resolveVehicleTransportType(selectedVehicle),
   dispatch_type: selectedVehicle.dispatch_type || selectedVehicle.trip_dispatch_type || 'normal',
   icon_types: normalizeIconType(selectedVehicle.icon_types || selectedVehicle.icon_types_for),
+  category: String(selectedVehicle.category || ''),
   image: selectedVehicle.image || '',
   map_icon: selectedVehicle.map_icon || selectedVehicle.icon || selectedVehicle.image || '',
   capacity: Number(selectedVehicle.capacity || 0),
@@ -177,6 +178,10 @@ const buildVehicleFormData = (selectedVehicle = {}) => ({
   is_accept_share_ride: Number(selectedVehicle.is_accept_share_ride || 0),
   delivery_category: String(selectedVehicle.delivery_category || ''),
   delivery_distance_pricing: normalizeDeliveryDistancePricing(selectedVehicle.delivery_distance_pricing),
+  admin_commission_type_from_driver: String(selectedVehicle.admin_commission_type_from_driver ?? 1),
+  admin_commission_from_driver: String(selectedVehicle.admin_commission_from_driver ?? 0),
+  admin_commission_type_for_owner: String(selectedVehicle.admin_commission_type_for_owner ?? 1),
+  admin_commission_for_owner: String(selectedVehicle.admin_commission_for_owner ?? 0),
   status: Number(selectedVehicle.status ?? (selectedVehicle.active !== false ? 1 : 0)),
   active: selectedVehicle.active !== false && Number(selectedVehicle.status ?? 1) !== 0,
   supported_other_vehicle_types: Array.isArray(selectedVehicle.supported_other_vehicle_types)
@@ -207,6 +212,7 @@ const defaultFormData = {
   transport_type: 'taxi',
   dispatch_type: 'normal',
   icon_types: 'car',
+  category: '',
   image: '',
   map_icon: '',
   capacity: 0,
@@ -220,6 +226,10 @@ const defaultFormData = {
     free_distance: '',
     distance_price: '',
   },
+  admin_commission_type_from_driver: '1',
+  admin_commission_from_driver: '0',
+  admin_commission_type_for_owner: '1',
+  admin_commission_for_owner: '0',
   status: 1,
   active: true,
   supported_other_vehicle_types: [],
@@ -253,6 +263,13 @@ const DELIVERY_CATEGORY_OPTIONS = [
   },
 ];
 
+const VEHICLE_CATEGORY_OPTIONS = [
+  { id: '', label: 'Select Category' },
+  { id: 'bike', label: 'Bike' },
+  { id: 'car', label: 'Car' },
+  { id: 'auto', label: 'Auto' },
+];
+
 const TRANSPORT_TYPE_OPTIONS = [
   { id: 'taxi', name: 'taxi', display_name: 'Ride' },
   { id: 'delivery', name: 'delivery', display_name: 'Delivery' },
@@ -267,6 +284,19 @@ const normalizeDeliveryDistancePricing = (value = {}) => ({
   free_distance: String(value?.free_distance ?? value?.base_distance ?? ''),
   distance_price: String(value?.distance_price ?? ''),
 });
+
+const clampNonNegativeInput = (value) => {
+  if (value === '') {
+    return '';
+  }
+
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return '';
+  }
+
+  return String(Math.max(0, numericValue));
+};
 
 const normalizeVehicle = (item = {}) => ({
   ...item,
@@ -554,6 +584,7 @@ const VehicleType = ({ mode: propMode }) => {
         transport_type: normalizeTransportType(formData.transport_type),
         dispatch_type: formData.dispatch_type,
         icon_types: normalizeIconType(formData.icon_types),
+        category: formData.category,
         image: formData.image || '',
         icon: formData.map_icon || '',
         map_icon: formData.map_icon || '',
@@ -579,6 +610,10 @@ const VehicleType = ({ mode: propMode }) => {
               free_time: 0,
               time_price: 0,
             },
+        admin_commission_type_from_driver: Number(formData.admin_commission_type_from_driver || 1),
+        admin_commission_from_driver: Number(formData.admin_commission_from_driver || 0),
+        admin_commission_type_for_owner: Number(formData.admin_commission_type_for_owner || 1),
+        admin_commission_for_owner: Number(formData.admin_commission_for_owner || 0),
         status: formData.active ? 1 : 0,
         active: formData.active,
         supported_other_vehicle_types: sanitizeObjectIdList(formData.supported_other_vehicle_types),
@@ -869,6 +904,15 @@ const VehicleType = ({ mode: propMode }) => {
             </select>
           </div>
 
+          <div>
+            <label className={labelClass}>Category</label>
+            <select value={formData.category} onChange={(e) => updateForm('category', e.target.value)} className={inputClass}>
+              {VEHICLE_CATEGORY_OPTIONS.map((option) => (
+                <option key={option.id || 'empty'} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+
           {showsDeliveryCategorySelector ? (
             <div className="lg:col-span-2">
               <label className={labelClass}>Delivery Category *</label>
@@ -986,6 +1030,56 @@ const VehicleType = ({ mode: propMode }) => {
                   />
                 </div>
 
+              </div>
+
+              <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+                <div>
+                  <label className={labelClass}>Admin Commission Type From Driver</label>
+                  <select
+                    value={formData.admin_commission_type_from_driver}
+                    onChange={(e) => updateForm('admin_commission_type_from_driver', e.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="1">Percentage</option>
+                    <option value="2">Fixed</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Admin Commission From Driver</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.admin_commission_from_driver}
+                    onChange={(e) => updateForm('admin_commission_from_driver', clampNonNegativeInput(e.target.value))}
+                    className={inputClass}
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Admin Commission Type From Owner</label>
+                  <select
+                    value={formData.admin_commission_type_for_owner}
+                    onChange={(e) => updateForm('admin_commission_type_for_owner', e.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="1">Percentage</option>
+                    <option value="2">Fixed</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Admin Commission From Owner</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.admin_commission_for_owner}
+                    onChange={(e) => updateForm('admin_commission_for_owner', clampNonNegativeInput(e.target.value))}
+                    className={inputClass}
+                    placeholder="0"
+                  />
+                </div>
               </div>
 
               <p className="mt-3 text-xs text-slate-500">

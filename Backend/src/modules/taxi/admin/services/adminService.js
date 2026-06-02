@@ -5836,11 +5836,13 @@ export const listVehicleTypes = async (queryParams = {}) => {
       : { $in: [normalizedTransportType, 'both'] };
   }
   const items = await Vehicle.find(query)
-    .select('name short_description description transport_type dispatch_type icon_types delivery_category delivery_distance_pricing capacity image icon map_icon status active createdAt updatedAt')
+    .select('name short_description description transport_type dispatch_type icon_types category delivery_category delivery_distance_pricing admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner capacity image icon map_icon status active createdAt updatedAt')
     .sort({ createdAt: -1 })
     .lean();
   const results = items.map((item) => ({
     ...item,
+    ...normalizeVehicleCommissionConfig(item),
+    category: item.category || '',
     icon: item.map_icon || item.icon || item.image || '',
     map_icon: item.map_icon || item.icon || item.image || '',
     delivery_category: item.delivery_category || '',
@@ -5867,7 +5869,9 @@ export const listVehicleCatalog = async () => {
 
   const results = items.map((item) => ({
     ...item,
+    ...normalizeVehicleCommissionConfig(item),
     id: String(item._id),
+    category: item.category || '',
     icon: item.map_icon || item.icon || item.image || '',
     map_icon: item.map_icon || item.icon || item.image || '',
     delivery_category: item.delivery_category || '',
@@ -5911,6 +5915,13 @@ const buildDatabasePaginator = (results, page = 1, limit = 50, total = 0) => {
   };
 };
 
+const normalizeVehicleCommissionConfig = (item = {}) => ({
+  admin_commission_type_from_driver: Number(item?.admin_commission_type_from_driver ?? 1),
+  admin_commission_from_driver: Number(item?.admin_commission_from_driver ?? 0),
+  admin_commission_type_for_owner: Number(item?.admin_commission_type_for_owner ?? 1),
+  admin_commission_for_owner: Number(item?.admin_commission_for_owner ?? 0),
+});
+
 
 export const getVehicleTypeById = async (id) => {
   const item = await Vehicle.findById(id).lean();
@@ -5921,7 +5932,9 @@ export const getVehicleTypeById = async (id) => {
 
   return {
     ...item,
+    ...normalizeVehicleCommissionConfig(item),
     id: String(item._id),
+    category: item.category || '',
     icon: item.map_icon || item.icon || item.image || '',
     map_icon: item.map_icon || item.icon || item.image || '',
     delivery_category: item.delivery_category || '',
@@ -5942,7 +5955,7 @@ export const listPublicVehicleCatalog = async () => {
   }
 
   const items = await Vehicle.find()
-    .select('name short_description description transport_type dispatch_type icon_types delivery_category delivery_distance_pricing capacity image icon map_icon status active')
+    .select('name short_description description transport_type dispatch_type icon_types category delivery_category delivery_distance_pricing admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner capacity image icon map_icon status active')
     .sort({ createdAt: -1 })
     .lean();
 
@@ -5955,8 +5968,10 @@ export const listPublicVehicleCatalog = async () => {
     transport_type: item.transport_type || 'taxi',
     dispatch_type: item.dispatch_type || 'normal',
     icon_types: item.icon_types || 'car',
+    category: item.category || '',
     delivery_category: item.delivery_category || '',
     delivery_distance_pricing: normalizeDeliveryDistancePricing(item.delivery_distance_pricing),
+    ...normalizeVehicleCommissionConfig(item),
     capacity: Number(item.capacity || 0),
     image: item.image || '',
     map_icon: item.map_icon || item.icon || item.image || '',
@@ -6019,6 +6034,7 @@ export const createVehicleType = async (payload) => {
     transport_type: transportType,
     dispatch_type: payload.dispatch_type || 'normal',
     icon_types: payload.icon_types || 'car',
+    category: String(payload.category || '').trim().toLowerCase(),
     capacity: Number(payload.capacity || 0),
     size: payload.size ?? '',
     is_taxi: payload.is_taxi || transportType,
@@ -6029,6 +6045,10 @@ export const createVehicleType = async (payload) => {
     delivery_distance_pricing: ['delivery', 'both'].includes(transportType)
       ? normalizeDeliveryDistancePricing(payload.delivery_distance_pricing)
       : normalizeDeliveryDistancePricing(),
+    admin_commission_type_from_driver: Number(payload.admin_commission_type_from_driver ?? 1),
+    admin_commission_from_driver: Number(payload.admin_commission_from_driver ?? 0),
+    admin_commission_type_for_owner: Number(payload.admin_commission_type_for_owner ?? 1),
+    admin_commission_for_owner: Number(payload.admin_commission_for_owner ?? 0),
     image: payload.image ?? mapIcon,
     icon: mapIcon,
     map_icon: mapIcon,
@@ -6071,6 +6091,9 @@ export const updateVehicleType = async (id, payload) => {
   if (payload.icon_types !== undefined) {
     vehicle.icon_types = payload.icon_types || 'car';
   }
+  if (payload.category !== undefined) {
+    vehicle.category = String(payload.category || '').trim().toLowerCase();
+  }
   if (payload.image !== undefined) {
     vehicle.image = payload.image ?? '';
   }
@@ -6100,6 +6123,18 @@ export const updateVehicleType = async (id, payload) => {
     vehicle.delivery_distance_pricing = ['delivery', 'both'].includes(vehicle.transport_type)
       ? normalizeDeliveryDistancePricing(payload.delivery_distance_pricing, vehicle.delivery_distance_pricing)
       : normalizeDeliveryDistancePricing();
+  }
+  if (payload.admin_commission_type_from_driver !== undefined) {
+    vehicle.admin_commission_type_from_driver = Number(payload.admin_commission_type_from_driver ?? 1);
+  }
+  if (payload.admin_commission_from_driver !== undefined) {
+    vehicle.admin_commission_from_driver = Number(payload.admin_commission_from_driver ?? 0);
+  }
+  if (payload.admin_commission_type_for_owner !== undefined) {
+    vehicle.admin_commission_type_for_owner = Number(payload.admin_commission_type_for_owner ?? 1);
+  }
+  if (payload.admin_commission_for_owner !== undefined) {
+    vehicle.admin_commission_for_owner = Number(payload.admin_commission_for_owner ?? 0);
   }
   if (payload.status !== undefined) {
     vehicle.status = Number(payload.status) ? 1 : 0;
