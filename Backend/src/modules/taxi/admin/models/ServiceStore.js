@@ -97,6 +97,11 @@ const serviceStoreSchema = new mongoose.Schema(
           min: 0,
         },
       },
+      serviceTaxPercentage: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
     },
   },
   {

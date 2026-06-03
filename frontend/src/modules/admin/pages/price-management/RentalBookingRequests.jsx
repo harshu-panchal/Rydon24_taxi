@@ -484,12 +484,21 @@ const RentalBookingRequests = () => {
                         </p>
                       </div>
                       <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Service Tax</p>
+                        <p className="mt-3 text-lg font-black text-slate-900">
+                          {formatAmount(selectedRequest.commissionBreakdown?.live?.serviceTax?.amount)}
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-slate-500">
+                          Rate: {Number(selectedRequest.commissionBreakdown?.live?.serviceTax?.percentage || selectedRequest.commissionSnapshot?.serviceTaxPercentage || 0).toFixed(2)}%
+                        </p>
+                      </div>
+                      <div className="rounded-2xl bg-slate-50 px-4 py-4">
                         <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Admin Share</p>
                         <p className="mt-3 text-lg font-black text-emerald-700">
                           {formatAmount(selectedRequest.commissionBreakdown?.live?.admin?.amount)}
                         </p>
                         <p className="mt-1 text-sm font-semibold text-slate-500">
-                          Based on live charge {formatAmount(selectedRequest.commissionBreakdown?.live?.grossAmount || selectedRequest.finalCharge || selectedRequest.totalCost)}
+                          Based on rental {formatAmount(selectedRequest.commissionBreakdown?.live?.grossAmount || selectedRequest.finalCharge || selectedRequest.totalCost)}
                         </p>
                       </div>
                       <div className="rounded-2xl bg-slate-50 px-4 py-4">

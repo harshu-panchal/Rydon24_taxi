@@ -1195,6 +1195,7 @@ const serializeRentalBookingRequest = (item = {}) => ({
     ownerCommissionType:
       item.commissionSnapshot?.ownerCommissionType === 'fixed' ? 'fixed' : 'percentage',
     ownerCommissionValue: Number(item.commissionSnapshot?.ownerCommissionValue || 0),
+    serviceTaxPercentage: Math.max(0, Number(item.commissionSnapshot?.serviceTaxPercentage || 0)),
   },
   status: item.status || 'pending',
   adminNote: item.adminNote || '',
@@ -1226,10 +1227,17 @@ const computeRentalCommissionBreakdown = (snapshot = {}, grossAmount = 0) => {
     ownerValue,
   );
   const adminAmountRaw = Math.max(0, baseAmount - serviceStoreAmountRaw - ownerAmountRaw);
+  const serviceTaxPercentage = Math.max(0, Number(snapshot?.serviceTaxPercentage || 0));
+  const serviceTaxAmountRaw = (baseAmount * serviceTaxPercentage) / 100;
   const round = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
   return {
     grossAmount: round(baseAmount),
+    grossAmountWithTax: round(baseAmount + serviceTaxAmountRaw),
+    serviceTax: {
+      percentage: round(serviceTaxPercentage),
+      amount: round(serviceTaxAmountRaw),
+    },
     serviceStore: {
       id: snapshot?.serviceStoreId ? String(snapshot.serviceStoreId) : '',
       name: snapshot?.serviceStoreName || '',
@@ -4031,6 +4039,10 @@ export const createRentalBookingRequest = async (req, res) => {
       ownerCommissionValue: Math.max(
         0,
         Number(primaryServiceCenter?.rentalCommission?.owner?.value || 0),
+      ),
+      serviceTaxPercentage: Math.max(
+        0,
+        Number(primaryServiceCenter?.rentalCommission?.serviceTaxPercentage || 0),
       ),
     },
     selectedPackage: {

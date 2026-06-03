@@ -130,6 +130,11 @@ const vehicleSchema = new mongoose.Schema(
         default: DELIVERY_DISTANCE_PRICING_DEFAULTS.time_price,
       },
     },
+    service_tax: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     admin_commission_type_from_driver: {
       type: Number,
       enum: [1, 2],

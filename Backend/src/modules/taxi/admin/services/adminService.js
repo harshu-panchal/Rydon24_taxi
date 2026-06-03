@@ -1396,6 +1396,7 @@ const serializeRentalBookingRequest = (item = {}) => ({
     ownerCommissionType:
       item.commissionSnapshot?.ownerCommissionType === 'fixed' ? 'fixed' : 'percentage',
     ownerCommissionValue: Number(item.commissionSnapshot?.ownerCommissionValue || 0),
+    serviceTaxPercentage: Math.max(0, Number(item.commissionSnapshot?.serviceTaxPercentage || 0)),
   },
   assignedStaff: {
     id: item.assignedStaffId ? String(item.assignedStaffId) : '',
@@ -1451,10 +1452,17 @@ const computeRentalCommissionBreakdown = (snapshot = {}, grossAmount = 0) => {
   const remainingAfterStore = Math.max(0, baseAmount - serviceStoreAmountRaw);
   const ownerAmountRaw = calculateAmount(remainingAfterStore, ownerRule);
   const adminAmountRaw = Math.max(0, baseAmount - serviceStoreAmountRaw - ownerAmountRaw);
+  const serviceTaxPercentage = Math.max(0, Number(snapshot?.serviceTaxPercentage || 0));
+  const serviceTaxAmountRaw = (baseAmount * serviceTaxPercentage) / 100;
   const round = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
   return {
     grossAmount: round(baseAmount),
+    grossAmountWithTax: round(baseAmount + serviceTaxAmountRaw),
+    serviceTax: {
+      percentage: round(serviceTaxPercentage),
+      amount: round(serviceTaxAmountRaw),
+    },
     serviceStore: {
       id: snapshot?.serviceStoreId ? String(snapshot.serviceStoreId) : '',
       name: snapshot?.serviceStoreName || '',
@@ -1473,6 +1481,9 @@ const computeRentalCommissionBreakdown = (snapshot = {}, grossAmount = 0) => {
     },
   };
 };
+
+const normalizeDeliveryServiceTax = (value, fallback = 0) =>
+  Math.max(0, Number(value ?? fallback ?? 0));
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const VALID_USER_GENDERS = new Set(['male', 'female', 'other', 'prefer-not-to-say']);
@@ -1788,6 +1799,7 @@ const serializeServiceStore = (store) => ({
       type: store.rentalCommission?.owner?.type === 'fixed' ? 'fixed' : 'percentage',
       value: Number(store.rentalCommission?.owner?.value || 0),
     },
+    serviceTaxPercentage: Math.max(0, Number(store.rentalCommission?.serviceTaxPercentage || 0)),
   },
   status: store.status || (store.active === false ? 'inactive' : 'active'),
   active: store.active !== false,
@@ -1838,6 +1850,14 @@ const normalizeServiceStoreRentalCommission = (value = {}, existing = {}) => ({
       ),
     ),
   },
+  serviceTaxPercentage: Math.max(
+    0,
+    Number(
+      value?.serviceTaxPercentage ??
+        existing?.serviceTaxPercentage ??
+        0,
+    ),
+  ),
 });
 
 const serializeSetPrice = (item) => ({
@@ -5949,7 +5969,7 @@ export const listVehicleTypes = async (queryParams = {}) => {
       : { $in: [normalizedTransportType, 'both'] };
   }
   const items = await Vehicle.find(query)
-    .select('name short_description description transport_type dispatch_type icon_types category delivery_category delivery_distance_pricing admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner capacity image icon map_icon status active createdAt updatedAt')
+    .select('name short_description description transport_type dispatch_type icon_types category delivery_category delivery_distance_pricing service_tax admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner capacity image icon map_icon status active createdAt updatedAt')
     .sort({ createdAt: -1 })
     .lean();
   const results = items.map((item) => ({
@@ -5960,6 +5980,7 @@ export const listVehicleTypes = async (queryParams = {}) => {
     map_icon: item.map_icon || item.icon || item.image || '',
     delivery_category: item.delivery_category || '',
     delivery_distance_pricing: normalizeDeliveryDistancePricing(item.delivery_distance_pricing),
+    service_tax: normalizeDeliveryServiceTax(item.service_tax),
   }));
 
   return {
@@ -6052,6 +6073,7 @@ export const getVehicleTypeById = async (id) => {
     map_icon: item.map_icon || item.icon || item.image || '',
     delivery_category: item.delivery_category || '',
     delivery_distance_pricing: normalizeDeliveryDistancePricing(item.delivery_distance_pricing),
+    service_tax: normalizeDeliveryServiceTax(item.service_tax),
     supported_vehicles: Array.isArray(item.supported_other_vehicle_types)
       ? item.supported_other_vehicle_types.map((v) => String(v)).join(',')
       : '',
@@ -6068,7 +6090,7 @@ export const listPublicVehicleCatalog = async () => {
   }
 
   const items = await Vehicle.find()
-    .select('name short_description description transport_type dispatch_type icon_types category delivery_category delivery_distance_pricing admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner capacity image icon map_icon status active')
+    .select('name short_description description transport_type dispatch_type icon_types category delivery_category delivery_distance_pricing service_tax admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner capacity image icon map_icon status active')
     .sort({ createdAt: -1 })
     .lean();
 
@@ -6084,6 +6106,7 @@ export const listPublicVehicleCatalog = async () => {
     category: item.category || '',
     delivery_category: item.delivery_category || '',
     delivery_distance_pricing: normalizeDeliveryDistancePricing(item.delivery_distance_pricing),
+    service_tax: normalizeDeliveryServiceTax(item.service_tax),
     ...normalizeVehicleCommissionConfig(item),
     capacity: Number(item.capacity || 0),
     image: item.image || '',
@@ -6158,6 +6181,9 @@ export const createVehicleType = async (payload) => {
     delivery_distance_pricing: ['delivery', 'both'].includes(transportType)
       ? normalizeDeliveryDistancePricing(payload.delivery_distance_pricing)
       : normalizeDeliveryDistancePricing(),
+    service_tax: ['delivery', 'both'].includes(transportType)
+      ? normalizeDeliveryServiceTax(payload.service_tax)
+      : 0,
     admin_commission_type_from_driver: Number(payload.admin_commission_type_from_driver ?? 1),
     admin_commission_from_driver: Number(payload.admin_commission_from_driver ?? 0),
     admin_commission_type_for_owner: Number(payload.admin_commission_type_for_owner ?? 1),
@@ -6236,6 +6262,11 @@ export const updateVehicleType = async (id, payload) => {
     vehicle.delivery_distance_pricing = ['delivery', 'both'].includes(vehicle.transport_type)
       ? normalizeDeliveryDistancePricing(payload.delivery_distance_pricing, vehicle.delivery_distance_pricing)
       : normalizeDeliveryDistancePricing();
+  }
+  if (payload.service_tax !== undefined || payload.transport_type !== undefined) {
+    vehicle.service_tax = ['delivery', 'both'].includes(vehicle.transport_type)
+      ? normalizeDeliveryServiceTax(payload.service_tax, vehicle.service_tax)
+      : 0;
   }
   if (payload.admin_commission_type_from_driver !== undefined) {
     vehicle.admin_commission_type_from_driver = Number(payload.admin_commission_type_from_driver ?? 1);

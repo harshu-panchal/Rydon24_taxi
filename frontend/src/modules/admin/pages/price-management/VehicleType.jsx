@@ -178,6 +178,7 @@ const buildVehicleFormData = (selectedVehicle = {}) => ({
   is_accept_share_ride: Number(selectedVehicle.is_accept_share_ride || 0),
   delivery_category: String(selectedVehicle.delivery_category || ''),
   delivery_distance_pricing: normalizeDeliveryDistancePricing(selectedVehicle.delivery_distance_pricing),
+  service_tax: String(selectedVehicle.service_tax ?? 0),
   admin_commission_type_from_driver: String(selectedVehicle.admin_commission_type_from_driver ?? 1),
   admin_commission_from_driver: String(selectedVehicle.admin_commission_from_driver ?? 0),
   admin_commission_type_for_owner: String(selectedVehicle.admin_commission_type_for_owner ?? 1),
@@ -226,6 +227,7 @@ const defaultFormData = {
     free_distance: '',
     distance_price: '',
   },
+  service_tax: '0',
   admin_commission_type_from_driver: '1',
   admin_commission_from_driver: '0',
   admin_commission_type_for_owner: '1',
@@ -610,6 +612,7 @@ const VehicleType = ({ mode: propMode }) => {
               free_time: 0,
               time_price: 0,
             },
+        service_tax: showsDeliveryCategorySelector ? Number(formData.service_tax || 0) : 0,
         admin_commission_type_from_driver: Number(formData.admin_commission_type_from_driver || 1),
         admin_commission_from_driver: Number(formData.admin_commission_from_driver || 0),
         admin_commission_type_for_owner: Number(formData.admin_commission_type_for_owner || 1),
@@ -1030,6 +1033,21 @@ const VehicleType = ({ mode: propMode }) => {
                   />
                 </div>
 
+                <div>
+                  <label className={labelClass}>Service Tax (%)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.service_tax}
+                    onChange={(e) => updateForm('service_tax', clampNonNegativeInput(e.target.value))}
+                    className={inputClass}
+                    placeholder="5"
+                  />
+                  <p className="mt-2 text-[11px] font-medium text-slate-400">
+                    Added on top of the delivery fare shown to the user.
+                  </p>
+                </div>
+
               </div>
 
               <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
@@ -1131,6 +1149,11 @@ const VehicleType = ({ mode: propMode }) => {
                     <span className="rounded bg-orange-500 px-1.5 py-0.5 text-[7px] font-black text-white">FASTEST</span>
                   </div>
                   <p className="truncate text-[11px] font-bold text-slate-500">{formData.short_description || formData.description || 'Closest driver 940 m away'}</p>
+                  {showsDeliveryCategorySelector ? (
+                    <p className="mt-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                      Includes {Number(formData.service_tax || 0).toFixed(2)}% service tax
+                    </p>
+                  ) : null}
                 </div>
                 <p className="text-sm font-black text-slate-900">₹31</p>
               </div>

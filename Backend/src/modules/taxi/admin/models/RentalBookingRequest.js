@@ -509,6 +509,11 @@ const rentalBookingRequestSchema = new mongoose.Schema(
         default: 0,
         min: 0,
       },
+      serviceTaxPercentage: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
     },
     assignedStaffId: {
       type: mongoose.Schema.Types.ObjectId,

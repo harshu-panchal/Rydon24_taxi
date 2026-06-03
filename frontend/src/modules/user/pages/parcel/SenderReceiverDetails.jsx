@@ -226,6 +226,7 @@ const normalizeDeliveryPricing = (vehicle = {}) => {
       ?? 0,
   );
   const distancePrice = Number(vehicle?.delivery_distance_pricing?.distance_price ?? 0);
+  const serviceTaxPercentage = Number(vehicle?.service_tax ?? 0);
 
   return {
     enabled: Boolean(
@@ -236,6 +237,7 @@ const normalizeDeliveryPricing = (vehicle = {}) => {
     basePrice,
     baseDistance,
     distancePrice,
+    serviceTaxPercentage,
   };
 };
 
@@ -250,15 +252,20 @@ const calculateVehicleFare = (vehicle, distanceKm) => {
   const normalizedDistanceKm = Math.max(Number(distanceKm || 0), 0);
   const extraDistanceKm = Math.max(normalizedDistanceKm - pricing.baseDistance, 0);
   const distanceCharge = extraDistanceKm * pricing.distancePrice;
-  const total = pricing.basePrice + distanceCharge;
+  const subtotal = pricing.basePrice + distanceCharge;
+  const serviceTaxAmount = (subtotal * pricing.serviceTaxPercentage) / 100;
+  const total = subtotal + serviceTaxAmount;
 
   return {
     total: Math.max(0, roundCurrency(total)),
+    subtotal: roundCurrency(subtotal),
     basePrice: pricing.basePrice,
     baseDistance: pricing.baseDistance,
     distancePrice: pricing.distancePrice,
     extraDistanceKm: roundCurrency(extraDistanceKm),
     distanceCharge: roundCurrency(distanceCharge),
+    serviceTaxPercentage: roundCurrency(pricing.serviceTaxPercentage),
+    serviceTaxAmount: roundCurrency(serviceTaxAmount),
   };
 };
 
@@ -1275,6 +1282,9 @@ const SenderReceiverDetails = () => {
       dynamic: true,
       minBaseDistance: Number(primaryFare.baseDistance || 0),
       maxBaseDistance: Number(primaryFare.baseDistance || 0),
+      subtotal: Number(primaryFare.subtotal || 0),
+      serviceTaxPercentage: Number(primaryFare.serviceTaxPercentage || 0),
+      serviceTaxAmount: Number(primaryFare.serviceTaxAmount || 0),
     };
   }, [drop, effectiveDistanceKm, primarySelectedVehicle]);
 
@@ -1974,12 +1984,17 @@ const SenderReceiverDetails = () => {
                   : 'Enter drop location to view live fare'}
               </p>
               {estimatedFare ? (
-                <p className="mt-1 text-[10px] font-semibold text-slate-500">
-                  Base fare covers {estimatedFare.minBaseDistance === estimatedFare.maxBaseDistance
-                    ? `${estimatedFare.maxBaseDistance.toFixed(1)} km`
-                    : `${estimatedFare.minBaseDistance.toFixed(1)}-${estimatedFare.maxBaseDistance.toFixed(1)} km`}
-                  {' '}before extra charges.
-                </p>
+                <>
+                  <p className="mt-1 text-[10px] font-semibold text-slate-500">
+                    Base fare covers {estimatedFare.minBaseDistance === estimatedFare.maxBaseDistance
+                      ? `${estimatedFare.maxBaseDistance.toFixed(1)} km`
+                      : `${estimatedFare.minBaseDistance.toFixed(1)}-${estimatedFare.maxBaseDistance.toFixed(1)} km`}
+                    {' '}before extra charges.
+                  </p>
+                  <p className="mt-1 text-[10px] font-semibold text-slate-500">
+                    Subtotal Rs {Number(estimatedFare.subtotal || 0).toFixed(2)} + service tax {Number(estimatedFare.serviceTaxPercentage || 0).toFixed(2)}% (Rs {Number(estimatedFare.serviceTaxAmount || 0).toFixed(2)})
+                  </p>
+                </>
               ) : null}
             </div>
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-md border border-white/10">

@@ -399,12 +399,16 @@ const ParcelSearchingDriver = () => {
   );
   const expectedFareMeta = useMemo(() => {
     const distanceKm = Number(routeState.estimatedDistanceKm);
+    const serviceTaxPercentage = Number(routeState.estimatedFare?.serviceTaxPercentage || 0);
+    const serviceTaxLabel = serviceTaxPercentage > 0
+      ? ` Includes ${serviceTaxPercentage.toFixed(2)}% service tax.`
+      : '';
     if (Number.isFinite(distanceKm) && distanceKm > 0) {
-      return `Estimated for about ${distanceKm.toFixed(1)} km`;
+      return `Estimated for about ${distanceKm.toFixed(1)} km.${serviceTaxLabel}`;
     }
 
-    return 'Based on the current parcel route';
-  }, [routeState.estimatedDistanceKm]);
+    return `Based on the current parcel route.${serviceTaxLabel}`;
+  }, [routeState.estimatedDistanceKm, routeState.estimatedFare?.serviceTaxPercentage]);
 
   useEffect(() => {
     driverRef.current = driver;
