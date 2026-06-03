@@ -3,6 +3,27 @@ import { Download, ExternalLink, Shield, Zap, Star } from 'lucide-react';
 import './LinksPage.css';
 import bannerImg from '@/assets/images/links-banner.png';
 
+// Custom Brand SVG Icons
+const YoutubeIcon = ({ size = 24, ...props }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" {...props}>
+    <path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.517 3.545 12 3.545 12 3.545s-7.517 0-9.388.507a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.871.507 9.388.507 9.388.507s7.517 0 9.388-.507a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+  </svg>
+);
+
+const LinkedinIcon = ({ size = 24, ...props }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" {...props}>
+    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+  </svg>
+);
+
+const InstagramIcon = ({ size = 24, ...props }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+  </svg>
+);
+
 const LinksPage = () => {
   const links = [
     {
@@ -83,6 +104,60 @@ const LinksPage = () => {
               </a>
             </div>
           ))}
+        </div>
+
+        <div className="social-links-section">
+          <h2 className="social-title">Connect With Us</h2>
+          <p className="social-subtitle font-medium">Follow us on our social media platforms for the latest updates, stories, and offers.</p>
+          <div className="social-links-grid">
+            <a 
+              href="https://youtube.com/@rydon24official?si=RfVhOYUay--g9BhB" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="social-card youtube"
+            >
+              <div className="social-icon-wrapper">
+                <YoutubeIcon size={24} />
+              </div>
+              <div className="social-card-info">
+                <span className="social-name">YouTube</span>
+                <span className="social-handle">@rydon24official</span>
+              </div>
+              <ExternalLink size={16} className="social-ext" />
+            </a>
+
+            <a 
+              href="https://www.instagram.com/rydon24official?igsh=MWQ3cWoxazJ1ZGV1OQ%3D%3D" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="social-card instagram"
+            >
+              <div className="social-icon-wrapper">
+                <InstagramIcon size={24} />
+              </div>
+              <div className="social-card-info">
+                <span className="social-name">Instagram</span>
+                <span className="social-handle">@rydon24official</span>
+              </div>
+              <ExternalLink size={16} className="social-ext" />
+            </a>
+
+            <a 
+              href="https://www.linkedin.com/company/124914072/admin/dashboard/" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="social-card linkedin"
+            >
+              <div className="social-icon-wrapper">
+                <LinkedinIcon size={24} />
+              </div>
+              <div className="social-card-info">
+                <span className="social-name">LinkedIn</span>
+                <span className="social-handle">Rydon24</span>
+              </div>
+              <ExternalLink size={16} className="social-ext" />
+            </a>
+          </div>
         </div>
 
         <footer className="links-footer">

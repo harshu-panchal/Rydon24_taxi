@@ -12,7 +12,28 @@ import bikeImg from '@/assets/landing/bike.png';
 import heroBgImg from '@/assets/landing/hero-bg.png';
 import newHeroTaxiImg from '@/assets/ride-removebg-preview.png';
 import checkUsOutImg from '@/assets/check_us_out.jpg';
-import { Camera, PlayCircle, Share2, Download } from 'lucide-react';
+import { Download } from 'lucide-react';
+
+// Custom Brand SVG Icons
+const YoutubeIcon = ({ size = 24, ...props }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" {...props}>
+    <path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.517 3.545 12 3.545 12 3.545s-7.517 0-9.388.507a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.871.507 9.388.507 9.388.507s7.517 0 9.388-.507a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+  </svg>
+);
+
+const LinkedinIcon = ({ size = 24, ...props }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" {...props}>
+    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+  </svg>
+);
+
+const InstagramIcon = ({ size = 24, ...props }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+  </svg>
+);
 
 function LandingPage() {
   const navigate = useNavigate();
@@ -267,10 +288,43 @@ function LandingPage() {
               Follow us on social media to get the latest updates, exclusive offers, and behind-the-scenes content. 
               Be part of the fastest growing transportation network in the region.
             </p>
-            <div className="check-us-out-socials">
-              <a href="#" className="check-social-btn"><Camera size={24} /></a>
-              <a href="#" className="check-social-btn"><PlayCircle size={24} /></a>
-              <a href="#" className="check-social-btn"><Share2 size={24} /></a>
+            <div className="check-us-out-socials-container">
+              <a 
+                href="https://www.instagram.com/rydon24official?igsh=MWQ3cWoxazJ1ZGV1OQ%3D%3D" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="check-social-item instagram"
+                aria-label="Instagram"
+              >
+                <div className="check-social-btn instagram">
+                  <InstagramIcon size={24} />
+                </div>
+                <span className="check-social-label">Instagram</span>
+              </a>
+              <a 
+                href="https://www.linkedin.com/company/124914072/admin/dashboard/" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="check-social-item linkedin"
+                aria-label="LinkedIn"
+              >
+                <div className="check-social-btn linkedin">
+                  <LinkedinIcon size={24} />
+                </div>
+                <span className="check-social-label">LinkedIn</span>
+              </a>
+              <a 
+                href="https://youtube.com/@rydon24official?si=RfVhOYUay--g9BhB" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="check-social-item youtube"
+                aria-label="YouTube"
+              >
+                <div className="check-social-btn youtube">
+                  <YoutubeIcon size={24} />
+                </div>
+                <span className="check-social-label">YouTube</span>
+              </a>
             </div>
             <div className="check-us-out-links">
               {appLinks.map((link, index) => (
@@ -316,11 +370,43 @@ function LandingPage() {
             </a>
             <p>We provide the best taxi and ride services in the region. Reliable, fast, and secure rides at your fingertips.</p>
             <p>Our fleet consists of well-maintained vehicles driven by professional drivers to ensure a comfortable journey.</p>
-            <div className="footer-socials">
-              <a href="#" className="social-icon">f</a>
-              <a href="#" className="social-icon">t</a>
-              <a href="#" className="social-icon">in</a>
-              <a href="#" className="social-icon">y</a>
+            <div className="footer-socials-container">
+              <a 
+                href="https://www.instagram.com/rydon24official?igsh=MWQ3cWoxazJ1ZGV1OQ%3D%3D" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="footer-social-item instagram"
+                aria-label="Instagram"
+              >
+                <div className="social-icon instagram">
+                  <InstagramIcon size={18} />
+                </div>
+                <span className="social-label">Instagram</span>
+              </a>
+              <a 
+                href="https://www.linkedin.com/company/124914072/admin/dashboard/" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="footer-social-item linkedin"
+                aria-label="LinkedIn"
+              >
+                <div className="social-icon linkedin">
+                  <LinkedinIcon size={18} />
+                </div>
+                <span className="social-label">LinkedIn</span>
+              </a>
+              <a 
+                href="https://youtube.com/@rydon24official?si=RfVhOYUay--g9BhB" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="footer-social-item youtube"
+                aria-label="YouTube"
+              >
+                <div className="social-icon youtube">
+                  <YoutubeIcon size={18} />
+                </div>
+                <span className="social-label">YouTube</span>
+              </a>
             </div>
             <div className="footer-website">www.Rydon24.com</div>
           </div>

@@ -555,28 +555,74 @@ body {
   margin-bottom: 30px;
 }
 
-.check-us-out-socials {
+.check-us-out-socials-container {
   display: flex;
-  gap: 15px;
+  gap: 1.75rem;
   margin-bottom: 40px;
+  flex-wrap: wrap;
+}
+
+.check-social-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  cursor: pointer;
 }
 
 .check-social-btn {
-  width: 50px;
-  height: 50px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
-  background: #f5f5f5;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #333333;
-  transition: all 0.2s ease;
+  color: #ffffff;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.check-social-btn:hover {
-  background: var(--primary-yellow);
-  color: #1a1a1a;
-  transform: translateY(-2px);
+.check-social-btn.instagram {
+  background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%);
+  box-shadow: 0 4px 12px rgba(225, 48, 108, 0.2);
+}
+
+.check-social-btn.linkedin {
+  background-color: #0A66C2;
+  box-shadow: 0 4px 12px rgba(10, 102, 194, 0.2);
+}
+
+.check-social-btn.youtube {
+  background-color: #FF0000;
+  box-shadow: 0 4px 12px rgba(255, 0, 0, 0.2);
+}
+
+.check-social-item .check-social-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #4b5563;
+  transition: color 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Hover effects triggered by the check-social-item */
+.check-social-item:hover .check-social-btn {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+.check-social-item.instagram:hover .check-social-label {
+  color: #e1306c;
+}
+
+.check-social-item.linkedin:hover .check-social-label {
+  color: #0a66c2;
+}
+
+.check-social-item.youtube:hover .check-social-label {
+  color: #ff0000;
 }
 
 .check-us-out-links {
@@ -787,24 +833,75 @@ body {
   margin-bottom: 1.5rem;
 }
 
-.footer-socials {
+.footer-socials-container {
   display: flex;
-  gap: 1rem;
+  gap: 1.5rem;
   margin-top: 2rem;
   margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+
+.footer-social-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  cursor: pointer;
 }
 
 .social-icon {
-  width: 35px;
-  height: 35px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background-color: #FFB300;
-  color: #fff;
+  color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
   text-decoration: none;
-  font-weight: bold;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  border: 1px solid transparent;
+}
+
+.social-icon.instagram {
+  background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%);
+  box-shadow: 0 4px 10px rgba(225, 48, 108, 0.2);
+}
+
+.social-icon.linkedin {
+  background-color: #0A66C2;
+  box-shadow: 0 4px 10px rgba(10, 102, 194, 0.2);
+}
+
+.social-icon.youtube {
+  background-color: #FF0000;
+  box-shadow: 0 4px 10px rgba(255, 0, 0, 0.2);
+}
+
+.footer-social-item .social-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  transition: color 0.3s ease;
+}
+
+/* Hover styles for container items */
+.footer-social-item:hover .social-icon {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+}
+
+.footer-social-item.instagram:hover .social-label {
+  color: #e1306c;
+}
+
+.footer-social-item.linkedin:hover .social-label {
+  color: #0a66c2;
+}
+
+.footer-social-item.youtube:hover .social-label {
+  color: #ff0000;
 }
 
 .footer-website {
