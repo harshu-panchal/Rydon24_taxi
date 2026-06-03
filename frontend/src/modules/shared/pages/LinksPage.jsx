@@ -24,6 +24,12 @@ const InstagramIcon = ({ size = 24, ...props }) => (
   </svg>
 );
 
+const FacebookIcon = ({ size = 24, ...props }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" {...props}>
+    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+  </svg>
+);
+
 const LinksPage = () => {
   const links = [
     {
@@ -110,6 +116,22 @@ const LinksPage = () => {
           <h2 className="social-title">Connect With Us</h2>
           <p className="social-subtitle font-medium">Follow us on our social media platforms for the latest updates, stories, and offers.</p>
           <div className="social-links-grid">
+            <a 
+              href="https://www.facebook.com/people/Rydon24/61590718764212" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="social-card facebook"
+            >
+              <div className="social-icon-wrapper">
+                <FacebookIcon size={24} />
+              </div>
+              <div className="social-card-info">
+                <span className="social-name">Facebook</span>
+                <span className="social-handle">Rydon24</span>
+              </div>
+              <ExternalLink size={16} className="social-ext" />
+            </a>
+
             <a 
               href="https://youtube.com/@rydon24official?si=RfVhOYUay--g9BhB" 
               target="_blank" 

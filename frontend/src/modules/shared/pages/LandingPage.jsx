@@ -35,6 +35,12 @@ const InstagramIcon = ({ size = 24, ...props }) => (
   </svg>
 );
 
+const FacebookIcon = ({ size = 24, ...props }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" {...props}>
+    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+  </svg>
+);
+
 function LandingPage() {
   const navigate = useNavigate();
   const { settings } = useSettings();
@@ -290,6 +296,18 @@ function LandingPage() {
             </p>
             <div className="check-us-out-socials-container">
               <a 
+                href="https://www.facebook.com/people/Rydon24/61590718764212" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="check-social-item facebook"
+                aria-label="Facebook"
+              >
+                <div className="check-social-btn facebook">
+                  <FacebookIcon size={24} />
+                </div>
+                <span className="check-social-label">Facebook</span>
+              </a>
+              <a 
                 href="https://www.instagram.com/rydon24official?igsh=MWQ3cWoxazJ1ZGV1OQ%3D%3D" 
                 target="_blank" 
                 rel="noopener noreferrer" 
@@ -371,6 +389,18 @@ function LandingPage() {
             <p>We provide the best taxi and ride services in the region. Reliable, fast, and secure rides at your fingertips.</p>
             <p>Our fleet consists of well-maintained vehicles driven by professional drivers to ensure a comfortable journey.</p>
             <div className="footer-socials-container">
+              <a 
+                href="https://www.facebook.com/people/Rydon24/61590718764212" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="footer-social-item facebook"
+                aria-label="Facebook"
+              >
+                <div className="social-icon facebook">
+                  <FacebookIcon size={18} />
+                </div>
+                <span className="social-label">Facebook</span>
+              </a>
               <a 
                 href="https://www.instagram.com/rydon24official?igsh=MWQ3cWoxazJ1ZGV1OQ%3D%3D" 
                 target="_blank" 

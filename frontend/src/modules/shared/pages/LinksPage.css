@@ -373,6 +373,11 @@
 }
 
 /* Brand Custom Variables & Defaults */
+.social-card.facebook {
+  --brand-color: #1877F2;
+  --brand-bg-hover: rgba(24, 119, 242, 0.03);
+}
+
 .social-card.youtube {
   --brand-color: #FF0000;
   --brand-bg-hover: rgba(255, 0, 0, 0.03);
@@ -401,6 +406,11 @@
 }
 
 /* Brand Specific Icons (Actual Colors) */
+.social-card.facebook .social-icon-wrapper {
+  background-color: #1877F2;
+  box-shadow: 0 4px 12px rgba(24, 119, 242, 0.25);
+}
+
 .social-card.youtube .social-icon-wrapper {
   background-color: #FF0000;
   box-shadow: 0 4px 12px rgba(255, 0, 0, 0.25);
