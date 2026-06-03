@@ -276,14 +276,24 @@ const RideDetail = () => {
       <div className="p-6 border-t border-gray-50 flex gap-4 bg-white pb-10">
         <button
           type="button"
-          onClick={() => navigate(`${routePrefix}/ride/select-location`, {
-            state: {
-              pickup: details.pickup,
-              drop: details.drop,
-              pickupCoords: ride?.pickupLocation?.coordinates || ride?.pickup?.coordinates || null,
-              dropCoords: ride?.dropLocation?.coordinates || ride?.drop?.coordinates || null,
-            },
-          })}
+          onClick={() => {
+            const vehicleTypeStr = String(ride?.vehicleIconType || ride?.vehicle?.icon_types || ride?.driver?.vehicleType || '').toLowerCase();
+            const rebookCategory = vehicleTypeStr.includes('bike') || vehicleTypeStr.includes('scooty')
+              ? 'bike'
+              : vehicleTypeStr.includes('auto')
+                ? 'auto'
+                : 'car';
+
+            navigate(`${routePrefix}/ride/select-location`, {
+              state: {
+                pickup: details.pickup,
+                drop: details.drop,
+                pickupCoords: ride?.pickupLocation?.coordinates || ride?.pickup?.coordinates || null,
+                dropCoords: ride?.dropLocation?.coordinates || ride?.drop?.coordinates || null,
+                selectedCategory: rebookCategory,
+              },
+            });
+          }}
           className="flex-[2] bg-[#1C2833] text-white py-5 rounded-[24px] text-[14px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all"
         >
           <Repeat size={18} />

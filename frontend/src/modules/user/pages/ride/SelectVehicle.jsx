@@ -992,6 +992,21 @@ const getAvailabilityBadge = (availability) => {
   return null;
 };
 
+const getNormalizedCategory = (type) => {
+  const cat = String(type?.category || '').trim().toLowerCase();
+  if (cat) {
+    if (cat.includes('car')) return 'car';
+    if (cat.includes('bike') || cat.includes('scooty')) return 'bike';
+    if (cat.includes('auto')) return 'auto';
+    return cat;
+  }
+
+  const icon = String(type?.icon_types || '').trim().toLowerCase();
+  if (icon.includes('bike') || icon.includes('scooty')) return 'bike';
+  if (icon.includes('auto')) return 'auto';
+  return 'car';
+};
+
 const normalizeVehicleType = (type, index) => {
   const id = String(type?._id || type?.id || type?.name || index);
   const dispatchType = String(type?.dispatch_type || 'normal').trim().toLowerCase();
@@ -1001,6 +1016,7 @@ const normalizeVehicleType = (type, index) => {
     vehicleTypeId: type?._id || type?.id || '',
     transportType: String(type?.transport_type || 'taxi').trim().toLowerCase() || 'taxi',
     iconType: type?.icon_types || 'car',
+    category: getNormalizedCategory(type),
     icon: getVehiclePreviewImage(type),
     vehicleIconUrl: getVehicleMapIcon(type),
     name: getTypeLabel(type),
@@ -1266,8 +1282,13 @@ const SelectVehicle = () => {
           })
           .map(normalizeVehicleType);
 
-        setVehicles(nextVehicles);
-        setSelected((current) => current || nextVehicles[0]?.id || '');
+        const categoryFilter = String(routeState?.selectedCategory || '').trim().toLowerCase();
+        const filteredVehicles = categoryFilter
+          ? nextVehicles.filter(v => v.category === categoryFilter)
+          : nextVehicles;
+
+        setVehicles(filteredVehicles);
+        setSelected((current) => current || filteredVehicles[0]?.id || '');
       } catch (error) {
         if (active) {
           setVehicleLoadError(error.message || 'Could not load vehicle types.');
@@ -1284,7 +1305,7 @@ const SelectVehicle = () => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [routeState?.selectedCategory]);
 
   useEffect(() => {
     let active = true;
@@ -1898,6 +1919,7 @@ const SelectVehicle = () => {
         stops,
         service_location_id: serviceLocationId,
         zone_id: zoneId,
+        selectedCategory: routeState.selectedCategory, // Forward category filter
       },
     });
   };
@@ -2021,6 +2043,23 @@ const SelectVehicle = () => {
         <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-2.5 mb-2 shrink-0" />
 
         <div className="shrink-0 border-b border-slate-100 px-4 pb-3">
+          {routeState.selectedCategory && (() => {
+            const cat = String(routeState.selectedCategory).toLowerCase();
+            const bgClass = cat === 'bike' 
+              ? 'bg-orange-50 border-orange-100 text-orange-600' 
+              : cat === 'auto' 
+                ? 'bg-emerald-50 border-emerald-100 text-emerald-600' 
+                : 'bg-blue-50 border-blue-100 text-blue-600';
+            return (
+              <div className={`mb-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider select-none ${bgClass}`}>
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${cat === 'bike' ? 'bg-orange-400' : cat === 'auto' ? 'bg-emerald-400' : 'bg-blue-400'}`}></span>
+                  <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${cat === 'bike' ? 'bg-orange-500' : cat === 'auto' ? 'bg-emerald-500' : 'bg-blue-500'}`}></span>
+                </span>
+                <span>Category: {routeState.selectedCategory}</span>
+              </div>
+            );
+          })()}
           <div className="flex items-end gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex gap-3">

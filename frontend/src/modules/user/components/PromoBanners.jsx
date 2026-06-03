@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, Clock3, ShieldCheck, Sparkles } from 'lucide-react';
 
@@ -11,6 +11,7 @@ const rotatingCards = [
     description: 'Auto for shorter wait times.',
     actionClass: 'bg-orange-50 text-orange-500',
     path: '/taxi/user/ride/select-location',
+    state: { selectedCategory: 'auto' },
     images: [
       { src: '/2_AutoRickshaw.png', alt: 'Auto' },
       { src: '/1_Bike.png', alt: 'Bike' },
@@ -23,6 +24,7 @@ const rotatingCards = [
     description: 'Cab for luggage or comfort.',
     actionClass: 'bg-blue-50 text-blue-500',
     path: '/taxi/user/ride/select-location',
+    state: { selectedCategory: 'car' },
     images: [
       { src: '/4_Taxi.png', alt: 'Taxi' },
       { src: '/white_sedan_banner_car.png', alt: 'Sedan' },
@@ -42,11 +44,11 @@ const ImageCarousel = ({ images, className }) => {
   );
 };
 
-const PromoCard = ({ icon: Icon, iconClass, title, description, actionClass, path, images, onNavigate }) => (
+const PromoCard = ({ icon: Icon, iconClass, title, description, actionClass, path, state, images, onNavigate }) => (
   <motion.div
     whileTap={{ scale: 0.98 }}
-    onClick={() => onNavigate(path)}
-    className="relative min-h-[140px] overflow-hidden rounded-2xl border border-white/80 bg-white/88 p-3.5 shadow-[0_12px_28px_rgba(15,23,42,0.07)]"
+    onClick={() => onNavigate(path, { state })}
+    className="relative min-h-[140px] overflow-hidden rounded-2xl border border-white/80 bg-white/88 p-3.5 shadow-[0_12px_28px_rgba(15,23,42,0.07)] cursor-pointer"
   >
     <div className={`flex items-center gap-2 ${iconClass}`}>
       <Icon size={11} strokeWidth={2.5} />
@@ -62,6 +64,8 @@ const PromoCard = ({ icon: Icon, iconClass, title, description, actionClass, pat
 
 const PromoBanners = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
 
   return (
     <div className="px-5 space-y-4">
@@ -71,7 +75,12 @@ const PromoBanners = () => {
 
       <div className="grid grid-cols-2 gap-3">
         {rotatingCards.map((card, index) => (
-          <PromoCard key={`${String(card.title || '').trim() || 'promo'}-${index}`} {...card} onNavigate={navigate} />
+          <PromoCard 
+            key={`${String(card.title || '').trim() || 'promo'}-${index}`} 
+            {...card} 
+            path={routePrefix ? `${routePrefix}/ride/select-location` : '/ride/select-location'}
+            onNavigate={navigate} 
+          />
         ))}
       </div>
 
@@ -99,8 +108,8 @@ const PromoBanners = () => {
             <motion.button
               type="button"
               whileTap={{ scale: 0.98 }}
-              onClick={() => navigate('/taxi/user/ride/select-location')}
-              className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-[12px] font-black text-slate-900 shadow-lg shadow-black/15"
+              onClick={() => navigate(`${routePrefix}/ride/select-category`)}
+              className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-[12px] font-black text-slate-900 shadow-lg shadow-black/15 active:scale-95"
             >
               Ride Now
               <ArrowRight size={14} strokeWidth={3} />

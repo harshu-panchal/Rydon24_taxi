@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ChevronRight, MapPin, Navigation, Search } from 'lucide-react';
 
@@ -7,6 +7,8 @@ const quickPlaces = ['Home', 'Work', 'Recent'];
 
 const LocationCard = ({ location = 'Fetching location...' }) => {
   const navigate = useNavigate();
+  const routeLocation = useLocation();
+  const routePrefix = routeLocation.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
   const isFetchingLocation = location.trim().toLowerCase() === 'fetching location...';
   const locationLabel = isFetchingLocation ? 'Fetching location' : location;
 
@@ -76,7 +78,7 @@ const LocationCard = ({ location = 'Fetching location...' }) => {
         </motion.div>
 
         <motion.button
-          onClick={() => navigate('/ride/select-location')}
+          onClick={() => navigate(`${routePrefix}/ride/select-category`)}
           className="mt-4 flex w-full items-center gap-3 rounded-[18px] border border-slate-100 bg-slate-50 px-4 py-4 text-left transition-all hover:border-slate-200 hover:bg-white active:scale-[0.99]"
           whileHover={{ y: -1 }}
           whileTap={{ scale: 0.985 }}
@@ -107,7 +109,7 @@ const LocationCard = ({ location = 'Fetching location...' }) => {
             <motion.button
               key={`${String(place || '').trim() || 'place'}-${index}`}
               type="button"
-              onClick={() => navigate('/ride/select-location')}
+              onClick={() => navigate(`${routePrefix}/ride/select-category`)}
               className="shrink-0 rounded-full border border-slate-200 bg-white px-4 py-2 text-[12px] font-black text-slate-600 transition-all active:scale-95"
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}

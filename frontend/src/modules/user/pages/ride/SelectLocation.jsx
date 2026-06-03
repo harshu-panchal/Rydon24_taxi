@@ -714,6 +714,7 @@ const SelectLocation = () => {
         dropCoords: resolvedDropCoords,
         service_location_id: nextServiceLocationId,
         zone_id: nextZoneId,
+        selectedCategory: routeState.selectedCategory, // Forward category filter
       },
     });
   };

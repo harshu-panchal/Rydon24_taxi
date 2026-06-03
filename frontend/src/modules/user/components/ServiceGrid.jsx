@@ -68,17 +68,17 @@ const ServiceGrid = () => {
       return '/taxi/user/bus';
     }
 
-    // Regular ride-hailing modules should always start from location selection.
+    // Regular ride-hailing modules should always start from category selection.
     if (
       ['normal', 'taxi', 'ride', 'ride_hailing', 'ride-hailing'].includes(serviceType) ||
       ['taxi', 'both'].includes(transportType) ||
       moduleName.includes('taxi') ||
       moduleName.includes('cab')
     ) {
-      return '/taxi/user/ride/select-location';
+      return '/taxi/user/ride/select-category';
     }
 
-    return '/taxi/user/ride/select-location';
+    return '/taxi/user/ride/select-category';
   };
 
   const getAccent = (index) => {

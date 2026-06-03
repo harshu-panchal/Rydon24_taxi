@@ -27,6 +27,7 @@ const Signup = lazy(() => import('./modules/user/pages/auth/Signup'));
 // Ride Module Pages
 const SelectLocation = lazy(() => import('./modules/user/pages/ride/SelectLocation'));
 const SelectVehicle = lazy(() => import('./modules/user/pages/ride/SelectVehicle'));
+const SelectCategory = lazy(() => import('./modules/user/pages/ride/SelectCategory'));
 const SearchingDriver = lazy(() => import('./modules/user/pages/ride/SearchingDriver'));
 const RideTracking = lazy(() => import('./modules/user/pages/ride/RideTracking'));
 const RideComplete = lazy(() => import('./modules/user/pages/ride/RideComplete'));
@@ -702,6 +703,10 @@ function App() {
 
               <Route element={<UserProtectedRoute />}>
               <Route
+                path="/ride/select-category"
+                element={<SelectCategory />}
+              />
+              <Route
                 path="/ride/select-location"
                 element={<SelectLocation />}
               />
@@ -803,6 +808,10 @@ function App() {
               <Route path="/taxi/user" element={<UserHomeRoute taxiPrefixed />} />
 
               <Route element={<UserProtectedRoute />}>
+              <Route
+                path="/taxi/user/ride/select-category"
+                element={<SelectCategory />}
+              />
               <Route
                 path="/taxi/user/ride/select-location"
                 element={<SelectLocation />}

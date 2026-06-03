@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -58,6 +58,9 @@ const ActionCard = ({ title, description, image, surfaceClass, glowClass, button
 };
 
 const ActionsSection = () => {
+  const location = useLocation();
+  const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
+
   return (
     <div className="px-5">
       <div className="mb-3.5 ml-1">
@@ -72,7 +75,7 @@ const ActionsSection = () => {
           surfaceClass="bg-gradient-to-br from-orange-50/60 via-white/80 to-orange-100/40"
           glowClass="249,115,22"
           buttonBgClass="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600"
-          path="/ride/select-location"
+          path={`${routePrefix}/ride/select-category`}
         />
 
         <ActionCard
