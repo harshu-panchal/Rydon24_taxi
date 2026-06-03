@@ -1384,6 +1384,19 @@ const serializeRentalBookingRequest = (item = {}) => ({
   serviceCenterIds: Array.isArray(item.serviceCenterIds)
     ? item.serviceCenterIds.map((centerId) => String(centerId))
     : [],
+  commissionSnapshot: {
+    serviceStoreId: item.commissionSnapshot?.serviceStoreId
+      ? String(item.commissionSnapshot.serviceStoreId)
+      : '',
+    serviceStoreName: item.commissionSnapshot?.serviceStoreName || '',
+    ownerName: item.commissionSnapshot?.ownerName || '',
+    serviceStoreCommissionType:
+      item.commissionSnapshot?.serviceStoreCommissionType === 'fixed' ? 'fixed' : 'percentage',
+    serviceStoreCommissionValue: Number(item.commissionSnapshot?.serviceStoreCommissionValue || 0),
+    ownerCommissionType:
+      item.commissionSnapshot?.ownerCommissionType === 'fixed' ? 'fixed' : 'percentage',
+    ownerCommissionValue: Number(item.commissionSnapshot?.ownerCommissionValue || 0),
+  },
   assignedStaff: {
     id: item.assignedStaffId ? String(item.assignedStaffId) : '',
     name: item.assignedStaffName || '',
@@ -1403,6 +1416,63 @@ const serializeRentalBookingRequest = (item = {}) => ({
   createdAt: item.createdAt || null,
   updatedAt: item.updatedAt || null,
 });
+
+const normalizeRentalCommissionRule = (rule = {}, fallbackType = 'percentage') => ({
+  type: rule?.type === 'fixed' ? 'fixed' : fallbackType,
+  value: Math.max(0, Number(rule?.value || 0)),
+});
+
+const computeRentalCommissionBreakdown = (snapshot = {}, grossAmount = 0) => {
+  const baseAmount = Math.max(0, Number(grossAmount || 0));
+  const serviceStoreRule = normalizeRentalCommissionRule(
+    {
+      type: snapshot?.serviceStoreCommissionType,
+      value: snapshot?.serviceStoreCommissionValue,
+    },
+    'percentage',
+  );
+  const ownerRule = normalizeRentalCommissionRule(
+    {
+      type: snapshot?.ownerCommissionType,
+      value: snapshot?.ownerCommissionValue,
+    },
+    'percentage',
+  );
+
+  const calculateAmount = (amount, rule) => {
+    if (rule.type === 'fixed') {
+      return Math.min(amount, Math.max(0, Number(rule.value || 0)));
+    }
+
+    return Math.min(amount, Math.max(0, (amount * Number(rule.value || 0)) / 100));
+  };
+
+  const serviceStoreAmountRaw = calculateAmount(baseAmount, serviceStoreRule);
+  const remainingAfterStore = Math.max(0, baseAmount - serviceStoreAmountRaw);
+  const ownerAmountRaw = calculateAmount(remainingAfterStore, ownerRule);
+  const adminAmountRaw = Math.max(0, baseAmount - serviceStoreAmountRaw - ownerAmountRaw);
+  const round = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+
+  return {
+    grossAmount: round(baseAmount),
+    serviceStore: {
+      id: snapshot?.serviceStoreId ? String(snapshot.serviceStoreId) : '',
+      name: snapshot?.serviceStoreName || '',
+      type: serviceStoreRule.type,
+      value: round(serviceStoreRule.value),
+      amount: round(serviceStoreAmountRaw),
+    },
+    owner: {
+      name: snapshot?.ownerName || '',
+      type: ownerRule.type,
+      value: round(ownerRule.value),
+      amount: round(ownerAmountRaw),
+    },
+    admin: {
+      amount: round(adminAmountRaw),
+    },
+  };
+};
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const VALID_USER_GENDERS = new Set(['male', 'female', 'other', 'prefer-not-to-say']);
@@ -1709,6 +1779,16 @@ const serializeServiceStore = (store) => ({
     Number(store.latitude ?? store.location?.coordinates?.[1] ?? null),
   longitude:
     Number(store.longitude ?? store.location?.coordinates?.[0] ?? null),
+  rentalCommission: {
+    serviceStore: {
+      type: store.rentalCommission?.serviceStore?.type === 'fixed' ? 'fixed' : 'percentage',
+      value: Number(store.rentalCommission?.serviceStore?.value || 0),
+    },
+    owner: {
+      type: store.rentalCommission?.owner?.type === 'fixed' ? 'fixed' : 'percentage',
+      value: Number(store.rentalCommission?.owner?.value || 0),
+    },
+  },
   status: store.status || (store.active === false ? 'inactive' : 'active'),
   active: store.active !== false,
   staff: Array.isArray(store.staff)
@@ -1725,6 +1805,39 @@ const serializeServiceStore = (store) => ({
     : [],
   createdAt: store.createdAt,
   updatedAt: store.updatedAt,
+});
+
+const normalizeServiceStoreRentalCommission = (value = {}, existing = {}) => ({
+  serviceStore: {
+    type: value?.serviceStore?.type === 'fixed'
+      ? 'fixed'
+      : existing?.serviceStore?.type === 'fixed'
+        ? 'fixed'
+        : 'percentage',
+    value: Math.max(
+      0,
+      Number(
+        value?.serviceStore?.value ??
+          existing?.serviceStore?.value ??
+          0,
+      ),
+    ),
+  },
+  owner: {
+    type: value?.owner?.type === 'fixed'
+      ? 'fixed'
+      : existing?.owner?.type === 'fixed'
+        ? 'fixed'
+        : 'percentage',
+    value: Math.max(
+      0,
+      Number(
+        value?.owner?.value ??
+          existing?.owner?.value ??
+          0,
+      ),
+    ),
+  },
 });
 
 const serializeSetPrice = (item) => ({
@@ -7769,6 +7882,7 @@ export const getDashboardData = async () => {
       address: String(payload.address || '').trim(),
       owner_name: String(payload.owner_name || '').trim(),
       owner_phone: String(payload.owner_phone || '').trim(),
+      rentalCommission: normalizeServiceStoreRentalCommission(payload.rentalCommission),
       ...point,
       status,
       active: status === 'active',
@@ -7833,6 +7947,13 @@ export const updateServiceStore = async (id, payload, currentAdmin = null) => {
 
     if (payload.owner_phone !== undefined) {
       store.owner_phone = String(payload.owner_phone || '').trim();
+    }
+
+    if (payload.rentalCommission !== undefined) {
+      store.rentalCommission = normalizeServiceStoreRentalCommission(
+        payload.rentalCommission,
+        store.rentalCommission,
+      );
     }
 
     if (payload.latitude !== undefined || payload.longitude !== undefined) {
@@ -8522,13 +8643,24 @@ export const listRentalBookingRequests = async () => {
       .sort({ createdAt: -1 })
       .lean();
 
-    return items.map((item) => ({
-      ...serializeRentalBookingRequest(item),
-      rideMetrics: computeRentalRideMetrics(
+    return items.map((item) => {
+      const rideMetrics = computeRentalRideMetrics(
         item,
         item.completedAt || item.completionRequestedAt || null,
-      ),
-    }));
+      );
+
+      return {
+        ...serializeRentalBookingRequest(item),
+        rideMetrics,
+        commissionBreakdown: {
+          estimated: computeRentalCommissionBreakdown(item.commissionSnapshot, Number(item.totalCost || 0)),
+          live: computeRentalCommissionBreakdown(
+            item.commissionSnapshot,
+            Number(item.finalCharge || rideMetrics.currentCharge || item.totalCost || 0),
+          ),
+        },
+      };
+    });
   };
 
   export const getRentalBookingRequestById = async (id) => {
@@ -8541,12 +8673,21 @@ export const listRentalBookingRequests = async () => {
       throw new ApiError(404, 'Rental booking request not found');
     }
 
+    const rideMetrics = computeRentalRideMetrics(
+      item,
+      item.completedAt || item.completionRequestedAt || null,
+    );
+
     return {
       ...serializeRentalBookingRequest(item),
-      rideMetrics: computeRentalRideMetrics(
-        item,
-        item.completedAt || item.completionRequestedAt || null,
-      ),
+      rideMetrics,
+      commissionBreakdown: {
+        estimated: computeRentalCommissionBreakdown(item.commissionSnapshot, Number(item.totalCost || 0)),
+        live: computeRentalCommissionBreakdown(
+          item.commissionSnapshot,
+          Number(item.finalCharge || rideMetrics.currentCharge || item.totalCost || 0),
+        ),
+      },
     };
   };
 
@@ -8701,12 +8842,21 @@ export const getRentalTrackingDashboard = async () => {
       .populate('vehicleTypeId', 'name vehicleCategory image')
       .lean();
 
+    const rideMetrics = computeRentalRideMetrics(
+      populated,
+      populated.completedAt || populated.completionRequestedAt || null,
+    );
+
     return {
       ...serializeRentalBookingRequest(populated),
-      rideMetrics: computeRentalRideMetrics(
-        populated,
-        populated.completedAt || populated.completionRequestedAt || null,
-      ),
+      rideMetrics,
+      commissionBreakdown: {
+        estimated: computeRentalCommissionBreakdown(populated.commissionSnapshot, Number(populated.totalCost || 0)),
+        live: computeRentalCommissionBreakdown(
+          populated.commissionSnapshot,
+          Number(populated.finalCharge || rideMetrics.currentCharge || populated.totalCost || 0),
+        ),
+      },
     };
   };
 

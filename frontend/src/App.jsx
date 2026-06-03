@@ -235,6 +235,7 @@ const AdminDriverIncentive = lazy(() => import('./modules/admin/pages/price-mana
 const AdminSurgePricing = lazy(() => import('./modules/admin/pages/price-management/SurgePricing'));
 const AdminVehicleType = lazy(() => import('./modules/admin/pages/price-management/VehicleType'));
 const AdminRentalVehicleTypes = lazy(() => import('./modules/admin/pages/price-management/RentalVehicleTypes'));
+const AdminRentalCommissionManager = lazy(() => import('./modules/admin/pages/price-management/RentalCommissionManager'));
 const AdminRentalTracking = lazy(() => import('./modules/admin/pages/price-management/RentalTracking'));
 const AdminRentalTrackingDetail = lazy(() => import('./modules/admin/pages/price-management/RentalTrackingDetail'));
 const AdminRentalBookingRequests = lazy(() => import('./modules/admin/pages/price-management/RentalBookingRequests'));
@@ -1409,6 +1410,10 @@ function App() {
                   <Route
                     path="service-stores"
                     element={<AdminServiceStores />}
+                  />
+                  <Route
+                    path="rental-commission"
+                    element={<AdminRentalCommissionManager />}
                   />
                   <Route
                     path="service-stores/add"

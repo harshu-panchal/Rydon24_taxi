@@ -52,6 +52,8 @@ const formatDateTime = (value) => {
 };
 
 const formatAmount = (value) => `Rs.${Number(value || 0)}`;
+const formatCommissionRule = (type, value) =>
+  type === 'fixed' ? `${formatAmount(value)} fixed` : `${Number(value || 0)}%`;
 
 const toRentalRequestList = (response) => {
   const candidates = [
@@ -444,6 +446,60 @@ const RentalBookingRequests = () => {
                       <div className="rounded-2xl bg-slate-50 px-4 py-4">
                         <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Rental Total</p>
                         <p className="mt-3 text-lg font-black text-slate-900">{formatAmount(selectedRequest.totalCost)}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[24px] border border-slate-200 bg-white p-5">
+                    <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Commission Split</p>
+                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+                      <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Service Store</p>
+                        <p className="mt-3 text-sm font-black text-slate-900">
+                          {selectedRequest.commissionBreakdown?.live?.serviceStore?.name || selectedRequest.commissionSnapshot?.serviceStoreName || 'No store snapshot'}
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-slate-500">
+                          Rule: {formatCommissionRule(
+                            selectedRequest.commissionBreakdown?.live?.serviceStore?.type || selectedRequest.commissionSnapshot?.serviceStoreCommissionType,
+                            selectedRequest.commissionBreakdown?.live?.serviceStore?.value || selectedRequest.commissionSnapshot?.serviceStoreCommissionValue,
+                          )}
+                        </p>
+                        <p className="mt-2 text-lg font-black text-slate-900">
+                          {formatAmount(selectedRequest.commissionBreakdown?.live?.serviceStore?.amount)}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Owner</p>
+                        <p className="mt-3 text-sm font-black text-slate-900">
+                          {selectedRequest.commissionBreakdown?.live?.owner?.name || selectedRequest.commissionSnapshot?.ownerName || 'No owner snapshot'}
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-slate-500">
+                          Rule: {formatCommissionRule(
+                            selectedRequest.commissionBreakdown?.live?.owner?.type || selectedRequest.commissionSnapshot?.ownerCommissionType,
+                            selectedRequest.commissionBreakdown?.live?.owner?.value || selectedRequest.commissionSnapshot?.ownerCommissionValue,
+                          )}
+                        </p>
+                        <p className="mt-2 text-lg font-black text-slate-900">
+                          {formatAmount(selectedRequest.commissionBreakdown?.live?.owner?.amount)}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Admin Share</p>
+                        <p className="mt-3 text-lg font-black text-emerald-700">
+                          {formatAmount(selectedRequest.commissionBreakdown?.live?.admin?.amount)}
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-slate-500">
+                          Based on live charge {formatAmount(selectedRequest.commissionBreakdown?.live?.grossAmount || selectedRequest.finalCharge || selectedRequest.totalCost)}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Booked Estimate</p>
+                        <p className="mt-3 text-sm font-black text-slate-900">
+                          Gross: {formatAmount(selectedRequest.commissionBreakdown?.estimated?.grossAmount || selectedRequest.totalCost)}
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-slate-500">
+                          Store {formatAmount(selectedRequest.commissionBreakdown?.estimated?.serviceStore?.amount)} · Owner {formatAmount(selectedRequest.commissionBreakdown?.estimated?.owner?.amount)}
+                        </p>
                       </div>
                     </div>
                   </div>

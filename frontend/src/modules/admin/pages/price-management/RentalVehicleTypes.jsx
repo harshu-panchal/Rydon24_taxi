@@ -224,7 +224,7 @@ const buildDefaultForm = () => {
     poolingEnabled: false,
     advancePayment: {
       enabled: false,
-      paymentMode: 'fixed',
+      paymentMode: 'percentage',
       amount: 20,
       label: 'Advance booking payment',
       notes: '',
@@ -354,7 +354,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
               poolingEnabled: Boolean(selected.poolingEnabled),
               advancePayment: {
                 enabled: Boolean(selected.advancePayment?.enabled),
-                paymentMode: 'fixed',
+                paymentMode: selected.advancePayment?.paymentMode || 'percentage',
                 amount: Number(selected.advancePayment?.amount ?? 20),
                 label: selected.advancePayment?.label || 'Advance booking payment',
                 notes: selected.advancePayment?.notes || '',
@@ -398,7 +398,6 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
       ...current,
       advancePayment: {
         ...current.advancePayment,
-        paymentMode: 'fixed',
         [field]: value,
       },
     }));
@@ -1303,6 +1302,19 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
               {formData.advancePayment?.enabled ? (
                 <div className="mt-4 space-y-4 rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
                   <div>
+                    <label className={labelClass}>Advance Payment Mode</label>
+                    <select
+                      value={formData.advancePayment?.paymentMode || 'percentage'}
+                      onChange={(event) => updateAdvancePayment('paymentMode', event.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="percentage">Percentage of rental total</option>
+                      <option value="fixed">Fixed amount</option>
+                      <option value="full">Full amount</option>
+                    </select>
+                  </div>
+
+                  <div>
                     <label className={labelClass}>Payment Label</label>
                     <input
                       type="text"
@@ -1314,17 +1326,28 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                   </div>
 
                   <div>
-                    <label className={labelClass}>Custom Advance Amount</label>
+                    <label className={labelClass}>
+                      {formData.advancePayment?.paymentMode === 'percentage'
+                        ? 'Advance Percentage'
+                        : formData.advancePayment?.paymentMode === 'full'
+                          ? 'Full Payment Value'
+                          : 'Custom Advance Amount'}
+                    </label>
                     <input
                       type="number"
                       min="0"
+                      max={formData.advancePayment?.paymentMode === 'percentage' ? '100' : undefined}
                       value={formData.advancePayment?.amount ?? 0}
                       onChange={(event) => updateAdvancePayment('amount', Number(event.target.value || 0))}
                       className={inputClass}
-                      placeholder="500"
+                      placeholder={formData.advancePayment?.paymentMode === 'percentage' ? '20' : '500'}
                     />
                     <p className="mt-2 text-xs text-slate-500">
-                      Enter the exact amount the user must pay upfront while booking this vehicle.
+                      {formData.advancePayment?.paymentMode === 'percentage'
+                        ? 'Enter the percentage of the rental total that the user must pay upfront.'
+                        : formData.advancePayment?.paymentMode === 'full'
+                          ? 'Full payment charges the full rental total during booking. Amount is kept only as a fallback.'
+                          : 'Enter the exact amount the user must pay upfront while booking this vehicle.'}
                     </p>
                   </div>
 

@@ -1183,6 +1183,19 @@ const serializeRentalBookingRequest = (item = {}) => ({
     vehicleCategory: item.assignedVehicle?.vehicleCategory || '',
     image: item.assignedVehicle?.image || '',
   },
+  commissionSnapshot: {
+    serviceStoreId: item.commissionSnapshot?.serviceStoreId
+      ? String(item.commissionSnapshot.serviceStoreId)
+      : '',
+    serviceStoreName: item.commissionSnapshot?.serviceStoreName || '',
+    ownerName: item.commissionSnapshot?.ownerName || '',
+    serviceStoreCommissionType:
+      item.commissionSnapshot?.serviceStoreCommissionType === 'fixed' ? 'fixed' : 'percentage',
+    serviceStoreCommissionValue: Number(item.commissionSnapshot?.serviceStoreCommissionValue || 0),
+    ownerCommissionType:
+      item.commissionSnapshot?.ownerCommissionType === 'fixed' ? 'fixed' : 'percentage',
+    ownerCommissionValue: Number(item.commissionSnapshot?.ownerCommissionValue || 0),
+  },
   status: item.status || 'pending',
   adminNote: item.adminNote || '',
   assignedAt: item.assignedAt || null,
@@ -1194,6 +1207,47 @@ const serializeRentalBookingRequest = (item = {}) => ({
   updatedAt: item.updatedAt || null,
   rentalTracking: buildRentalTrackingSnapshot(item),
 });
+
+const computeRentalCommissionBreakdown = (snapshot = {}, grossAmount = 0) => {
+  const baseAmount = Math.max(0, Number(grossAmount || 0));
+  const serviceStoreType =
+    snapshot?.serviceStoreCommissionType === 'fixed' ? 'fixed' : 'percentage';
+  const ownerType = snapshot?.ownerCommissionType === 'fixed' ? 'fixed' : 'percentage';
+  const serviceStoreValue = Math.max(0, Number(snapshot?.serviceStoreCommissionValue || 0));
+  const ownerValue = Math.max(0, Number(snapshot?.ownerCommissionValue || 0));
+  const calculateAmount = (amount, type, value) =>
+    type === 'fixed'
+      ? Math.min(amount, value)
+      : Math.min(amount, Math.max(0, (amount * value) / 100));
+  const serviceStoreAmountRaw = calculateAmount(baseAmount, serviceStoreType, serviceStoreValue);
+  const ownerAmountRaw = calculateAmount(
+    Math.max(0, baseAmount - serviceStoreAmountRaw),
+    ownerType,
+    ownerValue,
+  );
+  const adminAmountRaw = Math.max(0, baseAmount - serviceStoreAmountRaw - ownerAmountRaw);
+  const round = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+
+  return {
+    grossAmount: round(baseAmount),
+    serviceStore: {
+      id: snapshot?.serviceStoreId ? String(snapshot.serviceStoreId) : '',
+      name: snapshot?.serviceStoreName || '',
+      type: serviceStoreType,
+      value: round(serviceStoreValue),
+      amount: round(serviceStoreAmountRaw),
+    },
+    owner: {
+      name: snapshot?.ownerName || '',
+      type: ownerType,
+      value: round(ownerValue),
+      amount: round(ownerAmountRaw),
+    },
+    admin: {
+      amount: round(adminAmountRaw),
+    },
+  };
+};
 
 const resolveRentalSelectedPackagePricing = (item = {}) => {
   const selectedPackage = item.selectedPackage || {};
@@ -1375,6 +1429,22 @@ const normalizeGovernmentIdProof = (input = {}, { required = false } = {}) => {
         ? new Date(input.backUploadedAt)
         : new Date()
       : null,
+  };
+};
+
+const buildRentalBookingResponse = (item = {}, endedAt = null) => {
+  const rideMetrics = computeRentalRideMetrics(item, endedAt);
+
+  return {
+    ...serializeRentalBookingRequest(item),
+    rideMetrics,
+    commissionBreakdown: {
+      estimated: computeRentalCommissionBreakdown(item.commissionSnapshot, Number(item.totalCost || 0)),
+      live: computeRentalCommissionBreakdown(
+        item.commissionSnapshot,
+        Number(item.finalCharge || rideMetrics.currentCharge || item.totalCost || 0),
+      ),
+    },
   };
 };
 
@@ -3813,9 +3883,6 @@ export const createRentalBookingRequest = async (req, res) => {
   const paymentStatus = toCleanString(payload.paymentStatus).toLowerCase() || 'pending';
   const paymentMethod = toCleanString(payload.paymentMethod).toLowerCase();
   const paymentMethodLabel = toCleanString(payload.paymentMethodLabel);
-  const advancePaymentLabel = toCleanString(payload.advancePaymentLabel) || 'Advance booking payment';
-  const totalCost = Math.max(0, Number(payload.totalCost || 0));
-  const payableNow = Math.max(0, Number(payload.payableNow || payload.deposit || 0));
   const kycCompleted = Boolean(payload.kycCompleted);
 
   if (!mongoose.Types.ObjectId.isValid(vehicleTypeId)) {
@@ -3863,6 +3930,43 @@ export const createRentalBookingRequest = async (req, res) => {
   const serviceLocation = payload.serviceLocation || {};
   const paymentPayload = payload.payment || {};
   const kycDocumentsPayload = payload.kycDocuments || {};
+  const matchedPackage = Array.isArray(vehicle.pricing)
+    ? vehicle.pricing.find(
+        (item) => String(item?.id || item?.packageId || '').trim() ===
+          String(selectedPackage.id || selectedPackage.packageId || '').trim(),
+      ) || null
+    : null;
+
+  if (!matchedPackage) {
+    throw new ApiError(400, 'Selected rental package is invalid');
+  }
+
+  const totalCost = Math.max(0, Number(matchedPackage.price || 0));
+  const advancePaymentConfig = vehicle.advancePayment || {};
+  const advancePaymentMode = String(advancePaymentConfig.paymentMode || '').trim().toLowerCase();
+  const advancePaymentLabel =
+    toCleanString(advancePaymentConfig.label) ||
+    toCleanString(payload.advancePaymentLabel) ||
+    'Advance booking payment';
+  const advanceAmountRaw = advancePaymentConfig.enabled
+    ? advancePaymentMode === 'full'
+      ? totalCost
+      : advancePaymentMode === 'percentage'
+        ? (totalCost * Math.max(0, Number(advancePaymentConfig.amount || 0))) / 100
+        : Math.max(0, Number(advancePaymentConfig.amount || 0))
+    : 0;
+  const payableNow = Math.min(
+    totalCost,
+    Math.round((Math.max(0, advanceAmountRaw) + Number.EPSILON) * 100) / 100,
+  );
+  const normalizedPaymentStatus = payableNow > 0
+    ? paymentStatus === 'paid'
+      ? 'paid'
+      : paymentStatus === 'failed'
+        ? 'failed'
+        : 'pending'
+    : 'not_required';
+
   const normalizedDrivingLicenseUrl = toCleanString(
     kycDocumentsPayload.drivingLicense?.imageUrl ||
       kycDocumentsPayload.drivingLicense?.secureUrl ||
@@ -3884,9 +3988,21 @@ export const createRentalBookingRequest = async (req, res) => {
         _id: { $in: allowedServiceStoreIds },
         ...(requestedLocationId ? { service_location_id: requestedLocationId } : {}),
       })
-        .select('_id')
+        .select('_id name owner_name rentalCommission')
+        .sort({ name: 1, _id: 1 })
         .lean()
     : [];
+
+  if (matchingServiceCenters.length === 0) {
+    throw new ApiError(
+      400,
+      requestedLocationId
+        ? 'No rental service store is configured for this vehicle in the selected service location'
+        : 'No rental service store is configured for this vehicle',
+    );
+  }
+
+  const primaryServiceCenter = matchingServiceCenters[0] || null;
 
   const update = {
     userId: user._id,
@@ -3896,12 +4012,33 @@ export const createRentalBookingRequest = async (req, res) => {
     vehicleCategory: vehicle.vehicleCategory || '',
     vehicleImage: vehicle.image || '',
     serviceCenterIds: matchingServiceCenters.map((item) => item._id),
+    commissionSnapshot: {
+      serviceStoreId: primaryServiceCenter?._id || null,
+      serviceStoreName: toCleanString(primaryServiceCenter?.name),
+      ownerName: toCleanString(primaryServiceCenter?.owner_name),
+      serviceStoreCommissionType:
+        primaryServiceCenter?.rentalCommission?.serviceStore?.type === 'fixed'
+          ? 'fixed'
+          : 'percentage',
+      serviceStoreCommissionValue: Math.max(
+        0,
+        Number(primaryServiceCenter?.rentalCommission?.serviceStore?.value || 0),
+      ),
+      ownerCommissionType:
+        primaryServiceCenter?.rentalCommission?.owner?.type === 'fixed'
+          ? 'fixed'
+          : 'percentage',
+      ownerCommissionValue: Math.max(
+        0,
+        Number(primaryServiceCenter?.rentalCommission?.owner?.value || 0),
+      ),
+    },
     selectedPackage: {
       packageId: toCleanString(selectedPackage.id || selectedPackage.packageId || ''),
-      label: toCleanString(selectedPackage.label),
-      durationHours: Math.max(0, Number(selectedPackage.durationHours || 0)),
-      price: Math.max(0, Number(selectedPackage.price || 0)),
-      extraHourPrice: Math.max(0, Number(selectedPackage.extraHourPrice || 0)),
+      label: toCleanString(matchedPackage.label || selectedPackage.label),
+      durationHours: Math.max(0, Number(matchedPackage.durationHours || selectedPackage.durationHours || 0)),
+      price: totalCost,
+      extraHourPrice: Math.max(0, Number(matchedPackage.extraHourPrice || selectedPackage.extraHourPrice || 0)),
     },
     serviceLocation: {
       locationId: toCleanString(serviceLocation.id || serviceLocation._id || serviceLocation.locationId || ''),
@@ -3918,13 +4055,15 @@ export const createRentalBookingRequest = async (req, res) => {
     totalCost,
     payableNow,
     advancePaymentLabel,
-    paymentStatus,
+    paymentStatus: normalizedPaymentStatus,
     paymentMethod,
     paymentMethodLabel,
     payment: {
       provider: toCleanString(paymentPayload.provider),
-      status: toCleanString(paymentPayload.status) || paymentStatus,
-      amount: Math.max(0, Number(paymentPayload.amount || payableNow || 0)),
+      status: toCleanString(paymentPayload.status) || normalizedPaymentStatus,
+      amount: normalizedPaymentStatus === 'not_required'
+        ? 0
+        : Math.max(0, Number(paymentPayload.amount || payableNow || 0)),
       currency: toCleanString(paymentPayload.currency) || 'INR',
       orderId: toCleanString(paymentPayload.orderId || paymentPayload.razorpay_order_id),
       paymentId: toCleanString(paymentPayload.paymentId || paymentPayload.razorpay_payment_id),
@@ -3982,7 +4121,7 @@ export const createRentalBookingRequest = async (req, res) => {
 
   return res.status(201).json({
     success: true,
-    data: serializeRentalBookingRequest(request),
+    data: buildRentalBookingResponse(request),
     message: 'Rental booking request submitted successfully',
   });
 };
@@ -4020,7 +4159,7 @@ export const getMyActiveRentalBooking = async (req, res) => {
   return res.status(200).json({
     success: true,
     data: {
-      ...serializeRentalBookingRequest(item),
+      ...buildRentalBookingResponse(item, item.completionRequestedAt || item.completedAt || null),
       rideMetrics: effectiveMetrics,
     },
   });
@@ -4057,7 +4196,7 @@ export const listMyRentalBookings = async (req, res) => {
   return res.status(200).json({
     success: true,
     data: {
-      results: items.map((item) => serializeRentalBookingRequest(item)),
+      results: items.map((item) => buildRentalBookingResponse(item)),
       pagination: buildPagination({ page, limit, total }),
     },
   });
@@ -4102,7 +4241,7 @@ export const endMyActiveRentalRide = async (req, res) => {
   return res.status(200).json({
     success: true,
     data: {
-      ...serializeRentalBookingRequest(item.toObject()),
+      ...buildRentalBookingResponse(item.toObject(), completionRequestedAt),
       rideMetrics: {
         ...metrics,
         currentCharge: item.finalCharge,

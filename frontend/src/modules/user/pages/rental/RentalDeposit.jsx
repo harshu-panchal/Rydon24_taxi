@@ -139,9 +139,20 @@ const RentalDeposit = () => {
   const { totalCost, selectedPackage, serviceLocation } = state;
   const vehicle = useMemo(() => vehicleSnapshot || {}, [vehicleSnapshot]);
   const advancePayment = vehicle.advancePayment || {};
+  const advancePaymentMode = String(advancePayment.paymentMode || 'percentage').toLowerCase();
   const payableNow = useMemo(
-    () => (advancePayment.enabled ? Number(advancePayment.amount || 0) : 0),
-    [advancePayment.amount, advancePayment.enabled],
+    () => {
+      if (!advancePayment.enabled) return 0;
+      if (advancePaymentMode === 'full') return Number(totalCost || 0);
+      if (advancePaymentMode === 'percentage') {
+        return Math.min(
+          Number(totalCost || 0),
+          Math.round((((Number(totalCost || 0) * Number(advancePayment.amount || 0)) / 100) + Number.EPSILON) * 100) / 100,
+        );
+      }
+      return Math.min(Number(totalCost || 0), Number(advancePayment.amount || 0));
+    },
+    [advancePayment.amount, advancePayment.enabled, advancePaymentMode, totalCost],
   );
   const advancePaymentLabel = advancePayment.label || 'Advance booking payment';
   const bookingReference = useMemo(

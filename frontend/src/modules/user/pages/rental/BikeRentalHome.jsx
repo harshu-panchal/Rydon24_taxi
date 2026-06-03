@@ -141,7 +141,7 @@ const normalizeRentalVehicle = (item = {}, index = 0) => {
     normalizedCategory: normalizeRentalCategory(item.vehicleCategory),
     advancePayment: {
       enabled: Boolean(item.advancePayment?.enabled),
-      paymentMode: 'fixed',
+      paymentMode: item.advancePayment?.paymentMode || 'percentage',
       amount: Number(item.advancePayment?.amount || 0),
       label: item.advancePayment?.label || 'Advance booking payment',
       notes: item.advancePayment?.notes || '',

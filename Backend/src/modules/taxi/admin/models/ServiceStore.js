@@ -72,6 +72,32 @@ const serviceStoreSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    rentalCommission: {
+      serviceStore: {
+        type: {
+          type: String,
+          enum: ['percentage', 'fixed'],
+          default: 'percentage',
+        },
+        value: {
+          type: Number,
+          default: 0,
+          min: 0,
+        },
+      },
+      owner: {
+        type: {
+          type: String,
+          enum: ['percentage', 'fixed'],
+          default: 'percentage',
+        },
+        value: {
+          type: Number,
+          default: 0,
+          min: 0,
+        },
+      },
+    },
   },
   {
     timestamps: true,
