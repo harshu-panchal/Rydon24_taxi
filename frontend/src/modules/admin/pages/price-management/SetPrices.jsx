@@ -194,6 +194,14 @@ const SetPrices = ({ mode }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [paginator, setPaginator] = useState({ current_page: 1, last_page: 1, total: 0, per_page: 10, from: 0, to: 0 });
+  const [showFilters, setShowFilters] = useState(false);
+  const [transportFilter, setTransportFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [zoneFilter, setZoneFilter] = useState('');
+  const [vehicleFilter, setVehicleFilter] = useState('');
   
   const [zones, setZones] = useState([]);
   const [vehicleTypes, setVehicleTypes] = useState([]);
@@ -212,7 +220,7 @@ const SetPrices = ({ mode }) => {
 
   useEffect(() => {
     fetchInitialData();
-  }, [view, editingId, location.key, location.state?.refreshAt]);
+  }, [view, editingId, location.key, location.state?.refreshAt, page, itemsPerPage, searchTerm, transportFilter, statusFilter, zoneFilter, vehicleFilter]);
 
   useEffect(() => {
     if (mode === 'create') {
@@ -242,13 +250,38 @@ const SetPrices = ({ mode }) => {
     try {
       const auth = { 'Authorization': `Bearer ${token}` };
       if (view === 'list') {
-        const response = await fetch(`${baseUrl}/types/set-prices?scope=ride`, { headers: auth });
-        const prizesData = await response.json();
+        const [pricesResponse, zonesResponse, vehiclesResponse] = await Promise.all([
+          adminService.getSetPrices({
+            scope: 'ride',
+            page,
+            limit: itemsPerPage,
+            search: searchTerm,
+            transport_type: transportFilter || undefined,
+            status: statusFilter || undefined,
+            zone_id: zoneFilter || undefined,
+            vehicle_type: vehicleFilter || undefined,
+          }),
+          adminService.getZones(),
+          adminService.getVehicleTypes(),
+        ]);
 
-        if (prizesData?.success) {
-          const items = prizesData.results || prizesData.data?.results || [];
-          setPrizes(Array.isArray(items) ? items : []);
-        }
+        const prizesData = pricesResponse?.data || {};
+        const items = prizesData.results || prizesData.data?.results || [];
+        const pager = prizesData.paginator || { current_page: 1, last_page: 1, total: 0, per_page: itemsPerPage, from: 0, to: 0 };
+        setPrizes(Array.isArray(items) ? items : []);
+        setPaginator({
+          current_page: Number(pager.current_page || 1),
+          last_page: Number(pager.last_page || 1),
+          total: Number(pager.total || 0),
+          per_page: Number(pager.per_page || itemsPerPage),
+          from: Number(pager.from || 0),
+          to: Number(pager.to || 0),
+        });
+
+        const zoneItems = zonesResponse?.data?.results || zonesResponse?.data?.data?.results || zonesResponse?.data?.data?.zones || [];
+        const vehicleItems = vehiclesResponse?.data?.results || vehiclesResponse?.data?.data?.results || vehiclesResponse?.data?.data?.vehicle_types || [];
+        setZones(Array.isArray(zoneItems) ? zoneItems : []);
+        setVehicleTypes(Array.isArray(vehicleItems) ? vehicleItems : []);
 
         return;
       }
@@ -335,11 +368,6 @@ const SetPrices = ({ mode }) => {
     } catch (error) { console.error(error); } finally { setSaving(false); }
   };
 
-  const filteredPrizes = prizes.filter(p => {
-    const q = searchTerm.toLowerCase();
-    return (p.zone_name || '').toLowerCase().includes(q) || (p.vehicle_type_name || '').toLowerCase().includes(q);
-  });
-
   const handleDeleteSetPrice = async (prize) => {
     const priceId = prize?.id || prize?._id || '';
     const zoneName = prize?.zone_name || 'this zone';
@@ -356,7 +384,7 @@ const SetPrices = ({ mode }) => {
 
     try {
       const response = await adminService.deleteSetPrice(priceId);
-      if (response?.data?.success) {
+        if (response?.data?.success) {
         setPrizes((previous) =>
           previous.filter((item) => String(item?.id || item?._id || '') !== String(priceId)),
         );
@@ -390,31 +418,152 @@ const SetPrices = ({ mode }) => {
             </div>
 
             <div className="bg-white rounded-md border border-gray-100 shadow-sm overflow-hidden">
-               <div className="p-5 flex items-center justify-between border-b border-gray-50 bg-white px-8">
-                  <div className="flex items-center gap-2 text-sm text-slate-400 font-medium">
+               <div className="border-b border-gray-50 bg-white px-8 py-5 space-y-4">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-slate-400 font-medium">
                     <span>show</span>
-                    <div className="relative">
-                      <select className="appearance-none bg-white border border-gray-200 rounded px-4 py-1.5 pr-8 focus:outline-none focus:border-indigo-500 cursor-pointer text-slate-700 font-bold text-[13px]">
-                        <option>10</option>
-                      </select>
-                      <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      <div className="relative">
+                        <select
+                          value={itemsPerPage}
+                          onChange={(event) => {
+                            setItemsPerPage(Number(event.target.value) || 10);
+                            setPage(1);
+                          }}
+                          className="appearance-none bg-white border border-gray-200 rounded px-4 py-1.5 pr-8 focus:outline-none focus:border-indigo-500 cursor-pointer text-slate-700 font-bold text-[13px]"
+                        >
+                          {[10, 25, 50].map((value) => (
+                            <option key={value} value={value}>{value}</option>
+                          ))}
+                        </select>
+                        <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      </div>
+                      <span>entries</span>
                     </div>
-                    <span>entries</span>
+
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <div className="relative min-w-[260px]">
+                        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          value={searchTerm}
+                          onChange={(event) => {
+                            setSearchTerm(event.target.value);
+                            setPage(1);
+                          }}
+                          placeholder="Search zone, vehicle, location..."
+                          className="w-full rounded-md border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-700 outline-none transition-all focus:border-indigo-500"
+                        />
+                      </div>
+                      <button
+                        onClick={() => fetchInitialData()}
+                        className={`w-10 h-10 flex items-center justify-center bg-white border border-gray-200 rounded-full text-slate-400 hover:text-indigo-600 transition-all shadow-sm ${loading ? 'animate-spin' : ''}`}
+                      >
+                        {loading ? <Loader2 size={18} /> : <Search size={18} />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowFilters((current) => !current)}
+                        className={`flex items-center gap-2 px-6 py-2 rounded text-sm font-bold shadow-sm transition-colors ${showFilters ? 'bg-slate-900 text-white' : 'bg-[#F37048] text-white'}`}
+                      >
+                        <Filter size={16} /> Filters
+                      </button>
+                      <button onClick={() => navigate('/admin/pricing/set-price/create')} className="flex items-center gap-2 px-6 py-2 bg-[#44516F] text-white rounded text-sm font-bold shadow-sm">
+                        <Plus size={18} /> Add Set Price
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => fetchInitialData()} className={`w-10 h-10 flex items-center justify-center bg-white border border-gray-200 rounded-full text-slate-400 hover:text-indigo-600 transition-all shadow-sm ${loading ? 'animate-spin' : ''}`}>
-                      {loading ? <Loader2 size={18} /> : <Search size={18} />}
-                    </button>
-                    <button className="flex items-center gap-2 px-6 py-2 bg-[#F37048] text-white rounded text-sm font-bold shadow-sm">
-                      <Filter size={16} /> Filters
-                    </button>
-                    <button onClick={() => navigate('/admin/pricing/set-price/create')} className="flex items-center gap-2 px-6 py-2 bg-[#44516F] text-white rounded text-sm font-bold shadow-sm">
-                      <Plus size={18} /> Add Set Price
-                    </button>
-                  </div>
+
+                  {showFilters ? (
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                      <div className="relative">
+                        <select
+                          value={transportFilter}
+                          onChange={(event) => {
+                            setTransportFilter(event.target.value);
+                            setPage(1);
+                          }}
+                          className={`${inputClass} appearance-none pr-10`}
+                        >
+                          <option value="">All transport types</option>
+                          <option value="taxi">Taxi</option>
+                          <option value="delivery">Delivery</option>
+                          <option value="pooling">Pooling</option>
+                          <option value="both">Both</option>
+                        </select>
+                        <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      </div>
+
+                      <div className="relative">
+                        <select
+                          value={statusFilter}
+                          onChange={(event) => {
+                            setStatusFilter(event.target.value);
+                            setPage(1);
+                          }}
+                          className={`${inputClass} appearance-none pr-10`}
+                        >
+                          <option value="">All statuses</option>
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
+                        </select>
+                        <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      </div>
+
+                      <div className="relative">
+                        <select
+                          value={zoneFilter}
+                          onChange={(event) => {
+                            setZoneFilter(event.target.value);
+                            setPage(1);
+                          }}
+                          className={`${inputClass} appearance-none pr-10`}
+                        >
+                          <option value="">All zones</option>
+                          {zones.map((zone) => (
+                            <option key={zone._id || zone.id} value={zone._id || zone.id}>{zone.name}</option>
+                          ))}
+                        </select>
+                        <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      </div>
+
+                      <div className="relative">
+                        <select
+                          value={vehicleFilter}
+                          onChange={(event) => {
+                            setVehicleFilter(event.target.value);
+                            setPage(1);
+                          }}
+                          className={`${inputClass} appearance-none pr-10`}
+                        >
+                          <option value="">All vehicle types</option>
+                          {vehicleTypes.map((vehicle) => (
+                            <option key={vehicle._id || vehicle.id} value={vehicle._id || vehicle.id}>{vehicle.name}</option>
+                          ))}
+                        </select>
+                        <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      </div>
+
+                      <div className="md:col-span-2 xl:col-span-4 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTransportFilter('');
+                            setStatusFilter('');
+                            setZoneFilter('');
+                            setVehicleFilter('');
+                            setSearchTerm('');
+                            setPage(1);
+                          }}
+                          className="rounded-md border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+                        >
+                          Clear filters
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                </div>
 
-               <div className="overflow-x-auto">
+                <div className="overflow-x-auto">
                  <table className="w-full text-left">
                    <thead className="bg-[#FBFCFF]">
                      <tr className="border-b border-gray-100 text-[11px] text-slate-800 uppercase font-black tracking-[0.1em]">
@@ -428,10 +577,10 @@ const SetPrices = ({ mode }) => {
                    <tbody className="divide-y divide-gray-50">
                     {loading && prizes.length === 0 ? (
                        <tr><td colSpan="5" className="py-24 text-center text-slate-300 font-bold uppercase tracking-widest text-xs animate-pulse">Syncing Price Matrix...</td></tr>
-                    ) : filteredPrizes.length === 0 ? (
-                       <tr><td colSpan="5" className="py-24 text-center text-slate-400 italic">No price rules configured.</td></tr>
+                    ) : prizes.length === 0 ? (
+                       <tr><td colSpan="5" className="py-24 text-center text-slate-400 italic">No price rules matched the current search or filters.</td></tr>
                     ) : (
-                      filteredPrizes.map((prize) => (
+                      prizes.map((prize) => (
                         <tr key={prize.id || prize._id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-8 py-6 text-sm font-semibold text-slate-700">{prize.zone_name || 'India'}</td>
                           <td className="px-8 py-6 text-sm text-slate-600 font-medium">
@@ -485,9 +634,37 @@ const SetPrices = ({ mode }) => {
                           </td>
                         </tr>
                       ))
-                    )}
+                   )}
                    </tbody>
                  </table>
+               </div>
+
+               <div className="flex flex-col gap-3 border-t border-gray-100 px-8 py-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                 <span>
+                   Showing {paginator.from || 0} to {paginator.to || 0} of {paginator.total || 0} entries
+                 </span>
+                 <div className="flex items-center gap-2">
+                   <button
+                     type="button"
+                     onClick={() => setPage((current) => Math.max(1, current - 1))}
+                     disabled={Number(paginator.current_page || page) <= 1}
+                     className="flex items-center gap-1 rounded border border-gray-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition disabled:opacity-50"
+                   >
+                     <ChevronLeft size={14} />
+                     Prev
+                   </button>
+                   <span className="rounded bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white">
+                     Page {paginator.current_page || page} / {Math.max(1, Number(paginator.last_page || 1))}
+                   </span>
+                   <button
+                     type="button"
+                     onClick={() => setPage((current) => Math.min(Math.max(1, Number(paginator.last_page || 1)), current + 1))}
+                     disabled={Number(paginator.current_page || page) >= Math.max(1, Number(paginator.last_page || 1))}
+                     className="rounded border border-gray-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition disabled:opacity-50"
+                   >
+                     Next
+                   </button>
+                 </div>
                </div>
             </div>
           </motion.div>

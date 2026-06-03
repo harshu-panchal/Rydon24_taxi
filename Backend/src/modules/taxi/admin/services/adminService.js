@@ -6312,6 +6312,13 @@ export const deleteVehicleType = async (id) => {
 export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
   const scope = String(queryArgs.scope || '').trim();
   const query = scope ? { pricing_scope: scope } : {};
+  const safePage = Math.max(1, Number(queryArgs.page || queryArgs.current_page || 1) || 1);
+  const safeLimit = Math.min(100, Math.max(1, Number(queryArgs.limit || queryArgs.per_page || 10) || 10));
+  const normalizedSearch = String(queryArgs.search || '').trim().toLowerCase();
+  const normalizedTransportType = String(queryArgs.transport_type || '').trim().toLowerCase();
+  const normalizedStatus = String(queryArgs.status || '').trim().toLowerCase();
+  const normalizedZoneId = String(queryArgs.zone_id || '').trim();
+  const normalizedVehicleTypeId = String(queryArgs.vehicle_type || '').trim();
 
   if (currentAdmin) {
     assertAdminPermission(currentAdmin, 'set_prices.view', 'set prices');
@@ -6501,16 +6508,80 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
     };
   });
 
+  const rows = results.map((result, index) => ({
+    result,
+    paginatorItem: paginatorData[index],
+  })).filter((row) => {
+    if (normalizedTransportType && String(row.result.transport_type || '').toLowerCase() !== normalizedTransportType) {
+      return false;
+    }
+
+    if (normalizedStatus) {
+      const rowStatus = String(row.result.status || (Number(row.result.active) === 1 ? 'active' : 'inactive')).toLowerCase();
+      if (rowStatus !== normalizedStatus) {
+        return false;
+      }
+    }
+
+    if (normalizedZoneId) {
+      const rowZoneId = String(
+        row.paginatorItem?.zone?._id ||
+        row.paginatorItem?.zone?.id ||
+        row.paginatorItem?.zone_id?._id ||
+        row.paginatorItem?.zone_id ||
+        '',
+      );
+      if (rowZoneId !== normalizedZoneId) {
+        return false;
+      }
+    }
+
+    if (normalizedVehicleTypeId) {
+      const rowVehicleTypeId = String(
+        row.paginatorItem?.vehicle_type?._id ||
+        row.paginatorItem?.vehicle_type?.id ||
+        row.paginatorItem?.vehicle_type?._id ||
+        row.result?.type_id ||
+        '',
+      );
+      if (rowVehicleTypeId !== normalizedVehicleTypeId) {
+        return false;
+      }
+    }
+
+    if (normalizedSearch) {
+      const haystack = [
+        row.result.zone_name,
+        row.result.vehicle_type_name,
+        row.result.transport_type,
+        row.result.service_location_name,
+        row.result.package_type_name,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      if (!haystack.includes(normalizedSearch)) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  const paginated = buildPaginator(rows, safePage, safeLimit);
+  const pagedRows = paginated.results;
+  const total = paginated.paginator.total;
+  const from = total === 0 ? 0 : (safePage - 1) * safeLimit + 1;
+  const to = total === 0 ? 0 : Math.min((safePage - 1) * safeLimit + pagedRows.length, total);
+
   return {
-    results,
+    results: pagedRows.map((row) => row.result),
     paginator: {
-      current_page: 1,
-      data: paginatorData,
-      from: 1,
-      to: paginatorData.length,
-      total: paginatorData.length,
-      last_page: 1,
-      per_page: 10,
+      ...paginated.paginator,
+      data: pagedRows.map((row) => row.paginatorItem),
+      from,
+      to,
     }
   };
 };
