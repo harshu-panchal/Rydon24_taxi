@@ -27,6 +27,7 @@ const PoolingCommissionManager = () => {
         results.reduce((accumulator, vehicle) => {
           accumulator[vehicle._id] = {
             adminCommissionPercentage: String(vehicle.adminCommissionPercentage ?? '0'),
+            ownerCommissionPercentage: String(vehicle.ownerCommissionPercentage ?? '0'),
             serviceTaxPercentage: String(vehicle.serviceTaxPercentage ?? '0'),
           };
           return accumulator;
@@ -73,6 +74,7 @@ const PoolingCommissionManager = () => {
     try {
       const payload = {
         adminCommissionPercentage: clampPercentage(draft.adminCommissionPercentage),
+        ownerCommissionPercentage: clampPercentage(draft.ownerCommissionPercentage),
         serviceTaxPercentage: clampPercentage(draft.serviceTaxPercentage),
       };
 
@@ -84,6 +86,7 @@ const PoolingCommissionManager = () => {
         ...current,
         [vehicle._id]: {
           adminCommissionPercentage: String(updated?.adminCommissionPercentage ?? payload.adminCommissionPercentage),
+          ownerCommissionPercentage: String(updated?.ownerCommissionPercentage ?? payload.ownerCommissionPercentage),
           serviceTaxPercentage: String(updated?.serviceTaxPercentage ?? payload.serviceTaxPercentage),
         },
       }));
@@ -107,7 +110,7 @@ const PoolingCommissionManager = () => {
             </div>
             <h1 className="mt-3 text-3xl font-black text-slate-900">Car Pooling Commission & Service Tax</h1>
             <p className="mt-1 text-sm font-medium text-slate-500">
-              Manage individual commission and service tax percentages for every pooling vehicle.
+              Manage driver commission, owner commission, and service tax percentages for every pooling vehicle.
             </p>
           </div>
 
@@ -133,14 +136,19 @@ const PoolingCommissionManager = () => {
         </div>
 
         <div className="overflow-hidden rounded-[32px] border border-slate-100 bg-white shadow-sm">
-          <div className="grid grid-cols-[minmax(0,1.2fr)_120px_120px_140px_200px_200px_150px] gap-4 bg-slate-100 px-6 py-5 text-sm font-black text-slate-700">
-            <p>Vehicle</p>
-            <p>Type</p>
-            <p>Capacity</p>
-            <p>Status</p>
-            <p>Commission %</p>
-            <p>Service Tax %</p>
-            <p>Action</p>
+          <div className="grid gap-4 border-b border-slate-100 bg-slate-100 px-6 py-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+            <div>
+              <p className="text-sm font-black text-slate-700">Vehicle Details</p>
+              <p className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                Name, type, capacity, and current status
+              </p>
+            </div>
+            <div className="grid grid-cols-4 gap-3 text-xs font-black uppercase tracking-[0.16em] text-slate-600">
+              <p>Driver %</p>
+              <p>Owner %</p>
+              <p>Tax %</p>
+              <p className="text-right lg:text-left">Action</p>
+            </div>
           </div>
 
           {loading ? (
@@ -156,72 +164,94 @@ const PoolingCommissionManager = () => {
                 return (
                   <div
                     key={vehicle._id}
-                    className="grid grid-cols-[minmax(0,1.2fr)_120px_120px_140px_200px_200px_150px] gap-4 px-6 py-5"
+                    className="grid gap-4 px-6 py-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:items-center"
                   >
-                    <div className="min-w-0">
-                      <p className="truncate text-base font-black text-slate-900">{vehicle.name || 'Untitled Vehicle'}</p>
-                      <p className="mt-1 truncate text-sm font-semibold text-slate-500">{vehicle.vehicleModel || 'Model not set'}</p>
-                      <p className="mt-1 truncate text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                        {vehicle.vehicleNumber || 'No vehicle number'}
-                      </p>
-                    </div>
+                    <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:items-center">
+                      <div className="min-w-0">
+                        <p className="truncate text-base font-black text-slate-900">{vehicle.name || 'Untitled Vehicle'}</p>
+                        <p className="mt-1 truncate text-sm font-semibold text-slate-500">{vehicle.vehicleModel || 'Model not set'}</p>
+                        <p className="mt-1 truncate text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                          {vehicle.vehicleNumber || 'No vehicle number'}
+                        </p>
+                      </div>
 
-                    <div>
-                      <p className="text-sm font-black uppercase text-slate-900">{vehicle.vehicleType || 'N/A'}</p>
-                      <p className="mt-1 text-xs font-semibold text-slate-500">{vehicle.color || 'Color not set'}</p>
-                    </div>
+                      <div>
+                        <p className="text-sm font-black uppercase text-slate-900">{vehicle.vehicleType || 'N/A'}</p>
+                        <p className="mt-1 text-xs font-semibold text-slate-500">{vehicle.color || 'Color not set'}</p>
+                      </div>
 
-                    <div>
-                      <p className="text-base font-black text-slate-900">{vehicle.capacity || 0}</p>
-                      <p className="mt-1 text-xs font-semibold text-slate-500">seats</p>
-                    </div>
+                      <div>
+                        <p className="text-base font-black text-slate-900">{vehicle.capacity || 0}</p>
+                        <p className="mt-1 text-xs font-semibold text-slate-500">seats</p>
+                      </div>
 
-                    <div>
-                      <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-black uppercase tracking-wider text-slate-600">
-                        {vehicle.status || 'inactive'}
-                      </span>
-                    </div>
-
-                    <div>
-                      <div className="relative">
-                        <Percent size={14} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input
-                          className={`${inputClass} pl-10`}
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          value={draft.adminCommissionPercentage ?? '0'}
-                          onChange={(event) => updateDraft(vehicle._id, 'adminCommissionPercentage', event.target.value)}
-                        />
+                      <div>
+                        <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-black uppercase tracking-wider text-slate-600">
+                          {vehicle.status || 'inactive'}
+                        </span>
                       </div>
                     </div>
 
-                    <div>
-                      <div className="relative">
-                        <Receipt size={14} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input
-                          className={`${inputClass} pl-10`}
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          value={draft.serviceTaxPercentage ?? '0'}
-                          onChange={(event) => updateDraft(vehicle._id, 'serviceTaxPercentage', event.target.value)}
-                        />
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <div>
+                        <p className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500 lg:hidden">Driver %</p>
+                        <div className="relative">
+                          <Percent size={14} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            className={`${inputClass} pl-10`}
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            value={draft.adminCommissionPercentage ?? '0'}
+                            onChange={(event) => updateDraft(vehicle._id, 'adminCommissionPercentage', event.target.value)}
+                          />
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-center">
-                      <button
-                        type="button"
-                        onClick={() => handleSave(vehicle)}
-                        disabled={isSaving}
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800 disabled:opacity-60"
-                      >
-                        {isSaving ? <RefreshCcw size={16} className="animate-spin" /> : <Save size={16} />}
-                        Save
-                      </button>
+                      <div>
+                        <p className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500 lg:hidden">Owner %</p>
+                        <div className="relative">
+                          <Percent size={14} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            className={`${inputClass} pl-10`}
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            value={draft.ownerCommissionPercentage ?? '0'}
+                            onChange={(event) => updateDraft(vehicle._id, 'ownerCommissionPercentage', event.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500 lg:hidden">Service Tax %</p>
+                        <div className="relative">
+                          <Receipt size={14} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            className={`${inputClass} pl-10`}
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            value={draft.serviceTaxPercentage ?? '0'}
+                            onChange={(event) => updateDraft(vehicle._id, 'serviceTaxPercentage', event.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-end">
+                        <button
+                          type="button"
+                          onClick={() => handleSave(vehicle)}
+                          disabled={isSaving}
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800 disabled:opacity-60"
+                        >
+                          {isSaving ? <RefreshCcw size={16} className="animate-spin" /> : <Save size={16} />}
+                          Save
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );

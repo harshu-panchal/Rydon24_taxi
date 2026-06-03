@@ -106,7 +106,13 @@ const computePoolingFareBreakdown = ({ route = {}, vehicle = {}, seatCount = 0 }
   const farePerSeat = Math.max(0, Number(route?.farePerSeat || 0));
   const baseFare = Math.round(farePerSeat * safeSeatCount * 100) / 100;
   const serviceTaxPercentage = Math.max(0, Math.min(100, Number(vehicle?.serviceTaxPercentage || 0)));
+  const driverCommissionPercentage = Math.max(0, Math.min(100, Number(
+    vehicle?.driverCommissionPercentage ?? vehicle?.adminCommissionPercentage ?? 0,
+  )));
+  const ownerCommissionPercentage = Math.max(0, Math.min(100, Number(vehicle?.ownerCommissionPercentage || 0)));
   const serviceTaxAmount = Math.round((baseFare * serviceTaxPercentage) * 100) / 100 / 100;
+  const driverCommissionAmount = Math.round(((baseFare * driverCommissionPercentage) / 100) * 100) / 100;
+  const ownerCommissionAmount = Math.round(((baseFare * ownerCommissionPercentage) / 100) * 100) / 100;
   const totalFare = Math.round((baseFare + serviceTaxAmount) * 100) / 100;
 
   return {
@@ -114,6 +120,10 @@ const computePoolingFareBreakdown = ({ route = {}, vehicle = {}, seatCount = 0 }
     baseFare,
     serviceTaxPercentage,
     serviceTaxAmount,
+    driverCommissionPercentage,
+    driverCommissionAmount,
+    ownerCommissionPercentage,
+    ownerCommissionAmount,
     totalFare,
   };
 };
@@ -153,6 +163,10 @@ const serializePoolingBooking = (booking) => {
     baseFare: Number(booking?.baseFare || 0),
     serviceTaxPercentage: Number(booking?.serviceTaxPercentage || 0),
     serviceTaxAmount: Number(booking?.serviceTaxAmount || 0),
+    driverCommissionPercentage: Number(booking?.driverCommissionPercentage || 0),
+    driverCommissionAmount: Number(booking?.driverCommissionAmount || 0),
+    ownerCommissionPercentage: Number(booking?.ownerCommissionPercentage || 0),
+    ownerCommissionAmount: Number(booking?.ownerCommissionAmount || 0),
     currency: booking?.currency || 'INR',
     paymentStatus: booking?.paymentStatus || 'pending',
     bookingStatus: booking?.bookingStatus || 'confirmed',
@@ -335,6 +349,10 @@ export const createPoolingBookingOrder = asyncHandler(async (req, res) => {
       baseFare: fareBreakdown.baseFare,
       serviceTaxPercentage: fareBreakdown.serviceTaxPercentage,
       serviceTaxAmount: fareBreakdown.serviceTaxAmount,
+      driverCommissionPercentage: fareBreakdown.driverCommissionPercentage,
+      driverCommissionAmount: fareBreakdown.driverCommissionAmount,
+      ownerCommissionPercentage: fareBreakdown.ownerCommissionPercentage,
+      ownerCommissionAmount: fareBreakdown.ownerCommissionAmount,
     },
     'Pooling payment order created successfully',
   );
@@ -465,6 +483,10 @@ export const verifyPoolingBookingPayment = asyncHandler(async (req, res) => {
     baseFare: fareBreakdown.baseFare,
     serviceTaxPercentage: fareBreakdown.serviceTaxPercentage,
     serviceTaxAmount: fareBreakdown.serviceTaxAmount,
+    driverCommissionPercentage: fareBreakdown.driverCommissionPercentage,
+    driverCommissionAmount: fareBreakdown.driverCommissionAmount,
+    ownerCommissionPercentage: fareBreakdown.ownerCommissionPercentage,
+    ownerCommissionAmount: fareBreakdown.ownerCommissionAmount,
     currency: 'INR',
     paymentStatus: 'paid',
     bookingStatus: 'confirmed',

@@ -60,6 +60,7 @@ const PoolingVehicleForm = ({
     driverPhone: '',
     capacity: 4,
     adminCommissionPercentage: 0,
+    ownerCommissionPercentage: 0,
     serviceTaxPercentage: 0,
     color: '',
     vehicleType: 'sedan',
@@ -126,6 +127,7 @@ const PoolingVehicleForm = ({
           driverPhone: vehicle.driverPhone || '',
           capacity: vehicle.capacity || 4,
           adminCommissionPercentage: Number(vehicle.adminCommissionPercentage ?? 0),
+          ownerCommissionPercentage: Number(vehicle.ownerCommissionPercentage ?? 0),
           serviceTaxPercentage: Number(vehicle.serviceTaxPercentage ?? 0),
           color: vehicle.color || '',
           vehicleType: vehicle.vehicleType || 'sedan',
@@ -189,6 +191,7 @@ const PoolingVehicleForm = ({
       const payload = {
         ...formData,
         adminCommissionPercentage: Math.min(100, Math.max(0, Number(formData.adminCommissionPercentage || 0))),
+        ownerCommissionPercentage: Math.min(100, Math.max(0, Number(formData.ownerCommissionPercentage || 0))),
         serviceTaxPercentage: Math.min(100, Math.max(0, Number(formData.serviceTaxPercentage || 0))),
       };
 
@@ -373,9 +376,9 @@ const PoolingVehicleForm = ({
                   </div>
                 </div>
                 {!hidePricingFields ? (
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <div>
-                      <label className={labelClass}>Admin Commission %</label>
+                      <label className={labelClass}>Driver Commission %</label>
                       <input
                         type="number"
                         min="0"
@@ -384,6 +387,20 @@ const PoolingVehicleForm = ({
                         value={formData.adminCommissionPercentage}
                         onChange={(e) => setFormData({ ...formData, adminCommissionPercentage: e.target.value })}
                         placeholder="e.g. 12.5"
+                        className={inputClass}
+                        readOnly={isViewMode}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Owner Commission %</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={formData.ownerCommissionPercentage}
+                        onChange={(e) => setFormData({ ...formData, ownerCommissionPercentage: e.target.value })}
+                        placeholder="e.g. 8"
                         className={inputClass}
                         readOnly={isViewMode}
                       />

@@ -19,6 +19,7 @@ const OwnerPoolingVehicleForm = () => (
       backPath="/taxi/owner/dashboard"
       backLabel="Back to Owner Dashboard"
       pageLabel="Add Pooling Vehicle"
+      hidePricingFields
     />
     <DriverBottomNav />
   </>

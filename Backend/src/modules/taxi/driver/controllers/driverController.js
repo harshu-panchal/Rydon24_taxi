@@ -1884,6 +1884,13 @@ const serializePoolingDriverBooking = (booking = {}) => ({
   bookingId: String(booking.bookingId || ""),
   seatsBooked: Number(booking.seatsBooked || 0),
   fare: Number(booking.fare || 0),
+  baseFare: Number(booking.baseFare || 0),
+  serviceTaxPercentage: Number(booking.serviceTaxPercentage || 0),
+  serviceTaxAmount: Number(booking.serviceTaxAmount || 0),
+  driverCommissionPercentage: Number(booking.driverCommissionPercentage || 0),
+  driverCommissionAmount: Number(booking.driverCommissionAmount || 0),
+  ownerCommissionPercentage: Number(booking.ownerCommissionPercentage || 0),
+  ownerCommissionAmount: Number(booking.ownerCommissionAmount || 0),
   currency: String(booking.currency || "INR"),
   paymentStatus: String(booking.paymentStatus || booking.payment?.status || "pending"),
   bookingStatus: String(booking.bookingStatus || "confirmed"),
@@ -7282,9 +7289,27 @@ export const createOwnerPoolingVehicle = async (req, res) => {
     );
   }
 
+  const body = req.body || {};
   const vehicle = await PoolingVehicle.create({
-    ...(req.body || {}),
+    name: String(body.name || "").trim(),
+    vehicleModel: String(body.vehicleModel || "").trim(),
+    vehicleNumber: String(body.vehicleNumber || "").trim(),
+    driverName: String(body.driverName || "").trim(),
+    driverPhone: String(body.driverPhone || "").trim(),
+    color: String(body.color || "").trim(),
+    capacity: Math.max(1, Number(body.capacity || 1) || 1),
+    vehicleType: ['bike', 'sedan', 'hatchback', 'suv', 'van', 'luxury'].includes(String(body.vehicleType || ''))
+      ? String(body.vehicleType)
+      : 'sedan',
+    blueprint: body.blueprint || {},
+    images: Array.isArray(body.images) ? body.images.filter(Boolean) : [],
     ownerId: owner._id,
+    approve: false,
+    status: 'pending',
+    poolingEnabled: true,
+    adminCommissionPercentage: 0,
+    ownerCommissionPercentage: 0,
+    serviceTaxPercentage: 0,
   });
 
   res.status(201).json({
@@ -7304,11 +7329,26 @@ export const updateOwnerPoolingVehicle = async (req, res) => {
     );
   }
 
+  const body = req.body || {};
   const vehicle = await PoolingVehicle.findOneAndUpdate(
-    { _id: req.params.vehicleId, ownerId: owner._id },
-    { ...(req.body || {}), ownerId: owner._id },
-    { new: true, runValidators: true },
-  );
+      { _id: req.params.vehicleId, ownerId: owner._id },
+      {
+        name: String(body.name || "").trim(),
+        vehicleModel: String(body.vehicleModel || "").trim(),
+        vehicleNumber: String(body.vehicleNumber || "").trim(),
+        driverName: String(body.driverName || "").trim(),
+        driverPhone: String(body.driverPhone || "").trim(),
+        color: String(body.color || "").trim(),
+        capacity: Math.max(1, Number(body.capacity || 1) || 1),
+        vehicleType: ['bike', 'sedan', 'hatchback', 'suv', 'van', 'luxury'].includes(String(body.vehicleType || ''))
+          ? String(body.vehicleType)
+          : 'sedan',
+        blueprint: body.blueprint || {},
+        images: Array.isArray(body.images) ? body.images.filter(Boolean) : [],
+        ownerId: owner._id,
+      },
+      { new: true, runValidators: true },
+    );
 
   if (!vehicle) {
     throw new ApiError(404, "Pooling vehicle not found");
