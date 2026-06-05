@@ -17,13 +17,13 @@ import { Download } from 'lucide-react';
 // Custom Brand SVG Icons
 const YoutubeIcon = ({ size = 24, ...props }) => (
   <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" {...props}>
-    <path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.517 3.545 12 3.545 12 3.545s-7.517 0-9.388.507a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.871.507 9.388.507 9.388.507s7.517 0 9.388-.507a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+    <path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.517 3.545 12 3.545 12 3.545s-7.517 0-9.388.507a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.871.507 9.388.507 9.388.507s7.517 0 9.388-.507a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
   </svg>
 );
 
 const LinkedinIcon = ({ size = 24, ...props }) => (
   <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" {...props}>
-    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
   </svg>
 );
 
@@ -37,7 +37,7 @@ const InstagramIcon = ({ size = 24, ...props }) => (
 
 const FacebookIcon = ({ size = 24, ...props }) => (
   <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" {...props}>
-    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
   </svg>
 );
 
@@ -92,23 +92,23 @@ function LandingPage() {
       {/* New Header & Hero Wrapper */}
       <div className="new-hero-wrapper">
         <div className="new-hero-background" style={{ backgroundImage: `url(${heroBgImg})` }}></div>
-        
+
         {/* Top Info Bar */}
         <div className="new-top-bar">
           <div className="new-logo-container">
-             <a href="/" className="new-logo">
-               <span style={{color: '#333'}}>Rydon24</span>
-             </a>
+            <a href="/" className="new-logo">
+              <span style={{ color: '#333' }}>Rydon24</span>
+            </a>
           </div>
           <div className="new-top-contacts">
-             <div className="top-contact-item">
-               <Phone size={16} />
-               <span>91-93-911-911</span>
-             </div>
-             <div className="top-contact-item">
-               <Mail size={16} />
-               <span>customercare@rydon24.com</span>
-             </div>
+            <div className="top-contact-item">
+              <Phone size={16} />
+              <span>91-93-911-911</span>
+            </div>
+            <div className="top-contact-item">
+              <Mail size={16} />
+              <span>customercare@rydon24.com</span>
+            </div>
           </div>
         </div>
 
@@ -117,7 +117,7 @@ function LandingPage() {
           <div className="new-nav-bg-slant"></div>
           <div className="new-nav-container">
             <a href="/" className="mobile-only-logo">
-               <span>Rydon24</span>
+              <span>Rydon24</span>
             </a>
             <nav className={`new-nav-links ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
               <a href="#home" className={`new-nav-link ${activeTab === 'home' ? 'active' : ''}`} onClick={handleRedirect('#home', 'home')}>Home</a>
@@ -146,8 +146,8 @@ function LandingPage() {
         <section id="home" className="new-hero-section">
           <div className="new-hero-left">
             <span className="new-hero-subtitle">Travel securely with us!</span>
-            <h1 className="new-hero-title">Book your taxi from<br/>anywhere today!</h1>
-            <p className="new-hero-desc">Everything your taxi business needs is already here!<br/>Rydon made for taxi service companies!</p>
+            <h1 className="new-hero-title">Book your taxi from<br />anywhere today!</h1>
+            <p className="new-hero-desc">Everything your taxi business needs is already here!<br />Rydon made for taxi service companies!</p>
             <div className="new-hero-cta-row">
               <button className="new-hero-action-btn" onClick={() => window.open('https://play.google.com/store/apps/details?id=com.rydon24.user', '_blank')}>Book Your Ride</button>
               <button className="new-hero-login-btn" onClick={() => navigate('/login')}>
@@ -156,10 +156,10 @@ function LandingPage() {
               </button>
             </div>
           </div>
-          
+
           <div className="new-hero-graphic">
-             <div className="new-hero-ribbon"></div>
-             <img src={newHeroTaxiImg} alt="Taxi" className="new-hero-taxi" />
+            <div className="new-hero-ribbon"></div>
+            <img src={newHeroTaxiImg} alt="Taxi" className="new-hero-taxi" />
           </div>
 
 
@@ -172,7 +172,7 @@ function LandingPage() {
           <h2 className="section-title">OUR SERVICES</h2>
           <div className="section-triangle"></div>
         </div>
-        
+
         <div className="subscriptions-grid">
           {/* Card 1 */}
           <div className="sub-card yellow">
@@ -283,7 +283,7 @@ function LandingPage() {
           <h2 className="section-title">CHECK US OUT</h2>
           <div className="section-triangle"></div>
         </div>
-        
+
         <div className="check-us-out-card">
           <div className="check-us-out-image-wrapper">
             <img src={checkUsOutImg} alt="Check Us Out" className="check-us-out-img" />
@@ -291,14 +291,14 @@ function LandingPage() {
           <div className="check-us-out-content">
             <h3 className="check-us-out-title">Join the Rydon24 Community</h3>
             <p className="check-us-out-desc">
-              Follow us on social media to get the latest updates, exclusive offers, and behind-the-scenes content. 
+              Follow us on social media to get the latest updates, exclusive offers, and behind-the-scenes content.
               Be part of the fastest growing transportation network in the region.
             </p>
             <div className="check-us-out-socials-container">
-              <a 
-                href="https://www.facebook.com/people/Rydon24/61590718764212" 
-                target="_blank" 
-                rel="noopener noreferrer" 
+              <a
+                href="https://www.facebook.com/people/Rydon24/61590718764212"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="check-social-item facebook"
                 aria-label="Facebook"
               >
@@ -307,10 +307,10 @@ function LandingPage() {
                 </div>
                 <span className="check-social-label">Facebook</span>
               </a>
-              <a 
-                href="https://www.instagram.com/rydon24official?igsh=MWQ3cWoxazJ1ZGV1OQ%3D%3D" 
-                target="_blank" 
-                rel="noopener noreferrer" 
+              <a
+                href="https://www.instagram.com/rydon24official?igsh=MWQ3cWoxazJ1ZGV1OQ%3D%3D"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="check-social-item instagram"
                 aria-label="Instagram"
               >
@@ -319,10 +319,10 @@ function LandingPage() {
                 </div>
                 <span className="check-social-label">Instagram</span>
               </a>
-              <a 
-                href="https://www.linkedin.com/company/124914072/admin/dashboard/" 
-                target="_blank" 
-                rel="noopener noreferrer" 
+              <a
+                href="https://www.linkedin.com/company/124914072/admin/dashboard/"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="check-social-item linkedin"
                 aria-label="LinkedIn"
               >
@@ -331,10 +331,10 @@ function LandingPage() {
                 </div>
                 <span className="check-social-label">LinkedIn</span>
               </a>
-              <a 
-                href="https://youtube.com/@rydon24official?si=RfVhOYUay--g9BhB" 
-                target="_blank" 
-                rel="noopener noreferrer" 
+              <a
+                href="https://youtube.com/@rydon24official?si=RfVhOYUay--g9BhB"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="check-social-item youtube"
                 aria-label="YouTube"
               >
@@ -384,15 +384,15 @@ function LandingPage() {
         <div className="footer-main-content">
           <div className="footer-col-1">
             <a href="/" className="footer-logo">
-               <span style={{color: '#FFB300', fontSize: '2.5rem', fontWeight: 800}}>Rydon</span><span style={{color: '#fff', fontSize: '2.5rem', fontWeight: 800}}>24</span>
+              <span style={{ color: '#FFB300', fontSize: '2.5rem', fontWeight: 800 }}>Rydon</span><span style={{ color: '#fff', fontSize: '2.5rem', fontWeight: 800 }}>24</span>
             </a>
             <p>We provide the best taxi and ride services in the region. Reliable, fast, and secure rides at your fingertips.</p>
             <p>Our fleet consists of well-maintained vehicles driven by professional drivers to ensure a comfortable journey.</p>
             <div className="footer-socials-container">
-              <a 
-                href="https://www.facebook.com/people/Rydon24/61590718764212" 
-                target="_blank" 
-                rel="noopener noreferrer" 
+              <a
+                href="https://www.facebook.com/people/Rydon24/61590718764212"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="footer-social-item facebook"
                 aria-label="Facebook"
               >
@@ -401,10 +401,10 @@ function LandingPage() {
                 </div>
                 <span className="social-label">Facebook</span>
               </a>
-              <a 
-                href="https://www.instagram.com/rydon24official?igsh=MWQ3cWoxazJ1ZGV1OQ%3D%3D" 
-                target="_blank" 
-                rel="noopener noreferrer" 
+              <a
+                href="https://www.instagram.com/rydon24official?igsh=MWQ3cWoxazJ1ZGV1OQ%3D%3D"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="footer-social-item instagram"
                 aria-label="Instagram"
               >
@@ -413,10 +413,10 @@ function LandingPage() {
                 </div>
                 <span className="social-label">Instagram</span>
               </a>
-              <a 
-                href="https://www.linkedin.com/company/124914072/admin/dashboard/" 
-                target="_blank" 
-                rel="noopener noreferrer" 
+              <a
+                href="https://www.linkedin.com/company/124914072/admin/dashboard/"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="footer-social-item linkedin"
                 aria-label="LinkedIn"
               >
@@ -425,10 +425,10 @@ function LandingPage() {
                 </div>
                 <span className="social-label">LinkedIn</span>
               </a>
-              <a 
-                href="https://youtube.com/@rydon24official?si=RfVhOYUay--g9BhB" 
-                target="_blank" 
-                rel="noopener noreferrer" 
+              <a
+                href="https://youtube.com/@rydon24official?si=RfVhOYUay--g9BhB"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="footer-social-item youtube"
                 aria-label="YouTube"
               >
@@ -438,7 +438,6 @@ function LandingPage() {
                 <span className="social-label">YouTube</span>
               </a>
             </div>
-            <div className="footer-website">www.Rydon24.com</div>
           </div>
           <div className="footer-col-2">
             <h3>Quick Links</h3>
