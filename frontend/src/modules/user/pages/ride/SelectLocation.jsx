@@ -707,6 +707,7 @@ const SelectLocation = () => {
 
     navigate(`${routePrefix}/ride/select-vehicle`, {
       state: {
+        ...routeState,
         pickup: finalPickup,
         drop: finalDrop,
         stops: stops.filter(s => s.trim().length > 0),

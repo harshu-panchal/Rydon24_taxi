@@ -602,6 +602,14 @@ const getSetPriceRows = (response) => {
   });
 };
 
+const getSetPricePaginationMeta = (response) => {
+  const data = unwrap(response);
+  return {
+    currentPage: Number(data?.current_page || data?.paginator?.current_page || 1) || 1,
+    lastPage: Number(data?.last_page || data?.paginator?.last_page || 1) || 1,
+  };
+};
+
 const normalizeId = (value) => String(value?._id || value?.id || value || '').trim();
 
 const getZoneServiceLocationId = (zone) => normalizeId(
@@ -1314,15 +1322,34 @@ const SelectVehicle = () => {
       setIsLoadingPricingRules(true);
 
       try {
-        const response = await api.get('/users/set-prices', {
-          params: { scope: 'ride' },
-        });
+        const aggregatedRules = [];
+        let page = 1;
+        let lastPage = 1;
+
+        do {
+          const response = await api.get('/users/set-prices', {
+            params: {
+              scope: 'ride',
+              page,
+              limit: 100,
+            },
+          });
+
+          if (!active) {
+            return;
+          }
+
+          aggregatedRules.push(...getSetPriceRows(response));
+          const pagination = getSetPricePaginationMeta(response);
+          lastPage = pagination.lastPage;
+          page += 1;
+        } while (page <= lastPage);
 
         if (!active) {
           return;
         }
 
-        setPricingRules(getSetPriceRows(response));
+        setPricingRules(aggregatedRules);
       } catch {
         if (active) {
           setPricingRules([]);
