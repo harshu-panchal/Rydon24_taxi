@@ -24,8 +24,11 @@ import { GoogleMap, MarkerF, OverlayView, OverlayViewF, PolylineF } from '@react
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../admin/utils/googleMaps';
 import { socketService } from '../../../shared/api/socket';
 import api from '../../../shared/api/axiosInstance';
+import autoIcon from '../../../assets/icons/auto.png';
+import bikeIcon from '../../../assets/icons/bike.png';
 import carIcon from '../../../assets/icons/car.png';
 import { getLocalDriverToken } from '../services/registrationService';
+import { BACKEND_ORIGIN } from '../../../shared/api/runtimeConfig';
 
 const MAP_CONTAINER_STYLE = {
     width: '100%',
@@ -157,6 +160,57 @@ const hexToRgba = (hex, alpha = 1) => {
 const getJobRideId = (job = {}) => String(job.rideId || job.id || job._id || job.requestId || '').trim();
 const ACTIVE_TRIP_HYDRATION_RETRY_DELAYS_MS = [0, 700, 1500, 2500, 4000];
 
+const resolveVehiclePreviewIcon = (iconUrl = '', fallback = carIcon) => {
+    const raw = String(iconUrl || '').trim();
+
+    if (!raw) {
+        return fallback;
+    }
+
+    if (/^(https?:|data:image\/|blob:)/.test(raw)) {
+        return raw;
+    }
+
+    if (raw.startsWith('/')) {
+        return `${BACKEND_ORIGIN}${raw}`;
+    }
+
+    if (/^(uploads\/|images\/)/.test(raw)) {
+        return `${BACKEND_ORIGIN}/${raw}`;
+    }
+
+    return raw;
+};
+
+const getActiveTripVehicleIcon = (ride = {}, driver = {}) => {
+    const customIcon = String(
+        ride?.vehicleIconUrl ||
+        ride?.vehicle?.vehicleIconUrl ||
+        ride?.vehicle?.icon ||
+        driver?.vehicleIconUrl ||
+        driver?.map_icon ||
+        driver?.icon ||
+        '',
+    ).trim();
+
+    if (customIcon) {
+        return resolveVehiclePreviewIcon(customIcon, carIcon);
+    }
+
+    const iconType = String(
+        ride?.vehicleIconType ||
+        driver?.vehicleIconType ||
+        driver?.vehicleType ||
+        '',
+    ).toLowerCase();
+
+    if (iconType.includes('bike')) return bikeIcon;
+    if (iconType.includes('auto')) return autoIcon;
+    if (iconType.includes('car')) return carIcon;
+
+    return carIcon;
+};
+
 const getActiveTripPhaseKey = (id) => (id ? `driverActiveTripPhase:${id}` : '');
 const getActiveTripUiStateKey = (id) => (id ? `driverActiveTripUiState:${id}` : '');
 const ACTIVE_TRIP_SESSION_KEY = 'driverActiveTripSnapshot';
@@ -251,6 +305,17 @@ const clearStoredActiveTripSnapshot = () => {
     } catch {
         // No-op.
     }
+};
+
+const isSnapshotForRide = (snapshot, rideId = '') => {
+    const snapshotRideId = getJobRideId(snapshot?.request?.raw || snapshot?.request || snapshot || {});
+    const normalizedRideId = String(rideId || '').trim();
+
+    if (!snapshotRideId || !normalizedRideId) {
+        return false;
+    }
+
+    return snapshotRideId === normalizedRideId;
 };
 
 const readStoredDriverCoords = () => {
@@ -721,9 +786,12 @@ const ActiveTrip = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const routeState = useMemo(() => location.state || {}, [location.state]);
-    const storedActiveTripSnapshot = useMemo(() => readStoredActiveTripSnapshot(), []);
-    const [hydratedTripState, setHydratedTripState] = useState(() => storedActiveTripSnapshot);
     const routeRideId = routeState?.rideId || routeState?.request?.rideId || '';
+    const storedActiveTripSnapshot = useMemo(() => {
+        const snapshot = readStoredActiveTripSnapshot();
+        return isSnapshotForRide(snapshot, routeRideId) ? snapshot : null;
+    }, [routeRideId]);
+    const [hydratedTripState, setHydratedTripState] = useState(() => storedActiveTripSnapshot);
     const routeOtp = routeState?.request?.raw?.otp || routeState?.request?.otp || routeState?.otp || '';
     const [isHydratingTrip, setIsHydratingTrip] = useState(!routeRideId || !routeOtp);
     const exitToDriverHome = React.useCallback((statusMessage = '') => {
@@ -809,14 +877,17 @@ const ActiveTrip = () => {
             } finally {
                 if (active) {
                     const fallbackSnapshot = readStoredActiveTripSnapshot();
+                    const matchingFallbackSnapshot = isSnapshotForRide(fallbackSnapshot, routeRideId)
+                        ? fallbackSnapshot
+                        : null;
                     if (restoredActiveTrip) {
                         setIsHydratingTrip(false);
                         return;
                     }
 
-                    if (fallbackSnapshot?.rideId) {
-                        setHydratedTripState(fallbackSnapshot);
-                        setPhase(resolvePhaseFromJob(fallbackSnapshot?.request?.raw || fallbackSnapshot));
+                    if (matchingFallbackSnapshot) {
+                        setHydratedTripState(matchingFallbackSnapshot);
+                        setPhase(resolvePhaseFromJob(matchingFallbackSnapshot?.request?.raw || matchingFallbackSnapshot));
                     } else if (lastRestoreError) {
                         exitToDriverHome(lastRestoreError);
                     } else {
@@ -844,7 +915,15 @@ const ActiveTrip = () => {
     const rideId = getJobRideId(liveRequest) || getJobRideId(effectiveState);
     const [resolvedPickupCoords, setResolvedPickupCoords] = useState(null);
     const [resolvedDropCoords, setResolvedDropCoords] = useState(null);
-    const vehicleIconUrl = liveRaw.vehicleIconUrl || liveRequest.vehicleIconUrl || effectiveState.vehicleIconUrl || carIcon;
+    const vehicleIconUrl = getActiveTripVehicleIcon(
+        {
+            ...effectiveState,
+            ...liveRequest,
+            ...liveRaw,
+            vehicle: liveRaw?.vehicle || liveRequest?.vehicle || effectiveState?.vehicle || null,
+        },
+        liveRaw?.driver || liveRequest?.raw?.driver || liveRequest?.driver || effectiveState?.driver || {},
+    );
 
     const pickupAddressLabel = String(
         liveRaw?.pickupAddress ||
@@ -922,7 +1001,9 @@ const ActiveTrip = () => {
     );
 
     const [phase, setPhase] = useState(() => {
-        const initialState = storedActiveTripSnapshot || routeState;
+        const initialState = isSnapshotForRide(storedActiveTripSnapshot, routeRideId)
+            ? storedActiveTripSnapshot
+            : routeState;
         const initialJob = initialState?.request?.raw || initialState?.request || initialState || {};
 
         return resolvePhaseFromJob({
@@ -1659,7 +1740,33 @@ const ActiveTrip = () => {
             return;
         }
 
-        if (String(enteredOtp) !== expectedOtp) {
+        let resolvedExpectedOtp = String(expectedOtp || '');
+
+        try {
+            const driverToken = getLocalDriverToken();
+            const endpoint = isParcel ? '/deliveries/active/me' : '/rides/active/me';
+            const response = await api.get(endpoint, withDriverAuthorization(driverToken));
+            const latestActiveJob = unwrapApiPayload(response);
+            const latestRideId = getJobRideId(latestActiveJob);
+
+            if (latestRideId && String(latestRideId) === String(rideId || routeRideId || '')) {
+                resolvedExpectedOtp = String(latestActiveJob?.otp || resolvedExpectedOtp || '');
+
+                const latestPersistedState = buildPersistedTripState(latestActiveJob, {
+                    phase,
+                    arrivedAt: localArrivedAt || latestActiveJob?.arrivedAt || '',
+                });
+
+                if (latestPersistedState) {
+                    setHydratedTripState(latestPersistedState);
+                    writeStoredActiveTripSnapshot(latestPersistedState);
+                }
+            }
+        } catch {
+            // Fall back to the currently hydrated OTP if the refresh request fails.
+        }
+
+        if (String(enteredOtp) !== resolvedExpectedOtp) {
             setOtpError('Wrong PIN. Ask the passenger again.');
             return;
         }
@@ -1974,12 +2081,12 @@ const ActiveTrip = () => {
 
         const enteredOtp = nextOtp.join('');
 
-        if (enteredOtp.length === 4 && enteredOtp === expectedOtp) {
+        if (enteredOtp.length === 4 && expectedOtp && enteredOtp === expectedOtp) {
             setTimeout(() => startTripAfterOtp(enteredOtp), 250);
             return;
         }
 
-        if (enteredOtp.length === 4) {
+        if (enteredOtp.length === 4 && expectedOtp) {
             setOtpError('Incorrect PIN. Please enter the PIN shown to the passenger.');
         }
     };
@@ -2112,7 +2219,7 @@ const ActiveTrip = () => {
                         className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-xl"
                         style={{ backgroundColor: routeStrokeColor }}
                     >
-                        {isParcel ? <Package size={20} strokeWidth={2.5} /> : <img src={carIcon} alt="Taxi" className="h-7 w-7 object-contain" />}
+                        <img src={vehicleIconUrl} alt="Vehicle" className="h-7 w-7 object-contain" />
                     </div>
                     <div className="flex-1 space-y-0.5 overflow-hidden">
                         <h4 className="text-[9px] font-semibold uppercase tracking-wide leading-none flex items-center gap-2" style={{ color: routeStrokeColor }}>

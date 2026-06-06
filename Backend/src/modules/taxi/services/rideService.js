@@ -903,7 +903,7 @@ export const createRideRecord = async ({
     ? await Vehicle.findById(primaryVehicleTypeId).select('icon map_icon image dispatch_type admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner').lean()
     : null;
   const resolvedVehicleIconUrl = String(
-    vehicleIconUrl || primaryVehicle?.map_icon || primaryVehicle?.icon || primaryVehicle?.image || '',
+    vehicleIconUrl || primaryVehicle?.image || primaryVehicle?.map_icon || primaryVehicle?.icon || '',
   ).trim();
   const normalizedTransportType = normalizeRideTransportType(transport_type);
   const resolvedZoneId =
