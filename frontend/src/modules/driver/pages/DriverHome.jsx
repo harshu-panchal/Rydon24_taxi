@@ -27,7 +27,7 @@ import { GoogleMap, Marker } from '@react-google-maps/api';
 import toast from 'react-hot-toast';
 
 
-import MapGrid from '@/assets/premium_grid_map.png';
+import MapGrid from '../../../assets/premium_grid_map.png';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import IncomingRideRequest from './IncomingRideRequest';
 import api from '../../../shared/api/axiosInstance';
@@ -36,17 +36,17 @@ import { uploadService } from '../../../shared/services/uploadService';
 import { BACKEND_ORIGIN } from '../../../shared/api/runtimeConfig';
 
 // Vehicle Icons for Map
-import BikeIcon from '@/assets/icons/bike.png';
-import CarIcon from '@/assets/icons/car.png';
-import AutoIcon from '@/assets/icons/auto.png';
-import TruckIcon from '@/assets/icons/truck.png';
-import EhcvIcon from '@/assets/icons/ehcv.png';
-import HcvIcon from '@/assets/icons/hcv.png';
-import LcvIcon from '@/assets/icons/LCV.png';
-import McvIcon from '@/assets/icons/mcv.png';
-import LuxuryIcon from '@/assets/icons/Luxury.png';
-import PremiumIcon from '@/assets/icons/Premium.png';
-import SuvIcon from '@/assets/icons/SUV.png';
+import BikeIcon from '../../../assets/icons/bike.png';
+import CarIcon from '../../../assets/icons/car.png';
+import AutoIcon from '../../../assets/icons/auto.png';
+import TruckIcon from '../../../assets/icons/truck.png';
+import EhcvIcon from '../../../assets/icons/ehcv.png';
+import HcvIcon from '../../../assets/icons/hcv.png';
+import LcvIcon from '../../../assets/icons/LCV.png';
+import McvIcon from '../../../assets/icons/mcv.png';
+import LuxuryIcon from '../../../assets/icons/Luxury.png';
+import PremiumIcon from '../../../assets/icons/Premium.png';
+import SuvIcon from '../../../assets/icons/SUV.png';
 
 import { socketService } from '../../../shared/api/socket';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../admin/utils/googleMaps';

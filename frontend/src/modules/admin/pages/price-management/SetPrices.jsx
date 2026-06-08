@@ -79,6 +79,68 @@ const formatTransportTypeLabel = (value = '') => {
   return normalized === 'taxi' ? 'Taxi' : 'Not assigned';
 };
 
+const buildSetPriceGroupingSignature = (item = {}) => JSON.stringify({
+  pricing_scope: item.pricing_scope || 'ride',
+  transport_type: item.transport_type || '',
+  vehicle_type: item.type_id || item.vehicle_type || '',
+  service_location_id: item.service_location_id || '',
+  vehicle_type_name: item.vehicle_type_name || '',
+  payment_type: normalizePaymentTypes(item.payment_type),
+  active: Number(item.active ?? 0),
+  status: item.status || '',
+  service_tax: Number(item.service_tax ?? 0),
+  base_price: Number(item.base_price ?? 0),
+  base_distance: Number(item.base_distance ?? 0),
+  price_per_distance: Number(item.price_per_distance ?? 0),
+  time_price: Number(item.time_price ?? 0),
+  waiting_charge: Number(item.waiting_charge ?? 0),
+  free_waiting_before: Number(item.free_waiting_before ?? 0),
+  free_waiting_after: Number(item.free_waiting_after ?? 0),
+  outstation_base_price: Number(item.outstation_base_price ?? 0),
+  outstation_base_distance: Number(item.outstation_base_distance ?? 0),
+  outstation_price_per_distance: Number(item.outstation_price_per_distance ?? 0),
+  outstation_time_price: Number(item.outstation_time_price ?? 0),
+});
+
+const collapseAllZonesSetPrices = (items = []) => {
+  if (!items.length) {
+    return items;
+  }
+
+  const grouped = new Map();
+
+  items.forEach((item) => {
+    const signature = buildSetPriceGroupingSignature(item);
+    const bucket = grouped.get(signature) || [];
+    bucket.push(item);
+    grouped.set(signature, bucket);
+  });
+
+  return Array.from(grouped.values()).flatMap((bucket) => {
+    const uniqueZoneIds = new Set(
+      bucket
+        .map((item) => String(item?.zone_id || '').trim())
+        .filter(Boolean),
+    );
+
+    const isAllZonesGroup = uniqueZoneIds.size > 1;
+
+    if (!isAllZonesGroup) {
+      return bucket;
+    }
+
+    const [firstItem] = bucket;
+    return [{
+      ...firstItem,
+      zone_id: ALL_ZONES_OPTION_VALUE,
+      zone_name: 'All',
+      is_all_zones: true,
+      grouped_ids: bucket.map((item) => String(item?.id || item?._id || '')).filter(Boolean),
+      grouped_zone_ids: Array.from(uniqueZoneIds),
+    }];
+  });
+};
+
 const NON_NEGATIVE_FORM_FIELDS = new Set([
   'admin_commission_from_driver',
   'admin_commission_for_owner',
@@ -258,7 +320,7 @@ const SetPrices = ({ mode }) => {
             search: searchTerm,
             transport_type: transportFilter || undefined,
             status: statusFilter || undefined,
-            zone_id: zoneFilter || undefined,
+            zone_id: zoneFilter && zoneFilter !== ALL_ZONES_OPTION_VALUE ? zoneFilter : undefined,
             vehicle_type: vehicleFilter || undefined,
           }),
           adminService.getZones(),
@@ -268,19 +330,27 @@ const SetPrices = ({ mode }) => {
         const prizesData = pricesResponse?.data || {};
         const items = prizesData.results || prizesData.data?.results || [];
         const pager = prizesData.paginator || { current_page: 1, last_page: 1, total: 0, per_page: itemsPerPage, from: 0, to: 0 };
-        setPrizes(Array.isArray(items) ? items : []);
-        setPaginator({
-          current_page: Number(pager.current_page || 1),
-          last_page: Number(pager.last_page || 1),
-          total: Number(pager.total || 0),
-          per_page: Number(pager.per_page || itemsPerPage),
-          from: Number(pager.from || 0),
-          to: Number(pager.to || 0),
-        });
 
         const zoneItems = zonesResponse?.data?.results || zonesResponse?.data?.data?.results || zonesResponse?.data?.data?.zones || [];
         const vehicleItems = vehiclesResponse?.data?.results || vehiclesResponse?.data?.data?.results || vehiclesResponse?.data?.data?.vehicle_types || [];
-        setZones(Array.isArray(zoneItems) ? zoneItems : []);
+        const safeZoneItems = Array.isArray(zoneItems) ? zoneItems : [];
+        const safeItems = Array.isArray(items) ? items : [];
+        const collapsedItems = collapseAllZonesSetPrices(safeItems);
+        const visibleItems = zoneFilter === ALL_ZONES_OPTION_VALUE
+          ? collapsedItems.filter((item) => item.is_all_zones)
+          : collapsedItems;
+
+        setPrizes(visibleItems);
+        setPaginator({
+          current_page: Number(pager.current_page || 1),
+          last_page: Number(pager.last_page || 1),
+          total: visibleItems.length,
+          per_page: Number(pager.per_page || itemsPerPage),
+          from: visibleItems.length ? ((Number(pager.current_page || 1) - 1) * Number(pager.per_page || itemsPerPage)) + 1 : 0,
+          to: visibleItems.length ? Math.min(((Number(pager.current_page || 1) - 1) * Number(pager.per_page || itemsPerPage)) + visibleItems.length, visibleItems.length) : 0,
+        });
+
+        setZones(safeZoneItems);
         setVehicleTypes(Array.isArray(vehicleItems) ? vehicleItems : []);
 
         return;
@@ -369,7 +439,10 @@ const SetPrices = ({ mode }) => {
   };
 
   const handleDeleteSetPrice = async (prize) => {
-    const priceId = prize?.id || prize?._id || '';
+    const groupedIds = Array.isArray(prize?.grouped_ids) && prize.grouped_ids.length > 0
+      ? prize.grouped_ids
+      : [prize?.id || prize?._id || ''].filter(Boolean);
+    const priceId = groupedIds[0] || '';
     const zoneName = prize?.zone_name || 'this zone';
     const vehicleName = prize?.vehicle_type_name || 'this vehicle type';
 
@@ -383,16 +456,22 @@ const SetPrices = ({ mode }) => {
     }
 
     try {
-      const response = await adminService.deleteSetPrice(priceId);
-        if (response?.data?.success) {
+      const responses = await Promise.all(groupedIds.map((id) => adminService.deleteSetPrice(id)));
+      const hasFailure = responses.some((response) => !response?.data?.success);
+      if (!hasFailure) {
         setPrizes((previous) =>
-          previous.filter((item) => String(item?.id || item?._id || '') !== String(priceId)),
+          previous.filter((item) => {
+            const itemIds = Array.isArray(item?.grouped_ids) && item.grouped_ids.length > 0
+              ? item.grouped_ids
+              : [item?.id || item?._id || ''].filter(Boolean);
+            return !itemIds.some((id) => groupedIds.includes(String(id)));
+          }),
         );
         fetchInitialData();
         return;
       }
 
-      alert(response?.data?.message || 'Failed to delete pricing rule.');
+      alert('Failed to delete one or more grouped pricing rules.');
     } catch (error) {
       console.error('Delete set price error:', error);
       alert(error?.response?.data?.message || 'Failed to delete pricing rule.');
@@ -519,6 +598,7 @@ const SetPrices = ({ mode }) => {
                           className={`${inputClass} appearance-none pr-10`}
                         >
                           <option value="">All zones</option>
+                          <option value={ALL_ZONES_OPTION_VALUE}>All</option>
                           {zones.map((zone) => (
                             <option key={zone._id || zone.id} value={zone._id || zone.id}>{zone.name}</option>
                           ))}
@@ -590,11 +670,16 @@ const SetPrices = ({ mode }) => {
                           <td className="px-8 py-6">
                              <StatusToggle active={Number(prize.active) === 1} onToggle={async () => {
                                try {
-                                 await fetch(`${baseUrl}/types/set-prices/${prize.id || prize._id}`, {
-                                   method: 'PATCH',
-                                   headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                                   body: JSON.stringify({ active: Number(prize.active) === 1 ? 0 : 1 })
-                                 });
+                                 const idsToToggle = Array.isArray(prize.grouped_ids) && prize.grouped_ids.length > 0
+                                   ? prize.grouped_ids
+                                   : [prize.id || prize._id].filter(Boolean);
+                                 await Promise.all(idsToToggle.map((targetId) =>
+                                   fetch(`${baseUrl}/types/set-prices/${targetId}`, {
+                                     method: 'PATCH',
+                                     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                                     body: JSON.stringify({ active: Number(prize.active) === 1 ? 0 : 1 })
+                                   })
+                                 ));
                                  fetchInitialData();
                                } catch(e) {}
                              }} />

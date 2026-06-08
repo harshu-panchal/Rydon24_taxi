@@ -1,7 +1,7 @@
 export const SUPPORT_INFO = {
   companyName: 'Rydon24 Trawler',
   ownerName: 'Sandeep Kumar',
-  phone: '93893 94808',
+  phone: '91-93-911-911',
   phoneHref: '91-93-911-911',
   email: 'customercare@rydon24.com',
   supportLabel: '24/7 client support',

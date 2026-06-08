@@ -6393,6 +6393,8 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
     return {
       id: String(item._id),
       pricing_scope: item.pricing_scope || 'ride',
+      zone_id: zone._id ? String(zone._id) : null,
+      service_location_id: effectiveServiceLocation._id ? String(effectiveServiceLocation._id) : null,
       type_id: vType._id ? String(vType._id) : null,
       name: vType.name || '',
       icon: vType.icon || '',
