@@ -126,12 +126,6 @@ const Signup = () => {
     ],
   );
 
-  const hasGovernmentIdProof = Boolean(
-    formData.governmentIdProof?.type &&
-      formData.governmentIdProof?.imageUrl &&
-      formData.governmentIdProof?.backImageUrl,
-  );
-
   const readFileAsDataUrl = (file) =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -280,9 +274,8 @@ const Signup = () => {
 
   const handleSignup = async (e, overrides = {}) => {
     e.preventDefault();
-    const finalProfileImage = overrides.profileImage ?? formData.profileImage;
-    if (!formData.name || !isValidPhone || !hasGovernmentIdProof || !finalProfileImage) {
-      setError('Please fill in all required fields and upload your profile photo.');
+    if (!formData.name.trim() || !isValidPhone) {
+      setError('Please fill in all required fields.');
       return;
     }
 
@@ -425,9 +418,9 @@ const Signup = () => {
                 </div>
             </div>
             <p className="mt-3 text-[10px] font-bold uppercase tracking-widest text-slate-900 flex items-center gap-1">
-              Profile Photo <span className="text-red-500">*</span>
+              Profile Photo <span className="text-slate-400">(Optional)</span>
             </p>
-            <p className="mt-2 text-xs font-medium text-slate-500">Please upload a clear photo of yourself to complete your profile.</p>
+            <p className="mt-2 text-xs font-medium text-slate-500">Upload a clear photo of yourself if you want to complete your profile now.</p>
             <div className="mt-4 grid w-full max-w-[280px] grid-cols-2 gap-2">
               <label className={`relative flex h-11 items-center justify-center gap-2 rounded-2xl border text-[11px] font-bold uppercase tracking-wider transition-all ${
                 photoUploading
@@ -535,16 +528,16 @@ const Signup = () => {
           </div>
 
           <div className="space-y-3">
-            <label className="ml-1 text-xs font-bold uppercase tracking-widest text-slate-600">Government ID Proof *</label>
+            <label className="ml-1 text-xs font-bold uppercase tracking-widest text-slate-600">Government ID Proof (Optional)</label>
             <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-              <p className="mb-3 text-xs font-bold text-slate-700">Upload clear front and back photos of your government ID proof.</p>
+              <p className="mb-3 text-xs font-bold text-slate-700">You can upload front and back photos of your government ID proof now or skip them.</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {governmentIdUploadItems.map((item) => (
                   <div key={item.side} className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{item.label}</p>
-                      <span className="rounded-full bg-slate-200 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-slate-600">
-                        Required
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                        Optional
                       </span>
                     </div>
                     <div className="h-32 w-full overflow-hidden rounded-xl bg-white border border-dashed border-slate-300 flex items-center justify-center">
@@ -636,28 +629,16 @@ const Signup = () => {
         </div>
 
         {/* Missing Fields Checklist */}
-        {(!formData.name || !hasGovernmentIdProof || !formData.profileImage) && (
+        {!formData.name.trim() && (
           <div className="rounded-2xl bg-amber-50/50 border border-amber-100 p-4 space-y-2 transition-all duration-300">
             <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
               <span>Remaining Steps to Complete</span>
             </h4>
             <ul className="space-y-2">
               <li className="flex items-center gap-2.5 text-xs font-semibold">
-                <span className={`w-2 h-2 rounded-full ${formData.profileImage ? 'bg-emerald-500' : 'bg-amber-400 animate-pulse'}`} />
-                <span className={formData.profileImage ? 'text-slate-400 line-through font-normal' : 'text-slate-700'}>
-                  Upload Profile Photo
-                </span>
-              </li>
-              <li className="flex items-center gap-2.5 text-xs font-semibold">
                 <span className={`w-2 h-2 rounded-full ${formData.name.trim() ? 'bg-emerald-500' : 'bg-amber-400 animate-pulse'}`} />
                 <span className={formData.name.trim() ? 'text-slate-400 line-through font-normal' : 'text-slate-700'}>
                   Enter Full Name
-                </span>
-              </li>
-              <li className="flex items-center gap-2.5 text-xs font-semibold">
-                <span className={`w-2 h-2 rounded-full ${hasGovernmentIdProof ? 'bg-emerald-500' : 'bg-amber-400 animate-pulse'}`} />
-                <span className={hasGovernmentIdProof ? 'text-slate-400 line-through font-normal' : 'text-slate-700'}>
-                  Upload Government ID Front & Back
                 </span>
               </li>
             </ul>
@@ -668,9 +649,9 @@ const Signup = () => {
           <Motion.motion.button 
             whileTap={{ scale: 0.98 }}
             type="submit"
-            disabled={!formData.name || !isValidPhone || !hasGovernmentIdProof || !formData.profileImage || loading || photoUploading || idUploading}
+            disabled={!formData.name.trim() || !isValidPhone || loading || photoUploading || idUploading}
             className={`w-full py-4 rounded-xl text-lg font-bold shadow-xl transition-all flex items-center justify-center gap-3 mt-4 ${
-              formData.name && isValidPhone && hasGovernmentIdProof && formData.profileImage && !loading && !photoUploading && !idUploading
+              formData.name.trim() && isValidPhone && !loading && !photoUploading && !idUploading
               ? 'bg-black text-white shadow-black/10' 
               : 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
             }`}

@@ -1401,7 +1401,7 @@ const normalizeGovernmentIdProof = (input = {}, { required = false } = {}) => {
   const fileName = toCleanString(input.fileName || input.name || 'government-id');
   const backFileName = toCleanString(input.backFileName || input.backName || 'government-id-back');
 
-  if (!type && !imageUrl && !backImageUrl && !required) {
+  if (!imageUrl && !backImageUrl && !required) {
     return {
       type: '',
       imageUrl: '',
@@ -1417,7 +1417,7 @@ const normalizeGovernmentIdProof = (input = {}, { required = false } = {}) => {
     throw new ApiError(400, 'A valid government ID type is required');
   }
 
-  if (!imageUrl) {
+  if (required && !imageUrl) {
     throw new ApiError(400, 'Government ID front image is required');
   }
 
@@ -1616,10 +1616,6 @@ export const registerUser = async (req, res) => {
   validatePhone(phone);
   validateEmail(email);
 
-  if (!profileImage) {
-    throw new ApiError(400, 'Profile image is required');
-  }
-
   const existingUser = await User.findOne({ phone });
 
   const referrer = referralCode ? await findUserByReferralCode(referralCode) : null;
@@ -1726,16 +1722,12 @@ export const signupUser = async (req, res) => {
   const countryCode = toCleanString(req.body.countryCode) || '+91';
   const gender = normalizeGender(req.body.gender);
   const profileImage = toCleanString(req.body.profileImage);
-  const governmentIdProof = normalizeGovernmentIdProof(req.body.governmentIdProof || {}, { required: true });
+  const governmentIdProof = normalizeGovernmentIdProof(req.body.governmentIdProof || {}, { required: false });
   const referralCode = normalizeReferralCode(req.body.referralCode);
 
   validateName(name);
   validatePhone(phone);
   validateEmail(email);
-
-  if (!profileImage) {
-    throw new ApiError(400, 'Profile image is required');
-  }
 
   const signupSession = await requireVerifiedUserSignupSession(phone);
 
