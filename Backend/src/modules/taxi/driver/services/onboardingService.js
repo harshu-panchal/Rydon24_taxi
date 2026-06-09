@@ -72,6 +72,7 @@ const normalizeRole = (role) => {
   return 'driver';
 };
 const hasExplicitSignupRole = (role) =>
+  Boolean(role) &&
   ['driver', 'owner', 'bus_driver', 'service_center', 'service_center_staff'].includes(
     normalizeRole(role),
   );

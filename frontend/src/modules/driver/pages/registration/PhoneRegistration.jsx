@@ -43,7 +43,7 @@ const PhoneRegistration = () => {
   const routePrefix = isOwnerPortal ? '/taxi/owner' : '/taxi/driver';
   const isLoginPage = location.pathname === `${routePrefix}/login` || location.pathname === `${routePrefix}/login/`;
   const entryPath = `${routePrefix}/login`;
-  const headerIcon = isOwnerPortal ? Briefcase : Smartphone;
+  const HeaderIcon = isOwnerPortal ? Briefcase : Smartphone;
   const portalLabel = isOwnerPortal ? 'Owner' : 'Driver';
 
   const handleSendOTP = async () => {
@@ -76,6 +76,7 @@ const PhoneRegistration = () => {
         phone,
         role: sessionData.role || (isOwnerPortal ? 'owner' : ''),
         roleConfirmed: sessionData.roleConfirmed ?? isOwnerPortal,
+        needsRoleSelection: !isOwnerPortal && sessionData.roleConfirmed === false,
         registrationId: sessionData.registrationId || '',
         debugOtp: sessionData.debugOtp || '',
         loginMode,
@@ -134,7 +135,7 @@ const PhoneRegistration = () => {
               </div>
             </div>
             <div className="w-20 h-20 bg-white rounded-3xl shadow-xl shadow-amber-200/40 mx-auto flex items-center justify-center border border-amber-50 mb-6">
-              <headerIcon size={34} className={isOwnerPortal ? 'text-emerald-500' : 'text-amber-500'} strokeWidth={2.5} />
+              <HeaderIcon size={34} className={isOwnerPortal ? 'text-emerald-500' : 'text-amber-500'} strokeWidth={2.5} />
             </div>
             <h1 className="text-4xl font-black text-slate-900 tracking-tight">
               {isLoginPage ? 'Hello!' : 'Welcome'}

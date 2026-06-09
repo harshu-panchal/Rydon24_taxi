@@ -43,12 +43,12 @@ const StepPersonal = () => {
 
     useEffect(() => {
         if (!phone || !registrationId) {
-            navigate(`${routePrefix}/reg-phone`, { replace: true });
+            navigate(`${routePrefix}/login`, { replace: true });
         }
-        if (session.roleConfirmed === false) {
+        if (session.roleConfirmed === false || session.needsRoleSelection === true) {
             navigate('/taxi/driver/select-role', { replace: true });
         }
-    }, [navigate, phone, registrationId, routePrefix, session.roleConfirmed]);
+    }, [navigate, phone, registrationId, routePrefix, session.needsRoleSelection, session.roleConfirmed]);
 
     const handleContinue = async () => {
         const fullName = formData.fullName.trim();

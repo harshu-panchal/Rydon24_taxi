@@ -96,6 +96,7 @@ const RoleSelection = () => {
           phone,
           role: 'pooling_driver',
           roleConfirmed: true,
+          needsRoleSelection: false,
           loginMode: false,
           poolingOnboarding: true,
           registrationId: payload?.session?.registrationId || '',
@@ -119,6 +120,7 @@ const RoleSelection = () => {
         ...session,
         role: selectedRole,
         roleConfirmed: payload?.session?.roleConfirmed ?? true,
+        needsRoleSelection: false,
         status: payload?.session?.status || session.status || 'otp_verified',
       });
 

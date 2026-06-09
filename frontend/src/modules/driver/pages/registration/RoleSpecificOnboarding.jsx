@@ -64,7 +64,7 @@ const RoleSpecificOnboarding = () => {
 
   useEffect(() => {
     if (!phone || !registrationId || !meta) {
-      navigate('/taxi/driver/reg-phone', { replace: true });
+      navigate('/taxi/driver/login', { replace: true });
       return;
     }
 

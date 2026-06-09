@@ -258,15 +258,21 @@ const OTPVerification = () => {
 
             const response = await verifyDriverOtp({ registrationId, phone, otp: otp.join('') });
             const payload = unwrap(response);
+            const shouldForceRoleSelection =
+                routePrefix === '/taxi/driver'
+                && (session.needsRoleSelection === true || session.roleConfirmed === false);
             const nextSession = saveDriverRegistrationSession({
                 ...session,
                 otpVerified: true,
                 role: payload?.session?.role || session.role || 'driver',
-                roleConfirmed: payload?.session?.roleConfirmed ?? session.roleConfirmed ?? true,
+                roleConfirmed: shouldForceRoleSelection
+                    ? false
+                    : (payload?.session?.roleConfirmed ?? session.roleConfirmed ?? true),
+                needsRoleSelection: shouldForceRoleSelection,
                 status: payload?.session?.status || 'otp_verified',
                 otpSession: payload?.session || null,
             });
-            if (nextSession.roleConfirmed === false) {
+            if (shouldForceRoleSelection || nextSession.roleConfirmed === false) {
                 navigate('/taxi/driver/select-role');
                 return;
             }

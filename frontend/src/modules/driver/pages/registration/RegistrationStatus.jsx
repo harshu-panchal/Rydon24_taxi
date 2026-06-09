@@ -22,6 +22,7 @@ const APPROVAL_POLL_MS = 2500;
 const normalizePortalRole = (role) => {
   const normalized = String(role || "").toLowerCase();
   if (normalized === "owner") return "owner";
+  if (normalized === "pooling_driver" || normalized === "pooling-driver" || normalized === "poolingdriver" || normalized === "pooling") return "pooling_driver";
   if (normalized === "bus_driver" || normalized === "bus-driver" || normalized === "busdriver") return "bus_driver";
   if (normalized === "service_center" || normalized === "service-center" || normalized === "servicecenter") return "service_center";
   if (normalized === "service_center_staff" || normalized === "service-center-staff" || normalized === "servicecenterstaff") return "service_center_staff";
@@ -155,6 +156,8 @@ const RegistrationStatus = () => {
               ? "/taxi/owner/home"
               : normalizedRole === "bus_driver"
                 ? "/taxi/driver/bus-home"
+              : normalizedRole === "pooling_driver"
+                ? "/taxi/driver/pooling"
                 : normalizedRole === "service_center" || normalizedRole === "service_center_staff"
                   ? "/taxi/driver/service-center"
                   : "/taxi/driver/home";

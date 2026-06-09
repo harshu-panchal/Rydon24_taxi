@@ -228,6 +228,8 @@ export const buildDriverOnboardingSessionSnapshot = (payload = {}, fallbackSessi
     phone: serverSession.phone || fallbackSession.phone || "",
     role: serverSession.role || fallbackSession.role || "driver",
     roleConfirmed: serverSession.roleConfirmed ?? fallbackSession.roleConfirmed ?? true,
+    needsRoleSelection:
+      fallbackSession.needsRoleSelection === true && serverSession.roleConfirmed === false,
     status: serverSession.status || fallbackSession.status || "",
     otpVerified:
       serverSession.otpVerified === true
@@ -298,6 +300,10 @@ export const getDriverOnboardingResumeStep = (session = {}) => {
   }
 
   if (!roleConfirmed) {
+    return "select-role";
+  }
+
+  if (session?.needsRoleSelection === true) {
     return "select-role";
   }
 

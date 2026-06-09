@@ -633,6 +633,8 @@ const DriverEntryRedirect = () => {
               ? '/taxi/driver/service-center'
             : role === 'bus_driver'
               ? '/taxi/driver/bus-home'
+            : role === 'pooling_driver'
+              ? '/taxi/driver/pooling'
               : '/taxi/driver/home'
       }
       replace

@@ -22,7 +22,7 @@ const driverRegistrationSessionSchema = new mongoose.Schema(
     },
     roleConfirmed: {
       type: Boolean,
-      default: true,
+      default: false,
     },
     status: {
       type: String,
