@@ -13,6 +13,7 @@ import { BusService } from '../../admin/models/BusService.js';
 import { Vehicle } from '../../admin/models/Vehicle.js';
 import { AdminBusinessSetting } from '../../admin/models/AdminBusinessSetting.js';
 import {
+  createBusService,
   listDriverDocumentUploadFields,
   listDriverNeededDocuments,
   listDriverVehicleFieldTemplates,
@@ -801,21 +802,61 @@ export const saveDriverRoleDetails = async ({ registrationId, phone, roleDetails
   if (normalizedRole === 'bus_driver') {
     const busServiceId = String(roleDetails.busServiceId || '').trim();
     const requestNote = String(roleDetails.requestNote || '').trim().slice(0, 300);
-
-    if (!busServiceId || !/^[a-f\d]{24}$/i.test(busServiceId)) {
-      throw new ApiError(400, 'Select a valid bus service');
-    }
-
-    const busService = await BusService.findById(busServiceId).lean();
-    if (!busService) {
-      throw new ApiError(404, 'Bus service not found');
-    }
-
-    session.roleDetails = {
-      busServiceId,
-      requestNote,
-      busServiceSnapshot: serializeSignupBusServiceOption(busService),
+    const createNewBus = roleDetails.createNewBus === true;
+    const busDraft = roleDetails.busDraft && typeof roleDetails.busDraft === 'object' ? roleDetails.busDraft : null;
+    const draftBusDetails = {
+      operatorName: String(busDraft?.operatorName || roleDetails.operatorName || '').trim(),
+      busName: String(busDraft?.busName || roleDetails.busName || '').trim(),
+      serviceNumber: String(busDraft?.serviceNumber || roleDetails.serviceNumber || '').trim(),
+      originCity: String(busDraft?.route?.originCity || roleDetails.originCity || '').trim(),
+      destinationCity: String(busDraft?.route?.destinationCity || roleDetails.destinationCity || '').trim(),
     };
+
+    if (createNewBus) {
+      if (!draftBusDetails.operatorName) {
+        throw new ApiError(400, 'Operator name is required');
+      }
+      if (!draftBusDetails.busName) {
+        throw new ApiError(400, 'Bus name is required');
+      }
+      if (!draftBusDetails.originCity) {
+        throw new ApiError(400, 'Origin city is required');
+      }
+      if (!draftBusDetails.destinationCity) {
+        throw new ApiError(400, 'Destination city is required');
+      }
+
+      session.roleDetails = {
+        createNewBus: true,
+        requestNote,
+        busDraft,
+        ...draftBusDetails,
+        busServiceSnapshot: {
+          operatorName: draftBusDetails.operatorName,
+          busName: draftBusDetails.busName,
+          serviceNumber: draftBusDetails.serviceNumber,
+          originCity: draftBusDetails.originCity,
+          destinationCity: draftBusDetails.destinationCity,
+          routeName: `${draftBusDetails.originCity} to ${draftBusDetails.destinationCity}`,
+        },
+      };
+    } else {
+      if (!busServiceId || !/^[a-f\d]{24}$/i.test(busServiceId)) {
+        throw new ApiError(400, 'Select a valid bus service');
+      }
+
+      const busService = await BusService.findById(busServiceId).lean();
+      if (!busService) {
+        throw new ApiError(404, 'Bus service not found');
+      }
+
+      session.roleDetails = {
+        createNewBus: false,
+        busServiceId,
+        requestNote,
+        busServiceSnapshot: serializeSignupBusServiceOption(busService),
+      };
+    }
   }
 
   session.status = 'role_details_saved';
@@ -1265,7 +1306,33 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
         throw new ApiError(409, 'Bus driver already exists with this phone number');
       }
 
-      const busService = await BusService.findById(session.roleDetails.busServiceId).lean();
+      let busService = null;
+      if (session.roleDetails?.createNewBus === true) {
+        const signupBusDraft =
+          session.roleDetails?.busDraft && typeof session.roleDetails.busDraft === 'object'
+            ? session.roleDetails.busDraft
+            : {
+                operatorName: session.roleDetails.operatorName,
+                busName: session.roleDetails.busName,
+                serviceNumber: session.roleDetails.serviceNumber,
+                status: 'draft',
+                route: {
+                  routeName:
+                    `${String(session.roleDetails.originCity || '').trim()} to ${String(session.roleDetails.destinationCity || '').trim()}`,
+                  originCity: session.roleDetails.originCity,
+                  destinationCity: session.roleDetails.destinationCity,
+                  stops: [],
+                },
+              };
+
+        busService = await createBusService({
+          ...signupBusDraft,
+          status: signupBusDraft.status || 'draft',
+        });
+      } else {
+        busService = await BusService.findById(session.roleDetails.busServiceId).lean();
+      }
+
       if (!busService) {
         throw new ApiError(404, 'Selected bus service is no longer available');
       }

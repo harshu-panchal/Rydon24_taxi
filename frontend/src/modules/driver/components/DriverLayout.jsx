@@ -73,6 +73,10 @@ const onboardingRoutes = new Set([
     '/taxi/owner/status',
 ]);
 
+const isOnboardingRoute = (pathname = '') =>
+    onboardingRoutes.has(pathname) ||
+    pathname.startsWith('/taxi/driver/role-signup/bus-builder');
+
 const softEntryRoutes = new Set([
     '/taxi/driver/welcome',
     '/taxi/driver/login',
@@ -151,7 +155,7 @@ const DriverLayout = () => {
                 )
             );
 
-        if (onboardingRoutes.has(currentPath) && !shouldVerifyOnboardingRoute) {
+        if (isOnboardingRoute(currentPath) && !shouldVerifyOnboardingRoute) {
             setIsAllowed(true);
             setIsChecking(false);
             return;
@@ -249,14 +253,14 @@ const DriverLayout = () => {
                     !isBusConsoleRoute(currentPath) &&
                     !isServiceCenterRoute(currentPath) &&
                     !isPoolingConsoleRoute(currentPath) &&
-                    !onboardingRoutes.has(currentPath);
+                    !isOnboardingRoute(currentPath);
 
                 if (isDriverConsoleRoute && effectiveRole !== 'driver') {
                     navigate(getAuthenticatedDriverHome(currentPath, effectiveRole), { replace: true });
                     return;
                 }
 
-                if (currentPath.startsWith('/taxi/owner') && effectiveRole !== 'owner' && !onboardingRoutes.has(currentPath)) {
+                if (currentPath.startsWith('/taxi/owner') && effectiveRole !== 'owner' && !isOnboardingRoute(currentPath)) {
                     navigate(getAuthenticatedDriverHome(currentPath, effectiveRole), { replace: true });
                     return;
                 }
@@ -314,7 +318,7 @@ const DriverLayout = () => {
 
     return (
         <div className="driver-theme min-h-screen">
-            {isChecking && !onboardingRoutes.has(location.pathname) ? (
+            {isChecking && !isOnboardingRoute(location.pathname) ? (
                 <div className="min-h-screen flex items-center justify-center bg-white">
                     <div className="w-10 h-10 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin" />
                 </div>

@@ -68,6 +68,32 @@ const VARIANT_PRICING_FIELDS = [
   { key: 'aisle', label: 'Aisle Seat' },
   { key: 'sleeper', label: 'Sleeper Berth' },
 ];
+const CREATE_FLOW_STEPS = [
+  {
+    key: 'basics',
+    shortLabel: 'Step 1',
+    title: 'Bus Basics',
+    description: 'Driver assignment, operator profile, pricing, and status.',
+  },
+  {
+    key: 'experience',
+    shortLabel: 'Step 2',
+    title: 'Media & Policies',
+    description: 'Images, amenities, and rider policy details.',
+  },
+  {
+    key: 'layout',
+    shortLabel: 'Step 3',
+    title: 'Seat Layout',
+    description: 'Coach blueprint and seat inventory setup.',
+  },
+  {
+    key: 'route',
+    shortLabel: 'Step 4',
+    title: 'Route & Schedule',
+    description: 'Stops, route map, and recurring departures.',
+  },
+];
 
 const blankStop = () => ({
   id: `stop-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -98,6 +124,13 @@ const blankCancellationRule = () => ({
 
 const CITY_AUTOCOMPLETE_FIELDS = ['address_components', 'formatted_address', 'geometry', 'name', 'place_id'];
 const ROUTE_MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
+const getCreateFlowStepIndex = (searchParams) => {
+  const rawValue = Number(searchParams.get('step') || 1);
+  if (!Number.isFinite(rawValue)) {
+    return 0;
+  }
+  return Math.min(CREATE_FLOW_STEPS.length - 1, Math.max(0, rawValue - 1));
+};
 
 const toCoords = (value) => {
   const lat = Number(value?.lat);
@@ -523,6 +556,30 @@ const BusServiceManager = ({
   const totalSeats = useMemo(() => countTotalSeats(draft.blueprint), [draft.blueprint]);
   const totalStops = draft.route?.stops?.length || 0;
   const totalSchedules = draft.schedules?.length || 0;
+  const isCreateFlowMode = currentMode === 'edit' || currentMode === 'create';
+  const currentFormStepIndex = useMemo(
+    () => (isCreateFlowMode ? getCreateFlowStepIndex(searchParams) : 0),
+    [isCreateFlowMode, searchParams],
+  );
+  const currentFormStep = CREATE_FLOW_STEPS[currentFormStepIndex] || CREATE_FLOW_STEPS[0];
+  const isLastFormStep = currentFormStepIndex === CREATE_FLOW_STEPS.length - 1;
+  const basicStepComplete = Boolean(
+    String(draft.operatorName || '').trim() && String(draft.busName || '').trim(),
+  );
+  const experienceStepComplete = Boolean(
+    String(draft.boardingPolicy || '').trim()
+      && String(draft.cancellationPolicy || '').trim()
+      && String(draft.luggagePolicy || '').trim(),
+  );
+  const layoutStepComplete = totalSeats > 0;
+  const routeStepComplete = Boolean(
+    String(draft.route?.originCity || '').trim()
+      && String(draft.route?.destinationCity || '').trim()
+      && totalSchedules > 0,
+  );
+  const stepCompletionState = [basicStepComplete, experienceStepComplete, layoutStepComplete, routeStepComplete];
+  const canAdvanceFromCurrentStep =
+    currentFormStepIndex === 0 ? basicStepComplete : currentFormStepIndex === 2 ? layoutStepComplete : true;
   const detailBus = useMemo(
     () => catalog.find((item) => item.id === currentBusId || item.id === detailBusId) || null,
     [catalog, currentBusId, detailBusId],
@@ -677,6 +734,31 @@ const BusServiceManager = ({
   const openListView = () => {
     setDetailBusId(null);
     navigate(basePath);
+  };
+
+  const openFormStep = (stepIndex) => {
+    const nextStepIndex = Math.min(CREATE_FLOW_STEPS.length - 1, Math.max(0, Number(stepIndex) || 0));
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextStepIndex <= 0) {
+      nextParams.delete('step');
+    } else {
+      nextParams.set('step', String(nextStepIndex + 1));
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const goToPreviousFormStep = () => {
+    if (currentFormStepIndex <= 0) {
+      return;
+    }
+    openFormStep(currentFormStepIndex - 1);
+  };
+
+  const goToNextFormStep = () => {
+    if (currentFormStepIndex >= CREATE_FLOW_STEPS.length - 1) {
+      return;
+    }
+    openFormStep(currentFormStepIndex + 1);
   };
 
   const openEditView = (busId) => {
@@ -1156,7 +1238,10 @@ const BusServiceManager = ({
       });
       setSelectedBusId(nextBus.id);
       setDraft(nextBus);
-      navigate(`${basePath}/edit/${nextBus.id}`);
+      navigate({
+        pathname: `${basePath}/edit/${nextBus.id}`,
+        search: currentFormStepIndex > 0 ? `?step=${currentFormStepIndex + 1}` : '',
+      });
       toast.success('Bus service saved');
     } catch (error) {
       toast.error(error?.message || 'Failed to save bus service');
@@ -1846,49 +1931,98 @@ const BusServiceManager = ({
           </div>
 
           <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-900">Module Overview</h3>
-            <div className="mt-4 space-y-4 text-xs font-medium text-slate-500">
-              <div className="flex items-start gap-3">
-                <CheckCircle2 size={14} className="mt-0.5 text-emerald-500" />
-                <p>Define vehicle specifications and policies.</p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Creation Flow</h3>
+                <p className="mt-1 text-xs font-medium text-slate-500">Move one block at a time, like the signup journey.</p>
               </div>
-              <div className="flex items-start gap-3">
-                <CheckCircle2 size={14} className="mt-0.5 text-emerald-500" />
-                <p>Configure and preview seat blueprints.</p>
+              <div className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                {currentFormStep.shortLabel}
               </div>
-              <div className="flex items-start gap-3">
-                <CheckCircle2 size={14} className="mt-0.5 text-emerald-500" />
-                <p>Manage routes, stops and recurring schedules.</p>
-              </div>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {CREATE_FLOW_STEPS.map((step, index) => {
+                const isActive = index === currentFormStepIndex;
+                const isComplete = stepCompletionState[index];
+                return (
+                  <button
+                    key={step.key}
+                    type="button"
+                    onClick={() => openFormStep(index)}
+                    className={`w-full rounded-[22px] border p-4 text-left transition ${
+                      isActive
+                        ? 'border-slate-900 bg-slate-900 text-white shadow-lg'
+                        : 'border-slate-200 bg-slate-50 text-slate-900 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${isActive ? 'text-slate-300' : 'text-slate-400'}`}>
+                          {step.shortLabel}
+                        </p>
+                        <p className="mt-1 text-sm font-black">{step.title}</p>
+                        <p className={`mt-1 text-xs font-semibold ${isActive ? 'text-slate-300' : 'text-slate-500'}`}>
+                          {step.description}
+                        </p>
+                      </div>
+                      <div className={`flex h-8 w-8 items-center justify-center rounded-full border ${
+                        isActive
+                          ? 'border-white/20 bg-white/10 text-white'
+                          : isComplete
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
+                            : 'border-slate-200 bg-white text-slate-400'
+                      }`}>
+                        {isComplete ? <CheckCircle2 size={16} /> : <span className="text-[11px] font-black">{index + 1}</span>}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
 
         <div className="space-y-8">
+          {currentFormStepIndex <= 1 ? (
           <section className="rounded-3xl border border-slate-100 bg-white p-8 shadow-sm">
             <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <h2 className="text-xl font-bold tracking-tight text-slate-900">Bus Specification</h2>
-                <p className="mt-1 text-xs font-medium text-slate-500">Define vehicle details, operator info and policies.</p>
+                <h2 className="text-xl font-bold tracking-tight text-slate-900">
+                  {currentFormStepIndex === 0 ? 'Bus Specification' : 'Bus Experience Setup'}
+                </h2>
+                <p className="mt-1 text-xs font-medium text-slate-500">
+                  {currentFormStepIndex === 0
+                    ? 'Define the essential operator, driver, and pricing details first.'
+                    : 'Add imagery, amenities, and passenger-facing policies without crowding the rest of the form.'}
+                </p>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                {['draft', 'active', 'paused'].map((status) => (
-                  <button
-                    key={status}
-                    type="button"
-                    onClick={() => updateDraft('status', status)}
-                    className={`rounded-full border px-4 py-2 text-[9px] font-bold uppercase tracking-wider transition-all ${
-                      draft.status === status ? statusTone[status] : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200'
-                    }`}
-                  >
-                    {status}
-                  </button>
-                ))}
-              </div>
+              {currentFormStepIndex === 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {['draft', 'active', 'paused'].map((status) => (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() => updateDraft('status', status)}
+                      className={`rounded-full border px-4 py-2 text-[9px] font-bold uppercase tracking-wider transition-all ${
+                        draft.status === status ? statusTone[status] : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200'
+                      }`}
+                    >
+                      {status}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-900">
+                  {(draft.galleryImages || []).length} gallery images
+                </div>
+              )}
             </div>
 
             <div className="grid gap-5 md:grid-cols-2">
+              {currentFormStepIndex === 0 ? (
+              <>
               <div>
                 <label className={labelClassName}>
                   {typeof api.getDrivers === 'function' ? 'Assign Fleet Driver' : 'Bus Driver Name'}
@@ -2046,6 +2180,10 @@ const BusServiceManager = ({
                 <label className={labelClassName}>Currency</label>
                 <input className={fieldClassName} value={draft.fareCurrency} onChange={(event) => updateDraft('fareCurrency', event.target.value.toUpperCase())} placeholder="INR" />
               </div>
+              </>
+              ) : null}
+              {currentFormStepIndex === 1 ? (
+              <>
               <div className="md:col-span-2">
                 <label className={labelClassName}>Different Seat Pricing</label>
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -2251,9 +2389,13 @@ const BusServiceManager = ({
                   ))}
                 </div>
               </div>
+              </>
+              ) : null}
             </div>
           </section>
+          ) : null}
 
+          {currentFormStepIndex === 2 ? (
           <section className="rounded-3xl border border-slate-100 bg-white p-8 shadow-sm">
             <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
@@ -2324,7 +2466,10 @@ const BusServiceManager = ({
               </div>
             </div>
           </section>
+          ) : null}
 
+          {currentFormStepIndex === 3 ? (
+          <>
           <section className="rounded-3xl border border-slate-100 bg-white p-8 shadow-sm">
             <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
@@ -2660,10 +2805,16 @@ const BusServiceManager = ({
               ))}
             </div>
           </section>
+          </>
+          ) : null}
 
           <section className="sticky bottom-0 z-20 rounded-3xl border border-slate-100 bg-white/80 p-5 shadow-2xl backdrop-blur-md">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-wrap gap-4">
+                <div className="rounded-2xl bg-slate-50 px-4 py-3 border border-slate-100">
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Current Step</p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">{currentFormStep.title}</p>
+                </div>
                 <div className="rounded-2xl bg-slate-50 px-4 py-3 border border-slate-100">
                   <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Route Snapshot</p>
                   <p className="mt-1 text-sm font-bold text-slate-900">
@@ -2677,6 +2828,24 @@ const BusServiceManager = ({
               </div>
 
               <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={goToPreviousFormStep}
+                  disabled={currentFormStepIndex === 0 || isSaving}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                {!isLastFormStep ? (
+                  <button
+                    type="button"
+                    onClick={goToNextFormStep}
+                    disabled={!canAdvanceFromCurrentStep || isSaving}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Next Step
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={handleDelete}
@@ -2693,7 +2862,7 @@ const BusServiceManager = ({
                   className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-lg transition-all hover:-translate-y-0.5 active:scale-95"
                 >
                   <Save size={16} />
-                  {isSaving ? 'Saving...' : 'Save Bus Service'}
+                  {isSaving ? 'Saving...' : isLastFormStep ? 'Save Bus Service' : 'Save Draft'}
                 </button>
               </div>
             </div>

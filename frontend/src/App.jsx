@@ -133,6 +133,7 @@ const StepReferral = lazy(() => import('./modules/driver/pages/registration/Step
 const StepVehicle = lazy(() => import('./modules/driver/pages/registration/StepVehicle'));
 const StepDocuments = lazy(() => import('./modules/driver/pages/registration/StepDocuments'));
 const RoleSpecificOnboarding = lazy(() => import('./modules/driver/pages/registration/RoleSpecificOnboarding'));
+const BusSignupBuilderPage = lazy(() => import('./modules/driver/pages/registration/BusSignupBuilderPage'));
 const ApplicationStatus = lazy(() => import('./modules/driver/pages/registration/ApplicationStatus'));
 
 // Driver Module - Core
@@ -984,6 +985,9 @@ function App() {
                 <Route path="select-role" element={<RoleSelection />} />
                 <Route path="step-personal" element={<StepPersonal />} />
                 <Route path="role-signup" element={<RoleSpecificOnboarding />} />
+                <Route path="role-signup/bus-builder" element={<Navigate to="/taxi/driver/role-signup/bus-builder/create" replace />} />
+                <Route path="role-signup/bus-builder/create" element={<BusSignupBuilderPage />} />
+                <Route path="role-signup/bus-builder/edit/:id" element={<BusSignupBuilderPage />} />
                 <Route path="step-referral" element={<StepReferral />} />
                 <Route path="step-vehicle" element={<StepVehicle />} />
                 <Route path="step-documents" element={<StepDocuments />} />
