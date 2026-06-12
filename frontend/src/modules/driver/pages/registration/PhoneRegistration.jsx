@@ -141,17 +141,11 @@ const PhoneRegistration = () => {
                 </p>
               </div>
             </div>
-            <div className="w-20 h-20 bg-white rounded-3xl shadow-xl shadow-amber-200/40 mx-auto flex items-center justify-center border border-amber-50 mb-6">
-              <HeaderIcon size={34} className={isOwnerPortal ? 'text-emerald-500' : 'text-amber-500'} strokeWidth={2.5} />
-            </div>
+         
             <h1 className="text-4xl font-black text-slate-900 tracking-tight">
               {isLoginPage ? 'Hello!' : 'Welcome'}
             </h1>
-            <p className="text-slate-500 font-medium text-lg">
-              {isOwnerPortal
-                ? 'Use your owner number to sign in or continue registration'
-                : 'Enter your mobile number. Existing accounts open directly and new numbers choose a role after OTP.'}
-            </p>
+         
             {!isOwnerPortal && (
               <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">
                 Driver, owner, pooling, bus, and service center logins all start here
