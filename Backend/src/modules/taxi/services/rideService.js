@@ -796,22 +796,27 @@ const buildDriverVehicleAcceptFilter = async (ride) => {
   const vehicleTypeIds = normalizeVehicleTypeIds(ride.dispatchVehicleTypeIds || [], ride.vehicleTypeId);
 
   if (vehicleTypeIds.length === 0) {
-    return {};
+    const fallbackKeys = [
+      ride?.vehicleIconType,
+      ride?.vehicleType,
+      String(ride?.vehicleIconType || '').replace(/\s+/g, '_'),
+      String(ride?.vehicleType || '').replace(/\s+/g, '_'),
+    ]
+      .map(normalizeVehicleKey)
+      .filter(Boolean);
+    const clauses = [
+      ...([...(new Set(fallbackKeys))].length
+        ? [
+            { vehicleType: { $in: [...(new Set(fallbackKeys))] } },
+            { vehicleIconType: { $in: [...(new Set(fallbackKeys))] } },
+          ]
+        : []),
+    ];
+
+    return clauses.length > 1 ? { $or: clauses } : clauses[0] || {};
   }
 
-  const vehicles = await Vehicle.find({ _id: { $in: vehicleTypeIds } }).select('name vehicle_type icon_types').lean();
-  const vehicleTypeKeys = normalizeVehicleKeys(vehicles);
-  const clauses = [
-    { vehicleTypeId: { $in: vehicleTypeIds } },
-    ...(vehicleTypeKeys.length
-      ? [
-          { vehicleType: { $in: vehicleTypeKeys } },
-          { vehicleIconType: { $in: vehicleTypeKeys } },
-        ]
-      : []),
-  ];
-
-  return clauses.length > 1 ? { $or: clauses } : clauses[0];
+  return { vehicleTypeId: { $in: vehicleTypeIds } };
 };
 
 const syncDeliveryWithRide = async (ride) => {

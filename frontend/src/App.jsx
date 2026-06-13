@@ -13,6 +13,7 @@ import userBusService from './modules/user/services/busService';
 import { userService } from './modules/user/services/userService';
 import { syncUpcomingRideReminders } from './modules/user/utils/upcomingRideReminderService';
 import { getAuthenticatedDriverRole, getLocalDriverToken } from './modules/driver/services/registrationService';
+import RideComplete from './modules/user/pages/ride/RideComplete';
 import './App.css';
 
 
@@ -28,7 +29,6 @@ const SelectVehicle = lazy(() => import('./modules/user/pages/ride/SelectVehicle
 const SelectCategory = lazy(() => import('./modules/user/pages/ride/SelectCategory'));
 const SearchingDriver = lazy(() => import('./modules/user/pages/ride/SearchingDriver'));
 const RideTracking = lazy(() => import('./modules/user/pages/ride/RideTracking'));
-const RideComplete = lazy(() => import('./modules/user/pages/ride/RideComplete'));
 const Chat = lazy(() => import('./modules/user/pages/ride/Chat'));
 const Support = lazy(() => import('./modules/user/pages/ride/Support'));
 const RideDetail = lazy(() => import('./modules/user/pages/ride/RideDetail'));

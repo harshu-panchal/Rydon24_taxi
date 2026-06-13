@@ -553,6 +553,7 @@ const RideTracking = () => {
       navigate(routeComplete, {
         replace: true,
         state: completedRideSnapshot,
+        flushSync: true,
       });
     },
     [driver, dropLabel, fare, navigate, paymentMethod, pickupLabel, rideId, rideRealtime?.completedAt, rideRealtime?.feedback, routeComplete, state],

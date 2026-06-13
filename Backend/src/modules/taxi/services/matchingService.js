@@ -37,15 +37,16 @@ const buildDriverMatchFilters = ({ zoneId, serviceLocationId, vehicleTypeId, veh
   const normalizedVehicleTypeKeys = Array.isArray(vehicleTypeKeys)
     ? [...new Set(vehicleTypeKeys.map(normalizeVehicleKey).filter(Boolean))]
     : [];
-  const vehicleTypeClauses = [
-    ...(normalizedVehicleTypeIds.length ? [{ vehicleTypeId: { $in: normalizedVehicleTypeIds } }] : []),
-    ...(normalizedVehicleTypeKeys.length
-      ? [
-          { vehicleType: { $in: normalizedVehicleTypeKeys } },
-          { vehicleIconType: { $in: normalizedVehicleTypeKeys } },
-        ]
-      : []),
-  ];
+  const vehicleTypeClauses = normalizedVehicleTypeIds.length
+    ? [{ vehicleTypeId: { $in: normalizedVehicleTypeIds } }]
+    : [
+        ...(normalizedVehicleTypeKeys.length
+          ? [
+              { vehicleType: { $in: normalizedVehicleTypeKeys } },
+              { vehicleIconType: { $in: normalizedVehicleTypeKeys } },
+            ]
+          : []),
+      ];
   const vehicleTypeFilter =
     vehicleTypeClauses.length > 1
       ? { $or: vehicleTypeClauses }
