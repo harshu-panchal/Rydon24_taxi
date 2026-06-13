@@ -12,6 +12,7 @@ import {
   ActivitySupportState,
 } from '../components/activity/ActivityStates';
 import api from '../../../shared/api/axiosInstance';
+import { toHistorySafeState } from '../../../shared/utils/historyState';
 import userBusService from '../services/busService';
 import { userService } from '../services/userService';
 import { normalizeBusBooking, normalizePoolingBooking, normalizeRentalBooking, normalizeRide, PAGE_SIZE, TABS } from '../components/activity/activityHelpers';
@@ -243,13 +244,17 @@ const Activity = () => {
     if (item.type === 'bus') {
       navigate(`${routePrefix}/profile/bus-bookings/${item.id}`);
     } else if (item.type === 'rental') {
-      navigate('/rental/confirmed', { state: buildRentalActivityState(item.booking) });
+      navigate('/rental/confirmed', {
+        state: toHistorySafeState(buildRentalActivityState(item.booking)),
+      });
     } else if (item.type === 'pooling') {
       navigate(`${routePrefix}/pooling`);
     } else if (item.type === 'parcel') {
       navigate(`${routePrefix}/parcel/detail/${item.id}`);
     } else {
-      navigate(`${routePrefix}/ride/detail/${item.id}`, { state: { ride: item.ride } });
+      navigate(`${routePrefix}/ride/detail/${item.id}`, {
+        state: toHistorySafeState({ ride: item.ride }),
+      });
     }
   };
   const helperText = useMemo(() => getHelperText(activeTab), [activeTab]);
