@@ -62,6 +62,12 @@ const driverSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    assignedFleetVehicleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TaxiFleetVehicle',
+      default: null,
+      index: true,
+    },
     country: {
       type: mongoose.Schema.Types.Mixed,
       default: null,

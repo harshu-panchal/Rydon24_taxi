@@ -46,8 +46,8 @@ const AdminLogin = () => {
 
     try {
       const response = await adminService.login({ email, password });
-      localStorage.setItem('adminToken', response?.data?.token || '');
-      localStorage.setItem('adminInfo', JSON.stringify(response?.data?.admin || {}));
+      localStorage.setItem('adminToken', response?.token || '');
+      localStorage.setItem('adminInfo', JSON.stringify(response?.admin || {}));
       setTimeout(() => navigate('/admin/dashboard'), 300);
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Authentication failed.');

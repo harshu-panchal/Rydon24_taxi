@@ -7146,6 +7146,27 @@ export const getOwnerFleetVehicles = async (req, res) => {
     .sort({ createdAt: -1 })
     .lean();
 
+  const assignedDrivers = await Driver.find({
+    owner_id: owner._id,
+    deletedAt: null,
+    assignedFleetVehicleId: { $ne: null },
+  })
+    .select("name phone assignedFleetVehicleId")
+    .lean();
+
+  const assignedVehicleMap = new Map(
+    assignedDrivers
+      .filter((driver) => driver.assignedFleetVehicleId)
+      .map((driver) => [
+        String(driver.assignedFleetVehicleId),
+        {
+          id: String(driver._id),
+          name: driver.name || "",
+          phone: driver.phone || "",
+        },
+      ]),
+  );
+
   res.json({
     success: true,
     data: {
@@ -7171,6 +7192,7 @@ export const getOwnerFleetVehicles = async (req, res) => {
           "",
         transport_type: vehicle.transport_type || "taxi",
         active: vehicle.active,
+        assignedDriver: assignedVehicleMap.get(String(vehicle._id)) || null,
         createdAt: vehicle.createdAt,
         updatedAt: vehicle.updatedAt,
       })),
@@ -7490,8 +7512,12 @@ export const getOwnerFleetDrivers = async (req, res) => {
   }
 
   const drivers = await Driver.find({ owner_id: owner._id, deletedAt: null })
+    .populate(
+      "assignedFleetVehicleId",
+      "vehicle_type_id car_brand car_model license_plate_number car_color status",
+    )
     .sort({ createdAt: -1 })
-    .select("name phone email city salary approve status isOnline isOnRide createdAt")
+    .select("name phone email city salary approve status isOnline isOnRide createdAt assignedFleetVehicleId")
     .lean();
 
   res.json({
@@ -7504,6 +7530,21 @@ export const getOwnerFleetDrivers = async (req, res) => {
         email: driver.email || "",
         city: driver.city || "",
         salary: Number(driver.salary || 0),
+        assignedVehicle: driver.assignedFleetVehicleId
+          ? {
+              vehicleId: String(driver.assignedFleetVehicleId._id || ""),
+              name: [
+                driver.assignedFleetVehicleId.car_brand,
+                driver.assignedFleetVehicleId.car_model,
+              ]
+                .filter(Boolean)
+                .join(" ")
+                .trim(),
+              number: driver.assignedFleetVehicleId.license_plate_number || "",
+              color: driver.assignedFleetVehicleId.car_color || "",
+              status: driver.assignedFleetVehicleId.status || "pending",
+            }
+          : null,
         approve: driver.approve,
         status: driver.status,
         isOnline: Boolean(driver.isOnline),
@@ -7529,6 +7570,9 @@ export const createOwnerFleetDriver = async (req, res) => {
   const email = String(req.body?.email || "")
     .trim()
     .toLowerCase();
+  const salaryValue = Number(
+    req.body?.salary ?? req.body?.monthly_salary ?? req.body?.monthlySalary ?? 0,
+  );
 
   if (!name) {
     throw new ApiError(400, "name is required");
@@ -7536,6 +7580,10 @@ export const createOwnerFleetDriver = async (req, res) => {
 
   if (!/^\d{10}$/.test(phone)) {
     throw new ApiError(400, "A valid 10-digit mobile number is required");
+  }
+
+  if (!Number.isFinite(salaryValue) || salaryValue < 0) {
+    throw new ApiError(400, "A valid non-negative salary is required");
   }
 
   const existing = await Driver.findOne({ phone }).lean();
@@ -8572,6 +8620,12 @@ export const updateOwnerFleetDriver = async (req, res) => {
     req.body?.salary ?? req.body?.monthly_salary ?? req.body?.monthlySalary ?? 0,
   );
   const city = String(req.body?.city || req.body?.address || "").trim();
+  const requestedAssignedVehicleId = String(
+    req.body?.assignedFleetVehicleId ??
+      req.body?.assignedVehicleId ??
+      req.body?.vehicleId ??
+      "",
+  ).trim();
 
   if (!name) {
     throw new ApiError(400, "name is required");
@@ -8593,11 +8647,63 @@ export const updateOwnerFleetDriver = async (req, res) => {
     throw new ApiError(409, "Phone number is already registered");
   }
 
+  let assignedVehicle = null;
+  if (requestedAssignedVehicleId) {
+    if (!mongoose.isValidObjectId(requestedAssignedVehicleId)) {
+      throw new ApiError(400, "A valid assigned vehicle id is required");
+    }
+
+    assignedVehicle = await FleetVehicle.findOne({
+      _id: requestedAssignedVehicleId,
+      owner_id: owner._id,
+      active: true,
+    })
+      .populate("vehicle_type_id", "name type_name transport_type icon_types")
+      .lean();
+
+    if (!assignedVehicle) {
+      throw new ApiError(404, "Assigned vehicle not found for this owner");
+    }
+
+    const alreadyAssigned = await Driver.findOne({
+      owner_id: owner._id,
+      deletedAt: null,
+      assignedFleetVehicleId: assignedVehicle._id,
+      _id: { $ne: driver._id },
+    })
+      .select("name")
+      .lean();
+
+    if (alreadyAssigned) {
+      throw new ApiError(
+        409,
+        `Vehicle is already assigned to ${alreadyAssigned.name || "another driver"}`,
+      );
+    }
+  }
+
   driver.name = name;
   driver.phone = phone;
   driver.email = email;
   driver.city = city || driver.city || "";
   driver.salary = salaryValue;
+  driver.assignedFleetVehicleId = assignedVehicle?._id || null;
+
+  if (assignedVehicle) {
+    driver.vehicleTypeId = assignedVehicle.vehicle_type_id?._id || null;
+    driver.vehicleMake = assignedVehicle.car_brand || "";
+    driver.vehicleModel = assignedVehicle.car_model || "";
+    driver.vehicleNumber = assignedVehicle.license_plate_number || "";
+    driver.vehicleColor = assignedVehicle.car_color || "";
+    driver.vehicleIconType =
+      assignedVehicle.vehicle_type_id?.icon_types || driver.vehicleIconType || "car";
+  } else {
+    driver.vehicleTypeId = null;
+    driver.vehicleMake = "";
+    driver.vehicleModel = "";
+    driver.vehicleNumber = "";
+    driver.vehicleColor = "";
+  }
 
   await driver.save();
 
@@ -8611,6 +8717,18 @@ export const updateOwnerFleetDriver = async (req, res) => {
       email: driver.email || "",
       city: driver.city || "",
       salary: Number(driver.salary || 0),
+      assignedVehicle: assignedVehicle
+        ? {
+            vehicleId: String(assignedVehicle._id),
+            name: [assignedVehicle.car_brand, assignedVehicle.car_model]
+              .filter(Boolean)
+              .join(" ")
+              .trim(),
+            number: assignedVehicle.license_plate_number || "",
+            color: assignedVehicle.car_color || "",
+            status: assignedVehicle.status || "pending",
+          }
+        : null,
       approve: driver.approve,
       status: driver.status,
       isOnline: Boolean(driver.isOnline),

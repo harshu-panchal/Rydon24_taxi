@@ -9,6 +9,7 @@ import { getLocalUserToken, userAuthService } from '../../services/authService';
 import { getCurrentRide, isActiveCurrentRide, saveCurrentRide } from '../../services/currentRideService';
 import { useAppGoogleMapsLoader, HAS_VALID_GOOGLE_MAPS_KEY } from '../../../admin/utils/googleMaps';
 import { scheduleScheduledRideReminders } from '../../utils/upcomingRideReminderService';
+import { toHistorySafeState } from '../../../../shared/utils/historyState';
 
 const MAP_OPTIONS = {
   disableDefaultUI: true,
@@ -172,6 +173,8 @@ const formatScheduledDateTime = (value) => {
     minute: '2-digit',
   });
 };
+
+const buildHistoryState = (value) => toHistorySafeState(value) || {};
 
 const SearchingDriver = () => {
   const navigate = useNavigate();
@@ -445,7 +448,7 @@ const SearchingDriver = () => {
       timerRef.current = setTimeout(() => {
         navigate(`${routePrefix}/ride/tracking`, {
           replace: true,
-          state: {
+          state: buildHistoryState({
             ...routeState,
             pickup: rideSnapshot?.pickupAddress || routeState.pickup,
             drop: rideSnapshot?.dropAddress || routeState.drop,
@@ -457,7 +460,7 @@ const SearchingDriver = () => {
             fare: rideSnapshot?.fare || routeState.fare || routeState.baseFare || routeState.vehicle?.price || 22,
             vehicleIconUrl: rideSnapshot?.vehicleIconUrl || routeState.vehicleIconUrl || routeState.vehicle?.vehicleIconUrl || routeState.vehicle?.icon || '',
             paymentMethod: routeState.paymentMethod || 'Cash',
-          },
+          }),
         });
       }, 2200);
     };
@@ -869,10 +872,10 @@ const SearchingDriver = () => {
 
     navigate(`${routePrefix}/ride/select-vehicle`, {
       replace: true,
-      state: {
+      state: buildHistoryState({
         ...routeState,
         ...nextState,
-      },
+      }),
     });
   };
 
@@ -1277,10 +1280,10 @@ const SearchingDriver = () => {
                     </motion.button>
                      <motion.button
                       whileTap={{ scale: 0.96 }}
-                      onClick={() => navigate(`${routePrefix}/ride/chat`, { state: { driver } })}
+                      onClick={() => navigate(`${routePrefix}/ride/chat`, { state: buildHistoryState({ driver }) })}
                       className="flex items-center justify-center gap-3 rounded-[22px] bg-slate-950 py-4.5 shadow-[0_12px_24px_rgba(15,23,42,0.15)] active:shadow-none"
                     >
-                      <MessageCircle size={18} className="text-white" strokeWidth={2.5} />
+                     <MessageCircle size={18} className="text-white" strokeWidth={2.5} />
                       <span className="text-[13px] font-black text-white uppercase tracking-widest leading-none">Chat</span>
                     </motion.button>
                   </div>
