@@ -138,6 +138,8 @@ const OTPVerification = () => {
     const existingAccount = Boolean(session.existingAccount);
     const detectedRole = formatRoleLabel(session.detectedRole || role);
     const entryPath = String(session.entryPath || (isLoginFlow ? `${routePrefix}/login` : `${routePrefix}/reg-phone`));
+    console.log('[OTPVerification] render session:', session);
+    console.log('[OTPVerification] isLoginFlow:', isLoginFlow, 'phone:', phone, 'availableRoles:', session.availableRoles);
     const sessionResumeKey = JSON.stringify({
         registrationId,
         phone,
@@ -288,7 +290,7 @@ const OTPVerification = () => {
         try {
             if (isLoginFlow) {
                 const targetRole = selectedRole || role;
-                const queryRole = (session.availableRoles && session.availableRoles.length > 1 && !selectedRole) ? undefined : targetRole;
+                const queryRole = selectedRole || undefined;
                 const response = await verifyDriverLoginOtp({ phone, otp: code, role: queryRole });
                 const payload = unwrap(response);
 
@@ -301,14 +303,15 @@ const OTPVerification = () => {
                     return;
                 }
 
+                const loggedInRole = payload?.role || targetRole;
                 const token = payload?.token;
                 if (token) {
-                    const normalizedRole = normalizeDriverRole(targetRole);
+                    const normalizedRole = normalizeDriverRole(loggedInRole);
                     persistDriverAuthSession({ token, role: normalizedRole });
                     await syncPushTokens();
                 }
                 clearDriverRegistrationSession();
-                const normalizedRole = normalizeDriverRole(targetRole);
+                const normalizedRole = normalizeDriverRole(loggedInRole);
                 const nextPath = getPostLoginRoute(normalizedRole, payload?.driver, routePrefix);
                 navigate(nextPath, { replace: true });
                 return;

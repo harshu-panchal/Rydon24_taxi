@@ -526,6 +526,7 @@ export const verifyDriverLoginOtp = async ({ phone, otp, role }) => {
   return {
     message: 'OTP verified successfully',
     token: signAccessToken({ sub: String(account._id), role: normalizedRole }),
+    role: normalizedRole,
     driver:
       normalizedRole === 'owner'
         ? publicOwnerPayload(account)

@@ -81,6 +81,9 @@ const PhoneRegistration = () => {
       const existingAccount = Boolean(payload?.existingAccount || sessionData?.existingAccount);
       const detectedRole = String(payload?.detectedRole || sessionData?.role || '').trim().toLowerCase();
       const availableRoles = payload?.availableRoles || sessionData?.availableRoles || [];
+      console.log('[PhoneRegistration] payload:', payload);
+      console.log('[PhoneRegistration] availableRoles:', availableRoles);
+      console.log('[PhoneRegistration] loginMode:', loginMode);
       const nextState = saveDriverRegistrationSession({
         phone,
         role: sessionData.role || (isOwnerPortal ? 'owner' : ''),
