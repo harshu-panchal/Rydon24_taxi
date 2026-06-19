@@ -272,11 +272,10 @@ const SidebarBadge = ({ count, isActive = false }) => {
     <motion.span
       initial={{ scale: 0.5, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
-      className={`ml-auto inline-flex min-w-[1.4rem] h-5 items-center justify-center rounded-full px-1.5 text-[9.5px] font-black tracking-tighter transition-colors duration-300 ${
-        isActive 
-          ? 'bg-white/20 text-white' 
-          : 'bg-orange-500 text-white shadow-[0_2px_10px_rgba(249,115,22,0.4)]'
-      }`}
+      className={`ml-auto inline-flex min-w-[1.4rem] h-5 items-center justify-center rounded-full px-1.5 text-[9.5px] font-black tracking-tighter transition-colors duration-300 ${isActive
+        ? 'bg-white/20 text-white'
+        : 'bg-orange-500 text-white shadow-[0_2px_10px_rgba(249,115,22,0.4)]'
+        }`}
     >
       {count > 99 ? '99+' : count}
     </motion.span>
@@ -290,9 +289,8 @@ const NotificationTabBadge = ({ count, isActive = false }) => {
 
   return (
     <span
-      className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-black ${
-        isActive ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-700'
-      }`}
+      className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-black ${isActive ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-700'
+        }`}
     >
       {count > 99 ? '99+' : count}
     </span>
@@ -304,8 +302,7 @@ const SidebarItem = ({ icon, label, path, isCollapsed, sidebarTextColor, unreadC
     to={path}
     end
     className={({ isActive }) =>
-      `group relative flex items-center gap-3.5 px-4 py-2 rounded-xl transition-all duration-200 ${
-        isActive ? 'text-white bg-white/10' : 'hover:bg-white/5'
+      `group relative flex items-center gap-3.5 px-4 py-2 rounded-xl transition-all duration-200 ${isActive ? 'text-white bg-white/10' : 'hover:bg-white/5'
       }`
     }
     style={({ isActive }) => ({
@@ -314,10 +311,10 @@ const SidebarItem = ({ icon, label, path, isCollapsed, sidebarTextColor, unreadC
   >
     {({ isActive }) => (
       <>
-        {React.createElement(icon, { 
-          size: 18, 
+        {React.createElement(icon, {
+          size: 18,
           strokeWidth: isActive ? 2.5 : 2,
-          className: `shrink-0 transition-all duration-300 ${isActive ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'}` 
+          className: `shrink-0 transition-all duration-300 ${isActive ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'}`
         })}
         {!isCollapsed && (
           <span className={`min-w-0 flex-1 text-[13px] tracking-tight transition-all duration-200 ${isActive ? 'font-bold' : 'font-medium opacity-60 group-hover:opacity-100'}`}>
@@ -349,7 +346,7 @@ const SidebarGroup = ({
   const isOpen = expandedGroups.includes(groupKey);
   const isExpanded = forceOpen || isOpen;
   const unreadCount = subItems.reduce((sum, item) => sum + getSidebarItemCount(item, unreadCountsByPath), 0);
-  
+
   const toggleGroup = () => {
     setExpandedGroups((current) => {
       if (current.includes(groupKey)) {
@@ -371,9 +368,8 @@ const SidebarGroup = ({
       <button
         type="button"
         onClick={toggleGroup}
-        className={`group relative w-full flex items-center justify-between px-4 py-2 rounded-xl transition-all duration-200 ${
-          isActive || isExpanded ? 'text-white' : 'hover:bg-white/5'
-        }`}
+        className={`group relative w-full flex items-center justify-between px-4 py-2 rounded-xl transition-all duration-200 ${isActive || isExpanded ? 'text-white' : 'hover:bg-white/5'
+          }`}
         style={{
           color: (isActive || isExpanded) ? '#FFFFFF' : sidebarTextColor,
           backgroundColor: (isActive || isExpanded) ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
@@ -394,9 +390,9 @@ const SidebarGroup = ({
         {!isCollapsed && (
           <div className="ml-3 flex items-center gap-2">
             <SidebarBadge count={unreadCount} isActive={isActive || isExpanded} />
-            <ChevronRight 
-              size={12} 
-              className={`text-white transition-transform duration-300 ease-out ${(isActive || isExpanded) ? 'opacity-100' : 'opacity-95'} ${isExpanded ? 'rotate-90' : ''}`} 
+            <ChevronRight
+              size={12}
+              className={`text-white transition-transform duration-300 ease-out ${(isActive || isExpanded) ? 'opacity-100' : 'opacity-95'} ${isExpanded ? 'rotate-90' : ''}`}
             />
           </div>
         )}
@@ -404,7 +400,7 @@ const SidebarGroup = ({
 
       <AnimatePresence initial={false}>
         {!isCollapsed && isExpanded && (
-          <motion.div 
+          <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
@@ -431,9 +427,8 @@ const SidebarGroup = ({
                     key={item.path}
                     to={item.path}
                     end
-                    className={({ isActive: childActive }) => 
-                      `group flex items-center gap-3 px-3 py-1.5 rounded-lg text-[12.5px] transition-all duration-200 ${
-                        childActive ? 'text-white bg-white/5' : 'hover:text-white'
+                    className={({ isActive: childActive }) =>
+                      `group flex items-center gap-3 px-3 py-1.5 rounded-lg text-[12.5px] transition-all duration-200 ${childActive ? 'text-white bg-white/5' : 'hover:text-white'
                       }`
                     }
                     style={({ isActive: childActive }) => ({
@@ -472,13 +467,13 @@ const NestedGroup = ({
   const isOpen = expandedGroups.includes(groupKey);
   const isExpanded = forceOpen || isOpen;
   const unreadCount = subItems.reduce((sum, item) => sum + getSidebarItemCount(item, unreadCountsByPath), 0);
-  
+
   const toggleGroup = () => {
     setExpandedGroups((current) => {
       if (current.includes(groupKey)) {
         return current.filter((key) => key !== groupKey);
       }
-      
+
       const parts = groupKey.split(':');
       const newExpanded = [];
       let currentPath = '';
@@ -495,9 +490,8 @@ const NestedGroup = ({
       <button
         type="button"
         onClick={toggleGroup}
-        className={`group w-full flex items-center justify-between px-3 py-1.5 rounded-lg transition-all duration-200 ${
-          isActive || isExpanded ? 'text-white' : 'hover:text-slate-200'
-        }`}
+        className={`group w-full flex items-center justify-between px-3 py-1.5 rounded-lg transition-all duration-200 ${isActive || isExpanded ? 'text-white' : 'hover:text-slate-200'
+          }`}
         style={{
           color: (isActive || isExpanded) ? '#FFFFFF' : sidebarTextColor,
           backgroundColor: (isActive || isExpanded) ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
@@ -509,9 +503,9 @@ const NestedGroup = ({
         </span>
         <span className="ml-3 flex items-center gap-2">
           <SidebarBadge count={unreadCount} isActive={isActive || isExpanded} />
-          <ChevronRight 
-            size={12} 
-            className={`text-white transition-transform duration-300 ease-out ${(isActive || isExpanded) ? 'opacity-100' : 'opacity-95'} ${isExpanded ? 'rotate-90' : ''}`} 
+          <ChevronRight
+            size={12}
+            className={`text-white transition-transform duration-300 ease-out ${(isActive || isExpanded) ? 'opacity-100' : 'opacity-95'} ${isExpanded ? 'rotate-90' : ''}`}
           />
         </span>
       </button>
@@ -532,8 +526,7 @@ const NestedGroup = ({
                   to={item.path}
                   end
                   className={({ isActive: childActive }) =>
-                    `group flex items-center gap-3 px-3 py-1.5 rounded-lg text-[12px] transition-all duration-200 ${
-                      childActive ? 'text-white' : 'hover:text-slate-300'
+                    `group flex items-center gap-3 px-3 py-1.5 rounded-lg text-[12px] transition-all duration-200 ${childActive ? 'text-white' : 'hover:text-slate-300'
                     }`
                   }
                   style={({ isActive: childActive }) => ({
@@ -588,22 +581,22 @@ const ModeSwitcher = ({ mode, setMode }) => {
           {active.id === ADMIN_MODE ? <Monitor size={14} strokeWidth={2.5} /> : <Briefcase size={14} strokeWidth={2.5} />}
         </div>
         <div className="text-left hidden sm:block">
-           <p className="text-[11px] font-black text-slate-900 leading-tight uppercase tracking-tight">{active.label}</p>
-           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{active.subtitle}</p>
+          <p className="text-[11px] font-black text-slate-900 leading-tight uppercase tracking-tight">{active.label}</p>
+          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{active.subtitle}</p>
         </div>
         <ChevronDown size={14} className={`text-slate-300 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       <AnimatePresence>
         {isOpen && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
             className="absolute right-0 top-full z-50 mt-4 w-60 overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-2.5 shadow-2xl"
           >
             <div className="px-4 py-3 border-b border-slate-50 mb-1.5">
-               <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Switch Workspace</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Switch Workspace</p>
             </div>
             {options.map((option) => {
               const selected = option.id === mode;
@@ -615,9 +608,8 @@ const ModeSwitcher = ({ mode, setMode }) => {
                     setMode(option.id);
                     setIsOpen(false);
                   }}
-                  className={`flex w-full items-center gap-3.5 rounded-2xl px-4 py-3.5 text-left transition-all ${
-                    selected ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/10' : 'hover:bg-slate-50 text-slate-600'
-                  }`}
+                  className={`flex w-full items-center gap-3.5 rounded-2xl px-4 py-3.5 text-left transition-all ${selected ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/10' : 'hover:bg-slate-50 text-slate-600'
+                    }`}
                 >
                   <div className={`h-1.5 w-1.5 rounded-full ${selected ? 'bg-white' : 'bg-slate-300'}`} />
                   <div>
@@ -1022,7 +1014,7 @@ const AdminLayout = () => {
             subItems: [
               { label: 'Wallet Settings', path: '/admin/settings/app/wallet', permission: 'settings.view' },
               { label: 'Tip Settings', path: '/admin/settings/app/tip', permission: 'settings.view' },
-              { label: 'Mobile App Landing/Onboard Screens Settings', path: '/admin/settings/app/onboard', permission: 'settings.view' },
+              // { label: 'Mobile App Landing/Onboard Screens Settings', path: '/admin/settings/app/onboard', permission: 'settings.view' },
             ],
           },
           {
@@ -1031,10 +1023,10 @@ const AdminLayout = () => {
             permission: 'settings.view',
             subItems: [
               { label: 'Payment Gateway Settings', path: '/admin/settings/third-party/payment', permission: 'settings.view' },
-              { label: 'SMS Gateway Settings', path: '/admin/settings/third-party/sms', permission: 'settings.view' },
-              { label: 'Firebase Settings', path: '/admin/settings/third-party/firebase', permission: 'settings.view' },
-              { label: 'Map and Map APIs Settings', path: '/admin/settings/third-party/map-apis', permission: 'settings.view' },
-              { label: 'Mail Configuration', path: '/admin/settings/third-party/mail', permission: 'settings.view' },
+              // { label: 'SMS Gateway Settings', path: '/admin/settings/third-party/sms', permission: 'settings.view' },
+              // { label: 'Firebase Settings', path: '/admin/settings/third-party/firebase', permission: 'settings.view' },
+              // { label: 'Map and Map APIs Settings', path: '/admin/settings/third-party/map-apis', permission: 'settings.view' },
+              // { label: 'Mail Configuration', path: '/admin/settings/third-party/mail', permission: 'settings.view' },
               // { label: 'Notification Channel', path: '/admin/settings/third-party/notification-channel' },
             ],
           },
@@ -1043,20 +1035,20 @@ const AdminLayout = () => {
           //   label: 'Addons',
           //   subItems: [{ label: 'Dispatcher Addons', path: '/admin/settings/addons/dispatcher' }],
           // },
-          {
-            icon: Monitor,
-            label: 'CMS-Landing Website',
-            permission: 'settings.view',
-            subItems: [
-              { label: 'Header-Footer', path: '/admin/settings/cms/header-footer', permission: 'settings.view' },
-              { label: 'Home', path: '/admin/settings/cms/home', permission: 'settings.view' },
-              { label: 'About Us', path: '/admin/settings/cms/about', permission: 'settings.view' },
-              { label: 'Driver', path: '/admin/settings/cms/driver', permission: 'settings.view' },
-              { label: 'User', path: '/admin/settings/cms/user', permission: 'settings.view' },
-              { label: 'Contact', path: '/admin/settings/cms/contact', permission: 'settings.view' },
-              { label: 'Privacy Policy, T&C and DMV', path: '/admin/settings/cms/legal', permission: 'settings.view' },
-            ],
-          },
+          // {
+          //   icon: Monitor,
+          //   label: 'CMS-Landing Website',
+          //   permission: 'settings.view',
+          //   subItems: [
+          //     { label: 'Header-Footer', path: '/admin/settings/cms/header-footer', permission: 'settings.view' },
+          //     { label: 'Home', path: '/admin/settings/cms/home', permission: 'settings.view' },
+          //     { label: 'About Us', path: '/admin/settings/cms/about', permission: 'settings.view' },
+          //     { label: 'Driver', path: '/admin/settings/cms/driver', permission: 'settings.view' },
+          //     { label: 'User', path: '/admin/settings/cms/user', permission: 'settings.view' },
+          //     { label: 'Contact', path: '/admin/settings/cms/contact', permission: 'settings.view' },
+          //     { label: 'Privacy Policy, T&C and DMV', path: '/admin/settings/cms/legal', permission: 'settings.view' },
+          //   ],
+          // },
         ],
       },
     ],
@@ -1467,9 +1459,8 @@ const AdminLayout = () => {
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8F9FA] font-sans text-gray-900">
       <aside
-        className={`relative z-50 flex h-screen flex-col overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-          isCollapsed ? 'w-20' : 'w-72'
-        } ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+        className={`relative z-50 flex h-screen flex-col overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${isCollapsed ? 'w-20' : 'w-72'
+          } ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
         style={{ backgroundColor: adminThemeColor }}
       >
         <div className="flex h-full flex-col">
@@ -1486,7 +1477,7 @@ const AdminLayout = () => {
                 <div className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-indigo-900" />
               </div>
               {!isCollapsed && (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   className="flex flex-col"
@@ -1592,9 +1583,8 @@ const AdminLayout = () => {
                 </button>
 
                 <div
-                  className={`absolute right-0 top-full z-50 mt-4 w-[380px] overflow-hidden rounded-[2.5rem] border border-slate-200 bg-white shadow-2xl transition-all duration-300 ${
-                    isNotificationsOpen ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0 pointer-events-none'
-                  }`}
+                  className={`absolute right-0 top-full z-50 mt-4 w-[380px] overflow-hidden rounded-[2.5rem] border border-slate-200 bg-white shadow-2xl transition-all duration-300 ${isNotificationsOpen ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0 pointer-events-none'
+                    }`}
                 >
                   <div className="border-b border-slate-50 px-6 py-6 bg-slate-50/50">
                     <div className="flex items-center justify-between gap-3">
@@ -1628,11 +1618,10 @@ const AdminLayout = () => {
                           setNotificationTab('ride_requests');
                           setRideRequestPage(1);
                         }}
-                        className={`flex-1 rounded-xl px-2 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ${
-                          notificationTab === 'ride_requests'
-                            ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/10'
-                            : 'text-slate-400 hover:text-slate-900'
-                        }`}
+                        className={`flex-1 rounded-xl px-2 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ${notificationTab === 'ride_requests'
+                          ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/10'
+                          : 'text-slate-400 hover:text-slate-900'
+                          }`}
                       >
                         Trips
                       </button>
@@ -1642,11 +1631,10 @@ const AdminLayout = () => {
                           setNotificationTab('bookings');
                           setBookingPage(1);
                         }}
-                        className={`flex-1 rounded-xl px-2 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ${
-                          notificationTab === 'bookings'
-                            ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/10'
-                            : 'text-slate-400 hover:text-slate-900'
-                        }`}
+                        className={`flex-1 rounded-xl px-2 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ${notificationTab === 'bookings'
+                          ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/10'
+                          : 'text-slate-400 hover:text-slate-900'
+                          }`}
                       >
                         Bookings
                       </button>
@@ -1655,11 +1643,10 @@ const AdminLayout = () => {
                         onClick={() => {
                           setNotificationTab('chats');
                         }}
-                        className={`flex-1 rounded-xl px-2 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ${
-                          notificationTab === 'chats'
-                            ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/10'
-                            : 'text-slate-400 hover:text-slate-900'
-                        }`}
+                        className={`flex-1 rounded-xl px-2 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ${notificationTab === 'chats'
+                          ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/10'
+                          : 'text-slate-400 hover:text-slate-900'
+                          }`}
                       >
                         Chats
                       </button>
@@ -1675,7 +1662,7 @@ const AdminLayout = () => {
                       visibleRideRequestResults.length === 0 ? (
                         <div className="px-6 py-12 text-center">
                           <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-200 mx-auto mb-4">
-                             <Zap size={24} />
+                            <Zap size={24} />
                           </div>
                           <p className="text-[13px] font-black text-slate-900 tracking-tight">Zero Traffic</p>
                           <p className="mt-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">No active ride requests</p>
@@ -1893,38 +1880,38 @@ const AdminLayout = () => {
                     className="absolute right-0 top-full z-50 mt-4 w-64 overflow-hidden rounded-[2.5rem] border border-slate-200 bg-white p-3 shadow-2xl"
                   >
                     <div className="px-5 py-4 border-b border-slate-50 mb-2 bg-slate-50/50 rounded-t-[1.5rem]">
-                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-1.5">Cryptographic Identity</p>
-                       <p className="text-[13px] font-bold text-slate-900 truncate leading-tight">{adminProfile?.email || 'root@rydon24.cloud'}</p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-1.5">Cryptographic Identity</p>
+                      <p className="text-[13px] font-bold text-slate-900 truncate leading-tight">{adminProfile?.email || 'root@rydon24.cloud'}</p>
                     </div>
-                    
-                    <div className="p-1 space-y-1">
-                       <button
-                         type="button"
-                         onClick={() => {
-                           navigate('/admin/profile');
-                           setIsUserMenuOpen(false);
-                         }}
-                         className="flex w-full items-center gap-3.5 rounded-2xl px-4 py-3.5 text-slate-600 transition-all hover:bg-slate-50 hover:text-slate-900 group"
-                       >
-                         <div className="p-1.5 rounded-lg bg-slate-50 text-slate-400 group-hover:text-slate-900 transition-colors">
-                            <Settings2 size={16} strokeWidth={2.5} />
-                         </div>
-                         <span className="text-[11px] font-black uppercase tracking-widest">Global Profile</span>
-                       </button>
 
-                       <button
-                         type="button"
-                         onClick={(event) => {
-                           event.stopPropagation();
-                           handleLogout();
-                         }}
-                         className="flex w-full items-center gap-3.5 rounded-2xl px-4 py-3.5 text-rose-600 transition-all hover:bg-rose-50 group"
-                       >
-                         <div className="p-1.5 rounded-lg bg-rose-50 text-rose-400 group-hover:text-rose-600 transition-colors">
-                            <LogOut size={16} strokeWidth={2.5} />
-                         </div>
-                         <span className="text-[11px] font-black uppercase tracking-widest">Logout Session</span>
-                       </button>
+                    <div className="p-1 space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigate('/admin/profile');
+                          setIsUserMenuOpen(false);
+                        }}
+                        className="flex w-full items-center gap-3.5 rounded-2xl px-4 py-3.5 text-slate-600 transition-all hover:bg-slate-50 hover:text-slate-900 group"
+                      >
+                        <div className="p-1.5 rounded-lg bg-slate-50 text-slate-400 group-hover:text-slate-900 transition-colors">
+                          <Settings2 size={16} strokeWidth={2.5} />
+                        </div>
+                        <span className="text-[11px] font-black uppercase tracking-widest">Global Profile</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleLogout();
+                        }}
+                        className="flex w-full items-center gap-3.5 rounded-2xl px-4 py-3.5 text-rose-600 transition-all hover:bg-rose-50 group"
+                      >
+                        <div className="p-1.5 rounded-lg bg-rose-50 text-rose-400 group-hover:text-rose-600 transition-colors">
+                          <LogOut size={16} strokeWidth={2.5} />
+                        </div>
+                        <span className="text-[11px] font-black uppercase tracking-widest">Logout Session</span>
+                      </button>
                     </div>
                   </motion.div>
                 )}
