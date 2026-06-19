@@ -131,19 +131,28 @@ const StepReferral = () => {
                             </div>
                         </div>
 
-                        <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                        <div className="group relative overflow-hidden rounded-[1.9rem] border-2 border-amber-200/70 bg-[linear-gradient(135deg,rgba(251,191,36,0.18),rgba(255,255,255,0.96)_46%,rgba(251,191,36,0.1))] p-4 shadow-[0_18px_45px_rgba(245,158,11,0.16)] transition-all focus-within:border-amber-400/80 focus-within:shadow-[0_22px_55px_rgba(245,158,11,0.22)]">
+                            <div className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/80 to-transparent" />
                             <div className="flex items-center gap-4">
-                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-amber-500 shadow-sm ring-1 ring-amber-200/70 transition-all group-focus-within:bg-slate-900 group-focus-within:text-amber-300">
                                     <UserRound size={20} strokeWidth={2.5} />
                                 </div>
                                 <div className="min-w-0 flex-1 space-y-0.5 overflow-hidden">
-                                    <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70">Employee Code</label>
+                                    <div className="mb-1 flex items-center justify-between gap-3">
+                                        <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-amber-700">Employee Code</label>
+                                        <span className="rounded-full bg-amber-500 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-white shadow-[0_10px_20px_rgba(245,158,11,0.25)]">
+                                            Highlight
+                                        </span>
+                                    </div>
                                     <input
                                         value={employeeCode}
                                         onChange={(e) => setEmployeeCode(e.target.value.toUpperCase())}
                                         placeholder="EMP-TEAM-01"
-                                        className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200 tracking-wider uppercase"
+                                        className="w-full border-none bg-transparent p-0 text-lg font-black tracking-[0.22em] text-slate-900 uppercase focus:outline-none focus:ring-0 placeholder:text-amber-300/60"
                                     />
+                                    <p className="pt-1 text-[11px] font-bold text-amber-700/80">
+                                        Add your employee code here if the signup came through staff.
+                                    </p>
                                 </div>
                             </div>
                         </div>

@@ -1,9 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Briefcase, CheckCircle2, ChevronRight, Smartphone } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
+  buildDriverOnboardingSessionSnapshot,
   clearDriverRegistrationSession,
+  getDriverOnboardingResumeStep,
+  getDriverOnboardingSession,
   getStoredDriverRegistrationSession,
   saveDriverRegistrationSession,
   sendDriverOtp,
@@ -40,6 +43,21 @@ const PhoneRegistration = () => {
     storedSession.employeeCode ||
     '',
   ).trim().toUpperCase();
+  const storedOnboardingPhone = String(storedSession.phone || '').replace(/\D/g, '').slice(-10);
+  const storedRegistrationId = String(storedSession.registrationId || '').trim();
+  const storedSessionResumeKey = JSON.stringify({
+    phone: storedOnboardingPhone,
+    registrationId: storedRegistrationId,
+    otpVerified: Boolean(storedSession.otpVerified),
+    status: storedSession.status || '',
+    role: storedSession.role || '',
+    roleConfirmed: storedSession.roleConfirmed !== false,
+    fullName: storedSession.fullName || '',
+    email: storedSession.email || '',
+    gender: storedSession.gender || '',
+    locationId: storedSession.locationId || '',
+    vehicleTypeId: storedSession.vehicleTypeId || '',
+  });
 
   const [phone, setPhone] = useState(() => String(location.state?.phone || storedSession.phone || '').replace(/\D/g, '').slice(-10));
   const [agreed, setAgreed] = useState(true);
@@ -51,6 +69,74 @@ const PhoneRegistration = () => {
   const entryPath = `${routePrefix}/login`;
   const HeaderIcon = isOwnerPortal ? Briefcase : Smartphone;
   const portalLabel = isOwnerPortal ? 'Owner' : 'Driver';
+
+  useEffect(() => {
+    let active = true;
+
+    const resumeOnboardingIfPossible = async () => {
+      if (isLoginPage) {
+        return;
+      }
+
+      if (!storedOnboardingPhone || !storedRegistrationId) {
+        return;
+      }
+
+      if (storedSession.otpVerified) {
+        const nextStep = getDriverOnboardingResumeStep(storedSession);
+        navigate(`${routePrefix}/${nextStep}`, {
+          replace: true,
+          state: storedSession,
+        });
+        return;
+      }
+
+      try {
+        const response = await getDriverOnboardingSession({
+          registrationId: storedRegistrationId,
+          phone: storedOnboardingPhone,
+        });
+
+        if (!active) {
+          return;
+        }
+
+        const payload = response?.data?.data || response?.data || response;
+        const nextSession = saveDriverRegistrationSession(
+          buildDriverOnboardingSessionSnapshot(payload, storedSession),
+        );
+
+        if (nextSession.otpVerified) {
+          const nextStep = getDriverOnboardingResumeStep(nextSession);
+          navigate(`${routePrefix}/${nextStep}`, {
+            replace: true,
+            state: nextSession,
+          });
+          return;
+        }
+
+        navigate(`${routePrefix}/otp-verify`, {
+          replace: true,
+          state: nextSession,
+        });
+      } catch {
+        if (!active) {
+          return;
+        }
+
+        navigate(`${routePrefix}/otp-verify`, {
+          replace: true,
+          state: storedSession,
+        });
+      }
+    };
+
+    resumeOnboardingIfPossible();
+
+    return () => {
+      active = false;
+    };
+  }, [isLoginPage, navigate, routePrefix, storedOnboardingPhone, storedRegistrationId, storedSession, storedSessionResumeKey]);
 
   const handleSendOTP = async () => {
     if (phone.length !== 10) {
