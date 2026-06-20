@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { adminService } from '../../services/adminService';
+import { computeDrivingRoute } from '../../../../shared/utils/googleRoutes';
 import {
   BUS_BLUEPRINT_TEMPLATES,
   createBusBlueprint,
@@ -124,6 +125,12 @@ const blankCancellationRule = () => ({
 
 const CITY_AUTOCOMPLETE_FIELDS = ['address_components', 'formatted_address', 'geometry', 'name', 'place_id'];
 const ROUTE_MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
+const getRouteCacheKey = (origin, destination) => {
+  const serializePoint = (point) =>
+    point ? `${Number(point.lat || 0).toFixed(5)},${Number(point.lng || 0).toFixed(5)}` : '';
+
+  return `${serializePoint(origin)}|${serializePoint(destination)}`;
+};
 const getCreateFlowStepIndex = (searchParams) => {
   const rawValue = Number(searchParams.get('step') || 1);
   if (!Number.isFinite(rawValue)) {
@@ -425,6 +432,8 @@ const BusServiceManager = ({
   const [routePath, setRoutePath] = useState([]);
   const autocompleteRefs = useRef({});
   const routeMapRef = useRef(null);
+  const routePreviewCacheRef = useRef(new Map());
+  const cityGeocodeCacheRef = useRef(new Map());
   const { isLoaded: isGoogleMapsLoaded } = useAppGoogleMapsLoader();
   const canUsePlacesAutocomplete =
     isGoogleMapsLoaded &&
@@ -674,41 +683,40 @@ const BusServiceManager = ({
     if (
       !isGoogleMapsLoaded ||
       routePreviewPoints.length < 2 ||
-      !window.google?.maps?.DirectionsService
+      !window.google?.maps?.importLibrary
     ) {
       setRoutePath([]);
       return;
     }
 
-    let cancelled = false;
-    const directionsService = new window.google.maps.DirectionsService();
+    const routeCacheKey = getRouteCacheKey(routePreviewPoints[0], routePreviewPoints[1]);
+    const cachedRoute = routePreviewCacheRef.current.get(routeCacheKey);
+    if (cachedRoute) {
+      setRoutePath(cachedRoute);
+      return;
+    }
 
-    directionsService.route(
-      {
+    let cancelled = false;
+    void (async () => {
+      const result = await computeDrivingRoute({
         origin: routePreviewPoints[0],
         destination: routePreviewPoints[1],
-        travelMode: window.google.maps.TravelMode.DRIVING,
-        provideRouteAlternatives: false,
         region: 'IN',
-      },
-      (result, status) => {
-        if (cancelled) {
-          return;
-        }
+      });
 
-        if (status === 'OK' && result?.routes?.[0]?.overview_path?.length) {
-          setRoutePath(
-            result.routes[0].overview_path.map((point) => ({
-              lat: point.lat(),
-              lng: point.lng(),
-            })),
-          );
-          return;
-        }
+      if (cancelled) {
+        return;
+      }
 
-        setRoutePath(routePreviewPoints);
-      },
-    );
+      if (result.status === 'OK' && result.path.length) {
+        routePreviewCacheRef.current.set(routeCacheKey, result.path);
+        setRoutePath(result.path);
+        return;
+      }
+
+      routePreviewCacheRef.current.set(routeCacheKey, routePreviewPoints);
+      setRoutePath(routePreviewPoints);
+    })();
 
     return () => {
       cancelled = true;
@@ -856,6 +864,12 @@ const BusServiceManager = ({
       return null;
     }
 
+    const cacheKey = trimmedCityName.toLowerCase();
+    const cachedCity = cityGeocodeCacheRef.current.get(cacheKey);
+    if (cachedCity) {
+      return cachedCity;
+    }
+
     const geocoder = new window.google.maps.Geocoder();
 
     return new Promise((resolve) => {
@@ -877,10 +891,12 @@ const BusServiceManager = ({
             ),
           ) || results[0];
 
-          resolve({
+          const resolvedCity = {
             city: getCityLabelFromPlace(bestMatch),
             coords: getCoordsFromPlace(bestMatch),
-          });
+          };
+          cityGeocodeCacheRef.current.set(cacheKey, resolvedCity);
+          resolve(resolvedCity);
         },
       );
     });

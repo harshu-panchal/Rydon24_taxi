@@ -26,6 +26,9 @@ const getCityCoords = (city) => {
 const unwrapApiPayload = (response) => response?.data?.data || response?.data || response || {};
 const normalizeSuggestionKey = (result) =>
   `${String(result?.title || '').trim().toLowerCase()}|${String(result?.address || '').trim().toLowerCase()}`;
+const MAP_REVERSE_GEOCODE_DEBOUNCE_MS = 450;
+const getLatLngCacheKey = (coords, precision = 5) =>
+  `${Number(coords?.lat || 0).toFixed(precision)},${Number(coords?.lng || 0).toFixed(precision)}`;
 
 const generateIntercityBookingId = () =>
   'IC-' + Math.random().toString(36).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6).padEnd(6, '0');
@@ -62,6 +65,9 @@ const IntercityDetails = () => {
   const autocompleteSessionTokenRef = useRef(null);
   const mapSearchCacheRef = useRef(new Map());
   const latestMapSearchRef = useRef(0);
+  const reverseGeocodeTimerRef = useRef(null);
+  const reverseGeocodeCacheRef = useRef(new Map());
+  const placeSelectionCacheRef = useRef(new Map());
   const { isLoaded, loadError } = useAppGoogleMapsLoader();
 
   const [autocompletePickup, setAutocompletePickup] = useState(null);
@@ -319,6 +325,14 @@ const IntercityDetails = () => {
   };
 
   const resolveSuggestionSelection = async (result) => {
+    const cacheKey = String(result?.placeId || normalizeSuggestionKey(result));
+    if (cacheKey) {
+      const cached = placeSelectionCacheRef.current.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
+
     const geocoder = getGeocoder();
     const placesService = getPlacesService();
 
@@ -334,11 +348,15 @@ const IntercityDetails = () => {
             const location = place?.geometry?.location;
 
             if (status === 'OK' && location) {
-              resolve({
+              const resolvedResult = {
                 title: result.title || place.name || place.formatted_address,
                 address: place.formatted_address || result.address || result.title || '',
                 coords: [location.lng(), location.lat()],
-              });
+              };
+              if (cacheKey) {
+                placeSelectionCacheRef.current.set(cacheKey, resolvedResult);
+              }
+              resolve(resolvedResult);
               return;
             }
 
@@ -352,11 +370,15 @@ const IntercityDetails = () => {
               const geocodedLocation = geocodedPlace?.geometry?.location;
 
               if (geocodeStatus === 'OK' && geocodedLocation) {
-                resolve({
+                const resolvedResult = {
                   title: result.title || geocodedPlace.formatted_address,
                   address: geocodedPlace.formatted_address || result.address || result.title || '',
                   coords: [geocodedLocation.lng(), geocodedLocation.lat()],
-                });
+                };
+                if (cacheKey) {
+                  placeSelectionCacheRef.current.set(cacheKey, resolvedResult);
+                }
+                resolve(resolvedResult);
                 return;
               }
 
@@ -377,11 +399,15 @@ const IntercityDetails = () => {
         const location = place?.geometry?.location;
 
         if (status === 'OK' && location) {
-          resolve({
+          const resolvedResult = {
             title: result.title || place.formatted_address,
             address: place.formatted_address || result.address || result.title || '',
             coords: [location.lng(), location.lat()],
-          });
+          };
+          if (cacheKey) {
+            placeSelectionCacheRef.current.set(cacheKey, resolvedResult);
+          }
+          resolve(resolvedResult);
           return;
         }
 
@@ -423,19 +449,43 @@ const IntercityDetails = () => {
 
     lastCenterRef.current = { lat, lng };
     setIsDragging(false);
-    setIsGeocoding(true);
+    const cacheKey = getLatLngCacheKey({ lat, lng });
+    const cached = reverseGeocodeCacheRef.current.get(cacheKey);
+    if (cached) {
+      setPickedAddress(cached);
+      return;
+    }
 
-    const geocoder = new window.google.maps.Geocoder();
-    geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-      setIsGeocoding(false);
-      if (status === 'OK' && results?.[0]) {
-        setPickedAddress(results[0].formatted_address);
+    if (reverseGeocodeTimerRef.current) {
+      window.clearTimeout(reverseGeocodeTimerRef.current);
+    }
+
+    reverseGeocodeTimerRef.current = window.setTimeout(() => {
+      const geocoder = getGeocoder();
+      if (!geocoder) {
+        setPickedAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
         return;
       }
 
-      setPickedAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
-    });
+      setIsGeocoding(true);
+      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+        setIsGeocoding(false);
+        if (status === 'OK' && results?.[0]) {
+          reverseGeocodeCacheRef.current.set(cacheKey, results[0].formatted_address);
+          setPickedAddress(results[0].formatted_address);
+          return;
+        }
+
+        setPickedAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+      });
+    }, MAP_REVERSE_GEOCODE_DEBOUNCE_MS);
   };
+
+  useEffect(() => () => {
+    if (reverseGeocodeTimerRef.current) {
+      window.clearTimeout(reverseGeocodeTimerRef.current);
+    }
+  }, []);
 
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) return;

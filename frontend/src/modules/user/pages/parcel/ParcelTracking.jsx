@@ -16,12 +16,13 @@ import {
   ShieldCheck, 
   ChevronRight
 } from 'lucide-react';
-import { GoogleMap, MarkerF, OverlayView, OverlayViewF, PolylineF } from '@react-google-maps/api';
+import { GoogleMap, OverlayView, OverlayViewF, PolylineF } from '@react-google-maps/api';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useBaseGoogleMapsLoader } from '../../../admin/utils/googleMaps';
 import { socketService } from '../../../../shared/api/socket';
 import api from '../../../../shared/api/axiosInstance';
 import { BACKEND_ORIGIN } from '../../../../shared/api/runtimeConfig';
 import { subscribeRideRealtime } from '../../../../shared/services/rideRealtime';
+import { computeDrivingRoute } from '../../../../shared/utils/googleRoutes';
 import { clearCurrentRide, getCurrentRide, saveCurrentRide } from '../../services/currentRideService';
 
 // Assets (Using the same icons as RideTracking)
@@ -93,6 +94,20 @@ const RotatingVehicleMarker = ({ position, iconUrl = deliveryIcon, heading = 0, 
   </OverlayViewF>
 );
 
+const CircleLocationMarker = ({ position, color = '#ef4444', size = 14, title = 'Destination' }) => (
+  <OverlayViewF
+    position={position}
+    mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+    getPixelPositionOffset={() => ({ x: -(size / 2), y: -(size / 2) })}
+  >
+    <div
+      title={title}
+      className="pointer-events-none rounded-full border-2 border-white shadow-[0_3px_10px_rgba(15,23,42,0.25)]"
+      style={{ width: size, height: size, backgroundColor: color }}
+    />
+  </OverlayViewF>
+);
+
 const getTrackingVehicleIcon = (ride, driver) => {
   const customIcon = String(
     ride?.vehicleIconUrl ||
@@ -139,6 +154,12 @@ const getInitials = (name = '') =>
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() || '')
     .join('') || 'DC';
+const getRouteCacheKey = (origin, destination) => {
+  const serializePoint = (point) =>
+    point ? `${Number(point.lat || 0).toFixed(5)},${Number(point.lng || 0).toFixed(5)}` : '';
+
+  return `${serializePoint(origin)}|${serializePoint(destination)}`;
+};
 
 const ParcelTracking = () => {
   const navigate = useNavigate();
@@ -173,6 +194,7 @@ const ParcelTracking = () => {
   const hydrateRideStateRef = useRef(async () => {});
   const hasAutoFramedMapRef = useRef(false);
   const hasCompletedRedirectRef = useRef(false);
+  const routeCacheRef = useRef(new Map());
 
   const rideId = state.rideId || '';
   const tripStatus = String(rideRealtime?.status || state.liveStatus || state.status || 'accepted').toLowerCase();
@@ -612,7 +634,7 @@ const ParcelTracking = () => {
 
   // Route Path Update
   useEffect(() => {
-    if (!isLoaded || !window.google?.maps?.DirectionsService) {
+    if (!isLoaded || !window.google?.maps?.importLibrary) {
       setRoutePath(arePositionsNearlyEqual(driverPosition, activeDestination) ? [driverPosition] : [driverPosition, activeDestination]);
       return;
     }
@@ -622,25 +644,34 @@ const ParcelTracking = () => {
       return;
     }
 
+    const routeCacheKey = getRouteCacheKey(driverPosition, activeDestination);
+    const cachedRoute = routeCacheRef.current.get(routeCacheKey);
+    if (cachedRoute) {
+      setRoutePath(cachedRoute);
+      return;
+    }
+
     let active = true;
-    const directionsService = new window.google.maps.DirectionsService();
-    directionsService.route({
-      origin: driverPosition,
-      destination: activeDestination,
-      travelMode: window.google.maps.TravelMode.DRIVING,
-      provideRouteAlternatives: false,
-    }, (result, status) => {
+    void (async () => {
+      const result = await computeDrivingRoute({
+        origin: driverPosition,
+        destination: activeDestination,
+      });
+
       if (!active) {
         return;
       }
 
-      if (status === 'OK' && result?.routes?.[0]?.overview_path?.length) {
-        setRoutePath(result.routes[0].overview_path.map(p => ({ lat: p.lat(), lng: p.lng() })));
+      if (result.status === 'OK' && result.path.length) {
+        routeCacheRef.current.set(routeCacheKey, result.path);
+        setRoutePath(result.path);
         return;
       }
 
-      setRoutePath([driverPosition, activeDestination]);
-    });
+      const fallbackRoute = [driverPosition, activeDestination];
+      routeCacheRef.current.set(routeCacheKey, fallbackRoute);
+      setRoutePath(fallbackRoute);
+    })();
 
     return () => {
       active = false;
@@ -779,7 +810,11 @@ const ParcelTracking = () => {
               />
             )}
             <RotatingVehicleMarker position={driverPosition} iconUrl={vehicleIcon} heading={displayDriverHeading} />
-            <MarkerF position={activeDestination} />
+            <CircleLocationMarker
+              position={activeDestination}
+              title={['started', 'ongoing', 'arrived', 'completed'].includes(tripStatus) ? 'Drop' : 'Pickup'}
+              color={['started', 'ongoing', 'arrived', 'completed'].includes(tripStatus) ? '#ef4444' : '#10b981'}
+            />
           </GoogleMap>
         ) : (
           <div className="h-full w-full bg-slate-200 animate-pulse" />

@@ -24,6 +24,7 @@ import { GoogleMap, MarkerF, OverlayView, OverlayViewF, PolylineF } from '@react
 import { HAS_VALID_GOOGLE_MAPS_KEY, useBaseGoogleMapsLoader } from '../../admin/utils/googleMaps';
 import { socketService } from '../../../shared/api/socket';
 import api from '../../../shared/api/axiosInstance';
+import { computeDrivingRoute } from '../../../shared/utils/googleRoutes';
 import autoIcon from '../../../assets/icons/auto.png';
 import bikeIcon from '../../../assets/icons/bike.png';
 import carIcon from '../../../assets/icons/car.png';
@@ -540,6 +541,12 @@ const getSimulationPath = ({ routePath = [], from, to }) => {
         .filter((point) => Number.isFinite(Number(point?.lat)) && Number.isFinite(Number(point?.lng)))
         .map((point) => ({ lat: Number(point.lat), lng: Number(point.lng) }));
 };
+const getRouteCacheKey = (origin, destination) => {
+    const serializePoint = (point) =>
+        point ? `${Number(point.lat || 0).toFixed(5)},${Number(point.lng || 0).toFixed(5)}` : '';
+
+    return `${serializePoint(origin)}|${serializePoint(destination)}`;
+};
 
 const toRadians = (value) => Number(value) * (Math.PI / 180);
 
@@ -1036,6 +1043,7 @@ const ActiveTrip = () => {
     const simulationPathRef = React.useRef([]);
     const simulationTimerRef = React.useRef(null);
     const isSimulationEnabledRef = React.useRef(false);
+    const routeCacheRef = React.useRef(new Map());
     const hasResolvedLivePositionRef = React.useRef(false);
     const hasHydratedUiStateRef = React.useRef(false);
     const mapFrameKeyRef = React.useRef('');
@@ -1969,7 +1977,7 @@ const ActiveTrip = () => {
             }
         }
 
-        if (!isLoaded || !window.google?.maps?.DirectionsService) {
+        if (!isLoaded || !window.google?.maps?.importLibrary) {
             setRoutePath(buildFallbackRoute(driverPosition, activeDestination));
             setRouteError('');
             return;
@@ -1980,40 +1988,51 @@ const ActiveTrip = () => {
             return;
         }
 
+        const routeCacheKey = getRouteCacheKey(driverPosition, activeDestination);
+        const cachedRoute = routeCacheRef.current.get(routeCacheKey);
+        if (cachedRoute) {
+            if (!arePathsEquivalent(routePath, cachedRoute.routePath)) {
+                setRoutePath(cachedRoute.routePath);
+            }
+            setRouteError(cachedRoute.routeError);
+            routeTrimStateRef.current = { distanceMeters: 0, shouldRefresh: false };
+            return;
+        }
+
         lastRouteRefreshAtRef.current = now;
         let active = true;
-        const directionsService = new window.google.maps.DirectionsService();
-
-        directionsService.route(
-            {
+        void (async () => {
+            const result = await computeDrivingRoute({
                 origin: driverPosition,
                 destination: activeDestination,
-                travelMode: window.google.maps.TravelMode.DRIVING,
-                provideRouteAlternatives: false,
-            },
-            (result, status) => {
-                if (!active) {
-                    return;
-                }
+            });
 
-                if (status === 'OK' && result?.routes?.[0]?.overview_path?.length) {
-                    const nextPath = simplifyRoutePath(
-                        result.routes[0].overview_path.map((point) => ({
-                            lat: point.lat(),
-                            lng: point.lng(),
-                        })),
-                    );
-                    setRoutePath(nextPath);
-                    routeTrimStateRef.current = { distanceMeters: 0, shouldRefresh: false };
-                    setRouteError('');
-                    return;
-                }
+            if (!active) {
+                return;
+            }
 
-                setRoutePath(buildFallbackRoute(driverPosition, activeDestination));
-                routeTrimStateRef.current = { distanceMeters: Number.POSITIVE_INFINITY, shouldRefresh: false };
-                setRouteError(status || 'Directions unavailable');
-            },
-        );
+            if (result.status === 'OK' && result.path.length) {
+                const nextPath = simplifyRoutePath(result.path);
+                routeCacheRef.current.set(routeCacheKey, {
+                    routePath: nextPath,
+                    routeError: '',
+                });
+                setRoutePath(nextPath);
+                routeTrimStateRef.current = { distanceMeters: 0, shouldRefresh: false };
+                setRouteError('');
+                return;
+            }
+
+            const fallbackRoute = buildFallbackRoute(driverPosition, activeDestination);
+            const nextRouteError = result.status || 'Directions unavailable';
+            routeCacheRef.current.set(routeCacheKey, {
+                routePath: fallbackRoute,
+                routeError: nextRouteError,
+            });
+            setRoutePath(fallbackRoute);
+            routeTrimStateRef.current = { distanceMeters: Number.POSITIVE_INFINITY, shouldRefresh: false };
+            setRouteError(nextRouteError);
+        })();
 
         return () => {
             active = false;

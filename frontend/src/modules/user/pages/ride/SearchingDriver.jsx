@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ShieldCheck, Phone, MessageCircle, Shield, CheckCircle2, Navigation, AlertTriangle, Star, MapPin, Calendar, Clock3, LoaderCircle } from 'lucide-react';
-import { GoogleMap, Marker, OverlayView, Polyline } from '@react-google-maps/api';
+import { GoogleMap, OverlayView, Polyline } from '@react-google-maps/api';
 import { socketService } from '../../../../shared/api/socket';
 import api from '../../../../shared/api/axiosInstance';
 import { getLocalUserToken, userAuthService } from '../../services/authService';
@@ -57,6 +57,38 @@ const getOverlayCenterOffset = (width, height) => ({
   x: -(width / 2),
   y: -(height / 2),
 });
+
+const PinLocationMarker = ({ position, title, color, size = 34, zIndex = 1 }) => (
+  <OverlayView
+    position={position}
+    mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+    zIndex={zIndex}
+    getPixelPositionOffset={() => ({
+      x: -(size / 2),
+      y: -(size - 2),
+    })}
+  >
+    <div title={title} className="pointer-events-none flex flex-col items-center">
+      <div
+        className="relative rounded-full border-2 border-white shadow-[0_8px_18px_rgba(15,23,42,0.25)]"
+        style={{ width: size, height: size, backgroundColor: color }}
+      >
+        <div className="absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90" />
+      </div>
+      <div
+        style={{
+          width: 0,
+          height: 0,
+          borderLeft: `${Math.round(size * 0.18)}px solid transparent`,
+          borderRight: `${Math.round(size * 0.18)}px solid transparent`,
+          borderTop: `${Math.round(size * 0.28)}px solid ${color}`,
+          marginTop: -2,
+          filter: 'drop-shadow(0 6px 8px rgba(15,23,42,0.18))',
+        }}
+      />
+    </div>
+  </OverlayView>
+);
 
 const clampVehicleCount = (value) => {
   const numeric = Number(value);
@@ -937,33 +969,10 @@ const SearchingDriver = () => {
             zoom={15}
             options={MAP_OPTIONS}
           >
-            <Marker 
-              position={pickupPos}
-              zIndex={100}
-              icon={{
-                path: 'M12,2C8.13,2,5,5.13,5,9c0,5.25,7,13,7,13s7-7.75,7-13C19,5.13,15.87,2,12,2z M12,13c-2.21,0-4-1.79-4-4s1.79-4,4-4s4,1.79,4,4S14.21,13,12,13z',
-                fillColor: '#000000',
-                fillOpacity: 1,
-                strokeWeight: 2,
-                strokeColor: '#ffffff',
-                scale: 1.6,
-                anchor: new window.google.maps.Point(12, 22)
-              }}
-            />
+            <PinLocationMarker position={pickupPos} title="Pickup" color="#000000" zIndex={100} />
 
             {dropPos && (
-              <Marker 
-                position={dropPos}
-                icon={{
-                  path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z',
-                  fillColor: '#f97316',
-                  fillOpacity: 1,
-                  strokeWeight: 2,
-                  strokeColor: '#ffffff',
-                  scale: 1.6,
-                  anchor: new window.google.maps.Point(12, 22)
-                }}
-              />
+              <PinLocationMarker position={dropPos} title="Drop" color="#f97316" />
             )}
 
             {isSearching && (

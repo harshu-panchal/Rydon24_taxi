@@ -2,9 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, X, Banknote, CreditCard, ChevronDown, Clock3, LoaderCircle, Eye, TicketPercent, CheckCircle2 } from 'lucide-react';
-import { GoogleMap, MarkerF, OverlayView, PolylineF } from '@react-google-maps/api';
+import { GoogleMap, OverlayView, PolylineF } from '@react-google-maps/api';
 import api from '../../../../shared/api/axiosInstance';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useBaseGoogleMapsLoader } from '../../../admin/utils/googleMaps';
+import { computeDrivingRoute, sumComputedRouteLegs } from '../../../../shared/utils/googleRoutes';
 import { userService } from '../../services/userService';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 import BikeIcon from '../../../../assets/icons/bike.png';
@@ -50,6 +51,28 @@ const getOverlayCenterOffset = (width = 56, height = 56) => ({
   x: -(width / 2),
   y: -(height / 2),
 });
+
+const CircleLocationMarker = ({ position, title, color, strokeColor = '#ffffff', size = 14 }) => (
+  <OverlayView
+    position={position}
+    mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+    getPixelPositionOffset={() => ({
+      x: -(size / 2),
+      y: -(size / 2),
+    })}
+  >
+    <div
+      title={title}
+      className="pointer-events-none rounded-full shadow-[0_3px_10px_rgba(15,23,42,0.25)]"
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: color,
+        border: `2px solid ${strokeColor}`,
+      }}
+    />
+  </OverlayView>
+);
 
 const getMarkerDimensionsForZoom = (zoom) => {
   const normalizedZoom = Number.isFinite(Number(zoom)) ? Number(zoom) : 13;
@@ -158,12 +181,27 @@ const buildFallbackRoute = (origin, destination) => {
   ];
 };
 
+const getRouteCacheKey = (origin, destination, waypoints = []) => {
+  const serializePoint = (point) =>
+    point
+      ? `${Number(point.lat || 0).toFixed(5)},${Number(point.lng || 0).toFixed(5)}`
+      : '';
+
+  const serializeWaypoint = (waypoint) => String(waypoint?.location || '').trim().toLowerCase();
+  return [
+    serializePoint(origin),
+    serializePoint(destination),
+    ...waypoints.map(serializeWaypoint),
+  ].join('|');
+};
+
 const VehicleMapPreview = React.memo(({ center, dropPosition, stops = [], drivers, selectedVehicle, isLoaded, loadError }) => {
   const mapRef = useRef(null);
   const [routePath, setRoutePath] = useState([]);
   const [routeError, setRouteError] = useState('');
   const [isMapInteracting, setIsMapInteracting] = useState(false);
   const [mapZoom, setMapZoom] = useState(13);
+  const routeCacheRef = useRef(new Map());
   const waypointRequests = useMemo(
     () =>
       (Array.isArray(stops) ? stops : [])
@@ -174,43 +212,51 @@ const VehicleMapPreview = React.memo(({ center, dropPosition, stops = [], driver
   );
 
   useEffect(() => {
-    if (!isLoaded || !dropPosition || !window.google?.maps?.DirectionsService) {
+    if (!isLoaded || !dropPosition || !window.google?.maps?.importLibrary) {
       setRoutePath([]);
       setRouteError('');
       return;
     }
 
-    let active = true;
-    const directionsService = new window.google.maps.DirectionsService();
+    const routeCacheKey = getRouteCacheKey(center, dropPosition, waypointRequests);
+    const cachedRoute = routeCacheRef.current.get(routeCacheKey);
+    if (cachedRoute) {
+      setRoutePath(cachedRoute.routePath);
+      setRouteError(cachedRoute.routeError);
+      return;
+    }
 
-    directionsService.route(
-      {
+    let active = true;
+    void (async () => {
+      const result = await computeDrivingRoute({
         origin: center,
         destination: dropPosition,
-        waypoints: waypointRequests,
-        travelMode: window.google.maps.TravelMode.DRIVING,
-        provideRouteAlternatives: false,
-      },
-      (result, status) => {
-        if (!active) {
-          return;
-        }
+        intermediates: waypointRequests,
+      });
 
-        if (status === 'OK' && result?.routes?.[0]?.overview_path?.length) {
-          setRoutePath(
-            result.routes[0].overview_path.map((point) => ({
-              lat: point.lat(),
-              lng: point.lng(),
-            })),
-          );
-          setRouteError('');
-          return;
-        }
+      if (!active) {
+        return;
+      }
 
-        setRoutePath(buildFallbackRoute(center, dropPosition));
-        setRouteError(status || 'Directions unavailable');
-      },
-    );
+      if (result.status === 'OK' && result.path.length) {
+        routeCacheRef.current.set(routeCacheKey, {
+          routePath: result.path,
+          routeError: '',
+        });
+        setRoutePath(result.path);
+        setRouteError('');
+        return;
+      }
+
+      const fallbackRoute = buildFallbackRoute(center, dropPosition);
+      const nextRouteError = result.status || 'Directions unavailable';
+      routeCacheRef.current.set(routeCacheKey, {
+        routePath: fallbackRoute,
+        routeError: nextRouteError,
+      });
+      setRoutePath(fallbackRoute);
+      setRouteError(nextRouteError);
+    })();
 
     return () => {
       active = false;
@@ -271,30 +317,20 @@ const VehicleMapPreview = React.memo(({ center, dropPosition, stops = [], driver
         }}
         onIdle={() => setIsMapInteracting(false)}
       >
-        <MarkerF
+        <CircleLocationMarker
           position={center}
           title="Pickup"
-          icon={{
-            path: window.google.maps.SymbolPath.CIRCLE,
-            fillColor: '#f8e001',
-            fillOpacity: 1,
-            strokeColor: '#111827',
-            strokeWeight: 2,
-            scale: 8,
-          }}
+          color="#f8e001"
+          strokeColor="#111827"
+          size={16}
         />
         {dropPosition && (
-          <MarkerF
+          <CircleLocationMarker
             position={dropPosition}
             title="Drop"
-            icon={{
-              path: window.google.maps.SymbolPath.CIRCLE,
-              fillColor: '#fb923c',
-              fillOpacity: 1,
-              strokeColor: '#ffffff',
-              strokeWeight: 2,
-              scale: 7,
-            }}
+            color="#fb923c"
+            strokeColor="#ffffff"
+            size={14}
           />
         )}
         {routePath.length > 1 && (
@@ -1134,6 +1170,7 @@ const SelectVehicle = () => {
       durationMinutes: estimateDurationMinutes(fallbackDistanceMeters),
     };
   });
+  const routeMetricsCacheRef = useRef(new Map());
   const [isResolvingTripMetrics, setIsResolvingTripMetrics] = useState(true);
   const [showScrollArrow, setShowScrollArrow] = useState(false);
   const scrollRef = React.useRef(null);
@@ -1402,51 +1439,60 @@ const SelectVehicle = () => {
       return;
     }
 
-    if (!isMapLoaded || !window.google?.maps?.DirectionsService) {
+    if (!isMapLoaded || !window.google?.maps?.importLibrary) {
       setIsResolvingTripMetrics(true);
+      return;
+    }
+
+    const waypointRequests = stops
+      .map((stop) => String(stop || '').trim())
+      .filter(Boolean)
+      .map((stop) => ({ location: stop, stopover: true }));
+    const routeCacheKey = getRouteCacheKey(pickupPosition, dropPosition, waypointRequests);
+    const cachedMetrics = routeMetricsCacheRef.current.get(routeCacheKey);
+    if (cachedMetrics) {
+      setIsResolvingTripMetrics(false);
+      setTripMetrics(cachedMetrics);
       return;
     }
 
     let active = true;
     setIsResolvingTripMetrics(true);
-    const directionsService = new window.google.maps.DirectionsService();
-
-    directionsService.route(
-      {
+    void (async () => {
+      const result = await computeDrivingRoute({
         origin: pickupPosition,
         destination: dropPosition,
-        waypoints: stops
-          .map((stop) => String(stop || '').trim())
-          .filter(Boolean)
-          .map((stop) => ({ location: stop, stopover: true })),
-        travelMode: window.google.maps.TravelMode.DRIVING,
-        provideRouteAlternatives: false,
-      },
-      (result, status) => {
-        if (!active) {
-          return;
-        }
+        intermediates: waypointRequests,
+      });
 
-        const leg = result?.routes?.[0]?.legs?.[0];
-        const distanceMeters = toFiniteNumber(leg?.distance?.value, fallbackDistanceMeters);
-        const durationMinutes = Math.max(
-          1,
-          Math.round(toFiniteNumber(leg?.duration?.value, fallbackDurationMinutes * 60) / 60),
-        );
+      if (!active) {
+        return;
+      }
 
-        if (status === 'OK' && leg) {
-          setIsResolvingTripMetrics(false);
-          setTripMetrics({ distanceMeters, durationMinutes });
-          return;
-        }
+      const totals = sumComputedRouteLegs(result.legs);
+      const distanceMeters = toFiniteNumber(totals.distanceMeters, fallbackDistanceMeters);
+      const durationMinutes = Math.max(
+        1,
+        Math.round(toFiniteNumber(totals.durationSeconds, fallbackDurationMinutes * 60) / 60),
+      );
 
+      if (result.status === 'OK' && result.legs.length) {
+        routeMetricsCacheRef.current.set(routeCacheKey, { distanceMeters, durationMinutes });
         setIsResolvingTripMetrics(false);
-        setTripMetrics({
-          distanceMeters: fallbackDistanceMeters,
-          durationMinutes: fallbackDurationMinutes,
-        });
-      },
-    );
+        setTripMetrics({ distanceMeters, durationMinutes });
+        return;
+      }
+
+      routeMetricsCacheRef.current.set(routeCacheKey, {
+        distanceMeters: fallbackDistanceMeters,
+        durationMinutes: fallbackDurationMinutes,
+      });
+      setIsResolvingTripMetrics(false);
+      setTripMetrics({
+        distanceMeters: fallbackDistanceMeters,
+        durationMinutes: fallbackDurationMinutes,
+      });
+    })();
 
     return () => {
       active = false;

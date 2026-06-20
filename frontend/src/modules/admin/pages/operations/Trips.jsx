@@ -48,11 +48,28 @@ const normalizeRow = (row = {}) => ({
 
 const Trips = () => {
   const [activeTab, setActiveTab] = React.useState('All');
+  const [searchInput, setSearchInput] = React.useState('');
   const [search, setSearch] = React.useState('');
+  const [page, setPage] = React.useState(1);
   const [limit, setLimit] = React.useState(10);
   const [rows, setRows] = React.useState([]);
+  const [pagination, setPagination] = React.useState({
+    current_page: 1,
+    last_page: 1,
+    total: 0,
+  });
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setSearch(searchInput);
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [searchInput]);
 
   const loadRows = React.useCallback(async () => {
     setLoading(true);
@@ -60,19 +77,39 @@ const Trips = () => {
 
     try {
       const response = await adminService.getRideRequests({
+        page,
         limit,
         tab: normalizeTab(activeTab),
         search,
       });
       const payload = response?.data?.data || response?.data || response || {};
       const results = Array.isArray(payload?.results) ? payload.results : [];
+      const paginator = payload?.paginator || {
+        current_page: page,
+        last_page: 1,
+        total: results.length,
+      };
       setRows(results.map(normalizeRow));
+      setPagination({
+        current_page: Number(paginator.current_page || page || 1),
+        last_page: Math.max(1, Number(paginator.last_page || 1)),
+        total: Math.max(0, Number(paginator.total || results.length || 0)),
+      });
     } catch (err) {
       setRows([]);
+      setPagination({
+        current_page: 1,
+        last_page: 1,
+        total: 0,
+      });
       setError(err?.message || 'Failed to load trip requests');
     } finally {
       setLoading(false);
     }
+  }, [activeTab, limit, page, search]);
+
+  React.useEffect(() => {
+    setPage(1);
   }, [activeTab, limit, search]);
 
   React.useEffect(() => {
@@ -128,8 +165,8 @@ const Trips = () => {
               <div className="relative">
                 <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
                   placeholder="Search trips"
                   className="h-10 w-52 rounded-full border border-slate-200 bg-white pl-9 pr-4 text-[13px] outline-none focus:border-slate-300"
                 />
@@ -198,6 +235,36 @@ const Trips = () => {
                 )}
               </tbody>
             </table>
+          </div>
+
+          <div className="flex flex-col gap-3 border-t border-slate-100 px-6 py-4 text-[13px] text-slate-500 lg:flex-row lg:items-center lg:justify-between">
+            <p>
+              Showing page <span className="font-bold text-slate-700">{pagination.current_page}</span> of{' '}
+              <span className="font-bold text-slate-700">{pagination.last_page}</span>
+              {' '}for <span className="font-bold text-slate-700">{pagination.total}</span> entries
+            </p>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                disabled={loading || pagination.current_page <= 1}
+                className="rounded-md border border-slate-200 px-3 py-2 font-medium text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <span className="min-w-16 text-center font-bold text-slate-700">
+                {pagination.current_page} / {pagination.last_page}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((current) => Math.min(pagination.last_page, current + 1))}
+                disabled={loading || pagination.current_page >= pagination.last_page}
+                className="rounded-md border border-slate-200 px-3 py-2 font-medium text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
           </div>
 
           <button className="fixed bottom-10 right-10 w-14 h-14 bg-[#00BFA5] text-white rounded-full flex items-center justify-center shadow-xl hover:scale-105 transition-transform z-50">

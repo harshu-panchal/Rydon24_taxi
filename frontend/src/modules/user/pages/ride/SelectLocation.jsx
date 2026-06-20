@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, MapPin, X, Plus, Minus, Check, Map as MapIcon, LoaderCircle, Navigation, AlertTriangle, ChevronRight } from 'lucide-react';
-import { GoogleMap, MarkerF } from '@react-google-maps/api';
+import { GoogleMap } from '@react-google-maps/api';
 import { useAppGoogleMapsLoader, INDIA_CENTER, HAS_VALID_GOOGLE_MAPS_KEY } from '../../../admin/utils/googleMaps';
 import api from '../../../../shared/api/axiosInstance';
 import { getSavedLocation, getSavedLocationCoords, saveLocation } from '../../services/locationStore';
@@ -29,6 +29,8 @@ const LOCATION_COORDS = {
 const getCoords = (title, fallback = [75.8577, 22.7196]) => LOCATION_COORDS[title] || fallback;
 const DEFAULT_COORDS = [75.8577, 22.7196];
 const MAP_REVERSE_GEOCODE_DEBOUNCE_MS = 500;
+const getLatLngCacheKey = (coords, precision = 5) =>
+  `${Number(coords?.lat || 0).toFixed(precision)},${Number(coords?.lng || 0).toFixed(precision)}`;
 const sanitizeLocationInput = (value) => String(value || '').replace(/^\s+/g, '').replace(/\s{2,}/g, ' ');
 
 const unwrapResults = (response) => {
@@ -197,6 +199,9 @@ const SelectLocation = () => {
   const autocompleteSessionTokenRef = useRef(null);
   const searchCacheRef = useRef(new Map());
   const latestSearchRef = useRef(0);
+  const coordsLookupCacheRef = useRef(new Map());
+  const placeSelectionCacheRef = useRef(new Map());
+  const reverseGeocodeCacheRef = useRef(new Map());
   const { isLoaded, loadError } = useAppGoogleMapsLoader();
   const navigate = useNavigate();
   const routePrefix = window.location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
@@ -341,6 +346,12 @@ const SelectLocation = () => {
       return knownCoords;
     }
 
+    const cacheKey = String(label).trim().toLowerCase();
+    const cachedCoords = coordsLookupCacheRef.current.get(cacheKey);
+    if (cachedCoords) {
+      return cachedCoords;
+    }
+
     if (!window.google?.maps?.Geocoder) {
       return fallback;
     }
@@ -354,7 +365,9 @@ const SelectLocation = () => {
       geocoder.geocode({ address: String(label).trim() }, (results, status) => {
         if (status === 'OK' && results?.[0]?.geometry?.location) {
           const location = results[0].geometry.location;
-          resolve([location.lng(), location.lat()]);
+          const resolvedCoords = [location.lng(), location.lat()];
+          coordsLookupCacheRef.current.set(cacheKey, resolvedCoords);
+          resolve(resolvedCoords);
           return;
         }
 
@@ -372,6 +385,12 @@ const SelectLocation = () => {
       };
     }
 
+    const cacheKey = String(result?.placeId || `${result?.title || ''}|${result?.address || ''}`.trim().toLowerCase());
+    const cachedSelection = placeSelectionCacheRef.current.get(cacheKey);
+    if (cachedSelection) {
+      return cachedSelection;
+    }
+
     const geocoder = getGeocoder();
     const placesService = getPlacesService();
 
@@ -387,11 +406,13 @@ const SelectLocation = () => {
             const location = place?.geometry?.location;
 
             if (status === 'OK' && location) {
-              resolve({
+              const resolvedSelection = {
                 title: result.title || place.name || place.formatted_address,
                 address: place.formatted_address || result.address || result.title || '',
                 coords: [location.lng(), location.lat()],
-              });
+              };
+              placeSelectionCacheRef.current.set(cacheKey, resolvedSelection);
+              resolve(resolvedSelection);
               return;
             }
 
@@ -401,11 +422,13 @@ const SelectLocation = () => {
                 const geocodedLocation = geocodedPlace?.geometry?.location;
 
                 if (geocodeStatus === 'OK' && geocodedLocation) {
-                  resolve({
+                  const resolvedSelection = {
                     title: result.title || geocodedPlace.formatted_address,
                     address: geocodedPlace.formatted_address || result.address || result.title || '',
                     coords: [geocodedLocation.lng(), geocodedLocation.lat()],
-                  });
+                  };
+                  placeSelectionCacheRef.current.set(cacheKey, resolvedSelection);
+                  resolve(resolvedSelection);
                   return;
                 }
 
@@ -437,11 +460,13 @@ const SelectLocation = () => {
     }
 
     const coords = await resolveCoords(result?.address || result?.title || '');
-    return {
+    const resolvedSelection = {
       title: result?.title || '',
       address: result?.address || result?.title || '',
       coords,
     };
+    placeSelectionCacheRef.current.set(cacheKey, resolvedSelection);
+    return resolvedSelection;
   };
 
   const validateZoneSelection = (coords) => {
@@ -590,6 +615,14 @@ const SelectLocation = () => {
   );
 
   const reverseGeocodeMapCenter = (nextCenter, fallbackLabel = '') => {
+    const cacheKey = getLatLngCacheKey(nextCenter);
+    const cachedAddress = reverseGeocodeCacheRef.current.get(cacheKey);
+    if (cachedAddress) {
+      lastReverseGeocodedCenterRef.current = nextCenter;
+      setPickedAddress(cachedAddress);
+      return;
+    }
+
     const geocoder = getGeocoder();
     if (!geocoder) {
       setPickedAddress(fallbackLabel || `${nextCenter.lat.toFixed(5)}, ${nextCenter.lng.toFixed(5)}`);
@@ -602,6 +635,7 @@ const SelectLocation = () => {
       lastReverseGeocodedCenterRef.current = nextCenter;
 
       if (status === 'OK' && results?.[0]?.formatted_address) {
+        reverseGeocodeCacheRef.current.set(cacheKey, results[0].formatted_address);
         setPickedAddress(results[0].formatted_address);
         return;
       }

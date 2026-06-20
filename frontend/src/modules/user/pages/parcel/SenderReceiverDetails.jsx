@@ -22,6 +22,7 @@ import { GoogleMap } from '@react-google-maps/api';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../../admin/utils/googleMaps';
 import { userAuthService } from '../../services/authService';
 import api from '../../../../shared/api/axiosInstance';
+import { computeDrivingRoute, sumComputedRouteLegs } from '../../../../shared/utils/googleRoutes';
 
 const Motion = motion;
 const PHONE_REGEX = /^[6-9]\d{9}$/;
@@ -275,6 +276,14 @@ const formatCoordLabel = (coords) => {
 };
 
 const formatLatLngLabel = (position) => `${position.lat.toFixed(5)}, ${position.lng.toFixed(5)}`;
+const getLatLngCacheKey = (position, precision = 5) =>
+  `${Number(position?.lat || 0).toFixed(precision)},${Number(position?.lng || 0).toFixed(precision)}`;
+const getCoordPairCacheKey = (coords, precision = 5) =>
+  Array.isArray(coords) && coords.length >= 2
+    ? `${Number(coords[1] || 0).toFixed(precision)},${Number(coords[0] || 0).toFixed(precision)}`
+    : '';
+const getParcelRouteCacheKey = (pickupCoords, dropCoords) =>
+  `${getCoordPairCacheKey(pickupCoords)}|${getCoordPairCacheKey(dropCoords)}`;
 const COORDINATE_LABEL_REGEX = /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/;
 const isCoordinateLabel = (value = '') => COORDINATE_LABEL_REGEX.test(String(value || '').trim());
 const getVehicleId = (vehicle) => String(vehicle?._id || vehicle?.id || '').trim();
@@ -352,6 +361,8 @@ const MapPickerSheet = ({ open, title, confirmLabel, value, initialCoords, onClo
   const autocompleteSessionTokenRef = useRef(null);
   const placesServiceRef = useRef(null);
   const suggestionCacheRef = useRef(new Map());
+  const reverseGeocodeCacheRef = useRef(new Map());
+  const placeSelectionCacheRef = useRef(new Map());
   const lastResolvedAddressRef = useRef(value || '');
   const ignoreAutocompleteRef = useRef(false);
   const ignoreGeocodingRef = useRef(false);
@@ -390,6 +401,15 @@ const MapPickerSheet = ({ open, title, confirmLabel, value, initialCoords, onClo
 
     clearTimeout(geocodeTimerRef.current);
     geocodeTimerRef.current = setTimeout(() => {
+      const cacheKey = getLatLngCacheKey(center);
+      const cachedAddress = reverseGeocodeCacheRef.current.get(cacheKey);
+      if (cachedAddress) {
+        lastResolvedAddressRef.current = cachedAddress;
+        ignoreAutocompleteRef.current = true;
+        setSearchQuery(cachedAddress);
+        return;
+      }
+
       setIsResolvingAddress(true);
       const geocoder = new window.google.maps.Geocoder();
 
@@ -398,6 +418,7 @@ const MapPickerSheet = ({ open, title, confirmLabel, value, initialCoords, onClo
 
         if (status === 'OK' && results?.[0]?.formatted_address) {
           const nextAddress = results[0].formatted_address;
+          reverseGeocodeCacheRef.current.set(cacheKey, nextAddress);
           lastResolvedAddressRef.current = nextAddress;
           ignoreAutocompleteRef.current = true;
           setSearchQuery(nextAddress);
@@ -524,6 +545,11 @@ const MapPickerSheet = ({ open, title, confirmLabel, value, initialCoords, onClo
   const resolveCoordsFromPlaceId = async (placeId) =>
     new Promise((resolve) => {
       const trimmedPlaceId = String(placeId || '').trim();
+      const cached = placeSelectionCacheRef.current.get(trimmedPlaceId);
+      if (cached) {
+        resolve(cached);
+        return;
+      }
 
       if (!trimmedPlaceId || !isLoaded) {
         resolve(null);
@@ -544,11 +570,13 @@ const MapPickerSheet = ({ open, title, confirmLabel, value, initialCoords, onClo
           (place, status) => {
             const locationPoint = place?.geometry?.location;
             if (status === 'OK' && locationPoint) {
-              resolve({
+              const resolvedResult = {
                 lat: locationPoint.lat(),
                 lng: locationPoint.lng(),
                 address: place.formatted_address || place.name || '',
-              });
+              };
+              placeSelectionCacheRef.current.set(trimmedPlaceId, resolvedResult);
+              resolve(resolvedResult);
               return;
             }
 
@@ -565,11 +593,13 @@ const MapPickerSheet = ({ open, title, confirmLabel, value, initialCoords, onClo
               }
 
               const fallbackLocation = results[0].geometry.location;
-              resolve({
+              const resolvedResult = {
                 lat: fallbackLocation.lat(),
                 lng: fallbackLocation.lng(),
                 address: results[0].formatted_address || '',
-              });
+              };
+              placeSelectionCacheRef.current.set(trimmedPlaceId, resolvedResult);
+              resolve(resolvedResult);
             });
           },
         );
@@ -589,11 +619,13 @@ const MapPickerSheet = ({ open, title, confirmLabel, value, initialCoords, onClo
         }
 
         const locationPoint = results[0].geometry.location;
-        resolve({
+        const resolvedResult = {
           lat: locationPoint.lat(),
           lng: locationPoint.lng(),
           address: results[0].formatted_address || '',
-        });
+        };
+        placeSelectionCacheRef.current.set(trimmedPlaceId, resolvedResult);
+        resolve(resolvedResult);
       });
     });
 
@@ -1013,6 +1045,9 @@ const SenderReceiverDetails = () => {
   const dropSuggestionCacheRef = useRef(new Map());
   const autocompleteServiceRef = useRef(null);
   const autocompleteSessionTokenRef = useRef(null);
+  const addressLookupCacheRef = useRef(new Map());
+  const placeIdLookupCacheRef = useRef(new Map());
+  const routeEstimateCacheRef = useRef(new Map());
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1215,50 +1250,50 @@ const SenderReceiverDetails = () => {
 
   useEffect(() => {
     let active = true;
+    const routeCacheKey = getParcelRouteCacheKey(pickupCoords, dropCoords);
 
     if (!Array.isArray(pickupCoords) || pickupCoords.length !== 2 || !Array.isArray(dropCoords) || dropCoords.length !== 2) {
       setRouteEstimate({ distanceKm: 0, durationMinutes: 0, source: 'air' });
       return undefined;
     }
 
-    if (!isGoogleMapsLoaded || !window.google?.maps?.DirectionsService) {
+    if (!isGoogleMapsLoaded || !window.google?.maps?.importLibrary) {
       setRouteEstimate({ distanceKm: estimatedDistanceKm, durationMinutes: 0, source: 'air' });
       return undefined;
     }
 
-    const directionsService = new window.google.maps.DirectionsService();
-    directionsService.route(
-      {
+    const cachedRouteEstimate = routeEstimateCacheRef.current.get(routeCacheKey);
+    if (cachedRouteEstimate) {
+      setRouteEstimate(cachedRouteEstimate);
+      return undefined;
+    }
+
+    void (async () => {
+      const result = await computeDrivingRoute({
         origin: coordPairToLatLng(pickupCoords),
         destination: coordPairToLatLng(dropCoords),
-        travelMode: window.google.maps.TravelMode.DRIVING,
-      },
-      (result, status) => {
-        if (!active) {
-          return;
-        }
+      });
 
-        if (status !== 'OK' || !result?.routes?.length) {
-          setRouteEstimate({ distanceKm: estimatedDistanceKm, durationMinutes: 0, source: 'air' });
-          return;
-        }
+      if (!active) {
+        return;
+      }
 
-        const legs = Array.isArray(result.routes[0]?.legs) ? result.routes[0].legs : [];
-        const totals = legs.reduce(
-          (accumulator, leg) => ({
-            distanceMeters: accumulator.distanceMeters + Number(leg?.distance?.value || 0),
-            durationSeconds: accumulator.durationSeconds + Number(leg?.duration?.value || 0),
-          }),
-          { distanceMeters: 0, durationSeconds: 0 },
-        );
+      if (result.status !== 'OK' || !result.legs.length) {
+        const fallbackEstimate = { distanceKm: estimatedDistanceKm, durationMinutes: 0, source: 'air' };
+        routeEstimateCacheRef.current.set(routeCacheKey, fallbackEstimate);
+        setRouteEstimate(fallbackEstimate);
+        return;
+      }
 
-        setRouteEstimate({
-          distanceKm: roundCurrency(totals.distanceMeters / 1000),
-          durationMinutes: Math.max(0, Math.ceil(totals.durationSeconds / 60)),
-          source: 'road',
-        });
-      },
-    );
+      const totals = sumComputedRouteLegs(result.legs);
+      const nextRouteEstimate = {
+        distanceKm: roundCurrency(totals.distanceMeters / 1000),
+        durationMinutes: Math.max(0, Math.ceil(totals.durationSeconds / 60)),
+        source: 'road',
+      };
+      routeEstimateCacheRef.current.set(routeCacheKey, nextRouteEstimate);
+      setRouteEstimate(nextRouteEstimate);
+    })();
 
     return () => {
       active = false;
@@ -1376,6 +1411,13 @@ const SenderReceiverDetails = () => {
 
   const resolveAddressFromCoords = useEffectEvent((position) =>
     new Promise((resolve) => {
+      const cacheKey = getLatLngCacheKey(position);
+      const cachedAddress = addressLookupCacheRef.current.get(cacheKey);
+      if (cachedAddress) {
+        resolve(cachedAddress);
+        return;
+      }
+
       if (!isGoogleMapsLoaded || !window.google?.maps?.Geocoder) {
         resolve(formatLatLngLabel(position));
         return;
@@ -1383,6 +1425,7 @@ const SenderReceiverDetails = () => {
       const geocoder = new window.google.maps.Geocoder();
       geocoder.geocode({ location: position }, (results, status) => {
         if (status === 'OK' && results?.[0]?.formatted_address) {
+          addressLookupCacheRef.current.set(cacheKey, results[0].formatted_address);
           resolve(results[0].formatted_address);
           return;
         }
@@ -1393,6 +1436,12 @@ const SenderReceiverDetails = () => {
   const resolveCoordsFromAddress = useEffectEvent((address) =>
     new Promise((resolve) => {
       const trimmedAddress = String(address || '').trim();
+      const cacheKey = trimmedAddress.toLowerCase();
+      const cachedCoords = addressLookupCacheRef.current.get(cacheKey);
+      if (cachedCoords) {
+        resolve(cachedCoords);
+        return;
+      }
 
       if (!trimmedAddress || !isGoogleMapsLoaded || !window.google?.maps?.Geocoder) {
         resolve(null);
@@ -1409,13 +1458,20 @@ const SenderReceiverDetails = () => {
         }
 
         const locationPoint = results[0].geometry.location;
-        resolve(latLngToCoordPair({ lat: locationPoint.lat(), lng: locationPoint.lng() }));
+        const resolvedCoords = latLngToCoordPair({ lat: locationPoint.lat(), lng: locationPoint.lng() });
+        addressLookupCacheRef.current.set(cacheKey, resolvedCoords);
+        resolve(resolvedCoords);
       });
     }));
 
   const resolveCoordsFromPlaceId = useEffectEvent((placeId) =>
     new Promise((resolve) => {
       const trimmedPlaceId = String(placeId || '').trim();
+      const cachedCoords = placeIdLookupCacheRef.current.get(trimmedPlaceId);
+      if (cachedCoords) {
+        resolve(cachedCoords);
+        return;
+      }
 
       if (!trimmedPlaceId || !isGoogleMapsLoaded || !window.google?.maps?.Geocoder) {
         resolve(null);
@@ -1430,7 +1486,9 @@ const SenderReceiverDetails = () => {
         }
 
         const locationPoint = results[0].geometry.location;
-        resolve(latLngToCoordPair({ lat: locationPoint.lat(), lng: locationPoint.lng() }));
+        const resolvedCoords = latLngToCoordPair({ lat: locationPoint.lat(), lng: locationPoint.lng() });
+        placeIdLookupCacheRef.current.set(trimmedPlaceId, resolvedCoords);
+        resolve(resolvedCoords);
       });
     }));
 

@@ -2,12 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Phone, MessageCircle, AlertTriangle, Shield, Star, ChevronLeft, Share2, Clock3 } from 'lucide-react';
-import { GoogleMap, MarkerF, OverlayView, OverlayViewF, PolylineF } from '@react-google-maps/api';
+import { GoogleMap, OverlayView, OverlayViewF, PolylineF } from '@react-google-maps/api';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useBaseGoogleMapsLoader } from '../../../admin/utils/googleMaps';
 import { socketService } from '../../../../shared/api/socket';
 import api from '../../../../shared/api/axiosInstance';
 import { BACKEND_ORIGIN } from '../../../../shared/api/runtimeConfig';
 import { subscribeRideRealtime } from '../../../../shared/services/rideRealtime';
+import { computeDrivingRoute } from '../../../../shared/utils/googleRoutes';
 import { clearCurrentRide, getCurrentRide, saveCurrentRide } from '../../services/currentRideService';
 import carIcon from '../../../../assets/icons/car.png';
 import bikeIcon from '../../../../assets/icons/bike.png';
@@ -72,6 +73,11 @@ const getVehicleMarkerOffset = (width, height) => ({
   y: -(height / 2),
 });
 
+const getCircleMarkerOffset = (size) => ({
+  x: -(size / 2),
+  y: -(size / 2),
+});
+
 const RotatingVehicleMarker = ({ position, iconUrl = carIcon, heading = 0, title = 'Driver' }) => (
   <OverlayViewF
     position={position}
@@ -93,6 +99,28 @@ const RotatingVehicleMarker = ({ position, iconUrl = carIcon, heading = 0, title
     </div>
   </OverlayViewF>
 );
+
+const CircleLocationMarker = ({ position, color, title }) => {
+  const markerSize = 14;
+
+  return (
+    <OverlayViewF
+      position={position}
+      mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+      getPixelPositionOffset={() => getCircleMarkerOffset(markerSize)}
+    >
+      <div
+        title={title}
+        className="pointer-events-none rounded-full border-2 border-white shadow-[0_3px_10px_rgba(15,23,42,0.25)]"
+        style={{
+          width: `${markerSize}px`,
+          height: `${markerSize}px`,
+          backgroundColor: color,
+        }}
+      />
+    </OverlayViewF>
+  );
+};
 
 const getTrackingVehicleIcon = (ride, driver) => {
   const customIcon = String(
@@ -162,6 +190,12 @@ const formatTimerClock = (totalSeconds) => {
 };
 
 const formatWholeMinutes = (value) => `${Math.max(0, Math.floor(Number(value) || 0))} min`;
+const getRouteCacheKey = (origin, destination) => {
+  const serializePoint = (point) =>
+    point ? `${Number(point.lat || 0).toFixed(5)},${Number(point.lng || 0).toFixed(5)}` : '';
+
+  return `${serializePoint(origin)}|${serializePoint(destination)}`;
+};
 
 const formatScheduledDateTime = (value) => {
   if (!value) {
@@ -328,6 +362,7 @@ const RideTracking = () => {
   const [vehicleImageBroken, setVehicleImageBroken] = useState(false);
   const [arrivalClockFallbackAt, setArrivalClockFallbackAt] = useState('');
   const [waitingNow, setWaitingNow] = useState(Date.now());
+  const routeCacheRef = useRef(new Map());
   const { settings } = useSettings();
   const appName = settings.general?.app_name || 'App';
   const navigate = useNavigate();
@@ -958,7 +993,7 @@ const RideTracking = () => {
       return;
     }
 
-    if (!isLoaded || !window.google?.maps?.DirectionsService) {
+    if (!isLoaded || !window.google?.maps?.importLibrary) {
       setRoutePath([driverPosition, activeDestination]);
       setRouteError('');
       return;
@@ -970,36 +1005,44 @@ const RideTracking = () => {
       return;
     }
 
-    let active = true;
-    const directionsService = new window.google.maps.DirectionsService();
+    const routeCacheKey = getRouteCacheKey(driverPosition, activeDestination);
+    const cachedRoute = routeCacheRef.current.get(routeCacheKey);
+    if (cachedRoute) {
+      setRoutePath(cachedRoute.routePath);
+      setRouteError(cachedRoute.routeError);
+      return;
+    }
 
-    directionsService.route(
-      {
+    let active = true;
+    void (async () => {
+      const result = await computeDrivingRoute({
         origin: driverPosition,
         destination: activeDestination,
-        travelMode: window.google.maps.TravelMode.DRIVING,
-        provideRouteAlternatives: false,
-      },
-      (result, status) => {
-        if (!active) {
-          return;
-        }
+      });
 
-        if (status === 'OK' && result?.routes?.[0]?.overview_path?.length) {
-          setRoutePath(
-            result.routes[0].overview_path.map((point) => ({
-              lat: point.lat(),
-              lng: point.lng(),
-            })),
-          );
-          setRouteError('');
-          return;
-        }
+      if (!active) {
+        return;
+      }
 
-        setRoutePath([driverPosition, activeDestination]);
-        setRouteError(status || 'Directions unavailable');
-      },
-    );
+      if (result.status === 'OK' && result.path.length) {
+        routeCacheRef.current.set(routeCacheKey, {
+          routePath: result.path,
+          routeError: '',
+        });
+        setRoutePath(result.path);
+        setRouteError('');
+        return;
+      }
+
+      const fallbackRoute = [driverPosition, activeDestination];
+      const nextRouteError = result.status || 'Directions unavailable';
+      routeCacheRef.current.set(routeCacheKey, {
+        routePath: fallbackRoute,
+        routeError: nextRouteError,
+      });
+      setRoutePath(fallbackRoute);
+      setRouteError(nextRouteError);
+    })();
 
     return () => {
       active = false;
@@ -1250,7 +1293,7 @@ const RideTracking = () => {
                 }}
               />
             )}
-            {hasLiveDriverLocation ? (
+            {driverPosition ? (
               <RotatingVehicleMarker
                 position={driverPosition}
                 title="Driver"
@@ -1258,17 +1301,10 @@ const RideTracking = () => {
                 heading={displayDriverHeading}
               />
             ) : null}
-            <MarkerF
+            <CircleLocationMarker
               position={activeDestination}
               title={['started', 'ongoing', 'arrived', 'completed'].includes(tripStatus) ? 'Drop' : 'Pickup'}
-              icon={{
-                path: window.google.maps.SymbolPath.CIRCLE,
-                fillColor: ['started', 'ongoing', 'arrived', 'completed'].includes(tripStatus) ? '#ef4444' : '#10b981',
-                fillOpacity: 1,
-                strokeColor: '#ffffff',
-                strokeWeight: 2,
-                scale: 7,
-              }}
+              color={['started', 'ongoing', 'arrived', 'completed'].includes(tripStatus) ? '#ef4444' : '#10b981'}
             />
           </GoogleMap>
         ) : (

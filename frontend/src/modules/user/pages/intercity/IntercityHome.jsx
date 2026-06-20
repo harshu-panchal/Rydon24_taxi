@@ -78,6 +78,9 @@ const formatTimeTo12Hour = (timeStr) => {
 
 const normalizeSuggestionKey = (result) =>
   `${String(result?.title || '').trim().toLowerCase()}|${String(result?.address || '').trim().toLowerCase()}`;
+const MAP_REVERSE_GEOCODE_DEBOUNCE_MS = 450;
+const getLatLngCacheKey = (coords, precision = 5) =>
+  `${Number(coords?.lat || 0).toFixed(precision)},${Number(coords?.lng || 0).toFixed(precision)}`;
 
 const IntercityHome = () => {
   const navigate = useNavigate();
@@ -131,6 +134,9 @@ const IntercityHome = () => {
   const autocompleteSessionTokenRef = useRef(null);
   const mapSearchCacheRef = useRef(new Map());
   const latestMapSearchRef = useRef(0);
+  const reverseGeocodeTimerRef = useRef(null);
+  const reverseGeocodeCacheRef = useRef(new Map());
+  const placeSelectionCacheRef = useRef(new Map());
 
   const { isLoaded } = useAppGoogleMapsLoader();
 
@@ -184,6 +190,20 @@ const IntercityHome = () => {
 
   const reverseGeocode = (coords) => {
     if (!window.google?.maps?.Geocoder) return;
+
+    const cacheKey = getLatLngCacheKey(coords);
+    const cached = reverseGeocodeCacheRef.current.get(cacheKey);
+    if (cached) {
+      setPickupAddress(cached.address);
+      if (cached.cityName) {
+        const matched = packages.find((pkg) => pkg.serviceLocationName.toLowerCase() === cached.cityName.toLowerCase());
+        if (matched) {
+          setFromCity(matched.serviceLocationName);
+        }
+      }
+      return;
+    }
+
     setIsGeocoding(true);
     const geocoder = geocoderRef.current || new window.google.maps.Geocoder();
     geocoderRef.current = geocoder;
@@ -197,8 +217,13 @@ const IntercityHome = () => {
         const cityObj = results[0].address_components.find(c =>
           c.types.includes('locality') || c.types.includes('administrative_area_level_2')
         );
+        const cityName = cityObj?.long_name || '';
+        reverseGeocodeCacheRef.current.set(cacheKey, {
+          address,
+          cityName,
+        });
+
         if (cityObj) {
-          const cityName = cityObj.long_name;
           // Check if this city exists in our packages
           const matched = packages.find(p => p.serviceLocationName.toLowerCase() === cityName.toLowerCase());
           if (matched) {
@@ -231,6 +256,14 @@ const IntercityHome = () => {
   };
 
   const resolveSuggestionSelection = async (result) => {
+    const cacheKey = String(result?.placeId || normalizeSuggestionKey(result));
+    if (cacheKey) {
+      const cached = placeSelectionCacheRef.current.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
+
     const placesService = placesServiceRef.current;
     const geocoder = geocoderRef.current || (window.google?.maps?.Geocoder ? new window.google.maps.Geocoder() : null);
     geocoderRef.current = geocoder;
@@ -247,10 +280,14 @@ const IntercityHome = () => {
             const location = place?.geometry?.location;
 
             if (status === 'OK' && location) {
-              resolve({
+              const resolvedResult = {
                 address: place.formatted_address || result.address || result.title || '',
                 coords: { lat: location.lat(), lng: location.lng() },
-              });
+              };
+              if (cacheKey) {
+                placeSelectionCacheRef.current.set(cacheKey, resolvedResult);
+              }
+              resolve(resolvedResult);
               return;
             }
 
@@ -263,13 +300,17 @@ const IntercityHome = () => {
               const geocodedPlace = results?.[0];
               const geocodedLocation = geocodedPlace?.geometry?.location;
 
-              if (geocodeStatus === 'OK' && geocodedLocation) {
-                resolve({
-                  address: geocodedPlace.formatted_address || result.address || result.title || '',
-                  coords: { lat: geocodedLocation.lat(), lng: geocodedLocation.lng() },
-                });
-                return;
-              }
+                if (geocodeStatus === 'OK' && geocodedLocation) {
+                  const resolvedResult = {
+                    address: geocodedPlace.formatted_address || result.address || result.title || '',
+                    coords: { lat: geocodedLocation.lat(), lng: geocodedLocation.lng() },
+                  };
+                  if (cacheKey) {
+                    placeSelectionCacheRef.current.set(cacheKey, resolvedResult);
+                  }
+                  resolve(resolvedResult);
+                  return;
+                }
 
               resolve(null);
             });
@@ -295,8 +336,20 @@ const IntercityHome = () => {
 
     lastCenterRef.current = { lat, lng };
     setIsDragging(false);
-    reverseGeocode({ lat, lng });
+    if (reverseGeocodeTimerRef.current) {
+      window.clearTimeout(reverseGeocodeTimerRef.current);
+    }
+
+    reverseGeocodeTimerRef.current = window.setTimeout(() => {
+      reverseGeocode({ lat, lng });
+    }, MAP_REVERSE_GEOCODE_DEBOUNCE_MS);
   };
+
+  useEffect(() => () => {
+    if (reverseGeocodeTimerRef.current) {
+      window.clearTimeout(reverseGeocodeTimerRef.current);
+    }
+  }, []);
 
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) return;

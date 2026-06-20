@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GoogleMap, MarkerF } from '@react-google-maps/api';
+import { GoogleMap, OverlayView } from '@react-google-maps/api';
 import {
   ArrowLeft,
   Calendar,
@@ -53,6 +53,39 @@ const inputClass =
   'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100/60';
 const pickerTriggerClass =
   'w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3.5 text-left text-sm text-slate-800 shadow-[0_4px_12px_rgba(15,23,42,0.04)] transition-all';
+
+const RentalMapMarker = ({ position, title, color, active = false, onClick }) => (
+  <OverlayView
+    position={position}
+    mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+    getPixelPositionOffset={() => ({ x: -16, y: -32 })}
+  >
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className="flex flex-col items-center bg-transparent p-0"
+    >
+      <div
+        className="relative h-8 w-8 rounded-full border-2 border-white shadow-[0_8px_18px_rgba(15,23,42,0.25)]"
+        style={{ backgroundColor: color, transform: active ? 'scale(1.05)' : 'scale(1)' }}
+      >
+        <div className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90" />
+      </div>
+      <div
+        style={{
+          width: 0,
+          height: 0,
+          borderLeft: '6px solid transparent',
+          borderRight: '6px solid transparent',
+          borderTop: `10px solid ${color}`,
+          marginTop: -2,
+          filter: 'drop-shadow(0 6px 8px rgba(15,23,42,0.18))',
+        }}
+      />
+    </button>
+  </OverlayView>
+);
 
 const pad = (n) => String(n).padStart(2, '0');
 const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -1403,15 +1436,13 @@ const RentalVehicleDetail = () => {
                           }}
                         >
                           {mapMarkers.map((marker) => (
-                            <MarkerF
+                            <RentalMapMarker
                               key={marker.key}
                               position={marker.position}
                               title={marker.title}
                               onClick={() => setSelectedServiceLocationId(String(marker.locationId))}
-                              icon={buildRentalMapPinIcon(
-                                marker.isSelected ? '#10b981' : marker.type === 'location' ? '#0f172a' : '#f59e0b',
-                                marker.isSelected || marker.isClosest,
-                              )}
+                              color={marker.isSelected ? '#10b981' : marker.type === 'location' ? '#0f172a' : '#f59e0b'}
+                              active={marker.isSelected || marker.isClosest}
                             />
                           ))}
                         </GoogleMap>

@@ -18,6 +18,7 @@ import { GoogleMap, MarkerF, PolylineF } from '@react-google-maps/api';
 import simplify from 'simplify-js';
 import toast from 'react-hot-toast';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useBaseGoogleMapsLoader } from '../../admin/utils/googleMaps';
+import { computeDrivingRoute } from '../../../shared/utils/googleRoutes';
 import { getCurrentDriver } from '../services/registrationService';
 import {
   getBusDriverLiveTrip,
@@ -192,26 +193,6 @@ const trimLiveTrail = (points = []) => {
   return kept.reverse();
 };
 
-const extractDirectionsPath = (route) => {
-  const stepPath = (Array.isArray(route?.legs) ? route.legs : [])
-    .flatMap((leg) => (Array.isArray(leg?.steps) ? leg.steps : []))
-    .flatMap((step) => (Array.isArray(step?.path) ? step.path : []))
-    .map((point) => ({ lat: point.lat(), lng: point.lng() }));
-
-  if (stepPath.length > 1) {
-    return stepPath.filter((point, index, items) => {
-      if (index === 0) return true;
-      const previous = items[index - 1];
-      return previous.lat !== point.lat || previous.lng !== point.lng;
-    });
-  }
-
-  return (Array.isArray(route?.overview_path) ? route.overview_path : []).map((point) => ({
-    lat: point.lat(),
-    lng: point.lng(),
-  }));
-};
-
 const getStatusLabel = (status) =>
   ({
     idle: 'Waiting to start',
@@ -338,6 +319,12 @@ const buildRemainingRoutePath = (routePath, currentLocation) => {
 
   return [currentPoint, ...remainingRoute];
 };
+const getRouteCacheKey = (origin, destination) => {
+  const serializePoint = (point) =>
+    point ? `${Number(point.lat || 0).toFixed(5)},${Number(point.lng || 0).toFixed(5)}` : '';
+
+  return `${serializePoint(origin)}|${serializePoint(destination)}`;
+};
 
 const createSvgMarkerIcon = (svgMarkup, width, height, anchorX, anchorY) => {
   if (!window.google?.maps) {
@@ -401,6 +388,7 @@ const BusDriverLiveRoute = () => {
   const watchIdRef = useRef(null);
   const lastSyncedPointRef = useRef(null);
   const lastSyncedAtRef = useRef(0);
+  const routeCacheRef = useRef(new Map());
   const hasAutoFittedRef = useRef(false);
   const programmaticCameraRef = useRef(false);
   const seededProfileRef = useRef(seededState.profile || null);
@@ -661,36 +649,41 @@ const BusDriverLiveRoute = () => {
   }, [centerMapOnPoint, currentBusPoint, fitMapToPoints, routeEndpoints, routePath]);
 
   useEffect(() => {
-    if (!isMapReady || routeEndpoints.length < 2 || !window.google?.maps?.DirectionsService) {
+    if (!isMapReady || routeEndpoints.length < 2 || !window.google?.maps?.importLibrary) {
       setRoutePath(buildFallbackRoute(originPoint, destinationPoint));
       return;
     }
 
-    let active = true;
-    const directionsService = new window.google.maps.DirectionsService();
+    const routeCacheKey = getRouteCacheKey(routeEndpoints[0], routeEndpoints[1]);
+    const cachedRoute = routeCacheRef.current.get(routeCacheKey);
+    if (cachedRoute) {
+      setRoutePath(cachedRoute);
+      return;
+    }
 
-    directionsService.route(
-      {
+    let active = true;
+    void (async () => {
+      const result = await computeDrivingRoute({
         origin: routeEndpoints[0],
         destination: routeEndpoints[1],
-        travelMode: window.google.maps.TravelMode.DRIVING,
-        provideRouteAlternatives: false,
         region: 'IN',
-      },
-      (result, status) => {
-        if (!active) {
-          return;
-        }
+      });
 
-        if (status === 'OK' && result?.routes?.[0]) {
-          const points = extractDirectionsPath(result.routes[0]);
-          setRoutePath(points.length > 1 ? points : buildFallbackRoute(originPoint, destinationPoint));
-          return;
-        }
+      if (!active) {
+        return;
+      }
 
-        setRoutePath(buildFallbackRoute(originPoint, destinationPoint));
-      },
-    );
+      if (result.status === 'OK') {
+        const nextRoutePath = result.path.length > 1 ? result.path : buildFallbackRoute(originPoint, destinationPoint);
+        routeCacheRef.current.set(routeCacheKey, nextRoutePath);
+        setRoutePath(nextRoutePath);
+        return;
+      }
+
+      const fallbackRoute = buildFallbackRoute(originPoint, destinationPoint);
+      routeCacheRef.current.set(routeCacheKey, fallbackRoute);
+      setRoutePath(fallbackRoute);
+    })();
 
     return () => {
       active = false;

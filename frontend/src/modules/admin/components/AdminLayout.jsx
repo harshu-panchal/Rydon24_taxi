@@ -1205,12 +1205,14 @@ const AdminLayout = () => {
       try {
         const [chatResponse, rideRequestsResponse, bookingsResponse] = await Promise.all([
           getSupportConversations(token),
-          adminService.getRideRequests({
-            page: 1,
-            limit: NOTIFICATION_PAGE_SIZE,
-            tab: 'all',
-            search: '',
-          }),
+          isTripsRoute
+            ? Promise.resolve(null)
+            : adminService.getRideRequests({
+                page: 1,
+                limit: NOTIFICATION_PAGE_SIZE,
+                tab: 'all',
+                search: '',
+              }),
           adminService.getOwnerBookings(),
         ]);
 
@@ -1227,12 +1229,16 @@ const AdminLayout = () => {
         const rideRequestTotal = Math.max(0, Number(rideRequestPaginator?.total || rideRequestResults.length || 0));
         const bookingsTotal = Array.isArray(bookingsResults) ? bookingsResults.length : 0;
 
-        setRideRequestFeed({
-          results: rideRequestResults,
-          paginator: rideRequestPaginator,
-        });
+        if (!isTripsRoute) {
+          setRideRequestFeed({
+            results: rideRequestResults,
+            paginator: rideRequestPaginator,
+          });
+        }
         setBookingsFeed(Array.isArray(bookingsResults) ? bookingsResults : []);
-        setRideRequestUnreadTotal(rideRequestTotal);
+        if (!isTripsRoute) {
+          setRideRequestUnreadTotal(rideRequestTotal);
+        }
         setBookingUnreadTotal(bookingsTotal);
 
         const response = chatResponse;
@@ -1303,6 +1309,10 @@ const AdminLayout = () => {
 
       try {
         if (notificationTab === 'ride_requests') {
+          if (isTripsRoute) {
+            return;
+          }
+
           const response = await adminService.getRideRequests({
             page: rideRequestPage,
             limit: NOTIFICATION_PAGE_SIZE,
@@ -1352,7 +1362,7 @@ const AdminLayout = () => {
     return () => {
       isMounted = false;
     };
-  }, [bookingPage, isNotificationsOpen, notificationTab, rideRequestPage]);
+  }, [bookingPage, isNotificationsOpen, isTripsRoute, notificationTab, rideRequestPage]);
 
   useEffect(() => {
     if (!isSearchOpen) return undefined;
