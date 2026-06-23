@@ -2,13 +2,16 @@ import { createServer } from 'node:http';
 import { createApp } from './src/app.js';
 import { connectDatabase } from './src/config/database.js';
 import { env } from './src/config/env.js';
+import { getRedisStatus } from './src/infrastructure/redis/redisClient.js';
 import { configureTaxiSocketServer } from './src/modules/taxi/socket/index.js';
 import { User } from './src/modules/taxi/user/models/User.js';
 import { restoreScheduledDispatches } from './src/modules/taxi/services/dispatchService.js';
 
 const bootstrap = async () => {
   await connectDatabase();
- 
+  if (!env.redis.enabled || !env.redis.url) {
+    console.warn('[redis] disabled or not configured, falling back to in-memory rate limiting');
+  }
 
   const app = createApp();
   const httpServer = createServer(app);
@@ -17,7 +20,9 @@ const bootstrap = async () => {
   await restoreScheduledDispatches();
 
   httpServer.listen(env.port, () => {
+    const redisStatus = getRedisStatus();
     console.log(`Taxi backend listening on port ${env.port}`);
+    console.log('[redis] status', redisStatus);
   });
 };
 

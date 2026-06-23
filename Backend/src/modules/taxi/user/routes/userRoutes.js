@@ -2,6 +2,12 @@ import { Router } from 'express';
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { authenticate } from '../../middlewares/authMiddleware.js';
 import {
+  loginRateLimit,
+  otpSendRateLimit,
+  otpVerifyRateLimit,
+  paymentOrderRateLimit,
+} from '../../middlewares/rateLimitMiddleware.js';
+import {
   cancelMyBusBooking,
   createBusBookingOrder,
   createRentalAdvancePaymentOrder,
@@ -86,11 +92,11 @@ userRouter.post('/rental-bookings/:id/end', authenticate(['user']), asyncHandler
 userRouter.post('/rental-bookings/:id/location', authenticate(['user']), asyncHandler(updateMyActiveRentalLocation));
 userRouter.post('/register', asyncHandler(registerUser));
 userRouter.post('/signup', asyncHandler(signupUser));
-userRouter.post('/login', asyncHandler(loginUser));
+userRouter.post('/login', loginRateLimit, asyncHandler(loginUser));
 userRouter.post('/profile-image', asyncHandler(uploadUserProfileImage));
-userRouter.post('/auth/send-otp', asyncHandler(startUserOtpRequest));
-userRouter.post('/auth/verify-otp', asyncHandler(verifyUserOtpRequest));
-userRouter.post('/otp-login', asyncHandler(verifyUserPhoneForOtpLogin));
+userRouter.post('/auth/send-otp', otpSendRateLimit, asyncHandler(startUserOtpRequest));
+userRouter.post('/auth/verify-otp', otpVerifyRateLimit, asyncHandler(verifyUserOtpRequest));
+userRouter.post('/otp-login', otpVerifyRateLimit, asyncHandler(verifyUserPhoneForOtpLogin));
 userRouter.post('/fcm-token', authenticate(['user']), asyncHandler(saveUserFcmToken));
 userRouter.get('/me', authenticate(['user']), asyncHandler(getCurrentUser));
 userRouter.patch('/me', authenticate(['user']), asyncHandler(updateCurrentUser));
@@ -106,15 +112,15 @@ userRouter.get('/wallet', authenticate(['user']), asyncHandler(getUserWallet));
 userRouter.post('/wallet/topup', authenticate(['user']), asyncHandler(topupUserWallet));
 userRouter.post('/wallet/transfer', authenticate(['user']), asyncHandler(transferUserWallet));
 userRouter.post('/wallet/transfer/driver', authenticate(['user']), asyncHandler(transferUserWalletToDriver));
-userRouter.post('/wallet/razorpay/order', authenticate(['user']), asyncHandler(createRazorpayWalletTopupOrder));
+userRouter.post('/wallet/razorpay/order', authenticate(['user']), paymentOrderRateLimit, asyncHandler(createRazorpayWalletTopupOrder));
 userRouter.post('/wallet/razorpay/verify', authenticate(['user']), asyncHandler(verifyRazorpayWalletTopup));
 userRouter.post('/wallet/razorpay/callback', asyncHandler(handleUserRazorpayWalletTopupCallback));
 userRouter.get('/wallet/razorpay/callback', asyncHandler(handleUserRazorpayWalletTopupCallback));
-userRouter.post('/wallet/phonepe/order', authenticate(['user']), asyncHandler(createPhonePeWalletTopupOrder));
+userRouter.post('/wallet/phonepe/order', authenticate(['user']), paymentOrderRateLimit, asyncHandler(createPhonePeWalletTopupOrder));
 userRouter.get('/wallet/phonepe/status/:merchantTransactionId', authenticate(['user']), asyncHandler(verifyPhonePeWalletTopup));
-userRouter.post('/rental-advance/razorpay/order', authenticate(['user']), asyncHandler(createRentalAdvancePaymentOrder));
+userRouter.post('/rental-advance/razorpay/order', authenticate(['user']), paymentOrderRateLimit, asyncHandler(createRentalAdvancePaymentOrder));
 userRouter.post('/rental-advance/razorpay/verify', authenticate(['user']), asyncHandler(verifyRentalAdvancePayment));
-userRouter.post('/rental-advance/phonepe/order', authenticate(['user']), asyncHandler(createPhonePeRentalAdvancePaymentOrder));
+userRouter.post('/rental-advance/phonepe/order', authenticate(['user']), paymentOrderRateLimit, asyncHandler(createPhonePeRentalAdvancePaymentOrder));
 userRouter.get('/rental-advance/phonepe/status/:merchantTransactionId', authenticate(['user']), asyncHandler(verifyPhonePeRentalAdvancePayment));
 userRouter.post('/rental-advance/wallet', authenticate(['user']), asyncHandler(payRentalAdvanceWithWallet));
 userRouter.get('/buses/routes', authenticate(['user']), asyncHandler(getBusRouteSuggestions));
@@ -123,13 +129,13 @@ userRouter.get('/buses/:id/seats', authenticate(['user']), asyncHandler(getBusSe
 userRouter.get('/bus-bookings', authenticate(['user']), asyncHandler(listMyBusBookings));
 userRouter.get('/bus-bookings/:id', authenticate(['user']), asyncHandler(getMyBusBookingById));
 userRouter.post('/bus-bookings/:id/review', authenticate(['user']), asyncHandler(submitMyBusBookingReview));
-userRouter.post('/bus-bookings/order', authenticate(['user']), asyncHandler(createBusBookingOrder));
-userRouter.post('/bus-bookings/verify', authenticate(['user']), asyncHandler(verifyBusBookingPayment));
+userRouter.post('/bus-bookings/order', authenticate(['user']), paymentOrderRateLimit, asyncHandler(createBusBookingOrder));
+userRouter.post('/bus-bookings/verify', authenticate(['user']), paymentOrderRateLimit, asyncHandler(verifyBusBookingPayment));
 userRouter.post('/bus-bookings/:id/cancel', authenticate(['user']), asyncHandler(cancelMyBusBooking));
 
 userRouter.get('/pooling/search', authenticate(['user']), asyncHandler(searchPoolingRoutes));
 userRouter.get('/pooling/routes/:id', authenticate(['user']), asyncHandler(getPoolingRouteDetails));
-userRouter.post('/pooling/bookings/order', authenticate(['user']), asyncHandler(createPoolingBookingOrder));
-userRouter.post('/pooling/bookings/verify', authenticate(['user']), asyncHandler(verifyPoolingBookingPayment));
+userRouter.post('/pooling/bookings/order', authenticate(['user']), paymentOrderRateLimit, asyncHandler(createPoolingBookingOrder));
+userRouter.post('/pooling/bookings/verify', authenticate(['user']), paymentOrderRateLimit, asyncHandler(verifyPoolingBookingPayment));
 userRouter.post('/pooling/bookings', authenticate(['user']), asyncHandler(createPoolingBooking));
 userRouter.get('/pooling/bookings', authenticate(['user']), asyncHandler(getMyPoolingBookings));

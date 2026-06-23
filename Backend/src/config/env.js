@@ -105,4 +105,17 @@ export const env = {
       ? Number(process.env.DRIVER_COMMISSION_PERCENT)
       : 20,
   },
+  redis: {
+    url: readEnv('REDIS_URL'),
+    enabled: !['false', '0', 'off'].includes(String(process.env.REDIS_ENABLED || 'true').trim().toLowerCase()),
+    rateLimitEnabled: !['false', '0', 'off'].includes(String(process.env.REDIS_RATE_LIMIT_ENABLED || 'true').trim().toLowerCase()),
+    connectTimeoutMs:
+      Number.isFinite(Number(process.env.REDIS_CONNECT_TIMEOUT_MS)) && Number(process.env.REDIS_CONNECT_TIMEOUT_MS) > 0
+        ? Number(process.env.REDIS_CONNECT_TIMEOUT_MS)
+        : 2000,
+    commandTimeoutMs:
+      Number.isFinite(Number(process.env.REDIS_COMMAND_TIMEOUT_MS)) && Number(process.env.REDIS_COMMAND_TIMEOUT_MS) > 0
+        ? Number(process.env.REDIS_COMMAND_TIMEOUT_MS)
+        : 500,
+  },
 };

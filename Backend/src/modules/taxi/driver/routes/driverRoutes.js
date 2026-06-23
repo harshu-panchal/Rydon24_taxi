@@ -2,6 +2,12 @@ import { Router } from "express";
 import { asyncHandler } from "../../../../utils/asyncHandler.js";
 import { authenticate } from "../../middlewares/authMiddleware.js";
 import {
+  loginRateLimit,
+  otpSendRateLimit,
+  otpVerifyRateLimit,
+  paymentOrderRateLimit,
+} from "../../middlewares/rateLimitMiddleware.js";
+import {
   addDriverEmergencyContact,
   completeOnboarding,
   createOwnerBusService,
@@ -114,18 +120,21 @@ import { triggerDriverSosAlert } from '../../safety/controllers/safetyController
 export const driverRouter = Router();
 
 driverRouter.post("/register", asyncHandler(registerDriver));
-driverRouter.post("/login", asyncHandler(loginDriver));
-driverRouter.post("/auth/send-otp", asyncHandler(startDriverLoginOtpRequest));
+driverRouter.post("/login", loginRateLimit, asyncHandler(loginDriver));
+driverRouter.post("/auth/send-otp", otpSendRateLimit, asyncHandler(startDriverLoginOtpRequest));
 driverRouter.post(
   "/auth/verify-otp",
+  otpVerifyRateLimit,
   asyncHandler(verifyDriverLoginOtpRequest),
 );
 driverRouter.post(
   "/pooling/onboarding/send-otp",
+  otpSendRateLimit,
   asyncHandler(startPoolingOnboardingRequest),
 );
 driverRouter.post(
   "/pooling/onboarding/verify-otp",
+  otpVerifyRateLimit,
   asyncHandler(verifyPoolingOnboardingOtpRequest),
 );
 driverRouter.get(
@@ -324,16 +333,18 @@ driverRouter.get(
   "/wallet/top-up/razorpay/callback",
   asyncHandler(handleDriverRazorpayWalletTopupCallback),
 );
-  driverRouter.post(
+driverRouter.post(
     "/wallet/top-up/razorpay/order",
     authenticate(["driver"]),
+    paymentOrderRateLimit,
     asyncHandler(createDriverWalletTopupOrder),
-  );
-  driverRouter.post(
+);
+driverRouter.post(
     "/wallet/top-up/phonepe/order",
     authenticate(["driver"]),
+    paymentOrderRateLimit,
     asyncHandler(createDriverPhonePeWalletTopupOrder),
-  );
+);
   driverRouter.post(
     "/wallet/top-up/razorpay/verify",
     authenticate(["driver"]),

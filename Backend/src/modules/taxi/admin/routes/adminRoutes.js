@@ -1,6 +1,11 @@
 import { Router } from 'express';
 import { authenticate } from '../../middlewares/authMiddleware.js';
 import {
+  loginRateLimit,
+  otpSendRateLimit,
+  otpVerifyRateLimit,
+} from '../../middlewares/rateLimitMiddleware.js';
+import {
   approveOwner,
   approveOwnerSignupFromDriver,
   approveBusDriverSignup,
@@ -244,10 +249,10 @@ export const adminRouter = Router();
 
 adminRouter.get('/admin', getAdminStatus);
 adminRouter.get('/admin/status', getAdminStatus);
-adminRouter.post('/admin/login', loginAdmin);
-adminRouter.post('/admin/forgot-password', forgotPassword);
-adminRouter.post('/admin/verify-reset-otp', verifyResetOtp);
-adminRouter.post('/admin/reset-password', resetPassword);
+adminRouter.post('/admin/login', loginRateLimit, loginAdmin);
+adminRouter.post('/admin/forgot-password', otpSendRateLimit, forgotPassword);
+adminRouter.post('/admin/verify-reset-otp', otpVerifyRateLimit, verifyResetOtp);
+adminRouter.post('/admin/reset-password', otpVerifyRateLimit, resetPassword);
 
 // Public route for app branding/settings
 adminRouter.get('/admin/general-settings/:category', getGeneralSettingsCategory);
