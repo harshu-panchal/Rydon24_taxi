@@ -16,6 +16,7 @@ import {
   getLocalDriverToken,
   getStoredDriverRole,
   persistDriverAuthSession,
+  verifyDriverBankDocument,
   verifyDriverGstinDocument,
   verifyDriverLicenseDocument,
   verifyDriverPanDocument,
@@ -339,7 +340,7 @@ const getStatusColor = (status) => {
 
       for (const template of documentTemplates) {
         const verificationType = String(template?.verification_type || 'none').trim().toLowerCase();
-        if (!['driving_license', 'pan', 'gstin', 'rc'].includes(verificationType)) {
+        if (!['driving_license', 'pan', 'gstin', 'rc', 'bank_account'].includes(verificationType)) {
           continue;
         }
 
@@ -367,12 +368,24 @@ const getStatusColor = (status) => {
             '',
           ).trim();
           const birthDate = String(doc?.birthDate || doc?.birth_date || '').trim();
+          const ifsc = String(doc?.ifsc || doc?.ifscCode || doc?.ifsc_code || '').trim().toUpperCase();
+          const accountHolderName = String(
+            doc?.accountHolderName ||
+            doc?.account_holder_name ||
+            doc?.beneficiaryName ||
+            doc?.benificiary_name ||
+            '',
+          ).trim();
 
           if (!identifyNumber) {
             continue;
           }
 
           if (verificationType === 'driving_license' && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+            continue;
+          }
+
+          if (verificationType === 'bank_account' && (!ifsc || !accountHolderName)) {
             continue;
           }
 
@@ -392,6 +405,12 @@ const getStatusColor = (status) => {
             runner = () => verifyDriverGstinDocument(key);
           } else if (verificationType === 'rc') {
             runner = () => verifyDriverRcDocument(key);
+          } else if (verificationType === 'bank_account') {
+            runner = () => verifyDriverBankDocument(key, {
+              accountNumber: identifyNumber,
+              ifsc,
+              accountHolderName,
+            });
           } else if (verificationType === 'driving_license') {
             runner = () => verifyDriverLicenseDocument(key);
           }

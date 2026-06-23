@@ -83,6 +83,7 @@ import {
   verifyDriverWalletTopup,
   verifyDriverPhonePeWalletTopup,
   verifyCurrentDriverBankDetails,
+  verifyCurrentDriverBankDocument,
   verifyCurrentDriverUpiDetails,
   verifyCurrentDriverLicenseDocument,
   verifyCurrentDriverGstinDocument,
@@ -262,6 +263,11 @@ driverRouter.post(
   "/documents/:documentKey/verify-rc",
   authenticate(["driver"], { allowPending: true }),
   asyncHandler(verifyCurrentDriverRcDocument),
+);
+driverRouter.post(
+  "/documents/:documentKey/verify-bank",
+  authenticate(["driver"], { allowPending: true }),
+  asyncHandler(verifyCurrentDriverBankDocument),
 );
 driverRouter.get(
   "/notifications",

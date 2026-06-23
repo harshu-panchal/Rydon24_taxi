@@ -108,6 +108,166 @@ const getDocumentProviderVerificationMessage = (doc = {}) =>
     '',
   ).trim();
 
+const getDocumentVerificationType = (doc = {}, fallbackKey = '') => {
+  const explicitType = String(doc?.verificationType ?? doc?.verification_type ?? '').trim().toLowerCase();
+  if (['driving_license', 'pan', 'gstin', 'rc', 'bank_account'].includes(explicitType)) {
+    return explicitType;
+  }
+
+  const haystack = [
+    doc?.sourceKey,
+    fallbackKey,
+    doc?.key,
+    doc?.documentKey,
+    doc?.type,
+    doc?.name,
+    doc?.label,
+    doc?.identify_number_key,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  if (/\bdriving[_\s-]*license\b|\bdl\b|\blicense\b/.test(haystack)) return 'driving_license';
+  if (/\bpan\b|\bpancard\b|\bpan[_\s-]*card\b/.test(haystack)) return 'pan';
+  if (/\bgst\b|\bgstin\b/.test(haystack)) return 'gstin';
+  if (/\brc\b|\bvehicle[_\s-]*rc\b|\bregistration certificate\b/.test(haystack)) return 'rc';
+  if (/\bbank\b|\baccount\b|\bifsc\b/.test(haystack)) return 'bank_account';
+  return 'none';
+};
+
+const getDocumentVerificationLabel = (type = 'none', fallbackName = 'Document') => {
+  if (type === 'pan') return 'PAN Verify';
+  if (type === 'bank_account') return 'Bank Verify';
+  if (type === 'driving_license') return 'DL Verify';
+  if (type === 'rc') return 'RC Verify';
+  if (type === 'gstin') return 'GSTIN Verify';
+  return fallbackName || 'Document';
+};
+
+const toDisplayValue = (value) => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  return String(value).trim();
+};
+
+const normalizeCheckStatus = (value) => {
+  if (typeof value === 'boolean') {
+    return value ? 'pass' : 'fail';
+  }
+
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return 'unknown';
+  if (['yes', 'true', 'active', 'valid', 'commercial', 'transport', 'available', 'present'].includes(normalized)) {
+    return 'pass';
+  }
+  if (['no', 'false', 'expired', 'invalid', 'private', 'non transport', 'non-transport', 'missing', 'unavailable'].includes(normalized)) {
+    return 'fail';
+  }
+  return 'unknown';
+};
+
+const getCheckTone = (status = 'unknown') => {
+  if (status === 'pass') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (status === 'fail') return 'border-rose-200 bg-rose-50 text-rose-700';
+  return 'border-slate-200 bg-slate-50 text-slate-600';
+};
+
+const getDocumentVerificationFacts = (doc = {}) => {
+  const verificationType = getDocumentVerificationType(doc, doc?.sourceKey);
+  const response = doc?.verificationResponse || {};
+  const result = response?.cardData?.result || {};
+  const sourceOutput = result?.source_output || {};
+  const bankAccountDetails = response?.cardData?.response?.account_details || {};
+
+  if (verificationType === 'pan') {
+    return [
+      { label: 'PAN Number', value: doc.identify_number || result?.pan || '' },
+      { label: 'Verified Name', value: result?.name || result?.registered_name || doc?.verifiedName || '' },
+      { label: 'PAN Status', value: result?.status || doc?.panValid || '' },
+      { label: 'Name Validated', value: result?.name_validated || '' },
+    ].filter((item) => toDisplayValue(item.value));
+  }
+
+  if (verificationType === 'bank_account') {
+    return [
+      { label: 'Account Number', value: doc.identify_number || '' },
+      { label: 'IFSC', value: doc?.ifsc || '' },
+      { label: 'Verified Name', value: bankAccountDetails?.beneficiary_name || doc?.verifiedName || '' },
+      { label: 'Bank', value: bankAccountDetails?.bank_name || doc?.verifiedBankName || '' },
+      { label: 'Branch', value: bankAccountDetails?.branch_name || doc?.verifiedBranchName || '' },
+    ].filter((item) => toDisplayValue(item.value));
+  }
+
+  if (verificationType === 'driving_license') {
+    return [
+      { label: 'License Number', value: doc.identify_number || '' },
+      { label: 'Verified Name', value: sourceOutput?.name || doc?.verifiedName || '' },
+      { label: 'DL Status', value: sourceOutput?.dl_status || doc?.dlStatus || '' },
+      { label: 'DOB', value: sourceOutput?.dob || doc?.verifiedDob || doc?.birthDate || '' },
+      { label: 'Issuing RTO', value: sourceOutput?.issuing_rto_name || doc?.issuingRtoName || '' },
+    ].filter((item) => toDisplayValue(item.value));
+  }
+
+  if (verificationType === 'rc') {
+    return [
+      { label: 'RC Number', value: doc.identify_number || '' },
+      { label: 'Owner Name', value: result?.owner_name || doc?.verifiedName || '' },
+      { label: 'RC Status', value: result?.status || doc?.rcStatus || '' },
+      { label: 'Vehicle Model', value: result?.model || doc?.vehicleModel || '' },
+      { label: 'Manufacturer', value: result?.vehicle_manufacturer_name || doc?.vehicleManufacturer || '' },
+      { label: 'Registration Date', value: result?.reg_date || doc?.vehicleRegistrationDate || '' },
+    ].filter((item) => toDisplayValue(item.value));
+  }
+
+  return [];
+};
+
+const getRcVerificationChecks = (doc = {}) => {
+  const verificationType = getDocumentVerificationType(doc, doc?.sourceKey);
+  if (verificationType !== 'rc') {
+    return [];
+  }
+
+  const response = doc?.verificationResponse || {};
+  const result = response?.cardData?.result || {};
+  const seatCapacity = result?.seat_capacity ?? result?.seating_capacity ?? result?.seating_cap ?? result?.no_of_seat ?? result?.seat ?? '';
+  const insuranceUpto = result?.vehicle_insurance_upto ?? result?.insurance_upto ?? result?.insurance_expiry ?? doc?.vehicleInsuranceUpto ?? '';
+  const puccUpto = result?.pucc_upto ?? result?.puc_upto ?? result?.pollution_upto ?? result?.vehicle_pucc_upto ?? '';
+  const commercialValue =
+    result?.commercial_vehicle ??
+    result?.is_commercial ??
+    result?.commercial ??
+    result?.vehicle_type ??
+    result?.vehicle_category ??
+    result?.registration_type ??
+    result?.class ??
+    '';
+
+  return [
+    {
+      label: 'Seat Capacity Check',
+      value: seatCapacity,
+      status: toDisplayValue(seatCapacity) ? 'pass' : 'unknown',
+    },
+    {
+      label: 'Insurance Check',
+      value: insuranceUpto,
+      status: normalizeCheckStatus(result?.insurance_status || insuranceUpto),
+    },
+    {
+      label: 'PUCC Check',
+      value: puccUpto,
+      status: normalizeCheckStatus(result?.pucc_status || result?.puc_status || puccUpto),
+    },
+    {
+      label: 'Commercial Vehicle Check',
+      value: commercialValue,
+      status: normalizeCheckStatus(commercialValue),
+    },
+  ];
+};
+
 const getProviderStatusTone = (status = '') => {
   const normalized = String(status || '').trim().toLowerCase();
   if (['verified', 'success', 'approved', 'completed'].includes(normalized)) {
@@ -251,6 +411,7 @@ const normalizeDocumentEntry = (doc = {}, fallbackKey = '') => {
     providerStatus: getDocumentProviderVerificationStatus(doc),
     providerMessage: getDocumentProviderVerificationMessage(doc),
     verificationReferenceId: String(doc?.verificationReferenceId ?? doc?.reference_id ?? '').trim(),
+    verificationResponse: doc?.verificationResponse ?? null,
     verifiedAt: doc?.verifiedAt ?? null,
     images,
     uploadedAt: doc?.uploadedAt ?? doc?.updatedAt ?? doc?.createdAt ?? null,
@@ -449,6 +610,10 @@ const DriverDetails = () => {
 
       return {
         ...doc,
+        verificationType: getDocumentVerificationType(doc, doc.sourceKey),
+        verificationLabel: getDocumentVerificationLabel(getDocumentVerificationType(doc, doc.sourceKey), doc.name),
+        verificationFacts: getDocumentVerificationFacts(doc),
+        rcChecks: getRcVerificationChecks(doc),
         isReuploaded:
           String(doc.status || '').toLowerCase() === 'pending' &&
           uploadedAtTime > 0 &&
@@ -895,7 +1060,12 @@ const DriverDetails = () => {
                       documents.map((doc, idx) => (
                         <tr key={`${doc.name}-${idx}`}>
                           <td className="px-6 py-3">
-                            <div className="font-semibold text-gray-900">{doc.name}</div>
+                            <div className="space-y-1">
+                              <div className="font-semibold text-gray-900">{doc.verificationLabel || doc.name}</div>
+                              {(doc.verificationLabel && doc.verificationLabel !== doc.name) ? (
+                                <div className="text-[11px] text-gray-500">{doc.name}</div>
+                              ) : null}
+                            </div>
                           </td>
                           <td className="px-4 py-3">{doc.identify_number}</td>
                           <td className="px-4 py-3">{doc.expiry_date}</td>
@@ -948,6 +1118,31 @@ const DriverDetails = () => {
                               <div className="mt-1 space-y-0.5 text-[10px] text-gray-400">
                                 {doc.uploadedAt ? <div>Uploaded: {formatDateTime(doc.uploadedAt)}</div> : null}
                                 {doc.reviewedAt ? <div>Reviewed: {formatDateTime(doc.reviewedAt)}</div> : null}
+                              </div>
+                            ) : null}
+                            {doc.verificationFacts?.length ? (
+                              <div className="mt-3 grid grid-cols-1 gap-2">
+                                {doc.verificationFacts.map((fact) => (
+                                  <div key={`${doc.sourceKey}-${fact.label}`} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{fact.label}</div>
+                                    <div className="mt-1 text-[11px] font-semibold text-slate-700">{toDisplayValue(fact.value)}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                            {doc.rcChecks?.length ? (
+                              <div className="mt-3 space-y-2">
+                                {doc.rcChecks.map((check) => (
+                                  <div
+                                    key={`${doc.sourceKey}-${check.label}`}
+                                    className={`rounded-lg border px-3 py-2 ${getCheckTone(check.status)}`}
+                                  >
+                                    <div className="text-[10px] font-bold uppercase tracking-wider">{check.label}</div>
+                                    <div className="mt-1 text-[11px] font-semibold">
+                                      {toDisplayValue(check.value) || 'Not available in RC response'}
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             ) : null}
                           </td>

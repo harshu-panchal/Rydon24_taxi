@@ -687,6 +687,13 @@ export const verifyDriverRcDocument = (documentKey, payload = {}) =>
     withDriverAuth(),
   );
 
+export const verifyDriverBankDocument = (documentKey, payload = {}) =>
+  api.post(
+    `/drivers/documents/${encodeURIComponent(documentKey)}/verify-bank`,
+    payload,
+    withDriverAuth(),
+  );
+
 export const getDriverIncentives = () =>
   api.get("/drivers/incentives", withDriverAuth());
 

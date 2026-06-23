@@ -3976,6 +3976,136 @@ export const verifyCurrentDriverRcDocument = async (req, res) => {
   });
 };
 
+export const verifyCurrentDriverBankDocument = async (req, res) => {
+  const documentKey = String(req.params.documentKey || "").trim();
+
+  if (!documentKey) {
+    throw new ApiError(400, "Document key is required");
+  }
+
+  const driver = await Driver.findById(req.auth.sub);
+
+  if (!driver) {
+    throw new ApiError(404, "Driver not found");
+  }
+
+  const existingDocument = driver.documents?.[documentKey] || {};
+  const accountNumber = String(
+    existingDocument.identifyNumber ||
+    existingDocument.identify_number ||
+    existingDocument.documentNumber ||
+    existingDocument.document_number ||
+    req.body?.accountNumber ||
+    req.body?.bank_account ||
+    "",
+  ).trim().replace(/\s/g, "");
+  const ifscCode = String(
+    existingDocument.ifsc ||
+    existingDocument.ifscCode ||
+    existingDocument.ifsc_code ||
+    req.body?.ifsc ||
+    req.body?.ifscCode ||
+    req.body?.ifsc_code ||
+    "",
+  ).trim().toUpperCase();
+  const accountHolderName = String(
+    existingDocument.accountHolderName ||
+    existingDocument.account_holder_name ||
+    existingDocument.beneficiaryName ||
+    existingDocument.benificiary_name ||
+    req.body?.accountHolderName ||
+    req.body?.account_holder_name ||
+    req.body?.beneficiaryName ||
+    req.body?.benificiary_name ||
+    driver.bankDetails?.accountHolderName ||
+    "",
+  ).trim();
+  const mode = String(req.body?.mode || "penny_less").trim().toLowerCase();
+
+  if (!accountNumber) {
+    throw new ApiError(400, "Bank account number is required before verification");
+  }
+
+  if (!ifscCode) {
+    throw new ApiError(400, "IFSC code is required before verification");
+  }
+
+  if (mode !== "v3" && !accountHolderName) {
+    throw new ApiError(400, "Account holder name is required before verification");
+  }
+
+  const providerResponse = await verifyBankAccountWithRecharge({
+    accountNumber,
+    ifscCode,
+    accountHolderName,
+    partnerRequestId: buildDriverBankVerificationRequestId(driver),
+    mode,
+  });
+
+  const accountDetails = providerResponse?.cardData?.response?.account_details || {};
+  const verificationSucceeded = Number(providerResponse?.status || 0) === 1 || String(providerResponse?.status || "") === "1";
+  const verificationMessage = String(
+    providerResponse?.cardData?.response?.message ||
+    providerResponse?.data?.message ||
+    providerResponse?.msg ||
+    "",
+  ).trim();
+
+  const updatedDocument = {
+    ...(typeof existingDocument === "object" ? existingDocument : {}),
+    key: documentKey,
+    identifyNumber: accountNumber,
+    identify_number: accountNumber,
+    documentNumber: accountNumber,
+    document_number: accountNumber,
+    ifsc: ifscCode,
+    ifscCode,
+    ifsc_code: ifscCode,
+    accountHolderName,
+    account_holder_name: accountHolderName,
+    beneficiaryName: accountHolderName,
+    benificiary_name: accountHolderName,
+    verificationStatus: verificationSucceeded ? "verified" : "failed",
+    reviewStatus: verificationSucceeded ? "verified" : "failed",
+    status: verificationSucceeded ? "verified" : "failed",
+    verifiedAt: new Date().toISOString(),
+    reviewedAt: new Date().toISOString(),
+    verificationMode: mode,
+    verificationMessage,
+    comment: verificationSucceeded ? "" : verificationMessage,
+    remarks: verificationSucceeded ? "" : verificationMessage,
+    reason: verificationSucceeded ? "" : verificationMessage,
+    verificationReferenceId: String(
+      providerResponse?.orderid ||
+      providerResponse?.optransid ||
+      providerResponse?.cardData?.request_id ||
+      providerResponse?.data?.requestId ||
+      "",
+    ).trim(),
+    verifiedName: String(accountDetails?.beneficiary_name || accountHolderName).trim(),
+    verifiedBankName: String(accountDetails?.bank_name || "").trim(),
+    verifiedBranchName: String(accountDetails?.branch_name || "").trim(),
+    verificationResponse: providerResponse,
+  };
+
+  driver.documents = {
+    ...(driver.documents || {}),
+    [documentKey]: updatedDocument,
+  };
+
+  driver.markModified("documents");
+  await driver.save();
+
+  res.json({
+    success: true,
+    data: {
+      document: updatedDocument,
+      documents: driver.documents || {},
+      verification: providerResponse,
+    },
+  });
+};
+
 export const requestDriverAccountDeletion = async (req, res) => {
   const driverId = req.auth?.sub;
   const reason = String(req.body?.reason || "").trim();

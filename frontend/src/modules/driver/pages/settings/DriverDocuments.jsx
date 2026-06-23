@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, BadgeCheck, CalendarDays, Camera, CheckCircle2, Eye, FileText, Loader2, RefreshCw, ShieldCheck, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { getCurrentDriver, getDriverDocumentTemplates, updateDriverDocument, verifyDriverGstinDocument, verifyDriverLicenseDocument, verifyDriverPanDocument, verifyDriverRcDocument } from '../../services/registrationService';
+import { getCurrentDriver, getDriverDocumentTemplates, updateDriverDocument, verifyDriverBankDocument, verifyDriverGstinDocument, verifyDriverLicenseDocument, verifyDriverPanDocument, verifyDriverRcDocument } from '../../services/registrationService';
 import { useImageUpload } from '../../../../shared/hooks/useImageUpload';
 import {
   flattenDriverDocumentFields,
@@ -60,6 +60,18 @@ const getDocumentBirthDateValue = (document = {}) =>
 const getDocumentRequestNumberValue = (document = {}) =>
   String(document?.requestNumber || document?.request_no || '').trim();
 
+const getDocumentIfscValue = (document = {}) =>
+  String(document?.ifsc || document?.ifscCode || document?.ifsc_code || '').trim().toUpperCase();
+
+const getDocumentAccountHolderNameValue = (document = {}) =>
+  String(
+    document?.accountHolderName ||
+    document?.account_holder_name ||
+    document?.beneficiaryName ||
+    document?.benificiary_name ||
+    '',
+  ).trim();
+
 const isDrivingLicenseDocument = (doc = {}) =>
   String(doc?.verificationType || '').trim() === 'driving_license' ||
   String(doc?.id || '').trim() === 'drivingLicense';
@@ -83,6 +95,11 @@ const isRcDocument = (doc = {}) =>
   /\brc\b/i.test(String(doc?.id || '')) ||
   /\bvehicle rc\b/i.test(String(doc?.name || '')) ||
   /\bregistration certificate\b/i.test(String(doc?.name || ''));
+
+const isBankDocument = (doc = {}) =>
+  String(doc?.verificationType || '').trim() === 'bank_account' ||
+  /\bbank\b/i.test(String(doc?.id || '')) ||
+  /\bbank\b/i.test(String(doc?.name || ''));
 
 const isDocumentExpired = (document = {}) => {
   const value = getDocumentExpiryValue(document);
@@ -142,6 +159,8 @@ const DriverDocuments = () => {
     identifyNumber: '',
     birthDate: '',
     requestNumber: '',
+    ifsc: '',
+    accountHolderName: '',
     isSubmitting: false,
     isVerifying: false,
   });
@@ -226,6 +245,8 @@ const DriverDocuments = () => {
       const identifyNumber = getDocumentIdentifyValue(doc);
       const birthDate = getDocumentBirthDateValue(doc);
       const requestNumber = getDocumentRequestNumberValue(doc);
+      const ifsc = getDocumentIfscValue(doc);
+      const accountHolderName = getDocumentAccountHolderNameValue(doc);
       const expired = isDocumentExpired(doc);
       const rejected = ['rejected', 'declined'].includes(getDocumentReviewStatus(doc));
       const verified = ['verified', 'approved'].includes(getDocumentReviewStatus(doc));
@@ -266,6 +287,8 @@ const DriverDocuments = () => {
         identifyNumber,
         birthDate,
         requestNumber,
+        ifsc,
+        accountHolderName,
         hasIdentifyNumber: field.hasIdentifyNumber,
         expired,
         rejected,
@@ -315,6 +338,8 @@ const DriverDocuments = () => {
       identifyNumber: '',
       birthDate: '',
       requestNumber: '',
+      ifsc: '',
+      accountHolderName: '',
       isSubmitting: false,
       isVerifying: false,
     });
@@ -369,6 +394,8 @@ const DriverDocuments = () => {
     const identifyNumber = String(metaModal.identifyNumber || '').trim().toUpperCase();
     const birthDate = String(metaModal.birthDate || '').trim();
     const requestNumber = String(metaModal.requestNumber || '').trim();
+    const ifsc = String(metaModal.ifsc || '').trim().toUpperCase();
+    const accountHolderName = String(metaModal.accountHolderName || '').trim();
 
     try {
       setMetaModal((prev) => ({
@@ -389,6 +416,13 @@ const DriverDocuments = () => {
         birth_date: birthDate,
         requestNumber,
         request_no: requestNumber,
+        ifsc,
+        ifscCode: ifsc,
+        ifsc_code: ifsc,
+        accountHolderName,
+        account_holder_name: accountHolderName,
+        beneficiaryName: accountHolderName,
+        benificiary_name: accountHolderName,
         uploaded: currentDocument?.uploaded ?? true,
       });
 
@@ -416,6 +450,12 @@ const DriverDocuments = () => {
               ? await verifyDriverGstinDocument(metaModal.docId)
               : metaModal.mode === 'rc'
                 ? await verifyDriverRcDocument(metaModal.docId)
+                : metaModal.mode === 'bank'
+                  ? await verifyDriverBankDocument(metaModal.docId, {
+                      accountNumber: identifyNumber,
+                      ifsc,
+                      accountHolderName,
+                    })
                 : await verifyDriverLicenseDocument(metaModal.docId);
         documents = verifyResponse?.data?.data?.documents || verifyResponse?.data?.documents || documents;
       }
@@ -552,6 +592,8 @@ const DriverDocuments = () => {
                       ? 'GSTIN'
                       : metaModal.mode === 'rc'
                         ? 'RC Number'
+                        : metaModal.mode === 'bank'
+                          ? 'Bank Account Number'
                         : 'License Number'}
                 </span>
                 <input
@@ -566,10 +608,44 @@ const DriverDocuments = () => {
                         ? 'Enter GSTIN'
                         : metaModal.mode === 'rc'
                           ? 'Enter RC number'
+                          : metaModal.mode === 'bank'
+                            ? 'Enter bank account number'
                           : 'Enter DL number'
                   }
                 />
               </label>
+
+              {metaModal.mode === 'bank' ? (
+              <label className="block">
+                <span className="mb-2 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  <BadgeCheck size={13} />
+                  IFSC Code
+                </span>
+                <input
+                  type="text"
+                  value={metaModal.ifsc}
+                  onChange={(event) => setMetaModal((prev) => ({ ...prev, ifsc: event.target.value.toUpperCase() }))}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-900 outline-none transition-colors focus:border-emerald-200 focus:bg-white"
+                  placeholder="Enter IFSC code"
+                />
+              </label>
+              ) : null}
+
+              {metaModal.mode === 'bank' ? (
+              <label className="block">
+                <span className="mb-2 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  <BadgeCheck size={13} />
+                  Account Holder Name
+                </span>
+                <input
+                  type="text"
+                  value={metaModal.accountHolderName}
+                  onChange={(event) => setMetaModal((prev) => ({ ...prev, accountHolderName: event.target.value }))}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-900 outline-none transition-colors focus:border-emerald-200 focus:bg-white"
+                  placeholder="Enter account holder name"
+                />
+              </label>
+              ) : null}
 
               {metaModal.mode === 'license' ? (
               <label className="block">
@@ -609,7 +685,8 @@ const DriverDocuments = () => {
                     metaModal.isSubmitting ||
                     metaModal.isVerifying ||
                     !metaModal.identifyNumber ||
-                    (metaModal.mode === 'license' && !metaModal.birthDate)
+                    (metaModal.mode === 'license' && !metaModal.birthDate) ||
+                    (metaModal.mode === 'bank' && (!metaModal.ifsc || !metaModal.accountHolderName))
                   }
                   className="h-11 rounded-xl bg-slate-100 text-[12px] font-black uppercase tracking-widest text-slate-700 transition-all active:scale-95 disabled:opacity-50"
                 >
@@ -621,7 +698,8 @@ const DriverDocuments = () => {
                     metaModal.isSubmitting ||
                     metaModal.isVerifying ||
                     !metaModal.identifyNumber ||
-                    (metaModal.mode === 'license' && !metaModal.birthDate)
+                    (metaModal.mode === 'license' && !metaModal.birthDate) ||
+                    (metaModal.mode === 'bank' && (!metaModal.ifsc || !metaModal.accountHolderName))
                   }
                   className="h-11 rounded-xl bg-emerald-600 text-[12px] font-black uppercase tracking-widest text-white transition-all active:scale-95 disabled:opacity-50"
                 >
@@ -633,6 +711,8 @@ const DriverDocuments = () => {
                         ? 'Verify GST'
                         : metaModal.mode === 'rc'
                           ? 'Verify RC'
+                          : metaModal.mode === 'bank'
+                            ? 'Verify Bank'
                           : 'Verify DL'}
                 </button>
               </div>
@@ -750,7 +830,7 @@ const DriverDocuments = () => {
                     </span>
                     
                     <div className="flex items-center gap-1.5 ml-1">
-                      {isDrivingLicenseDocument(doc) || isPanDocument(doc) || isGstDocument(doc) || isRcDocument(doc) ? (
+                      {isDrivingLicenseDocument(doc) || isPanDocument(doc) || isGstDocument(doc) || isRcDocument(doc) || isBankDocument(doc) ? (
                         <button
                           type="button"
                           onClick={(event) => {
@@ -763,12 +843,16 @@ const DriverDocuments = () => {
                                   ? 'gst'
                                   : isRcDocument(doc)
                                     ? 'rc'
+                                    : isBankDocument(doc)
+                                      ? 'bank'
                                     : 'license',
                               docId: doc.id,
                               name: doc.name,
                               identifyNumber: doc.identifyNumber || '',
                               birthDate: toDateInputValue(doc.birthDate),
                               requestNumber: doc.requestNumber || '',
+                              ifsc: doc.ifsc || '',
+                              accountHolderName: doc.accountHolderName || '',
                               isSubmitting: false,
                               isVerifying: false,
                             });
@@ -783,6 +867,8 @@ const DriverDocuments = () => {
                                 ? doc.verified ? 'View GST' : 'Verify GST'
                                 : isRcDocument(doc)
                                   ? doc.verified ? 'View RC' : 'Verify RC'
+                                  : isBankDocument(doc)
+                                    ? doc.verified ? 'View Bank' : 'Verify Bank'
                               : doc.verified ? 'View DL' : 'Verify DL'}
                           </span>
                         </button>

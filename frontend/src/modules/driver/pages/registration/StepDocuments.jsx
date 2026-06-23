@@ -63,9 +63,21 @@ const getDocumentBirthDateValue = (doc) =>
 const getDocumentRequestNumberValue = (doc) =>
   String(doc?.requestNumber || doc?.request_no || '').trim();
 
+const getDocumentIfscValue = (doc) =>
+  String(doc?.ifsc || doc?.ifscCode || doc?.ifsc_code || '').trim().toUpperCase();
+
+const getDocumentAccountHolderNameValue = (doc) =>
+  String(
+    doc?.accountHolderName ||
+    doc?.account_holder_name ||
+    doc?.beneficiaryName ||
+    doc?.benificiary_name ||
+    '',
+  ).trim();
+
 const normalizeVerificationType = (value) => {
   const normalized = String(value || 'none').trim().toLowerCase();
-  return ['driving_license', 'pan', 'gstin', 'rc'].includes(normalized) ? normalized : 'none';
+  return ['driving_license', 'pan', 'gstin', 'rc', 'bank_account'].includes(normalized) ? normalized : 'none';
 };
 
 const templateNeedsBirthDate = (template = {}) =>
@@ -89,6 +101,8 @@ const buildTemplateMetaState = (templates = [], documents = {}) =>
           expiryDate: getDocumentExpiryValue(firstDocument),
           birthDate: getDocumentBirthDateValue(firstDocument),
           requestNumber: getDocumentRequestNumberValue(firstDocument),
+          ifsc: getDocumentIfscValue(firstDocument),
+          accountHolderName: getDocumentAccountHolderNameValue(firstDocument),
         },
       ];
     }),
@@ -423,11 +437,15 @@ const StepDocuments = () => {
       expiryDate: '',
       birthDate: '',
       requestNumber: '',
+      ifsc: '',
+      accountHolderName: '',
     };
     const identifyNumber = String(meta.identifyNumber || '').trim();
     const expiryDate = String(meta.expiryDate || '').trim();
     const birthDate = String(meta.birthDate || '').trim();
     const requestNumber = String(meta.requestNumber || '').trim();
+    const ifsc = String(meta.ifsc || '').trim().toUpperCase();
+    const accountHolderName = String(meta.accountHolderName || '').trim();
 
     return Object.fromEntries(
       Object.entries(templateDocuments).map(([docKey, docValue]) => [
@@ -445,6 +463,13 @@ const StepDocuments = () => {
               birth_date: birthDate,
               requestNumber,
               request_no: requestNumber,
+              ifsc,
+              ifscCode: ifsc,
+              ifsc_code: ifsc,
+              accountHolderName,
+              account_holder_name: accountHolderName,
+              beneficiaryName: accountHolderName,
+              benificiary_name: accountHolderName,
             }
           : docValue,
       ]),
@@ -517,6 +542,8 @@ const StepDocuments = () => {
             expiryDate: documentMeta[templateId]?.expiryDate || '',
             birthDate: documentMeta[templateId]?.birthDate || '',
             requestNumber: documentMeta[templateId]?.requestNumber || '',
+            ifsc: documentMeta[templateId]?.ifsc || '',
+            accountHolderName: documentMeta[templateId]?.accountHolderName || '',
           },
         },
       });
@@ -675,7 +702,12 @@ const StepDocuments = () => {
       const hasIdentifyNumber = !template.has_identify_number || Boolean(String(meta.identifyNumber || '').trim());
       const hasExpiryDate = !template.has_expiry_date || Boolean(String(meta.expiryDate || '').trim());
       const hasBirthDate = !templateNeedsBirthDate(template) || /^\d{4}-\d{2}-\d{2}$/.test(String(meta.birthDate || '').trim());
-      return hasIdentifyNumber && hasExpiryDate && hasBirthDate;
+      const needsBankMeta = normalizeVerificationType(template.verification_type) === 'bank_account';
+      const hasBankMeta = !needsBankMeta || (
+        Boolean(String(meta.ifsc || '').trim()) &&
+        Boolean(String(meta.accountHolderName || '').trim())
+      );
+      return hasIdentifyNumber && hasExpiryDate && hasBirthDate && hasBankMeta;
     }) &&
     !uploading &&
     !templatesLoading;
@@ -945,7 +977,7 @@ const StepDocuments = () => {
                   })}
                 </div>
 
-                {(template.has_identify_number || template.has_expiry_date) ? (
+                {(template.has_identify_number || template.has_expiry_date || normalizeVerificationType(template.verification_type) === 'bank_account') ? (
                   <div className="space-y-2 pt-2">
                     {normalizeVerificationType(template.verification_type) !== 'none' ? (
                       <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
@@ -955,7 +987,7 @@ const StepDocuments = () => {
                   </div>
                 ) : null}
 
-                {(template.has_identify_number || template.has_expiry_date || templateNeedsBirthDate(template) || templateSupportsRequestNumber(template)) ? (
+                {(template.has_identify_number || template.has_expiry_date || templateNeedsBirthDate(template) || templateSupportsRequestNumber(template) || normalizeVerificationType(template.verification_type) === 'bank_account') ? (
                   <div className="space-y-4 pt-2">
                     {template.has_identify_number ? (
                       <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
@@ -1062,6 +1094,50 @@ const StepDocuments = () => {
                               value={documentMeta[template.id]?.requestNumber || ''}
                               onChange={(event) => handleMetaChange(template.id, 'requestNumber', event.target.value)}
                               placeholder="Optional, auto-generated later if left blank"
+                              className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {normalizeVerificationType(template.verification_type) === 'bank_account' ? (
+                      <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                        <div className="flex items-center gap-4">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
+                            <FileText size={20} strokeWidth={2.5} />
+                          </div>
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70">
+                              IFSC Code
+                            </label>
+                            <input
+                              type="text"
+                              value={documentMeta[template.id]?.ifsc || ''}
+                              onChange={(event) => handleMetaChange(template.id, 'ifsc', event.target.value.toUpperCase())}
+                              placeholder="Enter IFSC code"
+                              className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {normalizeVerificationType(template.verification_type) === 'bank_account' ? (
+                      <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                        <div className="flex items-center gap-4">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
+                            <FileText size={20} strokeWidth={2.5} />
+                          </div>
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70">
+                              Account Holder Name
+                            </label>
+                            <input
+                              type="text"
+                              value={documentMeta[template.id]?.accountHolderName || ''}
+                              onChange={(event) => handleMetaChange(template.id, 'accountHolderName', event.target.value)}
+                              placeholder="Enter account holder name"
                               className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200"
                             />
                           </div>

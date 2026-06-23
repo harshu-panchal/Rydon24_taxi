@@ -62,6 +62,7 @@ const verificationTypeOptions = [
   { value: 'pan', label: 'PAN Verification' },
   { value: 'gstin', label: 'GSTIN Verification' },
   { value: 'rc', label: 'RC Verification' },
+  { value: 'bank_account', label: 'Bank Account Verification' },
 ];
 
 const documentVerificationPresets = {
@@ -92,6 +93,13 @@ const documentVerificationPresets = {
     has_expiry_date: '0',
     has_identify_number: '1',
     identify_number_key: 'rc_no',
+  },
+  bank_account: {
+    name: 'Bank Proof',
+    image_type: 'image',
+    has_expiry_date: '0',
+    has_identify_number: '1',
+    identify_number_key: 'bank_account',
   },
 };
 

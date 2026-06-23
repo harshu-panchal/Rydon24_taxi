@@ -2310,7 +2310,7 @@ const LEGACY_DRIVER_DOCUMENT_SEED_SIGNATURES = [
 
 const normalizeDriverDocumentVerificationType = (value) => {
   const normalized = String(value || 'none').trim().toLowerCase();
-  if (['driving_license', 'pan', 'gstin', 'rc', 'none'].includes(normalized)) {
+  if (['driving_license', 'pan', 'gstin', 'rc', 'bank_account', 'none'].includes(normalized)) {
     return normalized;
   }
   return 'none';
@@ -2353,6 +2353,15 @@ const getDriverDocumentPresetConfig = (verificationType = 'none') => {
         has_identify_number: true,
         identify_number_key: 'rc_no',
         key: 'vehicleRC',
+      };
+    case 'bank_account':
+      return {
+        name: 'Bank Proof',
+        image_type: 'image',
+        has_expiry_date: false,
+        has_identify_number: true,
+        identify_number_key: 'bank_account',
+        key: 'bankProof',
       };
     default:
       return null;
