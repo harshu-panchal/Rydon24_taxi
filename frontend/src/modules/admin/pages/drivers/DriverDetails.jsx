@@ -174,49 +174,68 @@ const getCheckTone = (status = 'unknown') => {
 };
 
 const getDocumentVerificationFacts = (doc = {}) => {
+  const rawDocument = doc?.rawDocument || {};
   const verificationType = getDocumentVerificationType(doc, doc?.sourceKey);
-  const response = doc?.verificationResponse || {};
+  const response = doc?.verificationResponse || rawDocument?.verificationResponse || {};
   const result = response?.cardData?.result || {};
   const sourceOutput = result?.source_output || {};
+  const licenseDetails = result?.details_of_driving_licence || {};
+  const nonTransportValidity = result?.dl_validity?.non_transport || {};
+  const transportValidity = result?.dl_validity?.transport || {};
+  const badgeDetails = Array.isArray(result?.badge_details) ? result.badge_details : [];
+  const firstBadge = badgeDetails[0] || {};
   const bankAccountDetails = response?.cardData?.response?.account_details || {};
 
   if (verificationType === 'pan') {
     return [
-      { label: 'PAN Number', value: doc.identify_number || result?.pan || '' },
-      { label: 'Verified Name', value: result?.name || result?.registered_name || doc?.verifiedName || '' },
-      { label: 'PAN Status', value: result?.status || doc?.panValid || '' },
+      { label: 'PAN Number', value: doc.identify_number || rawDocument?.identify_number || result?.pan || '' },
+      { label: 'Verified Name', value: result?.name || result?.registered_name || rawDocument?.verifiedName || doc?.verifiedName || '' },
+      { label: 'PAN Status', value: result?.status || rawDocument?.panValid || doc?.panValid || '' },
       { label: 'Name Validated', value: result?.name_validated || '' },
     ].filter((item) => toDisplayValue(item.value));
   }
 
   if (verificationType === 'bank_account') {
     return [
-      { label: 'Account Number', value: doc.identify_number || '' },
-      { label: 'IFSC', value: doc?.ifsc || '' },
-      { label: 'Verified Name', value: bankAccountDetails?.beneficiary_name || doc?.verifiedName || '' },
-      { label: 'Bank', value: bankAccountDetails?.bank_name || doc?.verifiedBankName || '' },
-      { label: 'Branch', value: bankAccountDetails?.branch_name || doc?.verifiedBranchName || '' },
+      { label: 'Account Number', value: doc.identify_number || rawDocument?.identify_number || '' },
+      { label: 'IFSC', value: doc?.ifsc || rawDocument?.ifsc || '' },
+      { label: 'Verified Name', value: bankAccountDetails?.beneficiary_name || rawDocument?.verifiedName || doc?.verifiedName || '' },
+      { label: 'Bank', value: bankAccountDetails?.bank_name || rawDocument?.verifiedBankName || doc?.verifiedBankName || '' },
+      { label: 'Branch', value: bankAccountDetails?.branch_name || rawDocument?.verifiedBranchName || doc?.verifiedBranchName || '' },
     ].filter((item) => toDisplayValue(item.value));
   }
 
   if (verificationType === 'driving_license') {
     return [
-      { label: 'License Number', value: doc.identify_number || '' },
-      { label: 'Verified Name', value: sourceOutput?.name || doc?.verifiedName || '' },
-      { label: 'DL Status', value: sourceOutput?.dl_status || doc?.dlStatus || '' },
-      { label: 'DOB', value: sourceOutput?.dob || doc?.verifiedDob || doc?.birthDate || '' },
-      { label: 'Issuing RTO', value: sourceOutput?.issuing_rto_name || doc?.issuingRtoName || '' },
+      { label: 'License Number', value: doc.identify_number || rawDocument?.identify_number || rawDocument?.dlNumber || result?.dl_number || '' },
+      { label: 'Verified Name', value: licenseDetails?.name || sourceOutput?.name || rawDocument?.verifiedName || doc?.verifiedName || '' },
+      { label: 'DL Status', value: licenseDetails?.status || sourceOutput?.dl_status || rawDocument?.dlStatus || doc?.dlStatus || '' },
+      { label: 'DOB', value: result?.dob || sourceOutput?.dob || rawDocument?.verifiedDob || doc?.verifiedDob || rawDocument?.birthDate || doc?.birthDate || '' },
+      { label: 'Relative Name', value: licenseDetails?.father_or_husband_name || rawDocument?.relativeName || doc?.relativeName || '' },
+      { label: 'Non-Transport Valid From', value: nonTransportValidity?.from || rawDocument?.nonTransportValidFrom || '' },
+      { label: 'Non-Transport Valid To', value: nonTransportValidity?.to || rawDocument?.nonTransportValidTo || '' },
+      { label: 'Transport Valid From', value: transportValidity?.from || rawDocument?.transportValidFrom || '' },
+      { label: 'Transport Valid To', value: transportValidity?.to || rawDocument?.transportValidTo || '' },
+      { label: 'Badge Number', value: firstBadge?.badge_no || rawDocument?.badgeNumber || '' },
+      { label: 'Badge Issue Date', value: firstBadge?.badge_issue_date || rawDocument?.badgeIssueDate || '' },
+      { label: 'Class Of Vehicle', value: Array.isArray(firstBadge?.class_of_vehicle) ? firstBadge.class_of_vehicle.join(', ') : Array.isArray(rawDocument?.classOfVehicle) ? rawDocument.classOfVehicle.join(', ') : '' },
     ].filter((item) => toDisplayValue(item.value));
   }
 
   if (verificationType === 'rc') {
     return [
-      { label: 'RC Number', value: doc.identify_number || '' },
-      { label: 'Owner Name', value: result?.owner_name || doc?.verifiedName || '' },
-      { label: 'RC Status', value: result?.status || doc?.rcStatus || '' },
-      { label: 'Vehicle Model', value: result?.model || doc?.vehicleModel || '' },
-      { label: 'Manufacturer', value: result?.vehicle_manufacturer_name || doc?.vehicleManufacturer || '' },
-      { label: 'Registration Date', value: result?.reg_date || doc?.vehicleRegistrationDate || '' },
+      { label: 'RC Number', value: doc.identify_number || rawDocument?.identify_number || '' },
+      { label: 'Owner Name', value: result?.owner_name || rawDocument?.verifiedName || doc?.verifiedName || '' },
+      { label: 'RC Status', value: result?.status || rawDocument?.rcStatus || doc?.rcStatus || '' },
+      { label: 'Vehicle Model', value: result?.model || rawDocument?.vehicleModel || doc?.vehicleModel || '' },
+      { label: 'Manufacturer', value: result?.vehicle_manufacturer_name || rawDocument?.vehicleManufacturer || doc?.vehicleManufacturer || '' },
+      { label: 'Registration Date', value: result?.reg_date || rawDocument?.vehicleRegistrationDate || doc?.vehicleRegistrationDate || '' },
+      { label: 'Permit Number', value: result?.permit_no || result?.permit_number || rawDocument?.permitNumber || '' },
+      { label: 'Permit Valid Upto', value: result?.permit_valid_upto || result?.permit_upto || rawDocument?.permitValidUpto || '' },
+      { label: 'Insurance Upto', value: result?.vehicle_insurance_upto || result?.insurance_upto || rawDocument?.vehicleInsuranceUpto || '' },
+      { label: 'Fitness Upto', value: result?.fitness_upto || result?.vehicle_fitness_upto || rawDocument?.vehicleFitnessUpto || '' },
+      { label: 'PUC Number', value: result?.vehicle_pucc_number || result?.pucc_number || result?.pucc_no || result?.puc_number || result?.puc_no || rawDocument?.pucNumber || '' },
+      { label: 'PUC Valid Upto', value: result?.vehicle_pucc_upto || result?.pucc_upto || result?.puc_upto || rawDocument?.pucValidUpto || '' },
     ].filter((item) => toDisplayValue(item.value));
   }
 
@@ -224,16 +243,19 @@ const getDocumentVerificationFacts = (doc = {}) => {
 };
 
 const getRcVerificationChecks = (doc = {}) => {
+  const rawDocument = doc?.rawDocument || {};
   const verificationType = getDocumentVerificationType(doc, doc?.sourceKey);
   if (verificationType !== 'rc') {
     return [];
   }
 
-  const response = doc?.verificationResponse || {};
+  const response = doc?.verificationResponse || rawDocument?.verificationResponse || {};
   const result = response?.cardData?.result || {};
   const seatCapacity = result?.seat_capacity ?? result?.seating_capacity ?? result?.seating_cap ?? result?.no_of_seat ?? result?.seat ?? '';
-  const insuranceUpto = result?.vehicle_insurance_upto ?? result?.insurance_upto ?? result?.insurance_expiry ?? doc?.vehicleInsuranceUpto ?? '';
-  const puccUpto = result?.pucc_upto ?? result?.puc_upto ?? result?.pollution_upto ?? result?.vehicle_pucc_upto ?? '';
+  const insuranceUpto = result?.vehicle_insurance_upto ?? result?.insurance_upto ?? result?.insurance_expiry ?? rawDocument?.vehicleInsuranceUpto ?? doc?.vehicleInsuranceUpto ?? '';
+  const puccUpto = result?.vehicle_pucc_upto ?? result?.pucc_upto ?? result?.puc_upto ?? result?.pollution_upto ?? rawDocument?.pucValidUpto ?? rawDocument?.vehicle_pucc_upto ?? doc?.vehicle_pucc_upto ?? '';
+  const permitUpto = result?.permit_valid_upto ?? result?.permit_upto ?? rawDocument?.permitValidUpto ?? '';
+  const fitnessUpto = result?.fitness_upto ?? result?.vehicle_fitness_upto ?? rawDocument?.vehicleFitnessUpto ?? '';
   const commercialValue =
     result?.commercial_vehicle ??
     result?.is_commercial ??
@@ -259,6 +281,16 @@ const getRcVerificationChecks = (doc = {}) => {
       label: 'PUCC Check',
       value: puccUpto,
       status: normalizeCheckStatus(result?.pucc_status || result?.puc_status || puccUpto),
+    },
+    {
+      label: 'Permit Check',
+      value: permitUpto,
+      status: normalizeCheckStatus(permitUpto),
+    },
+    {
+      label: 'Fitness Check',
+      value: fitnessUpto,
+      status: normalizeCheckStatus(fitnessUpto),
     },
     {
       label: 'Commercial Vehicle Check',
@@ -396,6 +428,8 @@ const normalizeDocumentEntry = (doc = {}, fallbackKey = '') => {
   const fileNames = getDocumentFileNames(doc, images);
 
   return {
+    ...doc,
+    rawDocument: doc,
     sourceKey: doc?.key || doc?.documentKey || doc?.type || fallbackKey || doc?.name || '',
     name:
       doc?.name ||

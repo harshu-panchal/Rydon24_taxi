@@ -20,6 +20,7 @@ import {
   persistDriverAuthSession,
   saveDriverDocuments,
   saveDriverRegistrationSession,
+  verifyDriverOnboardingLicenseDocument,
 } from '../../services/registrationService';
 import {
   flattenDriverDocumentFields,
@@ -85,6 +86,22 @@ const templateNeedsBirthDate = (template = {}) =>
 
 const templateSupportsRequestNumber = (template = {}) =>
   normalizeVerificationType(template?.verification_type) === 'driving_license';
+
+const getDrivingLicenseVerificationDetails = (document = {}) =>
+  [
+    { key: 'verifiedName', label: 'Name' },
+    { key: 'verifiedDob', label: 'Date of Birth' },
+    { key: 'dlStatus', label: 'DL Status' },
+    { key: 'issuingRtoName', label: 'Issuing RTO' },
+    { key: 'relativeName', label: 'Relative Name' },
+    { key: 'requestNumber', label: 'Request Number' },
+  ]
+    .map(({ key, label }) => ({
+      key,
+      label,
+      value: String(document?.[key] || document?.[key === 'requestNumber' ? 'request_no' : ''] || '').trim(),
+    }))
+    .filter((item) => item.value);
 
 const buildTemplateMetaState = (templates = [], documents = {}) =>
   Object.fromEntries(
@@ -323,8 +340,11 @@ const StepDocuments = () => {
       Object.entries(session.documents || {}).map(([key, value]) => [key, normalizeDocument(value)]),
     ),
   );
-  const [documentMeta, setDocumentMeta] = useState({});
+  const [documentMeta, setDocumentMeta] = useState(() => session.documentMeta || {});
   const [uploading, setUploading] = useState(null);
+  const [verifyingTemplateId, setVerifyingTemplateId] = useState('');
+  const [verificationMessages, setVerificationMessages] = useState({});
+  const [verificationErrors, setVerificationErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -688,6 +708,98 @@ const StepDocuments = () => {
     } catch (error) {
       setError(error?.message || 'Unable to open the camera');
       triggerCameraFileInput(key);
+    }
+  };
+
+  const handleVerifyDrivingLicense = async (template) => {
+    const templateId = String(template?.id || '').trim();
+    const templateFields = templateFieldMap[templateId] || [];
+    const primaryField = templateFields[0];
+    const documentKey = String(primaryField?.key || '').trim();
+    const meta = documentMeta[templateId] || {};
+    const identifyNumber = String(meta.identifyNumber || '').trim().toUpperCase();
+    const birthDate = String(meta.birthDate || '').trim();
+    const requestNumber = String(meta.requestNumber || '').trim();
+
+    if (!templateId || !documentKey) {
+      setVerificationErrors((prev) => ({
+        ...prev,
+        [templateId]: 'Driving license document is not configured properly',
+      }));
+      return;
+    }
+
+    if (!identifyNumber) {
+      setVerificationErrors((prev) => ({
+        ...prev,
+        [templateId]: 'Enter the driving license number first',
+      }));
+      return;
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+      setVerificationErrors((prev) => ({
+        ...prev,
+        [templateId]: 'Enter the birth date in YYYY-MM-DD format',
+      }));
+      return;
+    }
+
+    setVerifyingTemplateId(templateId);
+    setVerificationErrors((prev) => ({ ...prev, [templateId]: '' }));
+    setVerificationMessages((prev) => ({ ...prev, [templateId]: '' }));
+    setError('');
+
+    try {
+      const response = await verifyDriverOnboardingLicenseDocument(documentKey, {
+        registrationId: session.registrationId,
+        phone: session.phone,
+        licenseNumber: identifyNumber,
+        birthDate,
+        requestNumber,
+      });
+
+      const payload = unwrap(response);
+      const verifiedDocument = normalizeDocument(payload?.document);
+
+      if (verifiedDocument) {
+        setDocs((current) => ({
+          ...current,
+          [documentKey]: {
+            ...(current[documentKey] || {}),
+            ...verifiedDocument,
+            uploaded: current[documentKey]?.uploaded ?? verifiedDocument.uploaded ?? false,
+          },
+        }));
+      }
+
+      const nextRequestNumber = String(
+        verifiedDocument?.requestNumber ||
+        verifiedDocument?.request_no ||
+        requestNumber,
+      ).trim();
+
+      setDocumentMeta((current) => ({
+        ...current,
+        [templateId]: {
+          ...(current[templateId] || {}),
+          identifyNumber,
+          birthDate,
+          requestNumber: nextRequestNumber,
+        },
+      }));
+
+      setVerificationMessages((prev) => ({
+        ...prev,
+        [templateId]: String(payload?.message || 'Driving license verified successfully').trim(),
+      }));
+    } catch (requestError) {
+      setVerificationErrors((prev) => ({
+        ...prev,
+        [templateId]: requestError?.message || 'Unable to verify driving license',
+      }));
+    } finally {
+      setVerifyingTemplateId('');
     }
   };
 
@@ -1098,6 +1210,59 @@ const StepDocuments = () => {
                             />
                           </div>
                         </div>
+                      </div>
+                    ) : null}
+
+                    {normalizeVerificationType(template.verification_type) === 'driving_license' ? (
+                      <div className="space-y-3">
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleVerifyDrivingLicense(template)}
+                            disabled={verifyingTemplateId === template.id}
+                            className={`rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-[0.15em] transition-colors ${
+                              verifyingTemplateId === template.id
+                                ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                                : 'bg-slate-900 text-white hover:bg-black'
+                            }`}
+                          >
+                            {verifyingTemplateId === template.id ? 'Verifying...' : 'Verify DL'}
+                          </button>
+                        </div>
+                        {verificationMessages[template.id] ? (
+                          <p className="text-[10px] font-bold text-emerald-600 px-1">{verificationMessages[template.id]}</p>
+                        ) : null}
+                        {verificationErrors[template.id] ? (
+                          <p className="text-[10px] font-bold text-amber-600 px-1">{verificationErrors[template.id]}</p>
+                        ) : null}
+                        {(() => {
+                          const primaryField = (templateFieldMap[template.id] || [])[0];
+                          const verifiedDoc = primaryField ? docs[primaryField.key] : null;
+                          const details = getDrivingLicenseVerificationDetails(verifiedDoc);
+
+                          if (details.length === 0) {
+                            return null;
+                          }
+
+                          return (
+                            <div className="rounded-[1.8rem] border border-emerald-100 bg-emerald-50/50 p-4">
+                              <div className="flex items-center gap-2 px-1">
+                                <ShieldCheck size={15} className="text-emerald-600" />
+                                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-emerald-700">
+                                  Verified From DL
+                                </p>
+                              </div>
+                              <div className="mt-3 grid grid-cols-2 gap-3">
+                                {details.map((item) => (
+                                  <div key={item.key} className="rounded-2xl bg-white/90 px-3 py-2">
+                                    <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400">{item.label}</p>
+                                    <p className="mt-1 text-[12px] font-bold text-slate-900 break-words">{item.value}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     ) : null}
 

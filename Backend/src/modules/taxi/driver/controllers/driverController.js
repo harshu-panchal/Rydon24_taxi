@@ -80,6 +80,7 @@ import {
   getDriverOnboardingSession,
   getDriverOnboardingSignupOptions,
   saveDriverDocuments,
+  verifyDriverOnboardingLicenseDocument,
   saveDriverRoleDetails,
   setDriverOnboardingRole,
   saveDriverPersonalDetails,
@@ -101,7 +102,7 @@ import {
   summarizePhonePePayload,
   summarizePhonePeRequestBody,
 } from "../../services/paymentDiagnostics.js";
-import { requestDrivingLicenseVerificationWithRecharge, verifyBankAccountWithRecharge, verifyDrivingLicenseWithRecharge, verifyGstinWithRecharge, verifyPanWithRecharge, verifyRcWithRecharge, verifyUpiWithRecharge } from "../../services/rechargeVerificationService.js";
+import { verifyBankAccountWithRecharge, verifyDrivingLicenseWithRecharge, verifyGstinWithRecharge, verifyPanWithRecharge, verifyRcWithRecharge, verifyUpiWithRecharge } from "../../services/rechargeVerificationService.js";
 
 const generateDriverReferralCode = (driver) => {
   const idPart = String(driver?._id || "")
@@ -3633,44 +3634,26 @@ export const verifyCurrentDriverLicenseDocument = async (req, res) => {
     throw new ApiError(400, "Driving license number is required before verification");
   }
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
-    throw new ApiError(400, "Birth date must use YYYY-MM-DD format before verification");
-  }
-
-  let resolvedRequestNumber = requestNumber;
-
-  if (!resolvedRequestNumber) {
-    const requestResponse = await requestDrivingLicenseVerificationWithRecharge({
-      licenseNumber,
-      birthDate,
-    });
-
-    resolvedRequestNumber = String(
-      requestResponse?.cardData?.request_id ||
-      requestResponse?.request_id ||
-      requestResponse?.data?.request_id ||
-      "",
-    ).trim();
-
-    if (!resolvedRequestNumber) {
-      throw new ApiError(502, "RechargeKit did not return a driving license request id");
-    }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) && !/^\d{2}\/\d{2}\/\d{4}$/.test(birthDate)) {
+    throw new ApiError(400, "Birth date must use YYYY-MM-DD or DD/MM/YYYY format before verification");
   }
 
   const providerResponse = await verifyDrivingLicenseWithRecharge({
     licenseNumber,
     birthDate,
     partnerRequestId: buildDriverLicenseVerificationRequestId(driver),
-    requestNumber: resolvedRequestNumber,
+    requestNumber,
   });
 
   const result = providerResponse?.cardData?.result || {};
-  const sourceOutput = result?.source_output || {};
+  const licenseDetails = result?.details_of_driving_licence || {};
+  const nonTransportValidity = result?.dl_validity?.non_transport || {};
+  const badgeDetails = Array.isArray(result?.badge_details) ? result.badge_details : [];
+  const firstBadge = badgeDetails[0] || {};
   const verificationSucceeded = String(providerResponse?.status || "") === "1" || Number(providerResponse?.status || 0) === 1;
   const verificationMessage = String(
     providerResponse?.msg ||
-    result?.status ||
-    sourceOutput?.dl_status ||
+    licenseDetails?.status ||
     "",
   ).trim();
 
@@ -3684,14 +3667,16 @@ export const verifyCurrentDriverLicenseDocument = async (req, res) => {
     birthDate,
     birth_date: birthDate,
     requestNumber: String(
-      providerResponse?.optransid ||
+      providerResponse?.partnerreqid ||
       providerResponse?.cardData?.request_id ||
-      resolvedRequestNumber,
+      providerResponse?.orderid ||
+      requestNumber,
     ).trim(),
     request_no: String(
-      providerResponse?.optransid ||
+      providerResponse?.partnerreqid ||
       providerResponse?.cardData?.request_id ||
-      resolvedRequestNumber,
+      providerResponse?.orderid ||
+      requestNumber,
     ).trim(),
     verificationStatus: verificationSucceeded ? "verified" : "failed",
     reviewStatus: verificationSucceeded ? "verified" : "failed",
@@ -3704,15 +3689,23 @@ export const verifyCurrentDriverLicenseDocument = async (req, res) => {
     reason: verificationSucceeded ? "" : verificationMessage,
     verificationReferenceId: String(
       providerResponse?.orderid ||
-      providerResponse?.optransid ||
+      providerResponse?.partnerreqid ||
       providerResponse?.cardData?.request_id ||
       "",
     ).trim(),
-    verifiedName: String(sourceOutput?.name || "").trim(),
-    verifiedDob: String(sourceOutput?.dob || birthDate).trim(),
-    dlStatus: String(sourceOutput?.dl_status || "").trim(),
-    issuingRtoName: String(sourceOutput?.issuing_rto_name || "").trim(),
-    relativeName: String(sourceOutput?.relatives_name || "").trim(),
+    verifiedName: String(licenseDetails?.name || "").trim(),
+    verifiedDob: String(result?.dob || birthDate).trim(),
+    dlStatus: String(licenseDetails?.status || "").trim(),
+    issuingRtoName: "",
+    relativeName: String(licenseDetails?.father_or_husband_name || "").trim(),
+    dlNumber: String(result?.dl_number || licenseNumber).trim(),
+    nonTransportValidFrom: String(nonTransportValidity?.from || "").trim(),
+    nonTransportValidTo: String(nonTransportValidity?.to || "").trim(),
+    transportValidFrom: String(result?.dl_validity?.transport?.from || "").trim(),
+    transportValidTo: String(result?.dl_validity?.transport?.to || "").trim(),
+    badgeNumber: String(firstBadge?.badge_no || "").trim(),
+    badgeIssueDate: String(firstBadge?.badge_issue_date || "").trim(),
+    classOfVehicle: Array.isArray(firstBadge?.class_of_vehicle) ? firstBadge.class_of_vehicle : [],
     verificationResponse: providerResponse,
   };
 
@@ -3956,6 +3949,24 @@ export const verifyCurrentDriverRcDocument = async (req, res) => {
     vehicleManufacturer: String(result?.vehicle_manufacturer_name || "").trim(),
     vehicleRegistrationDate: String(result?.reg_date || "").trim(),
     vehicleInsuranceUpto: String(result?.vehicle_insurance_upto || "").trim(),
+    vehicleFitnessUpto: String(result?.fitness_upto || result?.vehicle_fitness_upto || "").trim(),
+    permitNumber: String(result?.permit_no || result?.permit_number || "").trim(),
+    permitValidUpto: String(result?.permit_valid_upto || result?.permit_upto || "").trim(),
+    pucNumber: String(
+      result?.vehicle_pucc_number ||
+      result?.pucc_number ||
+      result?.pucc_no ||
+      result?.puc_number ||
+      result?.puc_no ||
+      "",
+    ).trim(),
+    pucValidUpto: String(
+      result?.vehicle_pucc_upto ||
+      result?.pucc_upto ||
+      result?.puc_valid_upto ||
+      result?.puc_upto ||
+      "",
+    ).trim(),
     verificationResponse: providerResponse,
   };
 
@@ -9712,6 +9723,14 @@ export const saveOnboardingVehicle = async (req, res) => {
 
 export const verifyOnboardingVehicleRc = async (req, res) => {
   const result = await verifyDriverVehicleRc(req.body);
+  res.json({ success: true, data: result });
+};
+
+export const verifyOnboardingLicenseDocument = async (req, res) => {
+  const result = await verifyDriverOnboardingLicenseDocument({
+    ...req.body,
+    documentKey: req.params.documentKey,
+  });
   res.json({ success: true, data: result });
 };
 

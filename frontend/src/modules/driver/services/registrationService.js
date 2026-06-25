@@ -206,6 +206,9 @@ export const saveDriverVehicle = (payload) =>
 export const verifyDriverVehicleRc = (payload) =>
   api.post("/drivers/onboarding/vehicle/verify-rc", payload);
 
+export const verifyDriverOnboardingLicenseDocument = (documentKey, payload) =>
+  api.post(`/drivers/onboarding/documents/${encodeURIComponent(documentKey)}/verify-license`, payload);
+
 export const saveDriverDocuments = (payload) =>
   api.patch("/drivers/onboarding/documents", payload);
 
