@@ -1790,7 +1790,7 @@ export const updateRideDriverLocation = async ({ rideId, driverId, coordinates, 
       },
     },
     {
-      new: true,
+      returnDocument: 'after',
       projection: {
         _id: 1,
         lastDriverLocation: 1,
@@ -1937,7 +1937,7 @@ export const increaseRideBidCeiling = async ({ rideId, userId, incrementSteps = 
         },
       },
       {
-        new: true,
+        returnDocument: 'after',
         runValidators: true,
       },
     );
@@ -1982,7 +1982,7 @@ export const increaseRideBidCeiling = async ({ rideId, userId, incrementSteps = 
       },
     },
     {
-      new: true,
+      returnDocument: 'after',
       runValidators: true,
     },
   );
