@@ -22,6 +22,11 @@ const TERMINAL_STATUSES = new Set(['completed', 'cancelled', 'delivered']);
 const ACTIVE_RIDE_VALIDATE_MS = 15000;
 const COMPLETED_TRACKING_STATUSES = new Set(['completed', 'delivered']);
 const POST_RIDE_REDIRECT_STATUSES = new Set(['arrived', 'completed', 'delivered']);
+const ROUTE_REFRESH_MIN_DISTANCE_METERS = 30;
+const ROUTE_REFRESH_MIN_INTERVAL_MS = 4000;
+const ROUTE_PROGRESS_CAPTURE_METERS = 40;
+const ROUTE_DESTINATION_CHANGE_METERS = 15;
+const MAX_ROUTE_CACHE_ENTRIES = 120;
 
 const toLatLng = (coords, fallback = DEFAULT_CENTER) => {
   const [lng, lat] = coords || [];
@@ -37,6 +42,24 @@ const arePositionsNearlyEqual = (first, second, threshold = 0.0002) => (
   Math.abs(Number(first?.lat ?? 0) - Number(second?.lat ?? 0)) < threshold &&
   Math.abs(Number(first?.lng ?? 0) - Number(second?.lng ?? 0)) < threshold
 );
+
+const toRadians = (value) => Number(value || 0) * (Math.PI / 180);
+
+const getDistanceMeters = (first, second) => {
+  if (!first || !second) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const earthRadiusMeters = 6371000;
+  const deltaLat = toRadians(Number(second.lat) - Number(first.lat));
+  const deltaLng = toRadians(Number(second.lng) - Number(first.lng));
+  const startLat = toRadians(first.lat);
+  const endLat = toRadians(second.lat);
+  const haversine = Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(startLat) * Math.cos(endLat) * Math.sin(deltaLng / 2) ** 2;
+
+  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+};
 
 const normalizeHeading = (value, fallback = 0) => {
   const numeric = Number(value);
@@ -195,6 +218,46 @@ const getRouteCacheKey = (origin, destination) => {
     point ? `${Number(point.lat || 0).toFixed(5)},${Number(point.lng || 0).toFixed(5)}` : '';
 
   return `${serializePoint(origin)}|${serializePoint(destination)}`;
+};
+
+const trimRoutePathFromPosition = (path = [], position) => {
+  if (!Array.isArray(path) || path.length < 2 || !position) {
+    return null;
+  }
+
+  let nearestIndex = -1;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  path.forEach((point, index) => {
+    const distance = getDistanceMeters(position, point);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestIndex = index;
+    }
+  });
+
+  if (nearestIndex < 0 || nearestDistance > ROUTE_PROGRESS_CAPTURE_METERS) {
+    return null;
+  }
+
+  if (nearestIndex >= path.length - 1) {
+    return [position];
+  }
+
+  return [position, ...path.slice(nearestIndex + 1)];
+};
+
+const rememberRouteCacheEntry = (cache, key, value) => {
+  cache.set(key, value);
+
+  if (cache.size <= MAX_ROUTE_CACHE_ENTRIES) {
+    return;
+  }
+
+  const firstKey = cache.keys().next().value;
+  if (firstKey) {
+    cache.delete(firstKey);
+  }
 };
 
 const formatScheduledDateTime = (value) => {
@@ -363,6 +426,11 @@ const RideTracking = () => {
   const [arrivalClockFallbackAt, setArrivalClockFallbackAt] = useState('');
   const [waitingNow, setWaitingNow] = useState(Date.now());
   const routeCacheRef = useRef(new Map());
+  const lastResolvedRouteRef = useRef({
+    origin: null,
+    destination: null,
+    resolvedAt: 0,
+  });
   const { settings } = useSettings();
   const appName = settings.general?.app_name || 'App';
   const navigate = useNavigate();
@@ -990,6 +1058,11 @@ const RideTracking = () => {
     if (isScheduledUpcoming && !hasLiveDriverLocation) {
       setRoutePath([]);
       setRouteError('');
+      lastResolvedRouteRef.current = {
+        origin: null,
+        destination: null,
+        resolvedAt: 0,
+      };
       return;
     }
 
@@ -1005,11 +1078,40 @@ const RideTracking = () => {
       return;
     }
 
+    const trimmedRoutePath = trimRoutePathFromPosition(routePath, driverPosition);
+    if (trimmedRoutePath) {
+      const currentFirstPoint = routePath[0];
+      const nextFirstPoint = trimmedRoutePath[0];
+      const shouldUpdateRoutePath = routePath.length !== trimmedRoutePath.length ||
+        !arePositionsNearlyEqual(currentFirstPoint, nextFirstPoint, 0.00001);
+
+      if (shouldUpdateRoutePath) {
+        setRoutePath(trimmedRoutePath);
+      }
+    }
+
+    const now = Date.now();
+    const lastResolvedRoute = lastResolvedRouteRef.current;
+    const destinationChanged = !lastResolvedRoute.destination ||
+      getDistanceMeters(lastResolvedRoute.destination, activeDestination) > ROUTE_DESTINATION_CHANGE_METERS;
+    const movedEnough = !lastResolvedRoute.origin ||
+      getDistanceMeters(lastResolvedRoute.origin, driverPosition) > ROUTE_REFRESH_MIN_DISTANCE_METERS;
+    const staleEnough = now - Number(lastResolvedRoute.resolvedAt || 0) >= ROUTE_REFRESH_MIN_INTERVAL_MS;
+
+    if (!destinationChanged && !(movedEnough && staleEnough)) {
+      return;
+    }
+
     const routeCacheKey = getRouteCacheKey(driverPosition, activeDestination);
     const cachedRoute = routeCacheRef.current.get(routeCacheKey);
     if (cachedRoute) {
       setRoutePath(cachedRoute.routePath);
       setRouteError(cachedRoute.routeError);
+      lastResolvedRouteRef.current = {
+        origin: driverPosition,
+        destination: activeDestination,
+        resolvedAt: now,
+      };
       return;
     }
 
@@ -1025,10 +1127,15 @@ const RideTracking = () => {
       }
 
       if (result.status === 'OK' && result.path.length) {
-        routeCacheRef.current.set(routeCacheKey, {
+        rememberRouteCacheEntry(routeCacheRef.current, routeCacheKey, {
           routePath: result.path,
           routeError: '',
         });
+        lastResolvedRouteRef.current = {
+          origin: driverPosition,
+          destination: activeDestination,
+          resolvedAt: Date.now(),
+        };
         setRoutePath(result.path);
         setRouteError('');
         return;
@@ -1036,10 +1143,15 @@ const RideTracking = () => {
 
       const fallbackRoute = [driverPosition, activeDestination];
       const nextRouteError = result.status || 'Directions unavailable';
-      routeCacheRef.current.set(routeCacheKey, {
+      rememberRouteCacheEntry(routeCacheRef.current, routeCacheKey, {
         routePath: fallbackRoute,
         routeError: nextRouteError,
       });
+      lastResolvedRouteRef.current = {
+        origin: driverPosition,
+        destination: activeDestination,
+        resolvedAt: Date.now(),
+      };
       setRoutePath(fallbackRoute);
       setRouteError(nextRouteError);
     })();
@@ -1047,7 +1159,7 @@ const RideTracking = () => {
     return () => {
       active = false;
     };
-  }, [activeDestination, driverPosition, hasLiveDriverLocation, isLoaded, isScheduledUpcoming]);
+  }, [activeDestination, driverPosition, hasLiveDriverLocation, isLoaded, isScheduledUpcoming, routePath]);
 
   useEffect(() => {
     if (!map || !window.google?.maps) {

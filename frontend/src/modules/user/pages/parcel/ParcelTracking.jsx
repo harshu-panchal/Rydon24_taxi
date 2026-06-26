@@ -37,6 +37,11 @@ const TERMINAL_STATUSES = new Set(['completed', 'cancelled', 'delivered']);
 const ACTIVE_RIDE_VALIDATE_MS = 4000;
 const COMPLETED_TRACKING_STATUSES = new Set(['completed', 'delivered']);
 const TIP_OPTIONS = [0, 20, 50, 100];
+const ROUTE_REFRESH_MIN_DISTANCE_METERS = 30;
+const ROUTE_REFRESH_MIN_INTERVAL_MS = 4000;
+const ROUTE_PROGRESS_CAPTURE_METERS = 40;
+const ROUTE_DESTINATION_CHANGE_METERS = 15;
+const MAX_ROUTE_CACHE_ENTRIES = 120;
 
 const toLatLng = (coords, fallback = DEFAULT_CENTER) => {
   const [lng, lat] = coords || [];
@@ -50,6 +55,24 @@ const arePositionsNearlyEqual = (first, second, threshold = 0.0002) => (
   Math.abs(Number(first?.lat ?? 0) - Number(second?.lat ?? 0)) < threshold &&
   Math.abs(Number(first?.lng ?? 0) - Number(second?.lng ?? 0)) < threshold
 );
+
+const toRadians = (value) => Number(value || 0) * (Math.PI / 180);
+
+const getDistanceMeters = (first, second) => {
+  if (!first || !second) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const earthRadiusMeters = 6371000;
+  const deltaLat = toRadians(Number(second.lat) - Number(first.lat));
+  const deltaLng = toRadians(Number(second.lng) - Number(first.lng));
+  const startLat = toRadians(first.lat);
+  const endLat = toRadians(second.lat);
+  const haversine = Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(startLat) * Math.cos(endLat) * Math.sin(deltaLng / 2) ** 2;
+
+  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+};
 
 const normalizeHeading = (value, fallback = 0) => {
   const numeric = Number(value);
@@ -161,6 +184,46 @@ const getRouteCacheKey = (origin, destination) => {
   return `${serializePoint(origin)}|${serializePoint(destination)}`;
 };
 
+const trimRoutePathFromPosition = (path = [], position) => {
+  if (!Array.isArray(path) || path.length < 2 || !position) {
+    return null;
+  }
+
+  let nearestIndex = -1;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  path.forEach((point, index) => {
+    const distance = getDistanceMeters(position, point);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestIndex = index;
+    }
+  });
+
+  if (nearestIndex < 0 || nearestDistance > ROUTE_PROGRESS_CAPTURE_METERS) {
+    return null;
+  }
+
+  if (nearestIndex >= path.length - 1) {
+    return [position];
+  }
+
+  return [position, ...path.slice(nearestIndex + 1)];
+};
+
+const rememberRouteCacheEntry = (cache, key, value) => {
+  cache.set(key, value);
+
+  if (cache.size <= MAX_ROUTE_CACHE_ENTRIES) {
+    return;
+  }
+
+  const firstKey = cache.keys().next().value;
+  if (firstKey) {
+    cache.delete(firstKey);
+  }
+};
+
 const ParcelTracking = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -195,6 +258,11 @@ const ParcelTracking = () => {
   const hasAutoFramedMapRef = useRef(false);
   const hasCompletedRedirectRef = useRef(false);
   const routeCacheRef = useRef(new Map());
+  const lastResolvedRouteRef = useRef({
+    origin: null,
+    destination: null,
+    resolvedAt: 0,
+  });
 
   const rideId = state.rideId || '';
   const tripStatus = String(rideRealtime?.status || state.liveStatus || state.status || 'accepted').toLowerCase();
@@ -644,10 +712,39 @@ const ParcelTracking = () => {
       return;
     }
 
+    const trimmedRoutePath = trimRoutePathFromPosition(routePath, driverPosition);
+    if (trimmedRoutePath) {
+      const currentFirstPoint = routePath[0];
+      const nextFirstPoint = trimmedRoutePath[0];
+      const shouldUpdateRoutePath = routePath.length !== trimmedRoutePath.length ||
+        !arePositionsNearlyEqual(currentFirstPoint, nextFirstPoint, 0.00001);
+
+      if (shouldUpdateRoutePath) {
+        setRoutePath(trimmedRoutePath);
+      }
+    }
+
+    const now = Date.now();
+    const lastResolvedRoute = lastResolvedRouteRef.current;
+    const destinationChanged = !lastResolvedRoute.destination ||
+      getDistanceMeters(lastResolvedRoute.destination, activeDestination) > ROUTE_DESTINATION_CHANGE_METERS;
+    const movedEnough = !lastResolvedRoute.origin ||
+      getDistanceMeters(lastResolvedRoute.origin, driverPosition) > ROUTE_REFRESH_MIN_DISTANCE_METERS;
+    const staleEnough = now - Number(lastResolvedRoute.resolvedAt || 0) >= ROUTE_REFRESH_MIN_INTERVAL_MS;
+
+    if (!destinationChanged && !(movedEnough && staleEnough)) {
+      return;
+    }
+
     const routeCacheKey = getRouteCacheKey(driverPosition, activeDestination);
     const cachedRoute = routeCacheRef.current.get(routeCacheKey);
     if (cachedRoute) {
       setRoutePath(cachedRoute);
+      lastResolvedRouteRef.current = {
+        origin: driverPosition,
+        destination: activeDestination,
+        resolvedAt: now,
+      };
       return;
     }
 
@@ -663,20 +760,30 @@ const ParcelTracking = () => {
       }
 
       if (result.status === 'OK' && result.path.length) {
-        routeCacheRef.current.set(routeCacheKey, result.path);
+        rememberRouteCacheEntry(routeCacheRef.current, routeCacheKey, result.path);
+        lastResolvedRouteRef.current = {
+          origin: driverPosition,
+          destination: activeDestination,
+          resolvedAt: Date.now(),
+        };
         setRoutePath(result.path);
         return;
       }
 
       const fallbackRoute = [driverPosition, activeDestination];
-      routeCacheRef.current.set(routeCacheKey, fallbackRoute);
+      rememberRouteCacheEntry(routeCacheRef.current, routeCacheKey, fallbackRoute);
+      lastResolvedRouteRef.current = {
+        origin: driverPosition,
+        destination: activeDestination,
+        resolvedAt: Date.now(),
+      };
       setRoutePath(fallbackRoute);
     })();
 
     return () => {
       active = false;
     };
-  }, [isLoaded, driverPosition, activeDestination]);
+  }, [activeDestination, driverPosition, isLoaded, routePath]);
 
   useEffect(() => {
     if (!map || !window.google?.maps) {
