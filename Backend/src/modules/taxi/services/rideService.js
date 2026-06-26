@@ -1775,25 +1775,36 @@ export const appendRideMessage = async ({ rideId, role, senderId, message }) => 
 
 export const updateRideDriverLocation = async ({ rideId, driverId, coordinates, heading = null, speed = null }) => {
   const normalizedCoords = normalizePoint(coordinates, 'coordinates');
-  const ride = await Ride.findOne({ _id: rideId, driverId });
-
-  if (!ride) {
-    throw new ApiError(404, 'Assigned ride not found');
-  }
-
-  ride.lastDriverLocation = {
+  const nextDriverLocation = {
     type: 'Point',
     coordinates: normalizedCoords,
     heading: Number.isFinite(Number(heading)) ? Number(heading) : null,
     speed: Number.isFinite(Number(speed)) ? Number(speed) : null,
     updatedAt: new Date(),
   };
+  const ride = await Ride.findOneAndUpdate(
+    { _id: rideId, driverId },
+    {
+      $set: {
+        lastDriverLocation: nextDriverLocation,
+      },
+    },
+    {
+      new: true,
+      projection: {
+        _id: 1,
+        lastDriverLocation: 1,
+      },
+    },
+  ).lean();
 
-  await ride.save();
+  if (!ride) {
+    throw new ApiError(404, 'Assigned ride not found');
+  }
 
   return {
     rideId: String(ride._id),
-    coordinates: normalizedCoords,
+    coordinates: ride.lastDriverLocation?.coordinates || normalizedCoords,
     heading: ride.lastDriverLocation.heading,
     speed: ride.lastDriverLocation.speed,
     updatedAt: ride.lastDriverLocation.updatedAt,

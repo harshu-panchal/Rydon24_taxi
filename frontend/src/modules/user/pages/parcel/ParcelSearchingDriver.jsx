@@ -48,7 +48,8 @@ const unwrapLoginPayload = (response) => {
 const generateOTP = () => String(Math.floor(1000 + Math.random() * 9000));
 const DRIVER_PLACEHOLDER = { name: 'Delivery Captain', rating: '4.9', vehicle: 'Bike', plate: 'Assigned', phone: '', eta: 2 };
 const STAGES = { SEARCHING: 'searching', ACCEPTED: 'accepted' };
-const ACTIVE_DELIVERY_POLL_MS = 1500;
+const ACTIVE_DELIVERY_POLL_MS = 8000;
+const ACTIVE_DELIVERY_POLL_DELAY_MS = 6000;
 const SEARCH_TIMEOUT_MS = 20000;
 const CONSUMED_SEARCH_NONCE_PREFIX = 'rydon24_consumed_parcel_search_nonce:';
 const ACTIVE_SEARCH_NONCES = new Set();
@@ -741,8 +742,13 @@ const ParcelSearchingDriver = () => {
         };
 
         clearInterval(activeRidePollRef.current);
-        activeRidePollRef.current = setInterval(pollActiveRide, ACTIVE_DELIVERY_POLL_MS);
-        pollActiveRide();
+        activeRidePollRef.current = null;
+        const startFallbackPolling = () => {
+          if (disposed || trackingStartedRef.current) return;
+          pollActiveRide();
+          activeRidePollRef.current = setInterval(pollActiveRide, ACTIVE_DELIVERY_POLL_MS);
+        };
+        window.setTimeout(startFallbackPolling, ACTIVE_DELIVERY_POLL_DELAY_MS);
         if (!disposed) {
           setSearchStatus('Booking created. Notifying nearby captains...');
           setNearbyVehicleCount(clampVehicleCount(selectedVehicleTypeIds.length));

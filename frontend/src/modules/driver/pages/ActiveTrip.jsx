@@ -42,6 +42,8 @@ const ARRIVAL_RADIUS_METERS = 100;
 const ROUTE_SIMPLIFY_TOLERANCE = 0.00008;
 const ROUTE_OFF_PATH_METERS = 45;
 const ROUTE_REFRESH_DEBOUNCE_MS = 2500;
+const DRIVER_LOCATION_EMIT_MIN_DISTANCE_METERS = 12;
+const DRIVER_LOCATION_EMIT_MIN_INTERVAL_MS = 3000;
 
 const mapStyles = [
     { elementType: 'geometry', stylers: [{ color: '#f8fafc' }] },
@@ -1049,6 +1051,10 @@ const ActiveTrip = () => {
     const mapFrameKeyRef = React.useRef('');
     const lastRouteRefreshAtRef = React.useRef(0);
     const routeTrimStateRef = React.useRef({ distanceMeters: Number.POSITIVE_INFINITY, shouldRefresh: false });
+    const lastDriverLocationEmitRef = React.useRef({
+        position: null,
+        emittedAt: 0,
+    });
 
     const activeDestination = useMemo(
         () => (phase === 'to_pickup' || phase === 'otp_verification' ? pickupPosition : dropPosition),
@@ -1589,8 +1595,20 @@ const ActiveTrip = () => {
         return () => window.clearInterval(intervalId);
     }, [phase, waitingStartedAt]);
 
-    const publishDriverLocation = (position, heading = displayDriverHeading) => {
+    const publishDriverLocation = (position, heading = displayDriverHeading, { speed = null, force = false } = {}) => {
         if (!rideId || !position) {
+            return;
+        }
+
+        const now = Date.now();
+        const lastEmission = lastDriverLocationEmitRef.current;
+        const movedDistance = getDistanceMeters(lastEmission.position, position);
+        const shouldEmit = force ||
+            !lastEmission.position ||
+            movedDistance >= DRIVER_LOCATION_EMIT_MIN_DISTANCE_METERS ||
+            now - Number(lastEmission.emittedAt || 0) >= DRIVER_LOCATION_EMIT_MIN_INTERVAL_MS;
+
+        if (!shouldEmit) {
             return;
         }
 
@@ -1598,8 +1616,14 @@ const ActiveTrip = () => {
             rideId,
             coordinates: [position.lng, position.lat],
             heading: normalizeHeading(heading),
+            speed,
             simulated: isSimulationEnabledRef.current,
         });
+
+        lastDriverLocationEmitRef.current = {
+            position,
+            emittedAt: now,
+        };
     };
 
     const stopSimulationTimer = () => {
@@ -1849,7 +1873,7 @@ const ActiveTrip = () => {
                     setDriverPosition((previousPosition) => {
                         const nextHeading = calculateBearing(previousPosition, position, displayDriverHeadingRef.current);
                         setDriverHeading(nextHeading);
-                        publishDriverLocation(position, nextHeading);
+                        publishDriverLocation(position, nextHeading, { force: true });
                         return position;
                     });
                 }
@@ -1881,10 +1905,7 @@ const ActiveTrip = () => {
                     );
                     setDriverHeading(nextHeading);
                     if (rideId) {
-                        socketService.emit('ride:driver-location:update', {
-                            rideId,
-                            coordinates: [nextPosition.lng, nextPosition.lat],
-                            heading: nextHeading,
+                        publishDriverLocation(nextPosition, nextHeading, {
                             speed: pos.coords.speed,
                         });
                     }

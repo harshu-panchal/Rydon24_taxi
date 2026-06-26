@@ -57,6 +57,8 @@ const getOverlayCenterOffset = (width, height) => ({
   x: -(width / 2),
   y: -(height / 2),
 });
+const SEARCH_FALLBACK_POLL_DELAY_MS = 10000;
+const SEARCH_FALLBACK_POLL_INTERVAL_MS = 10000;
 
 const PinLocationMarker = ({ position, title, color, size = 34, zIndex = 1 }) => (
   <OverlayView
@@ -748,8 +750,16 @@ const SearchingDriver = () => {
         };
 
         clearInterval(activeRidePollRef.current);
-        activeRidePollRef.current = setInterval(pollActiveRide, 5000);
-        pollActiveRide();
+        activeRidePollRef.current = null;
+        const startFallbackPolling = () => {
+          if (disposed || trackingStartedRef.current) {
+            return;
+          }
+
+          pollActiveRide();
+          activeRidePollRef.current = setInterval(pollActiveRide, SEARCH_FALLBACK_POLL_INTERVAL_MS);
+        };
+        window.setTimeout(startFallbackPolling, SEARCH_FALLBACK_POLL_DELAY_MS);
 
         if (!disposed) {
           setSearchStatus(

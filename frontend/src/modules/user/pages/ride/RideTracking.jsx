@@ -425,6 +425,7 @@ const RideTracking = () => {
   const [vehicleImageBroken, setVehicleImageBroken] = useState(false);
   const [arrivalClockFallbackAt, setArrivalClockFallbackAt] = useState('');
   const [waitingNow, setWaitingNow] = useState(Date.now());
+  const [socketRealtimeHealthy, setSocketRealtimeHealthy] = useState(() => socketService.isConnected());
   const routeCacheRef = useRef(new Map());
   const lastResolvedRouteRef = useRef({
     origin: null,
@@ -876,8 +877,11 @@ const RideTracking = () => {
     const socket = socketService.connect({ role: 'user' });
 
     if (!socket) {
+      setSocketRealtimeHealthy(false);
       return () => {};
     }
+
+    setSocketRealtimeHealthy(socket.connected);
 
     const onRideState = (payload) => {
       if (!payload || String(payload.rideId || '') !== String(rideId)) {
@@ -994,16 +998,25 @@ const RideTracking = () => {
     socketService.on('ride:driver-location:updated', onLocationUpdated);
     socketService.on('ride:status:updated', onStatusUpdated);
     socketService.emit('ride:join', { rideId });
+    const onSocketConnect = () => setSocketRealtimeHealthy(true);
+    const onSocketDisconnect = () => setSocketRealtimeHealthy(false);
+    const onSocketConnectError = () => setSocketRealtimeHealthy(false);
+    socket.on('connect', onSocketConnect);
+    socket.on('disconnect', onSocketDisconnect);
+    socket.on('connect_error', onSocketConnectError);
 
     return () => {
       socketService.off('ride:state', onRideState);
       socketService.off('ride:driver-location:updated', onLocationUpdated);
       socketService.off('ride:status:updated', onStatusUpdated);
+      socket.off('connect', onSocketConnect);
+      socket.off('disconnect', onSocketDisconnect);
+      socket.off('connect_error', onSocketConnectError);
     };
   }, [rideId]);
 
   useEffect(() => {
-    if (!rideId) {
+    if (!rideId || socketRealtimeHealthy) {
       return () => {};
     }
 
@@ -1052,7 +1065,7 @@ const RideTracking = () => {
       },
       () => {},
     );
-  }, [rideId]);
+  }, [rideId, socketRealtimeHealthy]);
 
   useEffect(() => {
     if (isScheduledUpcoming && !hasLiveDriverLocation) {

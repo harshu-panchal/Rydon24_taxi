@@ -240,6 +240,7 @@ const ParcelTracking = () => {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [shareToast, setShareToast] = useState(false);
   const [map, setMap] = useState(null);
+  const [socketRealtimeHealthy, setSocketRealtimeHealthy] = useState(() => socketService.isConnected());
   const [rating, setRating] = useState(() => Number(state.feedback?.rating || 0));
   const [comment, setComment] = useState(() => state.feedback?.comment || '');
   const [selectedTip, setSelectedTip] = useState(() => Number(state.feedback?.tipAmount || 0));
@@ -495,7 +496,10 @@ const ParcelTracking = () => {
   useEffect(() => {
     if (!rideId) return;
     const socket = socketService.connect({ role: 'user' });
-    if (!socket) return;
+    if (!socket) {
+      setSocketRealtimeHealthy(false);
+      return;
+    }
 
     const onRideState = (payload) => {
       if (String(payload?.rideId) !== String(rideId)) {
@@ -625,11 +629,21 @@ const ParcelTracking = () => {
     socketService.on('ride:driver-location:updated', onLocationUpdated);
     socketService.on('ride:status:updated', onStatusUpdated);
     socketService.emit('ride:join', { rideId });
+    setSocketRealtimeHealthy(socket.connected);
+    const onSocketConnect = () => setSocketRealtimeHealthy(true);
+    const onSocketDisconnect = () => setSocketRealtimeHealthy(false);
+    const onSocketConnectError = () => setSocketRealtimeHealthy(false);
+    socket.on('connect', onSocketConnect);
+    socket.on('disconnect', onSocketDisconnect);
+    socket.on('connect_error', onSocketConnectError);
 
     return () => {
       socketService.off('ride:state', onRideState);
       socketService.off('ride:driver-location:updated', onLocationUpdated);
       socketService.off('ride:status:updated', onStatusUpdated);
+      socket.off('connect', onSocketConnect);
+      socket.off('disconnect', onSocketDisconnect);
+      socket.off('connect_error', onSocketConnectError);
     };
   }, [rideId, navigate, routePrefix, userHomeRoute]);
 
@@ -647,7 +661,7 @@ const ParcelTracking = () => {
   }, [navigate, tripStatus, userHomeRoute]);
 
   useEffect(() => {
-    if (!rideId) {
+    if (!rideId || socketRealtimeHealthy) {
       return () => {};
     }
 
@@ -698,7 +712,7 @@ const ParcelTracking = () => {
       },
       () => {},
     );
-  }, [rideId]);
+  }, [rideId, socketRealtimeHealthy]);
 
   // Route Path Update
   useEffect(() => {
