@@ -283,7 +283,7 @@ const StepVehicle = () => {
             rcVerificationMessage,
             dlVerificationMessage,
         });
-    }, [formData, rcVerificationDetails, rcVerificationMessage, dlVerificationMessage, session]);
+    }, [formData, rcVerificationDetails, rcVerificationMessage, dlVerificationMessage]);
 
     useEffect(() => {
         if (isOwner) {
@@ -306,14 +306,34 @@ const StepVehicle = () => {
         const storedDoc = normalizeOnboardingDocument(
             storedSession.documents?.[docKey] || session.documents?.[docKey] || null,
         );
-
-        setDlMeta({
+        const nextDlMeta = {
             identifyNumber: String(storedMeta.identifyNumber || storedDoc?.identifyNumber || storedDoc?.identify_number || '').trim(),
             birthDate: String(storedMeta.birthDate || storedDoc?.birthDate || storedDoc?.birth_date || '').trim(),
             requestNumber: String(storedMeta.requestNumber || storedDoc?.requestNumber || storedDoc?.request_no || '').trim(),
+        };
+
+        setDlMeta((current) =>
+            current.identifyNumber === nextDlMeta.identifyNumber &&
+            current.birthDate === nextDlMeta.birthDate &&
+            current.requestNumber === nextDlMeta.requestNumber
+                ? current
+                : nextDlMeta,
+        );
+        setDlVerificationDetails((current) => {
+            const currentPreview = String(current?.previewUrl || current?.secureUrl || '').trim();
+            const nextPreview = String(storedDoc?.previewUrl || storedDoc?.secureUrl || '').trim();
+            const currentIdentifyNumber = String(current?.identifyNumber || current?.identify_number || '').trim();
+            const nextIdentifyNumber = String(storedDoc?.identifyNumber || storedDoc?.identify_number || '').trim();
+            const currentRequestNumber = String(current?.requestNumber || current?.request_no || '').trim();
+            const nextRequestNumber = String(storedDoc?.requestNumber || storedDoc?.request_no || '').trim();
+
+            return currentPreview === nextPreview &&
+                currentIdentifyNumber === nextIdentifyNumber &&
+                currentRequestNumber === nextRequestNumber
+                ? current
+                : storedDoc;
         });
-        setDlVerificationDetails(storedDoc);
-    }, [documentTemplates, isOwner, session.documentMeta, session.documents]);
+    }, [documentTemplates, isOwner]);
 
     useEffect(() => {
         if (!phone || !registrationId) {

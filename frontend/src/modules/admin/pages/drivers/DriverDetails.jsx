@@ -102,6 +102,9 @@ const getDocumentProviderVerificationStatus = (doc = {}) => {
 
 const getDocumentProviderVerificationMessage = (doc = {}) =>
   String(
+    doc?.verificationResponse?.msg ??
+    doc?.verificationResponse?.message ??
+    doc?.verificationResponse?.cardData?.response?.message ??
     doc?.verificationMessage ??
     doc?.msg ??
     doc?.providerMessage ??
@@ -334,6 +337,16 @@ const formatDateTime = (value) => {
     hour: '2-digit',
     minute: '2-digit',
   });
+};
+
+const formatVerificationResponse = (value) => {
+  if (!value) return '';
+
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
 };
 
 const humanizeDocumentKey = (value = '') =>
@@ -1178,6 +1191,16 @@ const DriverDetails = () => {
                                   </div>
                                 ))}
                               </div>
+                            ) : null}
+                            {doc.verificationResponse ? (
+                              <details className="mt-3 rounded-lg border border-sky-100 bg-sky-50/50 p-3">
+                                <summary className="cursor-pointer text-[11px] font-semibold text-sky-700">
+                                  View Full API Response
+                                </summary>
+                                <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md bg-slate-950 p-3 text-[10px] leading-5 text-slate-100">
+                                  {formatVerificationResponse(doc.verificationResponse)}
+                                </pre>
+                              </details>
                             ) : null}
                           </td>
                           <td className="px-4 py-3">
