@@ -26,6 +26,10 @@ const withTimeout = async (promise, timeoutMs, label = 'Redis command') => {
 };
 
 const attachRedisEventLogging = (client) => {
+  client.on('connect', () => {
+    console.log('[redis] connected');
+  });
+
   client.on('error', (error) => {
     console.error('[redis] client error', error?.message || error);
   });
@@ -120,7 +124,7 @@ export const runRedisCommand = async (executor, { label = 'Redis command' } = {}
   }
 
   try {
-    const client = await withTimeout(connectRedis(), env.redis.commandTimeoutMs, `${label} connect`);
+    const client = await withTimeout(connectRedis(), env.redis.connectTimeoutMs, `${label} connect`);
     if (!client?.isReady) {
       return { ok: false, reason: 'not_ready', value: null };
     }
