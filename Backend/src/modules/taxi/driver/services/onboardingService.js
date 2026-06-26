@@ -574,6 +574,24 @@ const uploadRegistrationDocument = async (documentKey, value) => {
   const expiryDate = typeof value === 'object'
     ? String(value.expiryDate || value.expiry_date || value.expiry || value.expiresAt || '').trim()
     : '';
+  const birthDate = typeof value === 'object'
+    ? String(value.birthDate || value.birth_date || '').trim()
+    : '';
+  const requestNumber = typeof value === 'object'
+    ? String(value.requestNumber || value.request_no || '').trim()
+    : '';
+  const ifsc = typeof value === 'object'
+    ? String(value.ifsc || value.ifscCode || value.ifsc_code || '').trim().toUpperCase()
+    : '';
+  const accountHolderName = typeof value === 'object'
+    ? String(
+      value.accountHolderName ||
+      value.account_holder_name ||
+      value.beneficiaryName ||
+      value.benificiary_name ||
+      '',
+    ).trim()
+    : '';
 
   if (!dataUrl) {
     throw new ApiError(400, `${documentKey} must contain an image data URL`);
@@ -609,6 +627,17 @@ const uploadRegistrationDocument = async (documentKey, value) => {
     document_number: identifyNumber,
     expiryDate,
     expiry_date: expiryDate,
+    birthDate,
+    birth_date: birthDate,
+    requestNumber,
+    request_no: requestNumber,
+    ifsc,
+    ifscCode: ifsc,
+    ifsc_code: ifsc,
+    accountHolderName,
+    account_holder_name: accountHolderName,
+    beneficiaryName: accountHolderName,
+    benificiary_name: accountHolderName,
     cloudinary: uploaded,
   };
 };
@@ -1194,7 +1223,12 @@ export const saveDriverDocuments = async ({ registrationId, phone, documents = {
     const uploadedDocument = await uploadRegistrationDocument(documentKey, value);
 
     if (uploadedDocument) {
-      updatedDocuments[documentKey] = uploadedDocument;
+      const existingDocument = session.documents?.[documentKey];
+      updatedDocuments[documentKey] = normalizeStoredDocument({
+        ...(typeof existingDocument === 'object' && existingDocument ? existingDocument : {}),
+        ...uploadedDocument,
+        key: documentKey,
+      });
       uploadedDocumentKeys.push(documentKey);
     }
   }

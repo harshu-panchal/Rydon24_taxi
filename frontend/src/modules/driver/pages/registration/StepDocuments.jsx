@@ -577,7 +577,12 @@ const StepDocuments = () => {
         mimeType: effectiveMimeType,
         uploaded: true,
       };
-      const nextDocWithMeta = applyTemplateMetaToDocuments(templateId, { [key]: nextDoc })[key];
+      const nextDocWithMeta = applyTemplateMetaToDocuments(templateId, {
+        [key]: {
+          ...(docs[key] || {}),
+          ...nextDoc,
+        },
+      })[key];
 
       setDocs((prev) => ({
         ...prev,
