@@ -138,6 +138,32 @@ const BIOMETRIC_FINGER_CODES = [
 const BIOMETRIC_CAPTURE_SOURCES = ["phone_sensor", "usb_scanner", "bluetooth_scanner", "manual", "unknown"];
 const BIOMETRIC_ENROLLMENT_MODES = ["thumbs_only", "optional", "all_ten"];
 const BIOMETRIC_STATUSES = ["not_started", "in_progress", "completed", "verified"];
+
+const resolveRechargeVerificationState = (providerResponse = {}, fallbackMessage = "") => {
+  const normalizedStatus = String(providerResponse?.status ?? "").trim().toLowerCase();
+  const message = String(
+    providerResponse?.cardData?.response?.message ||
+    providerResponse?.cardData?.message ||
+    providerResponse?.msg ||
+    providerResponse?.message ||
+    fallbackMessage ||
+    "",
+  ).trim();
+  const lowerMessage = message.toLowerCase();
+  const explicitPending =
+    ["pending", "processing", "queued", "in_progress", "in progress"].includes(normalizedStatus) ||
+    lowerMessage.includes("pending") ||
+    lowerMessage.includes("processing") ||
+    lowerMessage.includes("try after sometime") ||
+    lowerMessage.includes("please try after sometime");
+  const succeeded = normalizedStatus === "1" || normalizedStatus === "success" || normalizedStatus === "verified" || Number(providerResponse?.status || 0) === 1;
+
+  return {
+    succeeded,
+    status: succeeded ? "verified" : explicitPending ? "pending" : "failed",
+    message,
+  };
+};
 const BIOMETRIC_MIN_MATCH_SCORE = 80;
 
 const toIstDayKey = (value = new Date()) =>
@@ -3497,18 +3523,13 @@ export const verifyCurrentDriverBankDetails = async (req, res) => {
   });
 
   const accountDetails = providerResponse?.cardData?.response?.account_details || {};
-  const verificationSucceeded = Number(providerResponse?.status || 0) === 1;
+  const verification = resolveRechargeVerificationState(providerResponse);
 
   driver.bankDetails = {
     ...(driver.bankDetails?.toObject?.() || driver.bankDetails || {}),
-    verificationStatus: verificationSucceeded ? "verified" : "failed",
+    verificationStatus: verification.status,
     verificationMode: mode,
-    verificationMessage: String(
-      providerResponse?.cardData?.response?.message
-      || providerResponse?.data?.message
-      || providerResponse?.msg
-      || "",
-    ).trim(),
+    verificationMessage: verification.message,
     verificationReferenceId: String(
       providerResponse?.orderid
       || providerResponse?.optransid
@@ -3519,7 +3540,7 @@ export const verifyCurrentDriverBankDetails = async (req, res) => {
     verifiedBankName: String(accountDetails?.bank_name || "").trim(),
     verifiedBranchName: String(accountDetails?.branch_name || "").trim(),
     verifiedAccountHolderName: String(accountDetails?.beneficiary_name || "").trim(),
-    verifiedAt: new Date(),
+    verifiedAt: verification.succeeded ? new Date() : driver.bankDetails?.verifiedAt || null,
     updatedAt: driver.bankDetails?.updatedAt || new Date(),
   };
 
@@ -3557,17 +3578,13 @@ export const verifyCurrentDriverUpiDetails = async (req, res) => {
   const result = providerResponse?.cardData?.result || {};
   const vpaDetails = result?.vpa_details || {};
   const accountDetails = result?.account_details || {};
-  const verificationSucceeded = Number(providerResponse?.status || 0) === 1 || String(providerResponse?.status || "") === "1";
+  const verification = resolveRechargeVerificationState(providerResponse);
 
   driver.bankDetails = {
     ...(driver.bankDetails?.toObject?.() || driver.bankDetails || {}),
-    upiVerificationStatus: verificationSucceeded ? "verified" : "failed",
+    upiVerificationStatus: verification.status,
     upiVerificationMode: mode,
-    upiVerificationMessage: String(
-      providerResponse?.cardData?.message ||
-      providerResponse?.msg ||
-      "",
-    ).trim(),
+    upiVerificationMessage: verification.message,
     upiVerificationReferenceId: String(
       providerResponse?.orderid ||
       providerResponse?.cardData?.request_id ||
@@ -3577,7 +3594,7 @@ export const verifyCurrentDriverUpiDetails = async (req, res) => {
     upiVerifiedName: String(vpaDetails?.account_holder_name || "").trim(),
     upiAccountIfsc: String(accountDetails?.account_ifsc || "").trim(),
     upiAccountType: String(accountDetails?.account_type || "").trim(),
-    upiVerifiedAt: new Date(),
+    upiVerifiedAt: verification.succeeded ? new Date() : driver.bankDetails?.upiVerifiedAt || null,
     updatedAt: driver.bankDetails?.updatedAt || new Date(),
   };
 
@@ -3650,12 +3667,11 @@ export const verifyCurrentDriverLicenseDocument = async (req, res) => {
   const nonTransportValidity = result?.dl_validity?.non_transport || {};
   const badgeDetails = Array.isArray(result?.badge_details) ? result.badge_details : [];
   const firstBadge = badgeDetails[0] || {};
-  const verificationSucceeded = String(providerResponse?.status || "") === "1" || Number(providerResponse?.status || 0) === 1;
-  const verificationMessage = String(
-    providerResponse?.msg ||
-    licenseDetails?.status ||
-    "",
-  ).trim();
+  const verification = resolveRechargeVerificationState(
+    providerResponse,
+    String(licenseDetails?.status || "").trim(),
+  );
+  const verificationMessage = verification.message;
 
   const updatedDocument = {
     ...(typeof existingDocument === "object" ? existingDocument : {}),
@@ -3678,15 +3694,9 @@ export const verifyCurrentDriverLicenseDocument = async (req, res) => {
       providerResponse?.orderid ||
       requestNumber,
     ).trim(),
-    verificationStatus: verificationSucceeded ? "verified" : "failed",
-    reviewStatus: verificationSucceeded ? "verified" : "failed",
-    status: verificationSucceeded ? "verified" : "failed",
-    verifiedAt: new Date().toISOString(),
-    reviewedAt: new Date().toISOString(),
+    verificationStatus: verification.status,
+    verifiedAt: verification.succeeded ? new Date().toISOString() : existingDocument.verifiedAt || null,
     verificationMessage,
-    comment: verificationSucceeded ? "" : verificationMessage,
-    remarks: verificationSucceeded ? "" : verificationMessage,
-    reason: verificationSucceeded ? "" : verificationMessage,
     verificationReferenceId: String(
       providerResponse?.orderid ||
       providerResponse?.partnerreqid ||
@@ -3757,8 +3767,8 @@ export const verifyCurrentDriverPanDocument = async (req, res) => {
   });
 
   const cardData = providerResponse?.cardData || {};
-  const verificationSucceeded = Number(providerResponse?.status || 0) === 1 || String(providerResponse?.status || "") === "1";
-  const verificationMessage = String(providerResponse?.msg || "").trim();
+  const verification = resolveRechargeVerificationState(providerResponse);
+  const verificationMessage = verification.message;
 
   const updatedDocument = {
     ...(typeof existingDocument === "object" ? existingDocument : {}),
@@ -3767,15 +3777,9 @@ export const verifyCurrentDriverPanDocument = async (req, res) => {
     identify_number: panNumber,
     documentNumber: panNumber,
     document_number: panNumber,
-    verificationStatus: verificationSucceeded ? "verified" : "failed",
-    reviewStatus: verificationSucceeded ? "verified" : "failed",
-    status: verificationSucceeded ? "verified" : "failed",
-    verifiedAt: new Date().toISOString(),
-    reviewedAt: new Date().toISOString(),
+    verificationStatus: verification.status,
+    verifiedAt: verification.succeeded ? new Date().toISOString() : existingDocument.verifiedAt || null,
     verificationMessage,
-    comment: verificationSucceeded ? "" : verificationMessage,
-    remarks: verificationSucceeded ? "" : verificationMessage,
-    reason: verificationSucceeded ? "" : verificationMessage,
     verificationReferenceId: String(
       providerResponse?.orderid ||
       providerResponse?.optransid ||
@@ -3838,8 +3842,8 @@ export const verifyCurrentDriverGstinDocument = async (req, res) => {
 
   const result = providerResponse?.cardData?.result || {};
   const taxpayerDetails = result?.taxpayerDetails || {};
-  const verificationSucceeded = Number(providerResponse?.status || 0) === 1 || String(providerResponse?.status || "") === "1";
-  const verificationMessage = String(providerResponse?.msg || "").trim();
+  const verification = resolveRechargeVerificationState(providerResponse);
+  const verificationMessage = verification.message;
 
   const updatedDocument = {
     ...(typeof existingDocument === "object" ? existingDocument : {}),
@@ -3848,15 +3852,9 @@ export const verifyCurrentDriverGstinDocument = async (req, res) => {
     identify_number: gstin,
     documentNumber: gstin,
     document_number: gstin,
-    verificationStatus: verificationSucceeded ? "verified" : "failed",
-    reviewStatus: verificationSucceeded ? "verified" : "failed",
-    status: verificationSucceeded ? "verified" : "failed",
-    verifiedAt: new Date().toISOString(),
-    reviewedAt: new Date().toISOString(),
+    verificationStatus: verification.status,
+    verifiedAt: verification.succeeded ? new Date().toISOString() : existingDocument.verifiedAt || null,
     verificationMessage,
-    comment: verificationSucceeded ? "" : verificationMessage,
-    remarks: verificationSucceeded ? "" : verificationMessage,
-    reason: verificationSucceeded ? "" : verificationMessage,
     verificationReferenceId: String(
       providerResponse?.orderid ||
       providerResponse?.optransid ||
@@ -3918,8 +3916,8 @@ export const verifyCurrentDriverRcDocument = async (req, res) => {
   });
 
   const result = providerResponse?.cardData?.result || {};
-  const verificationSucceeded = Number(providerResponse?.status || 0) === 1 || String(providerResponse?.status || "") === "1";
-  const verificationMessage = String(providerResponse?.msg || "").trim();
+  const verification = resolveRechargeVerificationState(providerResponse);
+  const verificationMessage = verification.message;
 
   const updatedDocument = {
     ...(typeof existingDocument === "object" ? existingDocument : {}),
@@ -3928,15 +3926,9 @@ export const verifyCurrentDriverRcDocument = async (req, res) => {
     identify_number: rcNumber,
     documentNumber: rcNumber,
     document_number: rcNumber,
-    verificationStatus: verificationSucceeded ? "verified" : "failed",
-    reviewStatus: verificationSucceeded ? "verified" : "failed",
-    status: verificationSucceeded ? "verified" : "failed",
-    verifiedAt: new Date().toISOString(),
-    reviewedAt: new Date().toISOString(),
+    verificationStatus: verification.status,
+    verifiedAt: verification.succeeded ? new Date().toISOString() : existingDocument.verifiedAt || null,
     verificationMessage,
-    comment: verificationSucceeded ? "" : verificationMessage,
-    remarks: verificationSucceeded ? "" : verificationMessage,
-    reason: verificationSucceeded ? "" : verificationMessage,
     verificationReferenceId: String(
       providerResponse?.orderid ||
       providerResponse?.optransid ||
@@ -4055,13 +4047,8 @@ export const verifyCurrentDriverBankDocument = async (req, res) => {
   });
 
   const accountDetails = providerResponse?.cardData?.response?.account_details || {};
-  const verificationSucceeded = Number(providerResponse?.status || 0) === 1 || String(providerResponse?.status || "") === "1";
-  const verificationMessage = String(
-    providerResponse?.cardData?.response?.message ||
-    providerResponse?.data?.message ||
-    providerResponse?.msg ||
-    "",
-  ).trim();
+  const verification = resolveRechargeVerificationState(providerResponse);
+  const verificationMessage = verification.message;
 
   const updatedDocument = {
     ...(typeof existingDocument === "object" ? existingDocument : {}),
@@ -4077,16 +4064,10 @@ export const verifyCurrentDriverBankDocument = async (req, res) => {
     account_holder_name: accountHolderName,
     beneficiaryName: accountHolderName,
     benificiary_name: accountHolderName,
-    verificationStatus: verificationSucceeded ? "verified" : "failed",
-    reviewStatus: verificationSucceeded ? "verified" : "failed",
-    status: verificationSucceeded ? "verified" : "failed",
-    verifiedAt: new Date().toISOString(),
-    reviewedAt: new Date().toISOString(),
+    verificationStatus: verification.status,
+    verifiedAt: verification.succeeded ? new Date().toISOString() : existingDocument.verifiedAt || null,
     verificationMode: mode,
     verificationMessage,
-    comment: verificationSucceeded ? "" : verificationMessage,
-    remarks: verificationSucceeded ? "" : verificationMessage,
-    reason: verificationSucceeded ? "" : verificationMessage,
     verificationReferenceId: String(
       providerResponse?.orderid ||
       providerResponse?.optransid ||

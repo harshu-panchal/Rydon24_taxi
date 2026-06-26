@@ -29,6 +29,16 @@ import { registerRideSocketHandlers } from './handlers/rideSocketHandler.js';
 import { authorizeRideRoomAccess } from './middleware/rideRoomAuth.js';
 import { attachSocketAuth } from './middleware/socketAuth.js';
 import { clearDriverRoute } from './services/driverRouteService.js';
+import { consumeScopedRateLimit } from '../middlewares/rateLimitMiddleware.js';
+
+const getSocketClientIp = (socket) => {
+  const forwardedFor = socket.handshake.headers?.['x-forwarded-for'];
+  if (typeof forwardedFor === 'string' && forwardedFor.trim()) {
+    return forwardedFor.split(',')[0].trim();
+  }
+
+  return socket.handshake.address || socket.conn?.remoteAddress || 'unknown';
+};
 
 const onAsync = (socket, handler) => async (payload = {}) => {
   try {
@@ -162,6 +172,20 @@ export const configureTaxiSocketServer = (httpServer) => {
       'requestRide',
       onAsync(socket, async ({ pickup, drop, fare, estimatedDistanceMeters, estimatedDurationMinutes, vehicleTypeId, vehicleIconType, paymentMethod, serviceType, intercity }) => {
         if (identity.role !== 'user') {
+          return;
+        }
+
+        const rateLimitOutcome = await consumeScopedRateLimit({
+          scope: 'ride_create_socket',
+          max: 10,
+          windowMs: 10 * 60 * 1000,
+          mode: 'auth_or_ip',
+          parts: [identity.sub || `ip:${getSocketClientIp(socket)}`],
+        });
+        if (!rateLimitOutcome.allowed) {
+          socket.emit('errorMessage', {
+            message: 'Too many ride requests. Please try again later.',
+          });
           return;
         }
 

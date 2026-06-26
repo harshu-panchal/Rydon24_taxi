@@ -527,10 +527,9 @@ const getDocumentExpiryValue = (document = {}) => (
 );
 
 const getDocumentReviewStatus = (document = {}) => String(
-    document?.status
-    || document?.verificationStatus
-    || document?.approvalStatus
+    document?.approvalStatus
     || document?.reviewStatus
+    || document?.status
     || '',
 ).trim().toLowerCase();
 

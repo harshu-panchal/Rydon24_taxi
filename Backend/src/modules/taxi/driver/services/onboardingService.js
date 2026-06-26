@@ -134,6 +134,32 @@ const buildOnboardingRcVerificationRequestId = (session) =>
 const buildOnboardingLicenseVerificationRequestId = (session) =>
   `DL-${String(session?.registrationId || '').replace(/[^A-Za-z0-9]/g, '').slice(-8) || 'ONBOARD'}-${Date.now()}`;
 
+const resolveRechargeVerificationState = (providerResponse = {}, fallbackMessage = '') => {
+  const normalizedStatus = String(providerResponse?.status ?? '').trim().toLowerCase();
+  const message = String(
+    providerResponse?.cardData?.response?.message ||
+    providerResponse?.cardData?.message ||
+    providerResponse?.msg ||
+    providerResponse?.message ||
+    fallbackMessage ||
+    '',
+  ).trim();
+  const lowerMessage = message.toLowerCase();
+  const explicitPending =
+    ['pending', 'processing', 'queued', 'in_progress', 'in progress'].includes(normalizedStatus) ||
+    lowerMessage.includes('pending') ||
+    lowerMessage.includes('processing') ||
+    lowerMessage.includes('try after sometime') ||
+    lowerMessage.includes('please try after sometime');
+  const succeeded = normalizedStatus === '1' || normalizedStatus === 'success' || normalizedStatus === 'verified' || Number(providerResponse?.status || 0) === 1;
+
+  return {
+    succeeded,
+    status: succeeded ? 'verified' : explicitPending ? 'pending' : 'failed',
+    message,
+  };
+};
+
 const parseRcManufacturingYear = (value = '') => {
   const normalized = String(value || '').trim();
   const yearMatch = normalized.match(/\b(19|20)\d{2}\b/);
@@ -1871,14 +1897,11 @@ export const verifyDriverOnboardingLicenseDocument = async ({
   const nonTransportValidity = result?.dl_validity?.non_transport || {};
   const badgeDetails = Array.isArray(result?.badge_details) ? result.badge_details : [];
   const firstBadge = badgeDetails[0] || {};
-  const verificationSucceeded =
-    String(providerResponse?.status || '') === '1' ||
-    Number(providerResponse?.status || 0) === 1;
-  const verificationMessage = String(
-    providerResponse?.msg ||
-    licenseDetails?.status ||
-    '',
-  ).trim();
+  const verification = resolveRechargeVerificationState(
+    providerResponse,
+    String(licenseDetails?.status || '').trim(),
+  );
+  const verificationMessage = verification.message;
 
   const updatedDocument = {
     ...(typeof existingDocument === 'object' ? existingDocument : {}),
@@ -1907,15 +1930,9 @@ export const verifyDriverOnboardingLicenseDocument = async ({
       existingDocument.request_no ||
       '',
     ).trim(),
-    verificationStatus: verificationSucceeded ? 'verified' : 'failed',
-    reviewStatus: verificationSucceeded ? 'verified' : 'failed',
-    status: verificationSucceeded ? 'verified' : 'failed',
-    verifiedAt: new Date().toISOString(),
-    reviewedAt: new Date().toISOString(),
+    verificationStatus: verification.status,
+    verifiedAt: verification.succeeded ? new Date().toISOString() : existingDocument.verifiedAt || null,
     verificationMessage,
-    comment: verificationSucceeded ? '' : verificationMessage,
-    remarks: verificationSucceeded ? '' : verificationMessage,
-    reason: verificationSucceeded ? '' : verificationMessage,
     verificationReferenceId: String(
       providerResponse?.orderid ||
       providerResponse?.partnerreqid ||
