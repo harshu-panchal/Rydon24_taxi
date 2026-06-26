@@ -1678,7 +1678,7 @@ export const registerUser = async (req, res) => {
   });
 
   const user = existingUser
-    ? await User.findByIdAndUpdate(existingUser._id, { $set: userPayload }, { new: true, runValidators: true })
+    ? await User.findByIdAndUpdate(existingUser._id, { $set: userPayload }, { returnDocument: 'after', runValidators: true })
     : await User.create(userPayload);
 
   if (!String(user.referralCode || '').trim()) {
@@ -1800,7 +1800,7 @@ export const signupUser = async (req, res) => {
   });
 
   const user = existingUser
-    ? await User.findByIdAndUpdate(existingUser._id, { $set: userPayload }, { new: true, runValidators: true })
+    ? await User.findByIdAndUpdate(existingUser._id, { $set: userPayload }, { returnDocument: 'after', runValidators: true })
     : await User.create(userPayload);
 
   if (!String(user.referralCode || '').trim()) {
@@ -4169,7 +4169,7 @@ export const createRentalBookingRequest = async (req, res) => {
       },
     },
     {
-      new: true,
+      returnDocument: 'after',
       upsert: true,
       setDefaultsOnInsert: true,
     },

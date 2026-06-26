@@ -130,7 +130,7 @@ export const adminUpdateJob = async (req, res) => {
   if (type !== undefined) patch.type = type;
   if (active !== undefined) patch.active = Boolean(active);
 
-  const job = await CareerJob.findByIdAndUpdate(id, patch, { new: true });
+  const job = await CareerJob.findByIdAndUpdate(id, patch, { returnDocument: 'after' });
   if (!job) {
     throw new ApiError(404, 'Job position not found');
   }
@@ -209,7 +209,7 @@ export const adminUpdateApplicationStatus = async (req, res) => {
   const application = await CareerApplication.findByIdAndUpdate(
     id,
     { status },
-    { new: true }
+    { returnDocument: 'after' }
   ).populate('jobId', 'title department');
 
   if (!application) {

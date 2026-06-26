@@ -8269,7 +8269,7 @@ export const updateOwnerPoolingVehicle = async (req, res) => {
         images: Array.isArray(body.images) ? body.images.filter(Boolean) : [],
         ownerId: owner._id,
       },
-      { new: true, runValidators: true },
+      { returnDocument: 'after', runValidators: true },
     );
 
   if (!vehicle) {

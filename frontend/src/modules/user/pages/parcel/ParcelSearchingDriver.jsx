@@ -376,6 +376,7 @@ const ParcelSearchingDriver = () => {
   const [bookingError, setBookingError] = useState('');
   const [nearbyVehicleCount, setNearbyVehicleCount] = useState(4);
   const activeRidePollRef = useRef(null);
+  const activeRidePollStartTimeoutRef = useRef(null);
   const searchTimeoutRef = useRef(null);
   const requestStartedRef = useRef(false);
   const cleanupSearchRef = useRef(null);
@@ -630,8 +631,10 @@ const ParcelSearchingDriver = () => {
       disposed = true;
       requestStartedRef.current = false;
       clearInterval(activeRidePollRef.current);
+      clearTimeout(activeRidePollStartTimeoutRef.current);
       clearTimeout(searchTimeoutRef.current);
       clearTimeout(acceptedTimerRef.current);
+      activeRidePollStartTimeoutRef.current = null;
       activeRidePollRef.current = null;
       socketService.off('rideSearchUpdate', onRideSearchUpdate);
       socketService.off('rideAccepted', onRideAccepted);
@@ -748,7 +751,11 @@ const ParcelSearchingDriver = () => {
           pollActiveRide();
           activeRidePollRef.current = setInterval(pollActiveRide, ACTIVE_DELIVERY_POLL_MS);
         };
-        window.setTimeout(startFallbackPolling, ACTIVE_DELIVERY_POLL_DELAY_MS);
+        clearTimeout(activeRidePollStartTimeoutRef.current);
+        activeRidePollStartTimeoutRef.current = window.setTimeout(
+          startFallbackPolling,
+          ACTIVE_DELIVERY_POLL_DELAY_MS,
+        );
         if (!disposed) {
           setSearchStatus('Booking created. Notifying nearby captains...');
           setNearbyVehicleCount(clampVehicleCount(selectedVehicleTypeIds.length));

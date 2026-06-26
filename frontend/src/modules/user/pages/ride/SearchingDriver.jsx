@@ -242,6 +242,7 @@ const SearchingDriver = () => {
   });
   const timerRef = useRef(null);
   const activeRidePollRef = useRef(null);
+  const activeRidePollStartTimeoutRef = useRef(null);
   const requestStartedRef = useRef(false);
   const cleanupSearchRef = useRef(null);
   const cleanupDelayRef = useRef(null);
@@ -617,7 +618,9 @@ const SearchingDriver = () => {
       disposed = true;
       requestStartedRef.current = false;
       clearTimeout(timerRef.current);
+      clearTimeout(activeRidePollStartTimeoutRef.current);
       clearInterval(activeRidePollRef.current);
+      activeRidePollStartTimeoutRef.current = null;
       activeRidePollRef.current = null;
       socketService.off('rideSearchUpdate', onRideSearchUpdate);
       socketService.off('rideAccepted', onRideAccepted);
@@ -759,7 +762,11 @@ const SearchingDriver = () => {
           pollActiveRide();
           activeRidePollRef.current = setInterval(pollActiveRide, SEARCH_FALLBACK_POLL_INTERVAL_MS);
         };
-        window.setTimeout(startFallbackPolling, SEARCH_FALLBACK_POLL_DELAY_MS);
+        clearTimeout(activeRidePollStartTimeoutRef.current);
+        activeRidePollStartTimeoutRef.current = window.setTimeout(
+          startFallbackPolling,
+          SEARCH_FALLBACK_POLL_DELAY_MS,
+        );
 
         if (!disposed) {
           setSearchStatus(
