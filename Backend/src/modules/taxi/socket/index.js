@@ -335,7 +335,9 @@ export const configureTaxiSocketServer = (httpServer) => {
         return;
       }
 
-      markDriverRejectedFromDispatch(rideId, identity.sub);
+      markDriverRejectedFromDispatch(rideId, identity.sub).catch((error) => {
+        console.error('Failed to mark driver rejection from dispatch', error);
+      });
       socket.to(getRideRoom(rideId)).emit('driverRejectedRide', {
         rideId,
         driverId: identity.sub,

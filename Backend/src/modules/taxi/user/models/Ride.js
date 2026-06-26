@@ -52,6 +52,20 @@ const rideSchema = new mongoose.Schema(
       ],
       default: [],
     },
+    dispatchTracking: {
+      notifiedDriverIds: {
+        type: [String],
+        default: [],
+      },
+      rejectedDriverIds: {
+        type: [String],
+        default: [],
+      },
+      lastDispatchAttemptAt: {
+        type: Date,
+        default: null,
+      },
+    },
     vehicleIconType: {
       type: String,
       default: '',

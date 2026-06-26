@@ -477,6 +477,89 @@ const getDispatchVehicleTypeIds = (ride) => {
   return [...new Set(ids.map((id) => String(id || '').trim()).filter(Boolean))];
 };
 
+const normalizeDispatchDriverIds = (value) => [...new Set(
+  (Array.isArray(value) ? value : [value])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean),
+)];
+
+const getPersistedDispatchTracking = (ride = {}) => ({
+  notifiedDriverIds: normalizeDispatchDriverIds(ride?.dispatchTracking?.notifiedDriverIds),
+  rejectedDriverIds: normalizeDispatchDriverIds(ride?.dispatchTracking?.rejectedDriverIds),
+});
+
+const hydrateDispatchStateFromRide = (ride) => {
+  if (!ride?._id) {
+    return getDispatchState('');
+  }
+
+  const persistedTracking = getPersistedDispatchTracking(ride);
+  const currentState = getDispatchState(ride._id);
+  const nextNotifiedDriverIds = normalizeDispatchDriverIds([
+    ...persistedTracking.notifiedDriverIds,
+    ...currentState.notifiedDriverIds,
+  ]);
+  const nextRejectedDriverIds = normalizeDispatchDriverIds([
+    ...persistedTracking.rejectedDriverIds,
+    ...currentState.rejectedDriverIds,
+  ]);
+
+  if (
+    nextNotifiedDriverIds.length !== currentState.notifiedDriverIds.length ||
+    nextRejectedDriverIds.length !== currentState.rejectedDriverIds.length
+  ) {
+    return saveDispatchState(ride._id, {
+      notifiedDriverIds: nextNotifiedDriverIds,
+      rejectedDriverIds: nextRejectedDriverIds,
+    });
+  }
+
+  return currentState;
+};
+
+const persistDispatchTrackingProgress = async ({
+  rideId,
+  notifiedDriverIds = [],
+  rejectedDriverIds = [],
+  reset = false,
+} = {}) => {
+  if (!rideId) {
+    return;
+  }
+
+  const safeNotifiedDriverIds = normalizeDispatchDriverIds(notifiedDriverIds);
+  const safeRejectedDriverIds = normalizeDispatchDriverIds(rejectedDriverIds);
+  const update = reset
+    ? {
+        $set: {
+          'dispatchTracking.notifiedDriverIds': [],
+          'dispatchTracking.rejectedDriverIds': [],
+          'dispatchTracking.lastDispatchAttemptAt': null,
+        },
+      }
+    : {
+        $set: {
+          'dispatchTracking.lastDispatchAttemptAt': new Date(),
+        },
+      };
+
+  if (!reset && safeNotifiedDriverIds.length) {
+    update.$addToSet = {
+      ...(update.$addToSet || {}),
+      'dispatchTracking.notifiedDriverIds': { $each: safeNotifiedDriverIds },
+    };
+  }
+
+  if (!reset && safeRejectedDriverIds.length) {
+    update.$addToSet = {
+      ...(update.$addToSet || {}),
+      'dispatchTracking.rejectedDriverIds': { $each: safeRejectedDriverIds },
+    };
+  }
+
+  await Ride.updateOne({ _id: rideId }, update);
+};
+
 const emitToSocket = (socketId, event, payload) => {
   if (ioInstance && socketId) {
     ioInstance.to(socketId).emit(event, payload);
@@ -546,6 +629,7 @@ export const restartRideDispatchWithLatestFare = async (rideId) => {
     ...state.rejectedDriverIds,
   ]);
   stopDispatchFlow(rideId, { releaseLease: false });
+  await persistDispatchTrackingProgress({ rideId, reset: true }).catch(() => null);
 
   const ride = await Ride.findById(rideId).populate('userId', 'name phone countryCode');
   if (!ride || ride.status !== RIDE_STATUS.SEARCHING || ride.liveStatus !== RIDE_LIVE_STATUS.SEARCHING) {
@@ -685,7 +769,7 @@ const emitRideRequestToDrivers = async ({
   });
 };
 
-export const markDriverRejectedFromDispatch = (rideId, driverId) => {
+export const markDriverRejectedFromDispatch = async (rideId, driverId) => {
   if (!rideId || !driverId) {
     return;
   }
@@ -694,6 +778,7 @@ export const markDriverRejectedFromDispatch = (rideId, driverId) => {
   const rejectedDriverIds = [...new Set([...state.rejectedDriverIds, String(driverId)])];
 
   saveDispatchState(rideId, { rejectedDriverIds });
+  await persistDispatchTrackingProgress({ rideId, rejectedDriverIds: [String(driverId)] });
 };
 
 const closeRideAsUnmatched = async (rideId) => {
@@ -720,6 +805,7 @@ const closeRideAsUnmatched = async (rideId) => {
   }
 
   await User.findByIdAndUpdate(ride.userId, { currentRideId: null });
+  await persistDispatchTrackingProgress({ rideId, reset: true }).catch(() => null);
 
   emitToRoom(getUserRoom(ride.userId), 'rideCancelled', {
     rideId: String(ride._id),
@@ -775,6 +861,7 @@ export const cancelRideByAdmin = async (rideId) => {
     User.findByIdAndUpdate(ride.userId, { currentRideId: null }),
     ride.driverId ? Driver.findByIdAndUpdate(ride.driverId, { isOnRide: false }) : Promise.resolve(),
   ]);
+  await persistDispatchTrackingProgress({ rideId, reset: true }).catch(() => null);
 
   emitToRoom(getUserRoom(ride.userId), 'rideCancelled', {
     rideId: String(ride._id),
@@ -862,6 +949,7 @@ export const cancelRideByUser = async ({ rideId, userId }) => {
   } finally {
     session.endSession();
   }
+  await persistDispatchTrackingProgress({ rideId, reset: true }).catch(() => null);
 
   emitToRoom(getUserRoom(ride.userId), 'rideCancelled', {
     rideId: String(ride._id),
@@ -985,6 +1073,7 @@ export const cancelScheduledRideByDriver = async ({ rideId, driverId }) => {
   } finally {
     session.endSession();
   }
+  await persistDispatchTrackingProgress({ rideId, reset: true }).catch(() => null);
 
   const cancelReason = 'Your scheduled ride was cancelled by the driver.';
 
@@ -1084,13 +1173,13 @@ const dispatchAttempt = async (rideId, attemptIndex = 0) => {
   }
 
   try {
+    const dispatchState = hydrateDispatchStateFromRide(ride);
     const dispatchConfig = await resolveTransportDispatchConfig();
     const radius = getAttemptRadiusMeters(
       dispatchConfig.baseDistanceMeters || dispatchConfig.maxDistanceMeters,
       attemptIndex,
     );
     const dispatchVehicleTypeIds = getDispatchVehicleTypeIds(ride);
-    const dispatchState = getDispatchState(rideId);
     if (dispatchConfig.dispatchType === 'one_by_one' && attemptIndex > 0 && dispatchState.driverIds.length) {
       closeDriverRequestWindow(rideId, dispatchState.driverIds);
     }
@@ -1134,6 +1223,10 @@ const dispatchAttempt = async (rideId, attemptIndex = 0) => {
       dispatchConfig,
       attemptIndex,
     });
+    await persistDispatchTrackingProgress({
+      rideId,
+      notifiedDriverIds: targetDrivers.map((driver) => String(driver._id)),
+    }).catch(() => null);
 
     emitToRoom(getUserRoom(ride.userId), 'rideSearchUpdate', {
       rideId: String(ride._id),
@@ -1213,7 +1306,7 @@ export const restoreScheduledDispatches = async () => {
   const rides = await Ride.find({
     status: RIDE_STATUS.SEARCHING,
     liveStatus: RIDE_LIVE_STATUS.SEARCHING,
-  }).select('_id scheduledAt bookingMode');
+  }).select('_id scheduledAt bookingMode dispatchTracking');
 
   for (const ride of rides) {
     if (hasLocalDispatchFlow(ride._id)) {
@@ -1337,6 +1430,7 @@ export const notifyLateAvailableDriver = async (driverId) => {
 export const notifyRideAccepted = async (ride) => {
   const state = getDispatchState(ride._id);
   stopDispatchFlow(ride._id);
+  await persistDispatchTrackingProgress({ rideId: ride._id, reset: true }).catch(() => null);
 
   // Once one driver wins the race, the rider is updated and the rest are told to stop.
   const populatedRide = await Ride.findById(ride._id).populate(
