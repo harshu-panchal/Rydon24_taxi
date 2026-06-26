@@ -580,6 +580,13 @@ const saveDispatchState = (rideId, nextState = {}) => {
   return activeDispatches.get(rideKey);
 };
 
+const hasLocalDispatchFlow = (rideId) => {
+  const key = String(rideId);
+  return activeDispatches.has(key) ||
+    scheduledDispatchTimers.has(key) ||
+    dispatchLeaseRefreshTimers.has(key);
+};
+
 const closeDriverRequestWindow = (rideId, driverIds = []) => {
   const safeDriverIds = [...new Set((Array.isArray(driverIds) ? driverIds : []).map((id) => String(id || '')).filter(Boolean))];
 
@@ -1165,7 +1172,15 @@ const dispatchAttempt = async (rideId, attemptIndex = 0) => {
   }
 };
 
-export const startDispatchFlow = async (ride) => {
+export const startDispatchFlow = async (ride, { forceRestart = false } = {}) => {
+  if (!ride?._id) {
+    return;
+  }
+
+  if (!forceRestart && hasLocalDispatchFlow(ride._id)) {
+    return;
+  }
+
   stopDispatchFlow(ride._id, { releaseLease: false });
 
   const ownsDispatch = await ensureDispatchLease(ride._id);
@@ -1201,6 +1216,10 @@ export const restoreScheduledDispatches = async () => {
   }).select('_id scheduledAt bookingMode');
 
   for (const ride of rides) {
+    if (hasLocalDispatchFlow(ride._id)) {
+      continue;
+    }
+
     await startDispatchFlow(ride);
   }
 };
