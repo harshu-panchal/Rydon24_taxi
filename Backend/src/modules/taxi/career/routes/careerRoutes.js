@@ -9,7 +9,8 @@ import {
   adminUpdateJob,
   adminDeleteJob,
   adminListApplications,
-  adminUpdateApplicationStatus
+  adminUpdateApplicationStatus,
+  adminDeleteApplication
 } from '../controllers/careerController.js';
 
 export const careerRouter = Router();
@@ -26,3 +27,5 @@ careerRouter.delete('/admin/careers/jobs/:id', authenticate(['admin']), asyncHan
 
 careerRouter.get('/admin/careers/applications', authenticate(['admin']), asyncHandler(adminListApplications));
 careerRouter.patch('/admin/careers/applications/:id/status', authenticate(['admin']), asyncHandler(adminUpdateApplicationStatus));
+careerRouter.delete('/admin/careers/applications/:id', authenticate(['admin']), asyncHandler(adminDeleteApplication));
+

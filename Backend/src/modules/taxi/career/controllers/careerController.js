@@ -227,3 +227,18 @@ export const adminUpdateApplicationStatus = async (req, res) => {
     }
   });
 };
+
+// Delete a career application
+export const adminDeleteApplication = async (req, res) => {
+  const { id } = req.params;
+  const application = await CareerApplication.findByIdAndDelete(id);
+  if (!application) {
+    throw new ApiError(404, 'Career application not found');
+  }
+
+  res.json({
+    success: true,
+    data: { deleted: true }
+  });
+};
+

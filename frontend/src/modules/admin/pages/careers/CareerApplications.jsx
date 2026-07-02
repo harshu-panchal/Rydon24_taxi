@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronRight, Eye, Briefcase, Mail, Phone, Calendar, Clock, Download, ExternalLink } from 'lucide-react';
+import { ChevronRight, Eye, Briefcase, Mail, Phone, Calendar, Clock, Download, ExternalLink, Trash2 } from 'lucide-react';
 import api from '../../../../shared/api/axiosInstance';
 import toast from 'react-hot-toast';
 
@@ -53,6 +53,21 @@ const CareerApplications = () => {
       toast.error(apiError?.message || 'Failed to update status');
     }
   };
+
+  const deleteApplication = async (appId) => {
+    if (!window.confirm('Are you sure you want to permanently delete this application?')) return;
+    try {
+      await api.delete(`/admin/careers/applications/${appId}`);
+      toast.success('Application deleted successfully');
+      if (selectedApp?.id === appId) {
+        setSelectedApp(null);
+      }
+      await loadRows();
+    } catch (apiError) {
+      toast.error(apiError?.message || 'Failed to delete application');
+    }
+  };
+
 
   return (
     <div className="min-h-screen bg-gray-50 p-6 lg:p-8">
@@ -161,16 +176,30 @@ const CareerApplications = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedApp(row);
-                          }}
-                          className="rounded-md border border-gray-200 p-2 text-gray-500 hover:bg-gray-50"
-                        >
-                          <Eye size={14} />
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedApp(row);
+                            }}
+                            className="rounded-md border border-gray-200 p-2 text-gray-500 hover:bg-gray-50"
+                            title="View Details"
+                          >
+                            <Eye size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteApplication(row.id);
+                            }}
+                            className="rounded-md border border-red-100 p-2 text-red-500 hover:bg-red-50"
+                            title="Delete Application"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -288,6 +317,17 @@ const CareerApplications = () => {
                         </button>
                       ))}
                     </div>
+                  </div>
+
+                  <div className="border-t border-red-100 pt-4 mt-6">
+                    <button
+                      type="button"
+                      onClick={() => deleteApplication(selectedApp.id)}
+                      className="w-full py-2.5 text-xs font-bold uppercase tracking-wider rounded-lg border border-red-200 hover:bg-red-50 text-red-600 flex items-center justify-center gap-1.5 transition-all font-semibold"
+                    >
+                      <Trash2 size={14} />
+                      <span>Delete Application</span>
+                    </button>
                   </div>
                 </div>
               </div>
