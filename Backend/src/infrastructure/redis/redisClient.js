@@ -61,6 +61,7 @@ export const getRedisClient = () => {
       socket: {
         connectTimeout: env.redis.connectTimeoutMs,
         reconnectStrategy: () => false,
+        keepAlive: 5000, // Sends TCP keep-alive probes to prevent idle connection termination
       },
     });
     attachRedisEventLogging(redisClient);
