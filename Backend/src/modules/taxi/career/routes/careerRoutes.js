@@ -4,6 +4,7 @@ import { authenticate } from '../../middlewares/authMiddleware.js';
 import {
   listActiveJobs,
   submitApplication,
+  uploadApplicationFile,
   adminListJobs,
   adminCreateJob,
   adminUpdateJob,
@@ -18,6 +19,7 @@ export const careerRouter = Router();
 // Public routes
 careerRouter.get('/careers/jobs', asyncHandler(listActiveJobs));
 careerRouter.post('/careers/applications', asyncHandler(submitApplication));
+careerRouter.post('/careers/upload', asyncHandler(uploadApplicationFile));
 
 // Admin routes (requires admin authentication)
 careerRouter.get('/admin/careers/jobs', authenticate(['admin']), asyncHandler(adminListJobs));

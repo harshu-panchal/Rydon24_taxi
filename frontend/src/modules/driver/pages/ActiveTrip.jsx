@@ -1097,8 +1097,12 @@ const ActiveTrip = () => {
         }
 
         const socket = socketService.connect({ role: 'driver' });
+        const onSocketConnect = () => {
+            socketService.emit('ride:join', { rideId: currentRideId });
+        };
         if (socket) {
             socketService.emit('ride:join', { rideId: currentRideId });
+            socket.on('connect', onSocketConnect);
         }
 
         const handleTripClosed = (payload = {}) => {
@@ -1159,6 +1163,9 @@ const ActiveTrip = () => {
             socketService.off('rideCancelled', handleTripClosed);
             socketService.off('ride:status:updated', handleRideStatusUpdated);
             socketService.off('ride:state', handleRideState);
+            if (socket) {
+                socket.off('connect', onSocketConnect);
+            }
         };
     }, [exitToDriverHome, rideId, routeRideId]);
 

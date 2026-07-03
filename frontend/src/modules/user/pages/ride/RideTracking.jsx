@@ -19,7 +19,7 @@ import { useSettings } from '../../../../shared/context/SettingsContext';
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
 const DEFAULT_CENTER = { lat: 22.7196, lng: 75.8577 };
 const TERMINAL_STATUSES = new Set(['completed', 'cancelled', 'delivered']);
-const ACTIVE_RIDE_VALIDATE_MS = 15000;
+const ACTIVE_RIDE_VALIDATE_MS = 4000;
 const COMPLETED_TRACKING_STATUSES = new Set(['completed', 'delivered']);
 const POST_RIDE_REDIRECT_STATUSES = new Set(['arrived', 'completed', 'delivered']);
 const ROUTE_REFRESH_MIN_DISTANCE_METERS = 30;
@@ -548,6 +548,9 @@ const RideTracking = () => {
   const latestStateRef = useRef(state);
   const latestFallbackDriverRef = useRef(fallbackDriver);
   const latestDriverRef = useRef(driver);
+  const latestTripStatusRef = useRef(tripStatus);
+  const backoffCountRef = useRef(0);
+  const pollTimerRef = useRef(null);
   const latestCompleteTrackingRef = useRef(() => {});
   const hasCompletedRedirectRef = useRef(false);
   const hasAutoFramedMapRef = useRef(false);
@@ -564,6 +567,10 @@ const RideTracking = () => {
   useEffect(() => {
     latestDriverRef.current = driver;
   }, [driver]);
+
+  useEffect(() => {
+    latestTripStatusRef.current = tripStatus;
+  }, [tripStatus]);
 
   useEffect(() => {
     hasAutoFramedMapRef.current = false;
@@ -824,7 +831,7 @@ const RideTracking = () => {
           return false;
         }
 
-        if (!activeRideId || activeRideId !== String(rideId)) {
+        if (!activeRideId || activeRideId !== String(rideId) || activeStatus !== latestTripStatusRef.current) {
           await hydrateRideState().catch(() => {});
           return false;
         }
@@ -832,21 +839,83 @@ const RideTracking = () => {
         return true;
       } catch (err) {
         console.error('Active ride validation failed:', err);
-        await hydrateRideState().catch(() => {});
-        return false;
+        throw err; // Re-throw to trigger polling backoff
       }
     };
 
+    const runPoll = async () => {
+      if (document.hidden || !active) {
+        return;
+      }
+
+      try {
+        await validateActiveRide();
+        backoffCountRef.current = 0; // Reset on success
+      } catch (_err) {
+        backoffCountRef.current = Math.min(backoffCountRef.current + 1, 4); // Max backoff multiplier of 16x (approx 64s max delay)
+      }
+
+      if (active) {
+        scheduleNext();
+      }
+    };
+
+    const scheduleNext = () => {
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+
+      if (document.hidden || !active) {
+        return;
+      }
+
+      const baseInterval = socketRealtimeHealthy ? 30000 : 4000;
+      const backoffMultiplier = Math.pow(2, backoffCountRef.current);
+      const delay = Math.min(baseInterval * backoffMultiplier, 60000);
+
+      pollTimerRef.current = setTimeout(() => {
+        runPoll();
+      }, delay);
+    };
+
+    // Immediate sync and kickoff
     hydrateRideState();
-    const validationInterval = window.setInterval(() => {
-      validateActiveRide().catch(() => {});
-    }, ACTIVE_RIDE_VALIDATE_MS);
+    scheduleNext();
+
+    const handleVisibilityChange = () => {
+      if (!active) return;
+
+      if (document.visibilityState === 'visible') {
+        backoffCountRef.current = 0;
+        hydrateRideState().catch(() => {});
+        
+        // Reconnect/re-verify the socket room join immediately on focus
+        const currentSocket = socketService.connect({ role: 'user' });
+        if (currentSocket) {
+          socketService.emit('ride:join', { rideId });
+        }
+
+        scheduleNext();
+      } else {
+        if (pollTimerRef.current) {
+          clearTimeout(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       active = false;
-      window.clearInterval(validationInterval);
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [activeRideEndpoint, rideId]); // Removed unstable dependencies (completeTracking, exitTracking, etc.) to stop infinite loop
+  }, [activeRideEndpoint, rideId, socketRealtimeHealthy]); // Added socketRealtimeHealthy to re-trigger scheduling automatically
 
   useEffect(() => {
     if (!TERMINAL_STATUSES.has(tripStatus)) {
@@ -998,7 +1067,10 @@ const RideTracking = () => {
     socketService.on('ride:driver-location:updated', onLocationUpdated);
     socketService.on('ride:status:updated', onStatusUpdated);
     socketService.emit('ride:join', { rideId });
-    const onSocketConnect = () => setSocketRealtimeHealthy(true);
+    const onSocketConnect = () => {
+      setSocketRealtimeHealthy(true);
+      socketService.emit('ride:join', { rideId });
+    };
     const onSocketDisconnect = () => setSocketRealtimeHealthy(false);
     const onSocketConnectError = () => setSocketRealtimeHealthy(false);
     socket.on('connect', onSocketConnect);

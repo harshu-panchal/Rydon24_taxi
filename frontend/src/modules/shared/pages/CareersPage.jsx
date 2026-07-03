@@ -21,6 +21,9 @@ const CareersPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [activeShareMenu, setActiveShareMenu] = useState(null);
+  const [uploadingResume, setUploadingResume] = useState(false);
+  const [isResumeFileUploaded, setIsResumeFileUploaded] = useState(false);
+  const [uploadedFileName, setUploadedFileName] = useState('');
 
   useEffect(() => {
     fetchJobs();
@@ -140,6 +143,49 @@ const CareersPage = () => {
     syncSelectedJobToUrl(job);
   };
 
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File is too large. Max size is 10MB.');
+      return;
+    }
+
+    try {
+      setUploadingResume(true);
+      setUploadedFileName(file.name);
+
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        try {
+          const dataUrl = reader.result;
+          const res = await api.post('/careers/upload', { dataUrl });
+          const secureUrl = res?.data?.secureUrl || res?.secureUrl;
+          if (secureUrl) {
+            setFormData((prev) => ({ ...prev, resumeUrl: secureUrl }));
+            setIsResumeFileUploaded(true);
+            toast.success('Resume uploaded successfully!');
+          } else {
+            throw new Error('Upload failed: secureUrl not found');
+          }
+        } catch (error) {
+          console.error('File upload error:', error);
+          toast.error(error.message || 'Failed to upload document.');
+          setUploadedFileName('');
+        } finally {
+          setUploadingResume(false);
+        }
+      };
+    } catch (error) {
+      console.error('File reader error:', error);
+      toast.error('Failed to read file.');
+      setUploadingResume(false);
+      setUploadedFileName('');
+    }
+  };
+
   const shareOptions = [
     { key: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
     { key: 'facebook', label: 'Facebook', icon: Globe2 },
@@ -173,6 +219,8 @@ const CareersPage = () => {
         coverLetter: '',
         resumeUrl: ''
       });
+      setIsResumeFileUploaded(false);
+      setUploadedFileName('');
     } catch (error) {
       console.error('Submission failed:', error);
       toast.error(error.message || 'Failed to submit application. Please try again.');
@@ -527,16 +575,67 @@ const CareersPage = () => {
 
                           <div>
                             <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5">
-                              Resume / Portfolio Link (Optional)
+                              Upload Resume / Document (Optional)
                             </label>
-                            <input
-                              type="url"
-                              name="resumeUrl"
-                              value={formData.resumeUrl}
-                              onChange={handleInputChange}
-                              placeholder="https://drive.google.com/... or github.com/..."
-                              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-[#FFB300] focus:ring-1 focus:ring-[#FFB300] text-sm transition-all outline-none bg-gray-50/50"
-                            />
+                            <div className="flex flex-col gap-3">
+                              {uploadingResume ? (
+                                <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-dashed border-amber-300 bg-amber-50/20 text-xs font-semibold text-amber-600">
+                                  <span className="w-4 h-4 border-2 border-amber-600/30 border-t-amber-600 rounded-full animate-spin"></span>
+                                  <span>Uploading resume...</span>
+                                </div>
+                              ) : formData.resumeUrl && isResumeFileUploaded ? (
+                                <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-emerald-200 bg-emerald-50/20 text-xs font-semibold text-emerald-700">
+                                  <div className="flex items-center gap-2">
+                                    <CheckCircle size={16} className="text-emerald-600" />
+                                    <span className="truncate max-w-[200px]">{uploadedFileName || 'Resume uploaded'}</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIsResumeFileUploaded(false);
+                                      setUploadedFileName('');
+                                      setFormData(prev => ({ ...prev, resumeUrl: '' }));
+                                    }}
+                                    className="text-[10px] font-bold uppercase tracking-wider text-red-500 hover:text-red-700 cursor-pointer"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="relative group cursor-pointer">
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                                    onChange={handleFileChange}
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                  />
+                                  <div className="flex flex-col items-center justify-center border border-dashed border-gray-200 group-hover:border-[#FFB300]/50 rounded-xl p-4 bg-gray-50/50 transition-colors">
+                                    <span className="text-xs font-bold text-gray-500 group-hover:text-slate-800 transition-colors">
+                                      Choose File (PDF, Word, or Image)
+                                    </span>
+                                    <span className="text-[10px] text-gray-400 mt-1">
+                                      Max size 10MB
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {!isResumeFileUploaded && (
+                                <div>
+                                  <label className="block text-[9px] font-bold uppercase tracking-wider text-gray-400 mb-1">
+                                    Or paste a Portfolio / Drive Link instead
+                                  </label>
+                                  <input
+                                    type="url"
+                                    name="resumeUrl"
+                                    value={formData.resumeUrl}
+                                    onChange={handleInputChange}
+                                    placeholder="https://drive.google.com/... or github.com/..."
+                                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-[#FFB300] focus:ring-1 focus:ring-[#FFB300] text-sm transition-all outline-none bg-gray-50/50"
+                                  />
+                                </div>
+                              )}
+                            </div>
                           </div>
 
                           <div className="flex gap-3 pt-2">
