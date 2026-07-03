@@ -1480,7 +1480,7 @@ const RideTracking = () => {
               gestureHandling: 'greedy',
             }}
           >
-            {routePath.length > 1 && hasLiveDriverLocation && (
+            {routePath.length > 1 && (
               <PolylineF
                 path={routePath}
                 options={{

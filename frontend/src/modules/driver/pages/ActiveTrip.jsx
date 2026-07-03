@@ -1055,6 +1055,7 @@ const ActiveTrip = () => {
         position: null,
         emittedAt: 0,
     });
+    const previousDestinationRef = React.useRef(null);
 
     const activeDestination = useMemo(
         () => (phase === 'to_pickup' || phase === 'otp_verification' ? pickupPosition : dropPosition),
@@ -1976,7 +1977,11 @@ const ActiveTrip = () => {
     useEffect(() => () => stopSimulationTimer(), []);
 
     useEffect(() => {
-        if (isSimulationEnabled) {
+        const destinationChanged = !previousDestinationRef.current ||
+            !arePositionsNearlyEqual(previousDestinationRef.current, activeDestination, 0.00001);
+        previousDestinationRef.current = activeDestination;
+
+        if (isSimulationEnabled && !destinationChanged) {
             return;
         }
 
@@ -1988,7 +1993,7 @@ const ActiveTrip = () => {
             return;
         }
 
-        if (routePath.length > 1) {
+        if (routePath.length > 1 && !destinationChanged) {
             const trimmedRoute = trimRoutePathFromPosition(routePath, driverPosition);
             routeTrimStateRef.current = {
                 distanceMeters: trimmedRoute.distanceMeters,
@@ -2006,7 +2011,18 @@ const ActiveTrip = () => {
         }
 
         if (!isLoaded || !window.google?.maps?.importLibrary) {
-            setRoutePath(buildFallbackRoute(driverPosition, activeDestination));
+            const fallbackRoute = buildFallbackRoute(driverPosition, activeDestination);
+            setRoutePath(fallbackRoute);
+            if (isSimulationEnabled && destinationChanged) {
+                stopSimulationTimer();
+                simulationPathRef.current = fallbackRoute;
+                setSimulationStep(0);
+                setDriverPosition(fallbackRoute[0]);
+                const nextHeading = getRouteHeading(fallbackRoute[0], fallbackRoute.slice(1), displayDriverHeadingRef.current);
+                setDriverHeading(nextHeading);
+                publishDriverLocation(fallbackRoute[0], nextHeading);
+                setIsSimulationRunning(true);
+            }
             setRouteError('');
             return;
         }
@@ -2021,6 +2037,16 @@ const ActiveTrip = () => {
         if (cachedRoute) {
             if (!arePathsEquivalent(routePath, cachedRoute.routePath)) {
                 setRoutePath(cachedRoute.routePath);
+            }
+            if (isSimulationEnabled && destinationChanged) {
+                stopSimulationTimer();
+                simulationPathRef.current = cachedRoute.routePath;
+                setSimulationStep(0);
+                setDriverPosition(cachedRoute.routePath[0]);
+                const nextHeading = getRouteHeading(cachedRoute.routePath[0], cachedRoute.routePath.slice(1), displayDriverHeadingRef.current);
+                setDriverHeading(nextHeading);
+                publishDriverLocation(cachedRoute.routePath[0], nextHeading);
+                setIsSimulationRunning(true);
             }
             setRouteError(cachedRoute.routeError);
             routeTrimStateRef.current = { distanceMeters: 0, shouldRefresh: false };
@@ -2046,6 +2072,18 @@ const ActiveTrip = () => {
                     routeError: '',
                 });
                 setRoutePath(nextPath);
+                
+                if (isSimulationEnabled && destinationChanged) {
+                    stopSimulationTimer();
+                    simulationPathRef.current = nextPath;
+                    setSimulationStep(0);
+                    setDriverPosition(nextPath[0]);
+                    const nextHeading = getRouteHeading(nextPath[0], nextPath.slice(1), displayDriverHeadingRef.current);
+                    setDriverHeading(nextHeading);
+                    publishDriverLocation(nextPath[0], nextHeading);
+                    setIsSimulationRunning(true);
+                }
+
                 routeTrimStateRef.current = { distanceMeters: 0, shouldRefresh: false };
                 setRouteError('');
                 return;
@@ -2058,6 +2096,18 @@ const ActiveTrip = () => {
                 routeError: nextRouteError,
             });
             setRoutePath(fallbackRoute);
+            
+            if (isSimulationEnabled && destinationChanged) {
+                stopSimulationTimer();
+                simulationPathRef.current = fallbackRoute;
+                setSimulationStep(0);
+                setDriverPosition(fallbackRoute[0]);
+                const nextHeading = getRouteHeading(fallbackRoute[0], fallbackRoute.slice(1), displayDriverHeadingRef.current);
+                setDriverHeading(nextHeading);
+                publishDriverLocation(fallbackRoute[0], nextHeading);
+                setIsSimulationRunning(true);
+            }
+
             routeTrimStateRef.current = { distanceMeters: Number.POSITIVE_INFINITY, shouldRefresh: false };
             setRouteError(nextRouteError);
         })();
