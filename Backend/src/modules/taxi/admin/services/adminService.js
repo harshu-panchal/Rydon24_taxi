@@ -7735,6 +7735,16 @@ export const getOwnerById = async (id, currentAdmin = null) => {
     if (payload.city !== undefined) owner.city = payload.city || null;
     if (payload.tax_number !== undefined) owner.tax_number = payload.tax_number || null;
     if (payload.no_of_vehicles !== undefined) owner.no_of_vehicles = Number(payload.no_of_vehicles || 0);
+    if (payload.documents !== undefined) {
+      if (!owner.user_snapshot) {
+        owner.user_snapshot = {};
+      }
+      owner.user_snapshot = {
+        ...owner.user_snapshot,
+        documents: payload.documents,
+      };
+      owner.markModified('user_snapshot');
+    }
 
     await owner.save();
 
