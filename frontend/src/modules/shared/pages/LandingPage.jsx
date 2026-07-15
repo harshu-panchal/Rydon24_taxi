@@ -10,7 +10,7 @@ import rideImg from '@/assets/landing/ride.png';
 import parcelImg from '@/assets/landing/parcel.png';
 import bikeImg from '@/assets/landing/bike.png';
 import heroBgImg from '@/assets/landing/hero-bg.png';
-import newHeroTaxiImg from '@/assets/ride-removebg-preview.png';
+import newHeroTaxiImg from '@/assets/gemini-car-removebg-preview.png';
 import checkUsOutImg from '@/assets/check_us_out.jpg';
 import { Download } from 'lucide-react';
 
