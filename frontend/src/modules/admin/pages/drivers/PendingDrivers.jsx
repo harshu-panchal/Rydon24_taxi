@@ -36,6 +36,9 @@ const PendingDrivers = () => {
   const [passwordModal, setPasswordModal] = useState({ isOpen: false, driverId: null, password: '', isSubmitting: false });
   const [page, setPage] = useState(1);
   const [paginator, setPaginator] = useState(null);
+  const [referralSource, setReferralSource] = useState('all');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [employeeOptions, setEmployeeOptions] = useState([]);
 
   const openActionMenu = (driverId, anchorEl) => {
     const rect = anchorEl.getBoundingClientRect();
@@ -131,13 +134,21 @@ const PendingDrivers = () => {
     );
   };
 
-  const fetchPendingDrivers = async ({ nextPage = page, nextLimit = itemsPerPage, nextSearch = searchTerm } = {}) => {
+  const fetchPendingDrivers = async ({
+    nextPage = page,
+    nextLimit = itemsPerPage,
+    nextSearch = searchTerm,
+    nextReferralSource = referralSource,
+    nextEmployeeId = selectedEmployeeId,
+  } = {}) => {
     setIsLoading(true);
     setError('');
     try {
       const responseData = await adminService.getDrivers(nextPage, nextLimit, {
         approve: false,
         search: String(nextSearch || '').trim(),
+        referralSource: nextReferralSource,
+        employeeId: nextEmployeeId,
       });
       const driversList = responseData.data?.results || [];
       
@@ -155,6 +166,8 @@ const PendingDrivers = () => {
           reason: d.rejectionReason || d.rejected_reason || '-',
           rating: d.rating || 0.0,
           registeredAt: d.createdAt || null,
+          acquiredByEmployeeCode: d.acquiredByEmployeeCode || '',
+          acquiredByEmployeeName: d.acquiredByEmployeeName || '',
         }));
 
       setPendingDrivers(pending);
@@ -178,7 +191,31 @@ const PendingDrivers = () => {
       setPage(1);
     }, 250);
     return () => window.clearTimeout(timeoutId);
-  }, [searchTerm]);
+  }, [searchTerm, referralSource, selectedEmployeeId]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    adminService
+      .getEmployees(1, 100, '')
+      .then((resData) => {
+        if (!mounted || !resData?.success) return;
+        setEmployeeOptions(
+          (resData.data?.results || []).map((employee) => ({
+            id: employee._id,
+            name: employee.name || 'Unnamed employee',
+            code: employee.employeeCode || '',
+          })),
+        );
+      })
+      .catch(() => {
+        if (mounted) setEmployeeOptions([]);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     fetchPendingDrivers({ nextPage: page, nextLimit: itemsPerPage, nextSearch: searchTerm });
@@ -251,7 +288,7 @@ const PendingDrivers = () => {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-4 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto_auto] gap-4 items-end">
           <div>
             <label className={labelClass}>
               <Search size={12} className="inline mr-1 text-gray-400" />
@@ -263,6 +300,44 @@ const PendingDrivers = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+          </div>
+          <div>
+            <label className={labelClass}>Onboarding source</label>
+            <select
+              className={inputClass}
+              value={referralSource}
+              onChange={(e) => {
+                const nextValue = e.target.value;
+                setReferralSource(nextValue);
+                if (nextValue !== 'employee') {
+                  setSelectedEmployeeId('');
+                }
+              }}
+            >
+              <option value="all">All sources</option>
+              <option value="employee">Agent onboarded only</option>
+              <option value="organic">No agent code</option>
+            </select>
+          </div>
+          <div>
+            <label className={labelClass}>Agent</label>
+            <select
+              className={inputClass}
+              value={selectedEmployeeId}
+              onChange={(e) => {
+                setSelectedEmployeeId(e.target.value);
+                if (e.target.value) {
+                  setReferralSource('employee');
+                }
+              }}
+            >
+              <option value="">All agents</option>
+              {employeeOptions.map((employee) => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.name}{employee.code ? ` (${employee.code})` : ''}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="flex items-center gap-2">
             <label className={labelClass}>Show</label>
@@ -292,6 +367,7 @@ const PendingDrivers = () => {
                 <th className="px-4 py-4">Service Location</th>
                 <th className="px-4 py-4">Mobile Number</th>
                 <th className="px-4 py-4">Transport Type</th>
+                <th className="px-4 py-4">Onboarded By</th>
                 <th className="px-4 py-4 text-center">Document View</th>
                 <th className="px-4 py-4 text-center">Approved Status</th>
                 <th className="px-4 py-4 text-center">Declined Reason</th>
@@ -303,11 +379,11 @@ const PendingDrivers = () => {
             <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
               {isLoading ? (
                 <tr>
-                  <td colSpan="11" className="px-6 py-12 text-center text-gray-400">Loading pending drivers...</td>
+                  <td colSpan="12" className="px-6 py-12 text-center text-gray-400">Loading pending drivers...</td>
                 </tr>
               ) : pendingDrivers.length === 0 ? (
                 <tr>
-                  <td colSpan="11" className="px-6 py-12 text-center text-gray-400">No pending drivers found.</td>
+                  <td colSpan="12" className="px-6 py-12 text-center text-gray-400">No pending drivers found.</td>
                 </tr>
               ) : (
                 pendingDrivers.map((driver) => (
@@ -321,6 +397,18 @@ const PendingDrivers = () => {
                     <td className="px-4 py-4">{driver.serviceLocation}</td>
                     <td className="px-4 py-4 font-medium text-gray-800">{driver.phone}</td>
                     <td className="px-4 py-4">{driver.transport}</td>
+                    <td className="px-4 py-4">
+                      {driver.acquiredByEmployeeName || driver.acquiredByEmployeeCode ? (
+                        <div className="flex flex-col">
+                          <span className="font-medium text-gray-900">{driver.acquiredByEmployeeName || 'Agent'}</span>
+                          <span className="text-xs text-gray-500">
+                            {driver.acquiredByEmployeeCode || 'Agent onboarded'}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs font-medium text-gray-500">Not agent onboarded</span>
+                      )}
+                    </td>
                     <td className="px-4 py-4 text-center">
                       <button
                         onClick={() => navigate(`/admin/drivers/${driver.id}?tab=Documents`, { state: { from: '/admin/drivers/pending' } })}

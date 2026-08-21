@@ -37,14 +37,25 @@ const DriverList = ({ mode = 'approved' }) => {
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [paginator, setPaginator] = useState(null);
+  const [referralSource, setReferralSource] = useState('all');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [employeeOptions, setEmployeeOptions] = useState([]);
 
-  const fetchDrivers = async ({ nextPage = page, nextLimit = itemsPerPage, nextSearch = searchTerm } = {}) => {
+  const fetchDrivers = async ({
+    nextPage = page,
+    nextLimit = itemsPerPage,
+    nextSearch = searchTerm,
+    nextReferralSource = referralSource,
+    nextEmployeeId = selectedEmployeeId,
+  } = {}) => {
     setIsLoading(true);
     setError('');
     try {
       const responseData = await adminService.getDrivers(nextPage, nextLimit, {
         ...(mode === 'active' ? { isOnline: true } : { approve: true }),
         search: String(nextSearch || '').trim(),
+        referralSource: nextReferralSource,
+        employeeId: nextEmployeeId,
       });
       const driversList = responseData.data?.results || [];
       if (responseData.success) {
@@ -66,6 +77,8 @@ const DriverList = ({ mode = 'approved' }) => {
           onlineSelfieImage: d.online_selfie_image || '',
           onlineSelfieCapturedAt: d.online_selfie_captured_at || null,
           registeredAt: d.createdAt || null,
+          acquiredByEmployeeCode: d.acquiredByEmployeeCode || '',
+          acquiredByEmployeeName: d.acquiredByEmployeeName || '',
           status: mode === 'active' ? 'Online' : (d.approve ? 'Approved' : (d.status || 'Approved')),
         }));
         setDrivers(approved);
@@ -91,7 +104,31 @@ const DriverList = ({ mode = 'approved' }) => {
       setPage(1);
     }, 250);
     return () => window.clearTimeout(timeoutId);
-  }, [searchTerm]);
+  }, [searchTerm, referralSource, selectedEmployeeId]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    adminService
+      .getEmployees(1, 100, '')
+      .then((resData) => {
+        if (!mounted || !resData?.success) return;
+        setEmployeeOptions(
+          (resData.data?.results || []).map((employee) => ({
+            id: employee._id,
+            name: employee.name || 'Unnamed employee',
+            code: employee.employeeCode || '',
+          })),
+        );
+      })
+      .catch(() => {
+        if (mounted) setEmployeeOptions([]);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     fetchDrivers({ nextPage: page, nextLimit: itemsPerPage, nextSearch: searchTerm });
@@ -267,6 +304,38 @@ const DriverList = ({ mode = 'approved' }) => {
             <button className="bg-orange-500 text-white px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 shadow-sm uppercase tracking-wide">
               <Filter size={14} /> Filters
             </button>
+            <select
+              className="px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-500"
+              value={referralSource}
+              onChange={(e) => {
+                const nextValue = e.target.value;
+                setReferralSource(nextValue);
+                if (nextValue !== 'employee') {
+                  setSelectedEmployeeId('');
+                }
+              }}
+            >
+              <option value="all">All onboarding sources</option>
+              <option value="employee">Agent onboarded only</option>
+              <option value="organic">No agent code</option>
+            </select>
+            <select
+              className="px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-indigo-500"
+              value={selectedEmployeeId}
+              onChange={(e) => {
+                setSelectedEmployeeId(e.target.value);
+                if (e.target.value) {
+                  setReferralSource('employee');
+                }
+              }}
+            >
+              <option value="">All agents</option>
+              {employeeOptions.map((employee) => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.name}{employee.code ? ` (${employee.code})` : ''}
+                </option>
+              ))}
+            </select>
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
@@ -290,6 +359,7 @@ const DriverList = ({ mode = 'approved' }) => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Service Location</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Mobile Number</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Transport Type</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Onboarded By</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Today Selfie</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Document View</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Approved Status</th>
@@ -301,7 +371,7 @@ const DriverList = ({ mode = 'approved' }) => {
             <tbody className="divide-y divide-gray-50">
               {isLoading ? (
                 <tr>
-                  <td colSpan="11" className="py-16 text-center">
+                  <td colSpan="12" className="py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <Loader2 className="w-7 h-7 text-indigo-600 animate-spin" />
                       <p className="text-sm text-gray-400">Loading drivers...</p>
@@ -310,7 +380,7 @@ const DriverList = ({ mode = 'approved' }) => {
                 </tr>
               ) : drivers.length === 0 ? (
                 <tr>
-                  <td colSpan="11" className="px-6 py-16 text-center text-sm text-gray-400">No drivers found.</td>
+                  <td colSpan="12" className="px-6 py-16 text-center text-sm text-gray-400">No drivers found.</td>
                 </tr>
               ) : (
                 drivers.map((driver) => (
@@ -324,6 +394,18 @@ const DriverList = ({ mode = 'approved' }) => {
                     <td className="px-4 py-4 text-sm text-gray-500">{driver.serviceLocation}</td>
                     <td className="px-4 py-4 text-sm text-gray-500">{driver.phone}</td>
                     <td className="px-4 py-4 text-sm text-gray-500">{driver.transportType}</td>
+                    <td className="px-4 py-4 text-sm">
+                      {driver.acquiredByEmployeeName || driver.acquiredByEmployeeCode ? (
+                        <div className="flex flex-col">
+                          <span className="font-medium text-gray-900">{driver.acquiredByEmployeeName || 'Agent'}</span>
+                          <span className="text-xs text-gray-500">
+                            {driver.acquiredByEmployeeCode || 'Agent onboarded'}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs font-medium text-gray-500">Not agent onboarded</span>
+                      )}
+                    </td>
                     <td className="px-4 py-4">
                       {driver.onlineSelfieImage ? (
                         <button

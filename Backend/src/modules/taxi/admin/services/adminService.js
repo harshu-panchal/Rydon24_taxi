@@ -2709,7 +2709,7 @@ const DRIVER_LIST_SELECT = [
   'updatedAt',
 ].join(' ');
 
-const serializeDriverListItem = (driver) => ({
+const serializeDriverListItem = (driver, employee = null) => ({
   _id: driver._id,
   id: driver._id,
   name: driver.name || '',
@@ -2720,6 +2720,7 @@ const serializeDriverListItem = (driver) => ({
   referralCode: driver.referralCode || '',
   acquiredByEmployeeId: driver.acquiredByEmployeeId || null,
   acquiredByEmployeeCode: driver.acquiredByEmployeeCode || '',
+  acquiredByEmployeeName: employee?.name || '',
   owner_id: driver.owner_id || null,
   service_location_id: driver.service_location_id || null,
   city: driver.city || '',
@@ -4331,7 +4332,16 @@ export const adjustUserWallet = async (id, payload = {}) => {
   return { balance: Number(nextBalance.toFixed(2)) };
 };
 
-export const listDrivers = async ({ page = 1, limit = 50, status, search, approve, isOnline } = {}, currentAdmin = null) => {
+export const listDrivers = async ({
+  page = 1,
+  limit = 50,
+  status,
+  search,
+  approve,
+  isOnline,
+  employeeId = '',
+  referralSource = 'all',
+} = {}, currentAdmin = null) => {
   const safePage = Number(page) || 1;
   const safeLimit = Number(limit) || 50;
   const start = (safePage - 1) * safeLimit;
@@ -4352,6 +4362,21 @@ export const listDrivers = async ({ page = 1, limit = 50, status, search, approv
 
   if (isOnline !== undefined) {
     query.isOnline = isOnline === 'true' || isOnline === true || isOnline === 1;
+  }
+
+  const normalizedEmployeeId = String(employeeId || '').trim();
+  const normalizedReferralSource = String(referralSource || 'all').trim().toLowerCase();
+
+  if (normalizedEmployeeId) {
+    query.acquiredByEmployeeId = normalizedEmployeeId;
+  }
+
+  if (normalizedReferralSource === 'employee') {
+    query.acquiredByEmployeeId = normalizedEmployeeId
+      ? normalizedEmployeeId
+      : { $ne: null };
+  } else if (normalizedReferralSource === 'organic') {
+    query.acquiredByEmployeeId = null;
   }
 
   if (search) {
@@ -4388,7 +4413,15 @@ export const listDrivers = async ({ page = 1, limit = 50, status, search, approv
     ),
   ];
 
-  const [owners, serviceLocations] = await Promise.all([
+  const employeeIds = [
+    ...new Set(
+      drivers
+        .map((driver) => String(driver.acquiredByEmployeeId || '').trim())
+        .filter(Boolean),
+    ),
+  ];
+
+  const [owners, serviceLocations, employees] = await Promise.all([
     ownerIds.length
       ? Owner.find({ _id: { $in: ownerIds } })
           .select('_id company_name owner_name name email mobile')
@@ -4399,6 +4432,11 @@ export const listDrivers = async ({ page = 1, limit = 50, status, search, approv
           .select('_id service_location_name name country')
           .lean()
       : [],
+    employeeIds.length
+      ? Employee.find({ _id: { $in: employeeIds } })
+          .select('_id name employeeCode')
+          .lean()
+      : [],
   ]);
 
   const ownerMap = new Map(
@@ -4406,6 +4444,9 @@ export const listDrivers = async ({ page = 1, limit = 50, status, search, approv
   );
   const serviceLocationMap = new Map(
     serviceLocations.map((location) => [String(location._id), location]),
+  );
+  const employeeMap = new Map(
+    employees.map((employee) => [String(employee._id), employee]),
   );
 
   const hydratedDrivers = drivers.map((driver) => ({
@@ -4417,7 +4458,12 @@ export const listDrivers = async ({ page = 1, limit = 50, status, search, approv
   }));
 
   return {
-    results: hydratedDrivers.map(serializeDriverListItem),
+    results: hydratedDrivers.map((driver) =>
+      serializeDriverListItem(
+        driver,
+        employeeMap.get(String(driver.acquiredByEmployeeId || '')) || null,
+      ),
+    ),
     paginator: {
       current_page: safePage,
       per_page: safeLimit,
