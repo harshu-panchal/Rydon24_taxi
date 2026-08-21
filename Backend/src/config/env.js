@@ -95,6 +95,7 @@ export const env = {
       apiKeyOverride: readEnv('SMS_INDIA_HUB_API_KEY_OVERRIDE'),
       senderId: readEnv('SMS_INDIA_HUB_SENDER_ID'),
       dltTemplateId: readEnv('SMS_INDIA_HUB_DLT_TEMPLATE_ID'),
+      dltEntityId: readEnv('SMS_INDIA_HUB_DLT_ENTITY_ID'),
     },
   },
   driverWallet: {

@@ -1,11 +1,9 @@
 import { env } from '../../../config/env.js';
 import { ApiError } from '../../../utils/ApiError.js';
-import { AdminBusinessSetting } from '../admin/models/AdminBusinessSetting.js';
-
 const SMS_INDIA_HUB_ENDPOINT = 'http://cloud.smsindiahub.in/api/mt/SendSMS';
-const DLT_TEMPLATE_TEXT =
-  'Welcome to the ##var## powered by SMSINDIAHUB. Your OTP for registration is ##var##';
-const DEFAULT_BRAND_NAME = 'App';
+const SMS_INDIA_HUB_VENDOR_ENDPOINT = 'https://cloud.smsindiahub.in/vendorsms/pushsms.aspx';
+const DLT_TEMPLATE_TEXT = 'Welcome to the ##var## powered by Appzeto.Your OTP for registration is ##var##.BGADEC';
+const DEFAULT_BRAND_NAME = 'Rydon24';
 
 const isTruthy = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
 
@@ -72,6 +70,7 @@ const getSmsIndiaHubConfig = () => {
     apiKey,
     senderId,
     templateId,
+    entityId: readValue(env.sms?.indiaHub?.dltEntityId, process.env.SMS_INDIA_HUB_DLT_ENTITY_ID),
   };
 };
 
@@ -88,6 +87,7 @@ const logSmsConfigDebug = (config) => {
     apiKeyMasked: maskSecret(config.apiKey),
     senderId: config.senderId || '',
     templateId: config.templateId || '',
+    entityId: config.entityId || '',
   });
 };
 
@@ -104,6 +104,24 @@ const logSmsPayloadDebug = (payload) => {
   console.log('[smsService] final payload before request =', debugPayload);
 };
 
+const logVendorPayloadDebug = (params) => {
+  if (process.env.NODE_ENV === 'production') {
+    return;
+  }
+
+  console.log('[smsService] vendor payload before request =', {
+    APIKey: maskSecret(params.APIKey),
+    msisdn: params.msisdn,
+    sid: params.sid,
+    msg: params.msg,
+    fl: params.fl,
+    dc: params.dc,
+    gwid: params.gwid,
+    templateid: params.templateid || '',
+    entityid: params.entityid || '',
+  });
+};
+
 const parseProviderResponse = (responseText) => {
   try {
     return JSON.parse(responseText);
@@ -112,17 +130,7 @@ const parseProviderResponse = (responseText) => {
   }
 };
 
-const getConfiguredBrandName = async () => {
-  try {
-    const settings = await AdminBusinessSetting.findOne({ scope: 'default' })
-      .select('general.app_name')
-      .lean();
-
-    return readValue(settings?.general?.app_name, DEFAULT_BRAND_NAME);
-  } catch {
-    return DEFAULT_BRAND_NAME;
-  }
-};
+const getConfiguredBrandName = async () => DEFAULT_BRAND_NAME;
 
 const renderOtpMessage = ({ appName, otp }) =>
   DLT_TEMPLATE_TEXT.replace('##var##', String(appName)).replace('##var##', String(otp));
@@ -210,6 +218,61 @@ export const sendOtpSms = async ({ phone, otp, purpose = 'otp' }) => {
   let finalResponse = null;
   let finalResponseText = '';
   let delivered = false;
+
+  if (config.apiKey && config.senderId) {
+    const normalizedPhone = normalizeIndianPhone(phone);
+    const vendorParams = {
+      APIKey: config.apiKey,
+      msisdn: normalizedPhone,
+      sid: config.senderId,
+      msg: renderOtpMessage({ appName: brandName, otp }),
+      fl: '0',
+      dc: '0',
+      gwid: '2',
+    };
+
+    if (config.templateId) {
+      vendorParams.templateid = config.templateId;
+    }
+
+    if (config.entityId) {
+      vendorParams.entityid = config.entityId;
+    }
+
+    logVendorPayloadDebug(vendorParams);
+
+    const vendorQuery = new URLSearchParams(vendorParams).toString();
+    const vendorUrl = `${SMS_INDIA_HUB_VENDOR_ENDPOINT}?${vendorQuery}`;
+    const vendorResponse = await fetch(vendorUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json, text/plain;q=0.9, */*;q=0.8',
+        'User-Agent': 'Rydon24/1.0',
+      },
+    });
+    const vendorResponseText = (await vendorResponse.text()).trim();
+
+    finalResponse = vendorResponse;
+    finalResponseText = vendorResponseText;
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[smsService] SMS India Hub vendor response =', vendorResponseText);
+    }
+
+    if (isSuccessfulProviderResponse(vendorResponse, vendorResponseText)) {
+      delivered = true;
+    }
+  }
+
+  if (delivered) {
+    const parsedVendorResponse = parseProviderResponse(finalResponseText);
+    return {
+      mode: 'live',
+      message: 'OTP sent successfully',
+      providerResponse: finalResponseText,
+      jobId: parsedVendorResponse?.JobId || null,
+    };
+  }
 
   for (const authMode of authModes) {
     const payload = buildSmsPayload({
