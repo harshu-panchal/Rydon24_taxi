@@ -5503,8 +5503,14 @@ export const getDriverProfile = async (id) => {
   const [lng, lat] = coordinates;
   const hasValidLocation = Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
 
+  const acquiredByEmployee = driver.acquiredByEmployeeId
+    ? await Employee.findById(driver.acquiredByEmployeeId).select('_id name employeeCode').lean()
+    : null;
+
   return {
     ...serializeDriver(driver),
+    acquiredByEmployeeName: acquiredByEmployee?.name || '',
+    acquiredByEmployeeCode: driver.acquiredByEmployeeCode || acquiredByEmployee?.employeeCode || '',
     joined_at: driver.createdAt ? new Date(driver.createdAt).toLocaleString('en-IN') : 'N/A',
     vehicle: {
       type: driver.vehicleType || driver.registerFor || '',

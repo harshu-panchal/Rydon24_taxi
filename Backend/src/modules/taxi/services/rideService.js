@@ -19,6 +19,7 @@ import { consumeUserSubscriptionRide, resolveApplicableUserSubscription } from '
 import { applyPromoToRideInTransaction } from './promoService.js';
 import { getTipSettings } from './appSettingsService.js';
 import { getBidRideSettings } from './transportSettingsService.js';
+import { computeRideFareFromPricingRule } from './rideFare.js';
 
 const clearUserActiveRideIfPresent = async (user) => {
   if (!user?.currentRideId) {
@@ -908,11 +909,11 @@ export const createRideRecord = async ({
 
   await clearUserActiveRideIfPresent(user);
 
-  const safeFare = Number(fare);
+  const clientFare = Number(fare);
   const safeEstimatedDistanceMeters = Math.max(0, Number(estimatedDistanceMeters || 0));
   const safeEstimatedDurationMinutes = Math.max(0, Number(estimatedDurationMinutes || 0));
 
-  if (!Number.isFinite(safeFare) || safeFare < 0) {
+  if (!Number.isFinite(clientFare) || clientFare < 0) {
     throw new ApiError(400, 'fare must be a positive number or zero');
   }
 
@@ -951,6 +952,16 @@ export const createRideRecord = async ({
   const supportsBidding = ['bidding', 'both'].includes(String(primaryVehicle?.dispatch_type || '').trim().toLowerCase());
   const requestedBookingMode = String(bookingMode || '').trim().toLowerCase();
   const normalizedServiceType = normalizeServiceType(serviceType);
+  // Plain city rides are priced from SetPrice server-side; parcel/intercity keep their
+  // own quote pipelines, so their client fare stands.
+  const serverQuotedFare = normalizedServiceType === 'ride'
+    ? computeRideFareFromPricingRule({
+        pricingRule,
+        distanceMeters: safeEstimatedDistanceMeters,
+        durationMinutes: safeEstimatedDurationMinutes,
+      })
+    : null;
+  const safeFare = serverQuotedFare ?? clientFare;
   const bidRideSettings = await getBidRideSettings();
   const fareIncreaseWaitMinutes = toPositiveNumber(
     bidRideSettings.user_fare_increase_wait_minutes,

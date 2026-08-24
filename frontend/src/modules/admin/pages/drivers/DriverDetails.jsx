@@ -767,6 +767,14 @@ const DriverDetails = () => {
               <Calendar size={14} className="text-gray-400" />
               <span>{profile.joined_at}</span>
             </div>
+            <div className="flex items-center gap-2">
+              <CircleUserRound size={14} className="text-gray-400" />
+              <span>
+                {profile.acquiredByEmployeeCode
+                  ? `Onboarded by ${profile.acquiredByEmployeeName || 'agent'} (${profile.acquiredByEmployeeCode})`
+                  : 'Onboarded organically'}
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center gap-4">
