@@ -573,8 +573,12 @@ driverRouter.get(
   "/vehicle-field-templates",
   asyncHandler(getDriverVehicleFieldTemplates),
 );
-driverRouter.post("/onboarding/send-otp", asyncHandler(startOnboarding));
-driverRouter.post("/onboarding/verify-otp", asyncHandler(verifyOnboardingOtp));
+driverRouter.post("/onboarding/send-otp", otpSendRateLimit, asyncHandler(startOnboarding));
+driverRouter.post(
+  "/onboarding/verify-otp",
+  otpVerifyRateLimit,
+  asyncHandler(verifyOnboardingOtp),
+);
 driverRouter.patch("/onboarding/role", asyncHandler(saveOnboardingRole));
 driverRouter.get("/onboarding/signup-options", asyncHandler(getOnboardingSignupOptions));
 driverRouter.patch("/onboarding/role-details", asyncHandler(saveOnboardingRoleDetails));

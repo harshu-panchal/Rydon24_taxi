@@ -166,6 +166,7 @@ function LandingPage() {
               <Link to="/careers" className={`new-nav-link ${activeTab === 'careers' ? 'active' : ''}`} onClick={() => { setActiveTab('careers'); setIsMobileMenuOpen(false); }}>Careers</Link>
               <Link to="/contact" className={`new-nav-link ${activeTab === 'contact' ? 'active' : ''}`} onClick={() => { setActiveTab('contact'); setIsMobileMenuOpen(false); }}>Contact</Link>
               <Link to="/login" className={`new-nav-link ${activeTab === 'login' ? 'active' : ''}`} onClick={() => { setActiveTab('login'); setIsMobileMenuOpen(false); }}>Login</Link>
+              <Link to="/taxi/driver/login" className={`new-nav-link new-nav-link-driver ${activeTab === 'driver-login' ? 'active' : ''}`} onClick={() => { setActiveTab('driver-login'); setIsMobileMenuOpen(false); }}>Driver Login</Link>
             </nav>
             <div className="new-nav-actions">
               <a href="tel:91-93-911-911" className="mobile-phone-link">
@@ -173,6 +174,10 @@ function LandingPage() {
                 <span>91-93-911-911</span>
               </a>
               <button className="new-login-btn hidden-mobile" onClick={() => navigate('/login')}>Login</button>
+              <button className="new-driver-login-btn hidden-mobile" onClick={() => navigate('/taxi/driver/login')}>
+                <Car size={16} />
+                <span>Driver Login</span>
+              </button>
               <button className="new-book-btn hidden-mobile" onClick={() => window.open('https://play.google.com/store/apps/details?id=com.rydon24.user', '_blank')}>Book a Taxi</button>
               <button className="mobile-menu-btn" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
                 {isMobileMenuOpen ? '✕' : '☰'}

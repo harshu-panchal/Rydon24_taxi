@@ -1,6 +1,14 @@
 import api from "../../../shared/api/axiosInstance";
 
 const STORAGE_KEY = "driverRegistrationSession";
+// Government-backed document checks (RC/DL/PAN/GST/bank) go through a provider that
+// routinely takes 20-35s. The shared axios client times out at 30s, which surfaced as
+// "Network error or server down." on the RC screen, so these calls opt into a longer one.
+const DOCUMENT_VERIFICATION_TIMEOUT_MS = 90000;
+const withVerificationTimeout = (config = {}) => ({
+  ...config,
+  timeout: DOCUMENT_VERIFICATION_TIMEOUT_MS,
+});
 const DRIVER_AUTH_KEYS = ["token", "driverToken", "driverInfo", "role", "driverRole", "chatRole"];
 const DRIVER_PORTAL_ROLES = ["driver", "owner", "pooling_driver", "bus_driver", "service_center", "service_center_staff"];
 const isDataUrl = (value) => /^data:/i.test(String(value || "").trim());
@@ -204,10 +212,14 @@ export const saveDriverVehicle = (payload) =>
   api.patch("/drivers/onboarding/vehicle", payload);
 
 export const verifyDriverVehicleRc = (payload) =>
-  api.post("/drivers/onboarding/vehicle/verify-rc", payload);
+  api.post("/drivers/onboarding/vehicle/verify-rc", payload, withVerificationTimeout());
 
 export const verifyDriverOnboardingLicenseDocument = (documentKey, payload) =>
-  api.post(`/drivers/onboarding/documents/${encodeURIComponent(documentKey)}/verify-license`, payload);
+  api.post(
+    `/drivers/onboarding/documents/${encodeURIComponent(documentKey)}/verify-license`,
+    payload,
+    withVerificationTimeout(),
+  );
 
 export const saveDriverDocuments = (payload) =>
   api.patch("/drivers/onboarding/documents", payload);
@@ -670,35 +682,35 @@ export const verifyDriverLicenseDocument = (documentKey, payload = {}) =>
   api.post(
     `/drivers/documents/${encodeURIComponent(documentKey)}/verify-license`,
     payload,
-    withDriverAuth(),
+    withDriverAuth(withVerificationTimeout()),
   );
 
 export const verifyDriverPanDocument = (documentKey, payload = {}) =>
   api.post(
     `/drivers/documents/${encodeURIComponent(documentKey)}/verify-pan`,
     payload,
-    withDriverAuth(),
+    withDriverAuth(withVerificationTimeout()),
   );
 
 export const verifyDriverGstinDocument = (documentKey, payload = {}) =>
   api.post(
     `/drivers/documents/${encodeURIComponent(documentKey)}/verify-gst`,
     payload,
-    withDriverAuth(),
+    withDriverAuth(withVerificationTimeout()),
   );
 
 export const verifyDriverRcDocument = (documentKey, payload = {}) =>
   api.post(
     `/drivers/documents/${encodeURIComponent(documentKey)}/verify-rc`,
     payload,
-    withDriverAuth(),
+    withDriverAuth(withVerificationTimeout()),
   );
 
 export const verifyDriverBankDocument = (documentKey, payload = {}) =>
   api.post(
     `/drivers/documents/${encodeURIComponent(documentKey)}/verify-bank`,
     payload,
-    withDriverAuth(),
+    withDriverAuth(withVerificationTimeout()),
   );
 
 export const getDriverIncentives = () =>

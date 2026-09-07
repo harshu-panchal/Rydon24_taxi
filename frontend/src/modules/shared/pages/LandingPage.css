@@ -153,6 +153,29 @@ body {
   align-items: center;
 }
 
+/* Driver Login — brand-yellow so it reads as a separate audience from the
+   rider "Login" button sitting next to it. */
+.new-driver-login-btn {
+  background-color: var(--primary-yellow);
+  color: var(--text-dark);
+  border: none;
+  padding: 0 1.5rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+  font-family: inherit;
+  cursor: pointer;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+  transition: background-color 0.2s ease;
+}
+
+.new-driver-login-btn:hover {
+  background-color: var(--primary-yellow-hover);
+}
+
 .new-book-btn {
   background-color: #1a1a1a;
   color: var(--text-light);
@@ -1331,5 +1354,40 @@ body {
     flex-direction: column;
     gap: 0.3rem;
     align-items: center;
+  }
+}
+
+/* The desktop navbar already exposes Driver Login as a button in .new-nav-actions,
+   and those buttons are .hidden-mobile. So this nav-link duplicate exists purely to
+   carry Driver Login into the mobile menu. */
+.new-nav-link-driver {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .new-nav-link-driver {
+    display: block;
+    font-weight: 700;
+    color: var(--text-dark);
+  }
+}
+
+/* .new-nav-container uses padding-left:30%, so the nav row is tight on laptops.
+   Adding Driver Login pushed that row past the viewport at these widths, so
+   tighten the spacing in this band. Above 1400px the original spacing fits. */
+@media (max-width: 1400px) {
+  .new-nav-links {
+    gap: 1.25rem;
+  }
+
+  .new-login-btn,
+  .new-driver-login-btn {
+    padding: 0 0.9rem;
+    font-size: 0.85rem;
+  }
+
+  .new-book-btn {
+    padding: 0 1.1rem;
+    font-size: 0.9rem;
   }
 }

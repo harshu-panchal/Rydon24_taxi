@@ -2,6 +2,9 @@ import { env } from '../../../config/env.js';
 import { ApiError } from '../../../utils/ApiError.js';
 const SMS_INDIA_HUB_ENDPOINT = 'http://cloud.smsindiahub.in/api/mt/SendSMS';
 const SMS_INDIA_HUB_VENDOR_ENDPOINT = 'https://cloud.smsindiahub.in/vendorsms/pushsms.aspx';
+// Without an explicit timeout a stalled gateway leaves the OTP request hanging
+// forever, so the caller never gets an answer and the user never gets a code.
+const SMS_REQUEST_TIMEOUT_MS = 20000;
 const DLT_TEMPLATE_TEXT = 'Welcome to the ##var## powered by Appzeto.Your OTP for registration is ##var##.BGADEC';
 const DEFAULT_BRAND_NAME = 'Rydon24';
 
@@ -244,6 +247,7 @@ export const sendOtpSms = async ({ phone, otp, purpose = 'otp' }) => {
     const vendorQuery = new URLSearchParams(vendorParams).toString();
     const vendorUrl = `${SMS_INDIA_HUB_VENDOR_ENDPOINT}?${vendorQuery}`;
     const vendorResponse = await fetch(vendorUrl, {
+      signal: AbortSignal.timeout(SMS_REQUEST_TIMEOUT_MS),
       method: 'GET',
       headers: {
         Accept: 'application/json, text/plain;q=0.9, */*;q=0.8',
@@ -285,6 +289,7 @@ export const sendOtpSms = async ({ phone, otp, purpose = 'otp' }) => {
     const queryRequestUrl = `${SMS_INDIA_HUB_ENDPOINT}?${requestBody}`;
 
     const primaryResponse = await fetch(SMS_INDIA_HUB_ENDPOINT, {
+      signal: AbortSignal.timeout(SMS_REQUEST_TIMEOUT_MS),
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -311,6 +316,7 @@ export const sendOtpSms = async ({ phone, otp, purpose = 'otp' }) => {
       }
 
       const fallbackResponse = await fetch(queryRequestUrl, {
+        signal: AbortSignal.timeout(SMS_REQUEST_TIMEOUT_MS),
         method: 'POST',
         headers: {
           Accept: 'application/json, text/plain;q=0.9, */*;q=0.8',
@@ -339,6 +345,7 @@ export const sendOtpSms = async ({ phone, otp, purpose = 'otp' }) => {
         }
 
         const getFallbackResponse = await fetch(queryRequestUrl, {
+          signal: AbortSignal.timeout(SMS_REQUEST_TIMEOUT_MS),
           method: 'GET',
           headers: {
             Accept: 'application/json, text/plain;q=0.9, */*;q=0.8',

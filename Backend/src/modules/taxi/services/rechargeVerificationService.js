@@ -71,19 +71,41 @@ const buildAuthHeaders = (settings) => {
   };
 };
 
+// The provider proxies government sources (VAHAN/NSDL) and regularly needs 20-35s
+// to answer. Without an explicit timeout these requests hang forever and pile up.
+const RECHARGE_VERIFICATION_TIMEOUT_MS = 75000;
+
 const callRechargeVerificationEndpoint = async (settings, endpointPath, body) => {
   if (!settings.enabled) {
     throw new ApiError(400, `${settings.providerName} integration is disabled in admin settings`);
   }
 
-  const response = await fetch(joinUrl(settings.baseUrl, endpointPath), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...buildAuthHeaders(settings),
-    },
-    body: JSON.stringify(body),
-  });
+  let response;
+
+  try {
+    response = await fetch(joinUrl(settings.baseUrl, endpointPath), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...buildAuthHeaders(settings),
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(RECHARGE_VERIFICATION_TIMEOUT_MS),
+    });
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+      throw new ApiError(
+        504,
+        `${settings.providerName} did not respond in time. Please try again.`,
+      );
+    }
+
+    throw new ApiError(502, `${settings.providerName} could not be reached. Please try again.`);
+  }
 
   const rawText = await response.text();
   let payload = {};
