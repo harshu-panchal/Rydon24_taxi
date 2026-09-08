@@ -248,6 +248,11 @@ const EmployeeList = () => {
 
               {summary ? (
                 <div className="flex flex-wrap items-center gap-2">
+                  {summary.filtered ? (
+                    <span className="rounded-xl bg-slate-200 px-3 py-2 text-xs font-black text-slate-700">
+                      {summary.agentsWithOnboarding} agents
+                    </span>
+                  ) : null}
                   <span className="rounded-xl bg-sky-50 px-3 py-2 text-xs font-black text-sky-700">
                     {summary.usersAcquired} users
                   </span>
@@ -263,8 +268,8 @@ const EmployeeList = () => {
 
             <p className="mt-3 text-xs font-semibold text-slate-500">
               {summary?.filtered
-                ? 'Counts below cover only signups in the selected dates. Every agent is still listed, so a zero means they onboarded nobody in that window.'
-                : 'Pick a range to see how many people each agent onboarded on those dates.'}
+                ? 'Showing only agents who onboarded someone in the selected dates, with counts for that window. Clear the dates to see every agent.'
+                : 'Pick a range to see which agents onboarded people on those dates, and how many.'}
             </p>
           </div>
 
@@ -298,9 +303,13 @@ const EmployeeList = () => {
                           <UserRound size={28} />
                         </div>
                         <div>
-                          <p className="text-base font-black text-slate-900">No employees found</p>
+                          <p className="text-base font-black text-slate-900">
+                            {summary?.filtered ? 'Nobody onboarded in these dates' : 'No employees found'}
+                          </p>
                           <p className="mt-1 text-sm font-semibold text-slate-500">
-                            Add an employee to start attribution tracking for signups.
+                            {summary?.filtered
+                              ? 'No agent onboarded anyone in the selected range. Try a wider range or clear the dates.'
+                              : 'Add an employee to start attribution tracking for signups.'}
                           </p>
                         </div>
                       </div>

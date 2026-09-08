@@ -6094,6 +6094,44 @@ export const listEmployees = async (
     }
   }
 
+  const acquiredFrom = parseAcquisitionBoundary(dateFrom, false);
+  const acquiredTo = parseAcquisitionBoundary(dateTo, true);
+  const isRangeFiltered = Boolean(acquiredFrom || acquiredTo);
+
+  // With a range selected the counts have to be resolved across every agent
+  // *before* paging, for two reasons: the list is narrowed to agents who
+  // actually onboarded somebody in that window, and the page/total counts would
+  // otherwise be computed against rows that get dropped afterwards.
+  const rangeMatch = { acquiredByEmployeeId: { $ne: null } };
+
+  if (isRangeFiltered) {
+    rangeMatch.createdAt = {
+      ...(acquiredFrom ? { $gte: acquiredFrom } : {}),
+      ...(acquiredTo ? { $lte: acquiredTo } : {}),
+    };
+  }
+
+  const groupByEmployee = [
+    { $match: rangeMatch },
+    { $group: { _id: '$acquiredByEmployeeId', count: { $sum: 1 } } },
+  ];
+
+  const [userCounts, driverCounts] = await Promise.all([
+    User.aggregate(groupByEmployee),
+    Driver.aggregate(groupByEmployee),
+  ]);
+
+  const userCountMap = new Map(userCounts.map((item) => [String(item._id), Number(item.count || 0)]));
+  const driverCountMap = new Map(driverCounts.map((item) => [String(item._id), Number(item.count || 0)]));
+
+  if (isRangeFiltered) {
+    const acquiringIds = [...userCounts, ...driverCounts]
+      .filter((item) => Number(item.count || 0) > 0)
+      .map((item) => item._id);
+
+    query._id = { $in: acquiringIds };
+  }
+
   const [employees, total] = await Promise.all([
     Employee.find(query)
       .sort({ createdAt: -1 })
@@ -6103,42 +6141,15 @@ export const listEmployees = async (
     Employee.countDocuments(query),
   ]);
 
-  const employeeIds = employees.map((employee) => employee._id);
+  // Totals span every agent matching the filter, not just the current page.
+  const matchedIds = new Set([...userCountMap.keys(), ...driverCountMap.keys()]);
+  let usersInRange = 0;
+  let driversInRange = 0;
 
-  // The date range narrows *who was onboarded*, not which agents are listed, so
-  // every agent still appears and their counts reflect only the chosen window.
-  const acquiredFrom = parseAcquisitionBoundary(dateFrom, false);
-  const acquiredTo = parseAcquisitionBoundary(dateTo, true);
-  const acquisitionMatch = { acquiredByEmployeeId: { $in: employeeIds } };
-
-  if (acquiredFrom || acquiredTo) {
-    acquisitionMatch.createdAt = {
-      ...(acquiredFrom ? { $gte: acquiredFrom } : {}),
-      ...(acquiredTo ? { $lte: acquiredTo } : {}),
-    };
+  for (const id of matchedIds) {
+    usersInRange += userCountMap.get(id) || 0;
+    driversInRange += driverCountMap.get(id) || 0;
   }
-
-  const [userCounts, driverCounts] = await Promise.all([
-    employeeIds.length
-      ? User.aggregate([
-          { $match: acquisitionMatch },
-          { $group: { _id: '$acquiredByEmployeeId', count: { $sum: 1 } } },
-        ])
-      : [],
-    employeeIds.length
-      ? Driver.aggregate([
-          { $match: acquisitionMatch },
-          { $group: { _id: '$acquiredByEmployeeId', count: { $sum: 1 } } },
-        ])
-      : [],
-  ]);
-
-  const userCountMap = new Map(userCounts.map((item) => [String(item._id), Number(item.count || 0)]));
-  const driverCountMap = new Map(driverCounts.map((item) => [String(item._id), Number(item.count || 0)]));
-
-  const sumCounts = (entries) => entries.reduce((total_, item) => total_ + Number(item.count || 0), 0);
-  const usersInRange = sumCounts(userCounts);
-  const driversInRange = sumCounts(driverCounts);
 
   return {
     results: employees.map((employee) =>
@@ -6146,12 +6157,11 @@ export const listEmployees = async (
         totalUsers: userCountMap.get(String(employee._id)) || 0,
         totalDrivers: driverCountMap.get(String(employee._id)) || 0,
       })),
-    // Totals for the agents on this page, within the selected window, so the
-    // admin can read the headline number without adding up rows.
     summary: {
       dateFrom: acquiredFrom ? String(dateFrom).trim() : '',
       dateTo: acquiredTo ? String(dateTo).trim() : '',
-      filtered: Boolean(acquiredFrom || acquiredTo),
+      filtered: isRangeFiltered,
+      agentsWithOnboarding: total,
       usersAcquired: usersInRange,
       driversAcquired: driversInRange,
       totalAcquired: usersInRange + driversInRange,
