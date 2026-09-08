@@ -139,8 +139,10 @@ const DriverReferral = () => {
     normalizedDriverReferral,
     DRIVER_REFERRAL_TRANSLATION_FIELDS,
   );
+  // Point at the real login route rather than the legacy /reg-phone alias, so
+  // the link does not depend on a redirect to carry ?ref through.
   const referralShareLink = referralCode
-    ? `${window.location.origin}/taxi/driver/reg-phone?ref=${encodeURIComponent(referralCode)}`
+    ? `${window.location.origin}/taxi/driver/login?ref=${encodeURIComponent(referralCode)}`
     : '';
 
   const handleCopy = async () => {

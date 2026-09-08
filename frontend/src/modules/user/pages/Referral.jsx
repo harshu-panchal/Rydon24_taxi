@@ -169,6 +169,7 @@ const Referral = () => {
         await navigator.share({
           title: bannerText,
           text: shareText,
+          url: signupLink,
         });
         return;
       }

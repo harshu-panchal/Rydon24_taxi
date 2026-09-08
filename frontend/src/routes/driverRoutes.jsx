@@ -1,4 +1,4 @@
-import { Navigate, Route } from 'react-router-dom';
+import { Navigate, Route, useLocation } from 'react-router-dom';
 import DriverLayout from '../modules/driver/components/DriverLayout';
 import { getAuthenticatedDriverRole, getLocalDriverToken } from '../modules/driver/services/registrationService';
 import {
@@ -48,6 +48,16 @@ import {
   VehicleFleet,
 } from './lazyPages';
 
+// A plain <Navigate to="/path"> throws away the query string, which silently
+// broke every shared referral link: /taxi/driver/reg-phone?ref=CODE landed on
+// the login screen with no ?ref, so the code was never picked up. These legacy
+// aliases must forward the search params they were given.
+const NavigateKeepingQuery = ({ to }) => {
+  const { search } = useLocation();
+
+  return <Navigate to={`${to}${search}`} replace />;
+};
+
 export const DriverEntryRedirect = () => {
   const token = getLocalDriverToken();
   const role = String(getAuthenticatedDriverRole() || 'driver').toLowerCase();
@@ -79,12 +89,12 @@ export const DriverEntryRedirect = () => {
 const driverRoutes = (
   <Route path="/taxi/driver" element={<DriverLayout />}>
     <Route index element={<DriverEntryRedirect />} />
-    <Route path="lang-select" element={<Navigate to="/taxi/driver/login" replace />} />
-    <Route path="welcome" element={<Navigate to="/taxi/driver/login" replace />} />
+    <Route path="lang-select" element={<NavigateKeepingQuery to="/taxi/driver/login" />} />
+    <Route path="welcome" element={<NavigateKeepingQuery to="/taxi/driver/login" />} />
     <Route path="login" element={<PhoneRegistration />} />
     <Route path="terms" element={<LegalPage />} />
     <Route path="privacy" element={<LegalPage />} />
-    <Route path="reg-phone" element={<Navigate to="/taxi/driver/login" replace />} />
+    <Route path="reg-phone" element={<NavigateKeepingQuery to="/taxi/driver/login" />} />
     <Route path="otp-verify" element={<OTPVerification />} />
     <Route path="select-role" element={<RoleSelection />} />
     <Route path="step-personal" element={<StepPersonal />} />
