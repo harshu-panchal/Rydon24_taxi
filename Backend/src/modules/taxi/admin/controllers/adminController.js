@@ -597,8 +597,8 @@ export const updateReferralSettings = asyncHandler(async (req, res) =>
   ok(res, await adminService.updateReferralSettings(req.params.type, req.body)),
 );
 
-export const getReferralDashboard = asyncHandler(async (_req, res) =>
-  ok(res, await adminService.getReferralDashboard()),
+export const getReferralDashboard = asyncHandler(async (req, res) =>
+  ok(res, await adminService.getReferralDashboard(req.query)),
 );
 
 export const getServiceLocations = asyncHandler(async (req, res) =>

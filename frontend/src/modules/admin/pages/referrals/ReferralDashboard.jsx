@@ -116,28 +116,66 @@ const LineChartMock = ({ color, data, labels }) => {
   );
 };
 
+// Local calendar date as YYYY-MM-DD. toISOString() converts to UTC first and
+// would hand back yesterday for anyone east of Greenwich.
+const toLocalDateInput = (date) => {
+  const pad = (value) => String(value).padStart(2, '0');
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+const daysAgo = (count) => {
+  const date = new Date();
+  date.setDate(date.getDate() - count);
+
+  return toLocalDateInput(date);
+};
+
 const ReferralDashboard = () => {
   const { settings } = useSettings();
   const appName = settings.general?.app_name || 'App';
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchDashboard = async () => {
       try {
-        const res = await adminService.getReferralDashboard();
-        if (res.data) {
+        setIsRefreshing(true);
+        const res = await adminService.getReferralDashboard(dateFrom, dateTo);
+        if (!cancelled && res.data) {
           setData(res.data);
         }
       } catch (err) {
         console.error("Dashboard fetch error:", err);
-        toast.error('Failed to load dashboard data');
+        if (!cancelled) {
+          toast.error('Failed to load dashboard data');
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+          setIsRefreshing(false);
+        }
       }
     };
     fetchDashboard();
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dateFrom, dateTo]);
+
+  const isFiltered = Boolean(data?.range?.filtered);
+  const chartMonths = Number(data?.range?.chartMonths || 12);
+  // With a range the chart covers the months that range spans, so calling it
+  // "last N months" would be wrong.
+  const chartWindowLabel = isFiltered
+    ? 'Selected Dates'
+    : `Last ${chartMonths} Months`;
 
   if (isLoading) {
     return (
@@ -150,8 +188,8 @@ const ReferralDashboard = () => {
     );
   }
 
-  // Monthly data defaults
-  const emptyMonthly = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  // Placeholder series has to match the bucket count or the labels fall back.
+  const emptyMonthly = new Array(chartMonths).fill(0);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 font-sans text-gray-900 pb-20">
@@ -170,18 +208,106 @@ const ReferralDashboard = () => {
         </div>
       </div>
 
+      {/* DATE FILTER */}
+      <div className="bg-white border border-gray-100 rounded-lg shadow-sm p-5 mb-6">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1" htmlFor="referral-date-from">
+                Signed up from
+              </label>
+              <input
+                id="referral-date-from"
+                type="date"
+                value={dateFrom}
+                max={dateTo || undefined}
+                onChange={(event) => setDateFrom(event.target.value)}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1" htmlFor="referral-date-to">
+                To
+              </label>
+              <input
+                id="referral-date-to"
+                type="date"
+                value={dateTo}
+                min={dateFrom || undefined}
+                onChange={(event) => setDateTo(event.target.value)}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {[
+                { label: 'Today', from: daysAgo(0), to: daysAgo(0) },
+                { label: 'Last 7 days', from: daysAgo(6), to: daysAgo(0) },
+                { label: 'Last 30 days', from: daysAgo(29), to: daysAgo(0) },
+              ].map((preset) => {
+                const active = dateFrom === preset.from && dateTo === preset.to;
+
+                return (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => {
+                      setDateFrom(preset.from);
+                      setDateTo(preset.to);
+                    }}
+                    className={`rounded-lg px-3 py-2 text-[11px] font-black transition-colors ${
+                      active
+                        ? 'bg-indigo-600 text-white'
+                        : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+
+              {dateFrom || dateTo ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDateFrom('');
+                    setDateTo('');
+                  }}
+                  className="rounded-lg px-3 py-2 text-[11px] font-black text-gray-500 hover:text-gray-900"
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {isRefreshing ? (
+            <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-indigo-600">
+              <Loader2 size={12} className="animate-spin" />
+              Updating
+            </div>
+          ) : null}
+        </div>
+
+        <p className="mt-3 text-[11px] font-bold text-gray-400">
+          {isFiltered
+            ? 'Every figure below counts only people who signed up in the selected dates.'
+            : 'Showing all time. Pick a range to scope every figure to those dates.'}
+        </p>
+      </div>
+
       {/* TOP CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="TOTAL DRIVERS"
           value={data?.total_drivers ?? 0}
-          hint="All registered drivers"
+          hint={isFiltered ? "Registered in selected dates" : "All registered drivers"}
           icon={Users}
         />
         <StatCard
           title="TOTAL USERS"
           value={data?.total_users ?? 0}
-          hint="All registered users"
+          hint={isFiltered ? "Registered in selected dates" : "All registered users"}
           icon={UserCheck}
         />
         <StatCard
@@ -214,7 +340,7 @@ const ReferralDashboard = () => {
                  val2={data?.user_referrals?.referral_user || 0}
                />
             </ChartContainer>
-            <ChartContainer title="User Referrals · Last 12 Months">
+            <ChartContainer title={`User Referrals · ${chartWindowLabel}`}>
                <LineChartMock 
                  color="#059669" 
                  data={data?.user_referrals?.monthly || emptyMonthly}
@@ -240,7 +366,7 @@ const ReferralDashboard = () => {
                  val2={data?.driver_referrals?.referral_driver || 0}
                />
             </ChartContainer>
-            <ChartContainer title="Driver Referrals · Last 12 Months">
+            <ChartContainer title={`Driver Referrals · ${chartWindowLabel}`}>
                <LineChartMock 
                  color="#0EA5E9" 
                  data={data?.driver_referrals?.monthly || emptyMonthly}

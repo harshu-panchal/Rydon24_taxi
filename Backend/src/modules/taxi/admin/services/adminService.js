@@ -5636,7 +5636,7 @@ export const updateReferralSettings = async (type, payload) => {
   return setting.referral[type];
 };
 
-export const getReferralDashboard = async () => {
+export const getReferralDashboard = async ({ dateFrom = '', dateTo = '' } = {}) => {
   // Signups that arrived through an employee/agent belong to agent attribution
   // (Employee Management), not the referral programme. They must not be counted
   // here: most people who entered a referral code were also agent signups, so
@@ -5646,28 +5646,69 @@ export const getReferralDashboard = async () => {
   };
   const peerReferred = { referredBy: { $ne: null }, ...withoutAgent };
 
-  // Rolling twelve months ending with the current one, so the charts always
-  // show the last year of activity rather than resetting every January.
+  const rangeFrom = parseAcquisitionBoundary(dateFrom, false);
+  const rangeTo = parseAcquisitionBoundary(dateTo, true);
+  const isRangeFiltered = Boolean(rangeFrom || rangeTo);
+
+  // With no range the view is all-time and the charts roll over the last twelve
+  // months. With a range every figure is scoped to signups created inside it,
+  // so the cards, the pies and the charts all describe the same population.
   const now = new Date();
-  const windowStart = new Date(now.getFullYear(), now.getMonth() - 11, 1, 0, 0, 0, 0);
-  const windowEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-  const inWindow = { createdAt: { $gte: windowStart, $lte: windowEnd } };
+  const rangeQuery = isRangeFiltered
+    ? {
+        createdAt: {
+          ...(rangeFrom ? { $gte: rangeFrom } : {}),
+          ...(rangeTo ? { $lte: rangeTo } : {}),
+        },
+      }
+    : {};
 
   const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const MAX_BUCKETS = 12;
+
+  // Charts cover the months the range spans, or the trailing twelve when there
+  // is no range. The newest month is always last and at most twelve are shown,
+  // so a multi-year range stays readable instead of drawing 80 columns.
+  // chartEnd follows the range even when it is in the future, otherwise a future
+  // range would fall back to today and plot this month's signups against cards
+  // that correctly read zero.
+  const chartEnd = isRangeFiltered ? (rangeTo || now) : now;
+  const earliestWanted = rangeFrom
+    ? new Date(rangeFrom.getFullYear(), rangeFrom.getMonth(), 1)
+    : new Date(chartEnd.getFullYear(), chartEnd.getMonth() - (MAX_BUCKETS - 1), 1);
+  const monthsSpanned = ((chartEnd.getFullYear() - earliestWanted.getFullYear()) * 12)
+    + (chartEnd.getMonth() - earliestWanted.getMonth()) + 1;
+  const bucketCount = Math.min(MAX_BUCKETS, Math.max(1, monthsSpanned));
+
   const monthBuckets = [];
 
-  for (let offset = 11; offset >= 0; offset -= 1) {
-    const month = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+  for (let offset = bucketCount - 1; offset >= 0; offset -= 1) {
+    const month = new Date(chartEnd.getFullYear(), chartEnd.getMonth() - offset, 1);
 
     monthBuckets.push({
       key: `${month.getFullYear()}-${month.getMonth()}`,
-      // Each month appears once across a twelve month window, so the short name
-      // is unambiguous even where the window straddles two years.
+      // Bucket keys carry the year, so a window crossing a year boundary keeps
+      // last October separate from this one even though both read "Oct".
       label: MONTH_NAMES[month.getMonth()],
     });
   }
 
   const bucketIndexByKey = new Map(monthBuckets.map((bucket, index) => [bucket.key, index]));
+
+  // The chart query is the intersection of the bucket span and the selected
+  // range, so nothing outside the chosen dates can reach a bar.
+  const bucketFrom = new Date(
+    chartEnd.getFullYear(),
+    chartEnd.getMonth() - (bucketCount - 1),
+    1, 0, 0, 0, 0,
+  );
+  const bucketTo = new Date(chartEnd.getFullYear(), chartEnd.getMonth() + 1, 0, 23, 59, 59, 999);
+  const chartWindow = {
+    createdAt: {
+      $gte: rangeFrom && rangeFrom > bucketFrom ? rangeFrom : bucketFrom,
+      $lte: rangeTo && rangeTo < bucketTo ? rangeTo : bucketTo,
+    },
+  };
 
   const [
     totalDrivers,
@@ -5678,19 +5719,19 @@ export const getReferralDashboard = async () => {
     driverSignups,
     businessSetting,
   ] = await Promise.all([
-    Driver.countDocuments(),
-    User.countDocuments(),
-    User.countDocuments(peerReferred),
-    Driver.countDocuments(peerReferred),
-    User.find({ ...peerReferred, ...inWindow }).select('createdAt').lean(),
-    Driver.find({ ...peerReferred, ...inWindow }).select('createdAt').lean(),
+    Driver.countDocuments(rangeQuery),
+    User.countDocuments(rangeQuery),
+    User.countDocuments({ ...peerReferred, ...rangeQuery }),
+    Driver.countDocuments({ ...peerReferred, ...rangeQuery }),
+    User.find({ ...peerReferred, ...chartWindow }).select('createdAt').lean(),
+    Driver.find({ ...peerReferred, ...chartWindow }).select('createdAt').lean(),
     AdminBusinessSetting.findOne({ scope: 'default' }).lean(),
   ]);
 
   // Bucketed in JS on local months so they line up with the labels; $month would
   // bucket in UTC and push early-hours signups into the previous month.
   const monthlySeries = (records) => {
-    const months = new Array(12).fill(0);
+    const months = new Array(monthBuckets.length).fill(0);
 
     for (const record of records) {
       const created = record?.createdAt ? new Date(record.createdAt) : null;
@@ -5720,11 +5761,17 @@ export const getReferralDashboard = async () => {
     total_drivers: totalDrivers,
     total_users: totalUsers,
     active_referrals: referralUsers + referralDrivers,
-    // Labels travel with the data so the charts stay aligned as the window rolls.
-    monthly_labels: monthBuckets.map((bucket) => bucket.label),
     // No referral payout is recorded anywhere, so this is the configured reward
     // value of the qualifying referrals, not settled cash.
     referral_earning: (referralUsers * rewardFor('user')) + (referralDrivers * rewardFor('driver')),
+    // Labels travel with the data so the charts stay aligned as the window moves.
+    monthly_labels: monthBuckets.map((bucket) => bucket.label),
+    range: {
+      dateFrom: rangeFrom ? String(dateFrom).trim() : '',
+      dateTo: rangeTo ? String(dateTo).trim() : '',
+      filtered: isRangeFiltered,
+      chartMonths: monthBuckets.length,
+    },
     user_referrals: {
       normal_user: Math.max(0, totalUsers - referralUsers),
       referral_user: referralUsers,

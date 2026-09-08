@@ -106,7 +106,18 @@ export const adminService = {
   adjustOwnerWallet: (id, data) => api.post(`/admin/wallet/owners/${id}/adjust`, data),
   getOwnerWalletHistory: (id) => api.get(`/admin/wallet/owners/${id}/history`),
 
-  getReferralDashboard: () => api.get('/admin/referral/dashboard'),
+  getReferralDashboard: (dateFrom = '', dateTo = '') => {
+    const params = new URLSearchParams();
+    if (String(dateFrom || '').trim()) {
+      params.set('dateFrom', String(dateFrom).trim());
+    }
+    if (String(dateTo || '').trim()) {
+      params.set('dateTo', String(dateTo).trim());
+    }
+    const query = params.toString();
+
+    return api.get(`/admin/referral/dashboard${query ? `?${query}` : ''}`);
+  },
 
   /**
    * Subscription Management
