@@ -5637,27 +5637,79 @@ export const updateReferralSettings = async (type, payload) => {
 };
 
 export const getReferralDashboard = async () => {
-  const [totalDrivers, totalUsers] = await Promise.all([
+  // Signups that arrived through an employee/agent belong to agent attribution
+  // (Employee Management), not the referral programme. They must not be counted
+  // here: most people who entered a referral code were also agent signups, so
+  // counting the code alone would report agent work as referral performance.
+  const withoutAgent = {
+    $or: [{ acquiredByEmployeeId: null }, { acquiredByEmployeeId: { $exists: false } }],
+  };
+  const peerReferred = { referredBy: { $ne: null }, ...withoutAgent };
+
+  // The chart labels are a fixed Jan..Dec, so the series is the current
+  // calendar year rather than a trailing twelve months.
+  const yearStart = new Date(new Date().getFullYear(), 0, 1, 0, 0, 0, 0);
+  const yearEnd = new Date(new Date().getFullYear(), 11, 31, 23, 59, 59, 999);
+  const inThisYear = { createdAt: { $gte: yearStart, $lte: yearEnd } };
+
+  const [
+    totalDrivers,
+    totalUsers,
+    referralUsers,
+    referralDrivers,
+    userSignups,
+    driverSignups,
+    businessSetting,
+  ] = await Promise.all([
     Driver.countDocuments(),
     User.countDocuments(),
+    User.countDocuments(peerReferred),
+    Driver.countDocuments(peerReferred),
+    User.find({ ...peerReferred, ...inThisYear }).select('createdAt').lean(),
+    Driver.find({ ...peerReferred, ...inThisYear }).select('createdAt').lean(),
+    AdminBusinessSetting.findOne({ scope: 'default' }).lean(),
   ]);
 
-  // Mocking some parts for the dashboard view
+  // Bucketed in JS on local months so they line up with the labels; $month would
+  // bucket in UTC and push early-hours signups into the previous month.
+  const monthlySeries = (records) => {
+    const months = new Array(12).fill(0);
+
+    for (const record of records) {
+      const created = record?.createdAt ? new Date(record.createdAt) : null;
+
+      if (created && !Number.isNaN(created.getTime())) {
+        months[created.getMonth()] += 1;
+      }
+    }
+
+    return months;
+  };
+
+  const referralSettings = businessSetting?.referral || {};
+  const rewardFor = (audience) => {
+    const config = referralSettings?.[audience] || {};
+
+    return config.enabled === false ? 0 : Number(config.amount || 0);
+  };
+
   return {
     total_drivers: totalDrivers,
     total_users: totalUsers,
-    active_referrals: 0,
-    referral_earning: 0,
+    active_referrals: referralUsers + referralDrivers,
+    // No referral payout is recorded anywhere, so this is the configured reward
+    // value of the qualifying referrals, not settled cash.
+    referral_earning: (referralUsers * rewardFor('user')) + (referralDrivers * rewardFor('driver')),
     user_referrals: {
-      normal_user: totalUsers,
-      referral_user: 0,
-      monthly: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      normal_user: Math.max(0, totalUsers - referralUsers),
+      referral_user: referralUsers,
+      monthly: monthlySeries(userSignups),
     },
     driver_referrals: {
-      normal_driver: totalDrivers,
-      referral_driver: 0,
-      monthly: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    }
+      normal_driver: Math.max(0, totalDrivers - referralDrivers),
+      referral_driver: referralDrivers,
+      monthly: monthlySeries(driverSignups),
+    },
   };
 };
 

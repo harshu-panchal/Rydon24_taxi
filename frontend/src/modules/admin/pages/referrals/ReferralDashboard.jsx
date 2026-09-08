@@ -1,22 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Users, 
-  ArrowUpRight, 
+import {
+  Users,
   ChevronRight,
-  TrendingUp,
-  Activity,
-  ArrowRight,
   UserCheck,
   Zap,
   IndianRupee,
-  MoreVertical,
   Loader2
 } from 'lucide-react';
 import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 
-const StatCard = ({ title, value, change, icon: Icon, color }) => (
+const StatCard = ({ title, value, hint, icon: Icon }) => (
   <div className="bg-white rounded-lg p-6 border border-gray-100 shadow-sm flex flex-col justify-between h-full group hover:shadow-md transition-shadow">
     <div className="flex items-start justify-between">
       <div className="flex flex-col">
@@ -27,12 +22,9 @@ const StatCard = ({ title, value, change, icon: Icon, color }) => (
         <Icon size={20} />
       </div>
     </div>
-    <div className="mt-4 flex items-center gap-1.5">
-       <div className="flex items-center gap-0.5 text-emerald-500 font-bold text-[12px]">
-          <ArrowUpRight size={14} /> 
-          <span>{change}%</span>
-       </div>
-    </div>
+    {/* This used to render a hardcoded green "0%" rise on every card. There is
+        no period-over-period comparison behind it, so it said nothing. */}
+    <div className="mt-4 text-[11px] font-bold text-gray-400">{hint}</div>
   </div>
 );
 
@@ -161,39 +153,44 @@ const ReferralDashboard = () => {
     <div className="space-y-6 animate-in fade-in duration-500 font-sans text-gray-900 pb-20">
       {/* BREADCRUMB & TITLE */}
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-[11px] font-black tracking-[0.2em] text-gray-950 uppercase">REFERRAL DASHBOARD</h1>
+        <div>
+          <h1 className="text-[11px] font-black tracking-[0.2em] text-gray-950 uppercase">REFERRAL DASHBOARD</h1>
+          <p className="mt-2 text-[11px] font-bold text-gray-400">
+            Peer referrals only. Signups brought in by an agent are tracked separately under Employee Management.
+          </p>
+        </div>
         <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400">
-           <span>Referral Dashboard</span>
+           <span>Referrals</span>
            <ChevronRight size={12} />
-           <span className="text-gray-950">Referral Dashboard</span>
+           <span className="text-gray-950">Dashboard</span>
         </div>
       </div>
 
       {/* TOP CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard 
-          title="TOTAL DRIVERS" 
-          value={data?.total_drivers || "0"} 
-          change="0" 
-          icon={Users} 
+        <StatCard
+          title="TOTAL DRIVERS"
+          value={data?.total_drivers ?? 0}
+          hint="All registered drivers"
+          icon={Users}
         />
-        <StatCard 
-          title="TOTAL USERS" 
-          value={data?.total_users || "0"} 
-          change="0" 
-          icon={UserCheck} 
+        <StatCard
+          title="TOTAL USERS"
+          value={data?.total_users ?? 0}
+          hint="All registered users"
+          icon={UserCheck}
         />
-        <StatCard 
-          title="ACTIVE REFERRALS" 
-          value={data?.active_referrals || "0"} 
-          change="0" 
-          icon={Zap} 
+        <StatCard
+          title="ACTIVE REFERRALS"
+          value={data?.active_referrals ?? 0}
+          hint="Peer referrals only, agent signups excluded"
+          icon={Zap}
         />
-        <StatCard 
-          title="REFERRAL EARNING" 
-          value={data?.referral_earning ? `₹ ${data.referral_earning}` : "₹ 0"} 
-          change="0" 
-          icon={IndianRupee} 
+        <StatCard
+          title="REFERRAL REWARD VALUE"
+          value={`₹ ${Number(data?.referral_earning ?? 0).toLocaleString('en-IN')}`}
+          hint="Configured reward for those referrals"
+          icon={IndianRupee}
         />
       </div>
 
