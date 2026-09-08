@@ -30,10 +30,16 @@ export const adminService = {
     }
     return api.get(`/admin/users?${params.toString()}`);
   },
-  getEmployees: (page = 1, limit = 50, search = '') => {
+  getEmployees: (page = 1, limit = 50, search = '', dateFrom = '', dateTo = '') => {
     const params = new URLSearchParams({ page, limit });
     if (String(search || '').trim()) {
       params.set('search', String(search).trim());
+    }
+    if (String(dateFrom || '').trim()) {
+      params.set('dateFrom', String(dateFrom).trim());
+    }
+    if (String(dateTo || '').trim()) {
+      params.set('dateTo', String(dateTo).trim());
     }
     return api.get(`/admin/employees?${params.toString()}`);
   },

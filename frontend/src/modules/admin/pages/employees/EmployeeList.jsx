@@ -4,6 +4,22 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { adminService } from '../../services/adminService';
 
+// Local calendar date as YYYY-MM-DD. toISOString() would convert to UTC first
+// and hand back yesterday for anyone east of Greenwich, which is most of the
+// people using this panel.
+const toLocalDateInput = (date) => {
+  const pad = (value) => String(value).padStart(2, '0');
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+const daysAgo = (count) => {
+  const date = new Date();
+  date.setDate(date.getDate() - count);
+
+  return toLocalDateInput(date);
+};
+
 const EmployeeList = () => {
   const navigate = useNavigate();
   const [employees, setEmployees] = useState([]);
@@ -13,10 +29,19 @@ const EmployeeList = () => {
   const [paginator, setPaginator] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [summary, setSummary] = useState(null);
   const latestRequestId = useRef(0);
   const hasLoadedRef = useRef(false);
 
-  const loadEmployees = useCallback(async ({ nextPage = page, nextLimit = itemsPerPage, nextSearch = searchTerm } = {}) => {
+  const loadEmployees = useCallback(async ({
+    nextPage = page,
+    nextLimit = itemsPerPage,
+    nextSearch = searchTerm,
+    nextDateFrom = dateFrom,
+    nextDateTo = dateTo,
+  } = {}) => {
     const requestId = latestRequestId.current + 1;
     latestRequestId.current = requestId;
     const initialLoad = !hasLoadedRef.current;
@@ -24,7 +49,7 @@ const EmployeeList = () => {
     try {
       setLoading(initialLoad);
       setRefreshing(!initialLoad);
-      const response = await adminService.getEmployees(nextPage, nextLimit, nextSearch);
+      const response = await adminService.getEmployees(nextPage, nextLimit, nextSearch, nextDateFrom, nextDateTo);
 
       if (requestId !== latestRequestId.current) {
         return;
@@ -32,6 +57,7 @@ const EmployeeList = () => {
 
       setEmployees(Array.isArray(response?.data?.results) ? response.data.results : []);
       setPaginator(response?.data?.paginator || null);
+      setSummary(response?.data?.summary || null);
       hasLoadedRef.current = true;
     } catch (error) {
       if (requestId === latestRequestId.current) {
@@ -43,15 +69,21 @@ const EmployeeList = () => {
         setRefreshing(false);
       }
     }
-  }, [itemsPerPage, page, searchTerm]);
+  }, [itemsPerPage, page, searchTerm, dateFrom, dateTo]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      loadEmployees({ nextPage: page, nextLimit: itemsPerPage, nextSearch: searchTerm.trim() });
+      loadEmployees({
+        nextPage: page,
+        nextLimit: itemsPerPage,
+        nextSearch: searchTerm.trim(),
+        nextDateFrom: dateFrom,
+        nextDateTo: dateTo,
+      });
     }, searchTerm.trim() ? 300 : 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [loadEmployees, page, itemsPerPage, searchTerm]);
+  }, [loadEmployees, page, itemsPerPage, searchTerm, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Number(paginator?.last_page || 1));
   const safePage = Math.min(Math.max(1, page), totalPages);
@@ -131,6 +163,109 @@ const EmployeeList = () => {
               </select>
               <span>entries</span>
             </div>
+          </div>
+
+          <div className="mb-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+              <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-black uppercase tracking-[0.16em] text-slate-400" htmlFor="employee-date-from">
+                    Onboarded from
+                  </label>
+                  <input
+                    id="employee-date-from"
+                    type="date"
+                    value={dateFrom}
+                    max={dateTo || undefined}
+                    onChange={(event) => {
+                      setDateFrom(event.target.value);
+                      setPage(1);
+                    }}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-black uppercase tracking-[0.16em] text-slate-400" htmlFor="employee-date-to">
+                    To
+                  </label>
+                  <input
+                    id="employee-date-to"
+                    type="date"
+                    value={dateTo}
+                    min={dateFrom || undefined}
+                    onChange={(event) => {
+                      setDateTo(event.target.value);
+                      setPage(1);
+                    }}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {[
+                    { label: 'Today', from: daysAgo(0), to: daysAgo(0) },
+                    { label: 'Last 7 days', from: daysAgo(6), to: daysAgo(0) },
+                    { label: 'Last 30 days', from: daysAgo(29), to: daysAgo(0) },
+                  ].map((preset) => {
+                    const active = dateFrom === preset.from && dateTo === preset.to;
+
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => {
+                          setDateFrom(preset.from);
+                          setDateTo(preset.to);
+                          setPage(1);
+                        }}
+                        className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${
+                          active
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+
+                  {dateFrom || dateTo ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDateFrom('');
+                        setDateTo('');
+                        setPage(1);
+                      }}
+                      className="rounded-xl px-3 py-2 text-xs font-black text-slate-500 underline-offset-4 transition-all hover:text-slate-800 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              {summary ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-xl bg-sky-50 px-3 py-2 text-xs font-black text-sky-700">
+                    {summary.usersAcquired} users
+                  </span>
+                  <span className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-black text-amber-700">
+                    {summary.driversAcquired} drivers
+                  </span>
+                  <span className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-black text-white">
+                    {summary.totalAcquired} onboarded{summary.filtered ? ' in range' : ' all time'}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+
+            <p className="mt-3 text-xs font-semibold text-slate-500">
+              {summary?.filtered
+                ? 'Counts below cover only signups in the selected dates. Every agent is still listed, so a zero means they onboarded nobody in that window.'
+                : 'Pick a range to see how many people each agent onboarded on those dates.'}
+            </p>
           </div>
 
           {refreshing ? (

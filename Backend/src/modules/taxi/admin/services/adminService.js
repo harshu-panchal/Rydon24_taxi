@@ -6049,7 +6049,28 @@ const toAdminIntercityTripRow = (ride) => {
   };
 };
 
-export const listEmployees = async ({ page = 1, limit = 50, search = '' } = {}, currentAdmin = null) => {
+// "2026-09-07" -> that day's boundary in the server's own timezone, so an admin
+// filtering by a date gets the day they actually mean rather than a UTC window
+// shifted by the local offset.
+const parseAcquisitionBoundary = (value, endOfDay = false) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || '').trim());
+
+  if (!match) {
+    return null;
+  }
+
+  const [, year, month, day] = match.map(Number);
+  const date = endOfDay
+    ? new Date(year, month - 1, day, 23, 59, 59, 999)
+    : new Date(year, month - 1, day, 0, 0, 0, 0);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+export const listEmployees = async (
+  { page = 1, limit = 50, search = '', dateFrom = '', dateTo = '' } = {},
+  currentAdmin = null,
+) => {
   if (currentAdmin) {
     assertAdminPermission(currentAdmin, 'employees.view', 'employees');
   }
@@ -6083,16 +6104,30 @@ export const listEmployees = async ({ page = 1, limit = 50, search = '' } = {}, 
   ]);
 
   const employeeIds = employees.map((employee) => employee._id);
+
+  // The date range narrows *who was onboarded*, not which agents are listed, so
+  // every agent still appears and their counts reflect only the chosen window.
+  const acquiredFrom = parseAcquisitionBoundary(dateFrom, false);
+  const acquiredTo = parseAcquisitionBoundary(dateTo, true);
+  const acquisitionMatch = { acquiredByEmployeeId: { $in: employeeIds } };
+
+  if (acquiredFrom || acquiredTo) {
+    acquisitionMatch.createdAt = {
+      ...(acquiredFrom ? { $gte: acquiredFrom } : {}),
+      ...(acquiredTo ? { $lte: acquiredTo } : {}),
+    };
+  }
+
   const [userCounts, driverCounts] = await Promise.all([
     employeeIds.length
       ? User.aggregate([
-          { $match: { acquiredByEmployeeId: { $in: employeeIds } } },
+          { $match: acquisitionMatch },
           { $group: { _id: '$acquiredByEmployeeId', count: { $sum: 1 } } },
         ])
       : [],
     employeeIds.length
       ? Driver.aggregate([
-          { $match: { acquiredByEmployeeId: { $in: employeeIds } } },
+          { $match: acquisitionMatch },
           { $group: { _id: '$acquiredByEmployeeId', count: { $sum: 1 } } },
         ])
       : [],
@@ -6101,12 +6136,26 @@ export const listEmployees = async ({ page = 1, limit = 50, search = '' } = {}, 
   const userCountMap = new Map(userCounts.map((item) => [String(item._id), Number(item.count || 0)]));
   const driverCountMap = new Map(driverCounts.map((item) => [String(item._id), Number(item.count || 0)]));
 
+  const sumCounts = (entries) => entries.reduce((total_, item) => total_ + Number(item.count || 0), 0);
+  const usersInRange = sumCounts(userCounts);
+  const driversInRange = sumCounts(driverCounts);
+
   return {
     results: employees.map((employee) =>
       serializeEmployee(employee, {
         totalUsers: userCountMap.get(String(employee._id)) || 0,
         totalDrivers: driverCountMap.get(String(employee._id)) || 0,
       })),
+    // Totals for the agents on this page, within the selected window, so the
+    // admin can read the headline number without adding up rows.
+    summary: {
+      dateFrom: acquiredFrom ? String(dateFrom).trim() : '',
+      dateTo: acquiredTo ? String(dateTo).trim() : '',
+      filtered: Boolean(acquiredFrom || acquiredTo),
+      usersAcquired: usersInRange,
+      driversAcquired: driversInRange,
+      totalAcquired: usersInRange + driversInRange,
+    },
     paginator: {
       current_page: safePage,
       per_page: safeLimit,
