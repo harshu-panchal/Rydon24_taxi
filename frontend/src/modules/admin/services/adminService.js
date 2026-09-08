@@ -106,6 +106,23 @@ export const adminService = {
   adjustOwnerWallet: (id, data) => api.post(`/admin/wallet/owners/${id}/adjust`, data),
   getOwnerWalletHistory: (id) => api.get(`/admin/wallet/owners/${id}/history`),
 
+  getReferralLogs: (page = 1, limit = 25, { search = '', dateFrom = '', dateTo = '', type = 'all' } = {}) => {
+    const params = new URLSearchParams({ page, limit });
+    if (String(search || '').trim()) {
+      params.set('search', String(search).trim());
+    }
+    if (String(dateFrom || '').trim()) {
+      params.set('dateFrom', String(dateFrom).trim());
+    }
+    if (String(dateTo || '').trim()) {
+      params.set('dateTo', String(dateTo).trim());
+    }
+    if (type && type !== 'all') {
+      params.set('type', type);
+    }
+    return api.get(`/admin/referral/logs?${params.toString()}`);
+  },
+
   getReferralDashboard: (dateFrom = '', dateTo = '') => {
     const params = new URLSearchParams();
     if (String(dateFrom || '').trim()) {

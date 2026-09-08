@@ -5785,6 +5785,136 @@ export const getReferralDashboard = async ({ dateFrom = '', dateTo = '' } = {}) 
   };
 };
 
+// Every peer referral, newest first, as one merged feed of referred users and
+// drivers. Agent-acquired signups are excluded for the same reason as the
+// dashboard: they are agent attribution, not referral programme performance.
+export const listReferralLogs = async ({
+  page = 1,
+  limit = 25,
+  search = '',
+  dateFrom = '',
+  dateTo = '',
+  type = 'all',
+} = {}) => {
+  const safePage = Math.max(1, Number(page) || 1);
+  const safeLimit = Math.min(100, Math.max(1, Number(limit) || 25));
+  const start = (safePage - 1) * safeLimit;
+  const normalizedType = ['user', 'driver'].includes(String(type || '').trim().toLowerCase())
+    ? String(type).trim().toLowerCase()
+    : 'all';
+
+  const rangeFrom = parseAcquisitionBoundary(dateFrom, false);
+  const rangeTo = parseAcquisitionBoundary(dateTo, true);
+  const isRangeFiltered = Boolean(rangeFrom || rangeTo);
+
+  const baseQuery = {
+    referredBy: { $ne: null },
+    $or: [{ acquiredByEmployeeId: null }, { acquiredByEmployeeId: { $exists: false } }],
+  };
+
+  if (isRangeFiltered) {
+    baseQuery.createdAt = {
+      ...(rangeFrom ? { $gte: rangeFrom } : {}),
+      ...(rangeTo ? { $lte: rangeTo } : {}),
+    };
+  }
+
+  const normalizedSearch = String(search || '').trim();
+  const buildQuery = async (Model) => {
+    const query = { ...baseQuery };
+
+    if (!normalizedSearch) {
+      return query;
+    }
+
+    const escaped = normalizedSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escaped, 'i');
+    // A code search should find everyone that referrer brought in, so resolve
+    // the code to referrer ids rather than only matching the referred person.
+    const referrers = await Model.find({ referralCode: regex }).select('_id').lean();
+    const conditions = [{ name: regex }, { phone: regex }];
+
+    if (referrers.length) {
+      conditions.push({ referredBy: { $in: referrers.map((item) => item._id) } });
+    }
+
+    // $and keeps the base $or (the agent exclusion) from being overwritten.
+    return { $and: [query, { $or: conditions }] };
+  };
+
+  const [userQuery, driverQuery] = await Promise.all([buildQuery(User), buildQuery(Driver)]);
+  const wantUsers = normalizedType !== 'driver';
+  const wantDrivers = normalizedType !== 'user';
+
+  // To take page N of a merged, sorted feed it is enough to pull start+limit
+  // from each side; anything beyond that cannot appear on this page.
+  const fetchCount = start + safeLimit;
+  const projection = 'name phone referredBy createdAt';
+
+  const [users, drivers, userTotal, driverTotal] = await Promise.all([
+    wantUsers ? User.find(userQuery).select(projection).sort({ createdAt: -1 }).limit(fetchCount).lean() : [],
+    wantDrivers ? Driver.find(driverQuery).select(projection).sort({ createdAt: -1 }).limit(fetchCount).lean() : [],
+    wantUsers ? User.countDocuments(userQuery) : 0,
+    wantDrivers ? Driver.countDocuments(driverQuery) : 0,
+  ]);
+
+  // A user's referrer is another user; a driver's referrer is another driver.
+  const [userReferrers, driverReferrers] = await Promise.all([
+    users.length
+      ? User.find({ _id: { $in: users.map((item) => item.referredBy).filter(Boolean) } })
+          .select('name phone referralCode').lean()
+      : [],
+    drivers.length
+      ? Driver.find({ _id: { $in: drivers.map((item) => item.referredBy).filter(Boolean) } })
+          .select('name phone referralCode').lean()
+      : [],
+  ]);
+
+  const userReferrerMap = new Map(userReferrers.map((item) => [String(item._id), item]));
+  const driverReferrerMap = new Map(driverReferrers.map((item) => [String(item._id), item]));
+
+  const toRow = (record, rowType, referrerMap) => {
+    const referrer = referrerMap.get(String(record.referredBy || '')) || null;
+
+    return {
+      _id: record._id,
+      type: rowType,
+      name: record.name || '',
+      phone: record.phone || '',
+      referredAt: record.createdAt || null,
+      referrerName: referrer?.name || '',
+      referrerPhone: referrer?.phone || '',
+      referrerCode: referrer?.referralCode || '',
+    };
+  };
+
+  const merged = [
+    ...users.map((item) => toRow(item, 'user', userReferrerMap)),
+    ...drivers.map((item) => toRow(item, 'driver', driverReferrerMap)),
+  ].sort((a, b) => new Date(b.referredAt || 0) - new Date(a.referredAt || 0));
+
+  const total = userTotal + driverTotal;
+
+  return {
+    results: merged.slice(start, start + safeLimit),
+    summary: {
+      dateFrom: rangeFrom ? String(dateFrom).trim() : '',
+      dateTo: rangeTo ? String(dateTo).trim() : '',
+      filtered: isRangeFiltered,
+      type: normalizedType,
+      userReferrals: userTotal,
+      driverReferrals: driverTotal,
+      totalReferrals: total,
+    },
+    paginator: {
+      current_page: safePage,
+      per_page: safeLimit,
+      total,
+      last_page: Math.max(1, Math.ceil(total / safeLimit)),
+    },
+  };
+};
+
 export const listSubscriptionPlans = async () =>
   SubscriptionPlan.find({ audience: 'driver' }).sort({ createdAt: -1 }).populate('vehicle_type_id').lean();
 export const createSubscriptionPlan = async (payload) => {

@@ -164,6 +164,7 @@ export const AdminEmployeeList = lazy(() => import('../modules/admin/pages/emplo
 export const AdminEmployeeCreate = lazy(() => import('../modules/admin/pages/employees/EmployeeCreate'));
 export const AdminEmployeeDetails = lazy(() => import('../modules/admin/pages/employees/EmployeeDetails'));
 export const AdminReferralDashboard = lazy(() => import('../modules/admin/pages/referrals/ReferralDashboard'));
+export const AdminActiveReferrals = lazy(() => import('../modules/admin/pages/referrals/ActiveReferrals'));
 export const AdminUserReferralSettings = lazy(() => import('../modules/admin/pages/referrals/UserReferralSettings'));
 export const AdminDriverReferralSettings = lazy(() => import('../modules/admin/pages/referrals/DriverReferralSettings'));
 export const AdminReferralTranslation = lazy(() => import('../modules/admin/pages/referrals/ReferralTranslation'));

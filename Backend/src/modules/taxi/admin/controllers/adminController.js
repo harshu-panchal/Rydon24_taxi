@@ -601,6 +601,10 @@ export const getReferralDashboard = asyncHandler(async (req, res) =>
   ok(res, await adminService.getReferralDashboard(req.query)),
 );
 
+export const listReferralLogs = asyncHandler(async (req, res) =>
+  ok(res, await adminService.listReferralLogs(req.query)),
+);
+
 export const getServiceLocations = asyncHandler(async (req, res) =>
   ok(res, await adminService.listServiceLocations(req.auth?.admin)),
 );

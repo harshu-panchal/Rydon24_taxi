@@ -97,6 +97,7 @@ import {
   AdminPoolingVehicles,
   AdminPreferences,
   AdminPromoCodes,
+  AdminActiveReferrals,
   AdminReferralDashboard,
   AdminReferralTranslation,
   AdminRentalBookingRequests,
@@ -298,14 +299,7 @@ const adminRoutes = (
           </div>
         }
       />
-      <Route
-        path="referrals/active"
-        element={
-          <div className="flex items-center justify-center min-h-[500px] text-gray-400 font-bold uppercase tracking-widest">
-            Active Referrals Logs - Under Setup
-          </div>
-        }
-      />
+      <Route path="referrals/active" element={<AdminActiveReferrals />} />
       <Route path="geo/heatmap" element={<AdminHeatMap />} />
       <Route path="geo/gods-eye" element={<AdminGodsEye />} />
       <Route path="geo/peak-zone" element={<AdminGeoFencing />} />
