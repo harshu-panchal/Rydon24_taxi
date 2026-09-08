@@ -74,8 +74,12 @@ const PieChartMock = ({ color1, color2, label1, label2, val1, val2 }) => {
   );
 };
 
-const LineChartMock = ({ color, data }) => {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const FALLBACK_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const LineChartMock = ({ color, data, labels }) => {
+  // Labels come from the API so they follow the rolling window; the static list
+  // is only a fallback for a response that predates them.
+  const months = Array.isArray(labels) && labels.length === data.length ? labels : FALLBACK_MONTHS;
   const maxVal = Math.max(...data, 2) || 2;
 
   return (
@@ -210,10 +214,11 @@ const ReferralDashboard = () => {
                  val2={data?.user_referrals?.referral_user || 0}
                />
             </ChartContainer>
-            <ChartContainer title="User Referrals Overview">
+            <ChartContainer title="User Referrals · Last 12 Months">
                <LineChartMock 
                  color="#059669" 
-                 data={data?.user_referrals?.monthly || emptyMonthly} 
+                 data={data?.user_referrals?.monthly || emptyMonthly}
+                 labels={data?.monthly_labels} 
                />
             </ChartContainer>
          </div>
@@ -235,10 +240,11 @@ const ReferralDashboard = () => {
                  val2={data?.driver_referrals?.referral_driver || 0}
                />
             </ChartContainer>
-            <ChartContainer title="Driver Referrals Overview">
+            <ChartContainer title="Driver Referrals · Last 12 Months">
                <LineChartMock 
                  color="#0EA5E9" 
-                 data={data?.driver_referrals?.monthly || emptyMonthly} 
+                 data={data?.driver_referrals?.monthly || emptyMonthly}
+                 labels={data?.monthly_labels} 
                />
             </ChartContainer>
          </div>

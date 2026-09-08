@@ -5646,11 +5646,28 @@ export const getReferralDashboard = async () => {
   };
   const peerReferred = { referredBy: { $ne: null }, ...withoutAgent };
 
-  // The chart labels are a fixed Jan..Dec, so the series is the current
-  // calendar year rather than a trailing twelve months.
-  const yearStart = new Date(new Date().getFullYear(), 0, 1, 0, 0, 0, 0);
-  const yearEnd = new Date(new Date().getFullYear(), 11, 31, 23, 59, 59, 999);
-  const inThisYear = { createdAt: { $gte: yearStart, $lte: yearEnd } };
+  // Rolling twelve months ending with the current one, so the charts always
+  // show the last year of activity rather than resetting every January.
+  const now = new Date();
+  const windowStart = new Date(now.getFullYear(), now.getMonth() - 11, 1, 0, 0, 0, 0);
+  const windowEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  const inWindow = { createdAt: { $gte: windowStart, $lte: windowEnd } };
+
+  const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthBuckets = [];
+
+  for (let offset = 11; offset >= 0; offset -= 1) {
+    const month = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+
+    monthBuckets.push({
+      key: `${month.getFullYear()}-${month.getMonth()}`,
+      // Each month appears once across a twelve month window, so the short name
+      // is unambiguous even where the window straddles two years.
+      label: MONTH_NAMES[month.getMonth()],
+    });
+  }
+
+  const bucketIndexByKey = new Map(monthBuckets.map((bucket, index) => [bucket.key, index]));
 
   const [
     totalDrivers,
@@ -5665,8 +5682,8 @@ export const getReferralDashboard = async () => {
     User.countDocuments(),
     User.countDocuments(peerReferred),
     Driver.countDocuments(peerReferred),
-    User.find({ ...peerReferred, ...inThisYear }).select('createdAt').lean(),
-    Driver.find({ ...peerReferred, ...inThisYear }).select('createdAt').lean(),
+    User.find({ ...peerReferred, ...inWindow }).select('createdAt').lean(),
+    Driver.find({ ...peerReferred, ...inWindow }).select('createdAt').lean(),
     AdminBusinessSetting.findOne({ scope: 'default' }).lean(),
   ]);
 
@@ -5678,8 +5695,14 @@ export const getReferralDashboard = async () => {
     for (const record of records) {
       const created = record?.createdAt ? new Date(record.createdAt) : null;
 
-      if (created && !Number.isNaN(created.getTime())) {
-        months[created.getMonth()] += 1;
+      if (!created || Number.isNaN(created.getTime())) {
+        continue;
+      }
+
+      const index = bucketIndexByKey.get(`${created.getFullYear()}-${created.getMonth()}`);
+
+      if (index !== undefined) {
+        months[index] += 1;
       }
     }
 
@@ -5697,6 +5720,8 @@ export const getReferralDashboard = async () => {
     total_drivers: totalDrivers,
     total_users: totalUsers,
     active_referrals: referralUsers + referralDrivers,
+    // Labels travel with the data so the charts stay aligned as the window rolls.
+    monthly_labels: monthBuckets.map((bucket) => bucket.label),
     // No referral payout is recorded anywhere, so this is the configured reward
     // value of the qualifying referrals, not settled cash.
     referral_earning: (referralUsers * rewardFor('user')) + (referralDrivers * rewardFor('driver')),
