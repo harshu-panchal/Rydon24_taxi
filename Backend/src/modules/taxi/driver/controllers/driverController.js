@@ -1701,13 +1701,26 @@ const serializeEmergencyContact = (contact = {}) => ({
       : "manual",
 });
 
+// Icons live in Mongo as base64 data URIs, the largest of them 450KB. Returning
+// the blob inlined it into every /me response, which the driver app polls, so
+// the same image was re-sent indefinitely - p90 of that endpoint was 472KB.
+// Point at the cacheable icon route instead and let the client fetch it once.
 const resolveVehicleMapIcon = async (vehicleTypeId) => {
   if (!vehicleTypeId) {
     return "";
   }
 
   const vehicle = await Vehicle.findById(vehicleTypeId).select("icon map_icon image").lean();
-  return vehicle?.map_icon || vehicle?.icon || vehicle?.image || "";
+  const source = vehicle?.map_icon || vehicle?.icon || vehicle?.image || "";
+
+  if (!source) {
+    return "";
+  }
+
+  // Anything already hosted elsewhere is passed through untouched.
+  return /^data:/i.test(source)
+    ? `/api/v1/common/vehicle-icon/${vehicleTypeId}`
+    : source;
 };
 
 const normalizePhone = (value) =>
