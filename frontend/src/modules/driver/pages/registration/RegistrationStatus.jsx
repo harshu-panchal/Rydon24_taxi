@@ -72,6 +72,8 @@ const RegistrationStatus = () => {
   const [checking, setChecking] = useState(true);
   const [driver, setDriver] = useState(null);
   const [documentTemplates, setDocumentTemplates] = useState([]);
+  const [templatesSettled, setTemplatesSettled] = useState(false);
+  const [templatesFailed, setTemplatesFailed] = useState(false);
   const [statusMessage, setStatusMessage] = useState(
     "Waiting for admin approval",
   );
@@ -117,6 +119,11 @@ const RegistrationStatus = () => {
             if (mountedRef.current) setDocumentTemplates(templates);
         } catch (err) {
             console.error("Failed to fetch templates", err);
+            // The checklist falls back to a spinner whenever the list is empty,
+            // so a swallowed failure here spins forever with no explanation.
+            if (mountedRef.current) setTemplatesFailed(true);
+        } finally {
+            if (mountedRef.current) setTemplatesSettled(true);
         }
     };
 
@@ -181,7 +188,11 @@ const RegistrationStatus = () => {
           return;
         }
 
-        if (error?.status === 401) {
+        // 403 means the stored token is not usable for driver endpoints - it
+        // belongs to another portal, or its role no longer matches. Treated
+        // like 401: without this the page keeps polling a token that can never
+        // succeed and the driver waits on a spinner that will never resolve.
+        if (error?.status === 401 || error?.status === 403) {
           redirectToDriverLogin(navigate);
           requestInFlightRef.current = false;
           return;
@@ -604,10 +615,29 @@ const getStatusColor = (status) => {
                     <div className="bg-white rounded-[1.8rem] border border-slate-100 p-10 text-center shadow-sm">
                         <p className="text-[12px] font-black uppercase tracking-widest text-slate-400 opacity-60">No document uploads required for this role.</p>
                     </div>
-                ) : (
+                ) : !templatesSettled ? (
                     <div className="bg-white rounded-[1.8rem] border border-slate-100 p-10 text-center shadow-sm">
                         <div className="h-6 w-6 border-2 border-slate-100 border-t-slate-900 rounded-full animate-spin mx-auto mb-4" />
                         <p className="text-[12px] font-black uppercase tracking-widest text-slate-400 opacity-60">Syncing documents...</p>
+                    </div>
+                ) : templatesFailed ? (
+                    /* Previously this branch showed the spinner too, so a failed
+                       load was indistinguishable from one still in progress and
+                       the driver was left staring at it indefinitely. */
+                    <div className="bg-white rounded-[1.8rem] border border-slate-100 p-10 text-center shadow-sm">
+                        <p className="text-[13px] font-bold text-slate-600 leading-relaxed">
+                            Could not load your document checklist.
+                        </p>
+                        <button
+                            onClick={() => window.location.reload()}
+                            className="mt-4 h-11 px-6 bg-slate-900 text-white rounded-2xl text-[12px] font-black uppercase tracking-widest active:scale-95 transition-all"
+                        >
+                            Retry
+                        </button>
+                    </div>
+                ) : (
+                    <div className="bg-white rounded-[1.8rem] border border-slate-100 p-10 text-center shadow-sm">
+                        <p className="text-[12px] font-black uppercase tracking-widest text-slate-400 opacity-60">No documents required yet.</p>
                     </div>
                 )}
             </div>
