@@ -23,7 +23,13 @@ import {
   verifyDriverRcDocument,
 } from "../../services/registrationService";
 
-const APPROVAL_POLL_MS = 2500;
+// Approval is a human action that usually takes minutes to hours, so a fixed
+// 2.5s poll produced ~1,440 requests an hour per waiting driver and kept the
+// radio awake for nothing. Start responsive, then back off to a 30s ceiling,
+// and reset to fast polling whenever the driver actually looks at the screen.
+const APPROVAL_POLL_MIN_MS = 2500;
+const APPROVAL_POLL_MAX_MS = 30000;
+const APPROVAL_POLL_BACKOFF = 1.6;
 const normalizePortalRole = (role) => {
   const normalized = String(role || "").toLowerCase();
   if (normalized === "owner") return "owner";
@@ -214,13 +220,55 @@ const RegistrationStatus = () => {
       }
     };
 
-    checkApproval();
-    timeoutRef.current = setInterval(checkApproval, APPROVAL_POLL_MS);
+    // Self-rescheduling timeout rather than setInterval: the delay has to grow,
+    // and setInterval would also stack callbacks if a request ever outlives the
+    // gap between ticks.
+    let currentDelay = APPROVAL_POLL_MIN_MS;
+
+    const scheduleNext = () => {
+      clearTimeout(timeoutRef.current);
+
+      if (!mountedRef.current) {
+        return;
+      }
+
+      timeoutRef.current = setTimeout(runPoll, currentDelay);
+      currentDelay = Math.min(Math.round(currentDelay * APPROVAL_POLL_BACKOFF), APPROVAL_POLL_MAX_MS);
+    };
+
+    const runPoll = async () => {
+      // Nothing on this screen is actionable while it is hidden, and a
+      // backgrounded app polling every few seconds is pure battery and data
+      // cost. The visibility listener below catches up the moment it returns.
+      if (document.visibilityState !== 'visible') {
+        scheduleNext();
+        return;
+      }
+
+      await checkApproval();
+      scheduleNext();
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible' || !mountedRef.current) {
+        return;
+      }
+
+      // Back to responsive polling: the driver is watching again, and this is
+      // the moment they are most likely to be waiting on the result.
+      currentDelay = APPROVAL_POLL_MIN_MS;
+      clearTimeout(timeoutRef.current);
+      runPoll();
+    };
+
+    checkApproval().then(scheduleNext);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       mountedRef.current = false;
       requestInFlightRef.current = false;
-      clearInterval(timeoutRef.current);
+      clearTimeout(timeoutRef.current);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [location.state, navigate]);
 

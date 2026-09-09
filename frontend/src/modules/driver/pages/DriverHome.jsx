@@ -824,20 +824,38 @@ const DriverHome = () => {
         refreshNotificationCount();
         loadScheduledRides();
 
-        const handleFocus = () => {
+        const refresh = () => {
             refreshNotificationCount();
             loadScheduledRides();
         };
+
+        const handleFocus = () => refresh();
+
+        // Neither the badge count nor the schedule list can be acted on while
+        // the app is in the background, so the timer skips those ticks instead
+        // of waking the radio every 30s. visibilitychange covers the mobile
+        // WebView case that a focus listener alone misses.
         const refreshInterval = window.setInterval(() => {
-            refreshNotificationCount();
-            loadScheduledRides();
+            if (document.visibilityState !== 'visible') {
+                return;
+            }
+
+            refresh();
         }, 30000);
 
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                refresh();
+            }
+        };
+
         window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleVisibility);
 
         return () => {
             window.clearInterval(refreshInterval);
             window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('visibilitychange', handleVisibility);
         };
     }, [loadScheduledRides, refreshNotificationCount]);
 
@@ -846,12 +864,28 @@ const DriverHome = () => {
             return undefined;
         }
 
+        // Drives the countdown labels only. It costs a render every second, so
+        // there is no reason to keep it running behind a hidden app; the value
+        // is refreshed on the way back in.
         const interval = window.setInterval(() => {
+            if (document.visibilityState !== 'visible') {
+                return;
+            }
+
             setScheduleNow(Date.now());
         }, 1000);
 
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                setScheduleNow(Date.now());
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibility);
+
         return () => {
             window.clearInterval(interval);
+            document.removeEventListener('visibilitychange', handleVisibility);
         };
     }, [scheduledRides.length]);
 
