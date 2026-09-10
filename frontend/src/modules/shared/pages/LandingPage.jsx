@@ -47,6 +47,114 @@ function LandingPage() {
   const appName = settings.general?.app_name || 'easytaxi';
   const [activeTab, setActiveTab] = React.useState('home');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const [heroLoaded, setHeroLoaded] = React.useState(false);
+  const heroImageRef = React.useRef(null);
+
+  // A cached image can finish before React attaches onLoad, which would leave
+  // the artwork stuck at opacity 0. Check the actual decode state on mount, and
+  // reveal it regardless after a moment so a load event that never arrives -
+  // a decode error, a blocked request - cannot leave the hero blank.
+  React.useEffect(() => {
+    if (heroImageRef.current?.complete && heroImageRef.current.naturalWidth > 0) {
+      setHeroLoaded(true);
+      return undefined;
+    }
+
+    const failsafe = window.setTimeout(() => setHeroLoaded(true), 2500);
+
+    return () => window.clearTimeout(failsafe);
+  }, []);
+
+  // Reveal on scroll. An observer costs nothing while idle, unlike a scroll
+  // handler that fires on every frame, and elements are unobserved once shown
+  // so nothing keeps running after the animation has played.
+  React.useEffect(() => {
+    const targets = document.querySelectorAll('.rd-reveal, .rd-stagger');
+
+    if (!targets.length) {
+      return undefined;
+    }
+
+    // The CSS keeps everything visible until this class is present, so a script
+    // error, a blocked bundle or an observer that never fires leaves the page
+    // readable rather than blank. Motion is the enhancement, not the content.
+    document.documentElement.classList.add('rd-ready');
+
+    if (typeof IntersectionObserver === 'undefined'
+      || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      targets.forEach((el) => el.classList.add('is-visible'));
+      return undefined;
+    }
+
+    // Reveal anything at or above the fold. IntersectionObserver only reports
+    // an element that *crosses* into view, so one skipped past in a single
+    // frame - a fling scroll, an anchor jump, or a restored scroll position on
+    // reload - would go from below the viewport to above it without ever being
+    // reported, and would stay invisible for good. Sweeping catches those.
+    const revealPassed = () => {
+      let remaining = 0;
+
+      targets.forEach((el) => {
+        if (el.classList.contains('is-visible')) {
+          return;
+        }
+
+        if (el.getBoundingClientRect().top < window.innerHeight) {
+          el.classList.add('is-visible');
+        } else {
+          remaining += 1;
+        }
+      });
+
+      return remaining;
+    };
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target);
+          }
+        });
+
+        revealPassed();
+      },
+      // Trigger slightly before the element reaches the fold so the motion is
+      // already underway by the time it is properly in view.
+      { threshold: 0.12, rootMargin: '0px 0px -8% 0px' },
+    );
+
+    targets.forEach((el) => observer.observe(el));
+
+    // Backstop for the frames the observer cannot see. Detaches itself as soon
+    // as everything has been revealed, so it does not linger on the page.
+    let ticking = false;
+
+    const onScroll = () => {
+      if (ticking) {
+        return;
+      }
+
+      ticking = true;
+      window.requestAnimationFrame(() => {
+        ticking = false;
+
+        if (revealPassed() === 0) {
+          window.removeEventListener('scroll', onScroll);
+        }
+      });
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    revealPassed();
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('scroll', onScroll);
+      document.documentElement.classList.remove('rd-ready');
+    };
+  }, []);
   const serviceNames = React.useMemo(() => {
     const activeModules = Array.isArray(modules)
       ? modules
@@ -203,7 +311,15 @@ function LandingPage() {
 
           <div className="new-hero-graphic">
             <div className="new-hero-ribbon"></div>
-            <img src={newHeroTaxiImg} alt="Rydon24 bike, auto, cab and logistics vehicles" className="new-hero-taxi" />
+            <img
+              ref={heroImageRef}
+              src={newHeroTaxiImg}
+              alt="Rydon24 bike, auto, cab and logistics vehicles"
+              className={`new-hero-taxi ${heroLoaded ? 'is-loaded' : ''}`}
+              onLoad={() => setHeroLoaded(true)}
+              decoding="async"
+              fetchPriority="high"
+            />
           </div>
 
 
@@ -212,12 +328,12 @@ function LandingPage() {
 
       {/* Services Section */}
       <section id="services" className="subscriptions-section">
-        <div className="section-header">
+        <div className="section-header rd-reveal">
           <h2 className="section-title">OUR SERVICES</h2>
           <div className="section-triangle"></div>
         </div>
 
-        <div className="subscriptions-grid">
+        <div className="subscriptions-grid rd-stagger">
           {/* Card 1 */}
           <div className="sub-card yellow">
             <h3>TAXI SERVICE</h3>
@@ -250,12 +366,12 @@ function LandingPage() {
       {/* Benefits Section */}
       <section className="benefits-section">
         <div className="benefits-container">
-          <div className="section-header">
+          <div className="section-header rd-reveal">
             <h2 className="section-title">SOME BENEFITS</h2>
             <div className="section-triangle"></div>
           </div>
 
-          <div className="benefits-grid">
+          <div className="benefits-grid rd-stagger">
             <div className="benefit-item">
               <div className="benefit-icon">
                 <Home strokeWidth={2.5} />
@@ -300,7 +416,7 @@ function LandingPage() {
       </section>
 
       <section className="landing-login-section">
-        <div className="landing-login-card">
+        <div className="landing-login-card rd-reveal">
           <div className="landing-login-copy">
             <p className="landing-login-eyebrow">Account Access</p>
             <h2>Login from the homepage to manage rides, bookings, refunds, and support requests.</h2>
@@ -323,7 +439,7 @@ function LandingPage() {
 
       {/* Check Us Out Section */}
       <section className="check-us-out-section">
-        <div className="section-header">
+        <div className="section-header rd-reveal">
           <h2 className="section-title">CHECK US OUT</h2>
           <div className="section-triangle"></div>
         </div>

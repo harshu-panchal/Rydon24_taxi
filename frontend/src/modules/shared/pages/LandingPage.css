@@ -1395,3 +1395,187 @@ body {
     font-size: 0.9rem;
   }
 }
+
+/* =====================================================================
+   Motion
+   Transform and opacity only, so every animation stays on the compositor
+   and never triggers layout. Nothing here changes an element's resting
+   position, so the hero geometry is untouched.
+   ===================================================================== */
+
+@keyframes rd-rise {
+  from { opacity: 0; transform: translate3d(0, 30px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes rd-hero-enter {
+  from { opacity: 0; transform: translate3d(56px, 0, 0) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes rd-float {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50%      { transform: translate3d(0, -12px, 0); }
+}
+
+@keyframes rd-ribbon-grow {
+  from { opacity: 0; transform: skewX(-15deg) scaleY(0.6); }
+  to   { opacity: 1; transform: skewX(-15deg) scaleY(1); }
+}
+
+@keyframes rd-nav-drop {
+  from { opacity: 0; transform: translate3d(0, -14px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* --- Hero: one staggered sequence, read top to bottom ---------------- */
+.new-top-bar,
+.new-main-header {
+  animation: rd-nav-drop 0.6s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+.new-main-header { animation-delay: 0.08s; }
+
+.new-hero-subtitle,
+.new-hero-title,
+.new-hero-desc,
+.new-hero-cta-row {
+  animation: rd-rise 0.85s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+.new-hero-subtitle { animation-delay: 0.18s; }
+.new-hero-title    { animation-delay: 0.30s; }
+.new-hero-desc     { animation-delay: 0.44s; }
+.new-hero-cta-row  { animation-delay: 0.58s; }
+
+.new-hero-ribbon {
+  transform-origin: center bottom;
+  animation: rd-ribbon-grow 1s cubic-bezier(0.22, 0.61, 0.36, 1) 0.1s both;
+}
+
+/* The artwork holds still until it has actually decoded, so it never pops
+   in half-painted, then drifts gently once it is settled. */
+.rd-ready .new-hero-taxi {
+  opacity: 0;
+}
+
+.new-hero-taxi.is-loaded {
+  animation:
+    rd-hero-enter 1s cubic-bezier(0.22, 0.61, 0.36, 1) 0.28s both,
+    rd-float 7s ease-in-out 1.4s infinite;
+}
+
+/* --- Scroll reveals --------------------------------------------------- */
+.rd-ready .rd-reveal {
+  opacity: 0;
+  transform: translate3d(0, 34px, 0);
+  transition:
+    opacity 0.75s cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 0.75s cubic-bezier(0.22, 0.61, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+.rd-ready .rd-reveal.is-visible {
+  opacity: 1;
+  transform: none;
+  will-change: auto;
+}
+
+/* Children of a revealed row arrive in sequence rather than all at once. */
+.rd-ready .rd-stagger > * {
+  opacity: 0;
+  transform: translate3d(0, 34px, 0);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.rd-ready .rd-stagger.is-visible > * {
+  opacity: 1;
+  transform: none;
+}
+
+.rd-ready .rd-stagger.is-visible > *:nth-child(1) { transition-delay: 0.05s; }
+.rd-ready .rd-stagger.is-visible > *:nth-child(2) { transition-delay: 0.15s; }
+.rd-ready .rd-stagger.is-visible > *:nth-child(3) { transition-delay: 0.25s; }
+.rd-ready .rd-stagger.is-visible > *:nth-child(4) { transition-delay: 0.35s; }
+.rd-ready .rd-stagger.is-visible > *:nth-child(5) { transition-delay: 0.45s; }
+.rd-ready .rd-stagger.is-visible > *:nth-child(6) { transition-delay: 0.55s; }
+
+/* --- Micro-interactions ---------------------------------------------- */
+.new-hero-action-btn,
+.new-hero-login-btn,
+.new-login-btn,
+.new-driver-login-btn,
+.new-book-btn,
+.landing-login-primary {
+  transition: transform 0.22s cubic-bezier(0.22, 0.61, 0.36, 1),
+              box-shadow 0.22s cubic-bezier(0.22, 0.61, 0.36, 1),
+              background-color 0.2s ease;
+}
+
+.new-hero-action-btn:hover,
+.new-hero-login-btn:hover,
+.landing-login-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.28);
+}
+
+.new-hero-action-btn:active,
+.new-hero-login-btn:active,
+.landing-login-primary:active {
+  transform: translateY(0);
+}
+
+.new-nav-link {
+  position: relative;
+  transition: color 0.2s ease;
+}
+
+/* Underline grows from the centre instead of the link changing size,
+   which would nudge its neighbours. */
+.new-nav-link::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -6px;
+  height: 2px;
+  background: currentColor;
+  transform: scaleX(0);
+  transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.new-nav-link:hover::after,
+.new-nav-link.active::after {
+  transform: scaleX(1);
+}
+
+.section-triangle {
+  transition: transform 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.rd-reveal.is-visible .section-triangle {
+  transform: translateY(2px);
+}
+
+/* --- Respect the system setting --------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .new-top-bar,
+  .new-main-header,
+  .new-hero-subtitle,
+  .new-hero-title,
+  .new-hero-desc,
+  .new-hero-cta-row,
+  .new-hero-ribbon,
+  .new-hero-taxi,
+  .new-hero-taxi.is-loaded {
+    animation: none !important;
+  }
+
+  .new-hero-taxi,
+  .rd-reveal,
+  .rd-stagger > * {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
