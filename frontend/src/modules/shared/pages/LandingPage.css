@@ -293,9 +293,13 @@ body {
 .new-hero-taxi {
   position: relative;
   z-index: 2;
-  width: 140%;
+  /* The old hero was a single car on a wide transparent canvas, so it was
+     oversized and dragged left to sit behind the headline. The fleet artwork
+     fills its canvas edge to edge, so the same rule pushed the bike over the
+     headline and the logistics truck off-screen. Fitting the graphic column
+     keeps the whole line-up visible and clear of the text at every width. */
+  width: 100%;
   max-width: 900px;
-  transform: translateX(-15%);
   filter: drop-shadow(0 20px 30px rgba(0,0,0,0.5));
 }
 

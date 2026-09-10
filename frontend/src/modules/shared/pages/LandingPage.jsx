@@ -10,7 +10,7 @@ import rideImg from '@/assets/landing/ride.png';
 import parcelImg from '@/assets/landing/parcel.png';
 import bikeImg from '@/assets/landing/bike.png';
 import heroBgImg from '@/assets/landing/hero-bg.png';
-import newHeroTaxiImg from '@/assets/gemini-car-removebg-preview.png';
+import newHeroTaxiImg from '@/assets/rydon24-hero-fleet.webp';
 import checkUsOutImg from '@/assets/check_us_out.jpg';
 import { Download } from 'lucide-react';
 
@@ -190,10 +190,10 @@ function LandingPage() {
         <section id="home" className="new-hero-section">
           <div className="new-hero-left">
             <span className="new-hero-subtitle">Travel securely with us!</span>
-            <h1 className="new-hero-title">Book your taxi from<br />anywhere today!</h1>
-            <p className="new-hero-desc">Everything your taxi business needs is already here!<br />Rydon made for taxi service companies!</p>
+            <h1 className="new-hero-title">Book your ride, parcel from<br />anywhere today!</h1>
+            <p className="new-hero-desc">Everything your ride, logistics business needs is already here!<br />Rydon made for ride and logistics companies!</p>
             <div className="new-hero-cta-row">
-              <button className="new-hero-action-btn" onClick={() => window.open('https://play.google.com/store/apps/details?id=com.rydon24.user', '_blank')}>Book Your Ride</button>
+              <button className="new-hero-action-btn" onClick={() => window.open('https://play.google.com/store/apps/details?id=com.rydon24.user', '_blank')}>Book Your Ride / Parcel</button>
               <button className="new-hero-login-btn" onClick={() => navigate('/login')}>
                 <LogIn size={18} />
                 <span>Login</span>
@@ -203,7 +203,7 @@ function LandingPage() {
 
           <div className="new-hero-graphic">
             <div className="new-hero-ribbon"></div>
-            <img src={newHeroTaxiImg} alt="Taxi" className="new-hero-taxi" />
+            <img src={newHeroTaxiImg} alt="Rydon24 bike, auto, cab and logistics vehicles" className="new-hero-taxi" />
           </div>
 
 
