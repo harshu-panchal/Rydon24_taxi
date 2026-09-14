@@ -25,11 +25,28 @@ const GENDER_LABELS = {
   other: 'Other',
 };
 
+// Local calendar date as YYYY-MM-DD. toISOString() converts to UTC first and
+// would hand back yesterday for anyone east of Greenwich.
+const toLocalDateInput = (date) => {
+  const pad = (value) => String(value).padStart(2, '0');
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+const daysAgo = (count) => {
+  const date = new Date();
+  date.setDate(date.getDate() - count);
+
+  return toLocalDateInput(date);
+};
+
 const UserList = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [referralSource, setReferralSource] = useState('all');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [employeeOptions, setEmployeeOptions] = useState([]);
   const [activeMenu, setActiveMenu] = useState(null);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
@@ -52,6 +69,8 @@ const UserList = () => {
     nextSearch = searchTerm,
     nextReferralSource = referralSource,
     nextEmployeeId = selectedEmployeeId,
+    nextDateFrom = dateFrom,
+    nextDateTo = dateTo,
   } = {}) => {
     const requestId = latestRequestId.current + 1;
     latestRequestId.current = requestId;
@@ -64,6 +83,8 @@ const UserList = () => {
       const resData = await adminService.getUsers(nextPage, nextLimit, String(nextSearch || '').trim(), {
         referralSource: nextReferralSource,
         employeeId: nextEmployeeId,
+        dateFrom: nextDateFrom,
+        dateTo: nextDateTo,
       });
       if (requestId !== latestRequestId.current) return;
 
@@ -96,7 +117,7 @@ const UserList = () => {
         setIsRefreshing(false);
       }
     }
-  }, [itemsPerPage, page, referralSource, searchTerm, selectedEmployeeId]);
+  }, [itemsPerPage, page, referralSource, searchTerm, selectedEmployeeId, dateFrom, dateTo]);
 
   useEffect(() => {
     let mounted = true;
@@ -138,11 +159,13 @@ const UserList = () => {
         nextSearch: trimmedSearch,
         nextReferralSource: referralSource,
         nextEmployeeId: selectedEmployeeId,
+        nextDateFrom: dateFrom,
+        nextDateTo: dateTo,
       });
     }, trimmedSearch ? 350 : 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [fetchUsers, page, itemsPerPage, referralSource, searchTerm, selectedEmployeeId]);
+  }, [fetchUsers, page, itemsPerPage, referralSource, searchTerm, selectedEmployeeId, dateFrom, dateTo]);
 
   useEffect(() => {
     const closeMenu = () => setActiveMenu(null);
@@ -308,7 +331,66 @@ const UserList = () => {
             <span>entries</span>
           </div>
         </div>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:flex-wrap">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold uppercase tracking-wide text-gray-500" htmlFor="user-date-from">Joined from</label>
+            <input
+              id="user-date-from"
+              type="date"
+              value={dateFrom}
+              max={dateTo || undefined}
+              onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold uppercase tracking-wide text-gray-500" htmlFor="user-date-to">To</label>
+            <input
+              id="user-date-to"
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 pb-0.5">
+            {[
+              { label: 'Today', from: daysAgo(0), to: daysAgo(0) },
+              { label: 'Last 7 days', from: daysAgo(6), to: daysAgo(0) },
+              { label: 'Last 30 days', from: daysAgo(29), to: daysAgo(0) },
+            ].map((preset) => {
+              const active = dateFrom === preset.from && dateTo === preset.to;
+
+              return (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => { setDateFrom(preset.from); setDateTo(preset.to); setPage(1); }}
+                  className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
+                    active
+                      ? 'bg-indigo-600 text-white'
+                      : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
+
+            {dateFrom || dateTo ? (
+              <button
+                type="button"
+                onClick={() => { setDateFrom(''); setDateTo(''); setPage(1); }}
+                className="rounded-lg px-3 py-2 text-xs font-bold text-gray-500 hover:text-gray-900"
+              >
+                Clear
+              </button>
+            ) : null}
+          </div>
+
           <div className="flex flex-col gap-1">
             <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Referral source</label>
             <select
