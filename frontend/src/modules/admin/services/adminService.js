@@ -28,6 +28,12 @@ export const adminService = {
     if (String(filters.referralSource || '').trim()) {
       params.set('referralSource', String(filters.referralSource).trim());
     }
+    if (String(filters.dateFrom || '').trim()) {
+      params.set('dateFrom', String(filters.dateFrom).trim());
+    }
+    if (String(filters.dateTo || '').trim()) {
+      params.set('dateTo', String(filters.dateTo).trim());
+    }
     return api.get(`/admin/users?${params.toString()}`);
   },
   getEmployees: (page = 1, limit = 50, search = '', dateFrom = '', dateTo = '') => {
