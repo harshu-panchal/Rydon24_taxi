@@ -3621,6 +3621,8 @@ export const listUsers = async ({
   search = '',
   employeeId = '',
   referralSource = 'all',
+  dateFrom = '',
+  dateTo = '',
 }) => {
   const safePage = Math.max(1, Number(page) || 1);
   const safeLimit = Math.min(100, Math.max(1, Number(limit) || 50));
@@ -3653,6 +3655,19 @@ export const listUsers = async ({
       : { $ne: null };
   } else if (normalizedReferralSource === 'organic') {
     query.acquiredByEmployeeId = null;
+  }
+
+  // Signup date range, parsed on the server's own timezone boundaries so a
+  // chosen day means that day rather than a UTC window shifted by the offset.
+  const joinedFrom = parseAcquisitionBoundary(dateFrom, false);
+  const joinedTo = parseAcquisitionBoundary(dateTo, true);
+  const isRangeFiltered = Boolean(joinedFrom || joinedTo);
+
+  if (isRangeFiltered) {
+    query.createdAt = {
+      ...(joinedFrom ? { $gte: joinedFrom } : {}),
+      ...(joinedTo ? { $lte: joinedTo } : {}),
+    };
   }
 
   const [users, total] = await Promise.all([
