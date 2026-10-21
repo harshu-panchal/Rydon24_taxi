@@ -2,6 +2,7 @@ import { env } from '../../../config/env.js';
 import { ApiError } from '../../../utils/ApiError.js';
 const SMS_INDIA_HUB_ENDPOINT = 'http://cloud.smsindiahub.in/api/mt/SendSMS';
 const SMS_INDIA_HUB_VENDOR_ENDPOINT = 'https://cloud.smsindiahub.in/vendorsms/pushsms.aspx';
+const SMS_INDIA_HUB_VENDOR_HTTP_ENDPOINT = 'http://cloud.smsindiahub.in/vendorsms/pushsms.aspx';
 // Without an explicit timeout a stalled gateway leaves the OTP request hanging
 // forever, so the caller never gets an answer and the user never gets a code.
 const SMS_REQUEST_TIMEOUT_MS = 20000;
@@ -245,8 +246,7 @@ export const sendOtpSms = async ({ phone, otp, purpose = 'otp' }) => {
     logVendorPayloadDebug(vendorParams);
 
     const vendorQuery = new URLSearchParams(vendorParams).toString();
-    const vendorUrl = `${SMS_INDIA_HUB_VENDOR_ENDPOINT}?${vendorQuery}`;
-    const vendorResponse = await fetch(vendorUrl, {
+    const fetchVendor = (endpoint) => fetch(`${endpoint}?${vendorQuery}`, {
       signal: AbortSignal.timeout(SMS_REQUEST_TIMEOUT_MS),
       method: 'GET',
       headers: {
@@ -254,6 +254,17 @@ export const sendOtpSms = async ({ phone, otp, purpose = 'otp' }) => {
         'User-Agent': 'Rydon24/1.0',
       },
     });
+    let vendorResponse;
+    try {
+      vendorResponse = await fetchVendor(SMS_INDIA_HUB_VENDOR_ENDPOINT);
+    } catch (error) {
+      if (error?.name === 'TimeoutError') {
+        throw error;
+      }
+      // The provider's TLS certificate has lapsed before; fall back to plain HTTP so OTPs keep flowing.
+      console.warn('[smsService] vendor HTTPS request failed, retrying over HTTP:', error?.cause?.code || error?.message);
+      vendorResponse = await fetchVendor(SMS_INDIA_HUB_VENDOR_HTTP_ENDPOINT);
+    }
     const vendorResponseText = (await vendorResponse.text()).trim();
 
     finalResponse = vendorResponse;
